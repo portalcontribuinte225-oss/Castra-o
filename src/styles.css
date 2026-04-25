@@ -357,6 +357,63 @@ button:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.login-welcome {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+.login-welcome h1 {
+  font-size: 1.5rem;
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+.login-welcome p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.login-main-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.login-big-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  border-radius: 14px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+  text-align: center;
+}
+.login-big-action strong {
+  font-size: 1rem;
+  display: block;
+}
+.login-big-action span {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+.login-big-action:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+}
+.login-big-action.primary {
+  background: var(--teal);
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(56,168,232,0.35);
+}
+.login-big-action.secondary {
+  background: #f3f8fa;
+  color: var(--ink);
+  border-color: var(--line);
+}
+
 .login-card .primary-action {
   min-height: 46px;
   border-radius: 12px;

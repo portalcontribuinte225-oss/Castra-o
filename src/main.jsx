@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
+import { api } from "./api.js";
 import {
   Activity,
   Bell,
@@ -192,19 +193,17 @@ const initialTeams = {
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [active, setActive] = useState("admin");
-  const [requests, setRequests] = useState(() => readStoredJson("castragestao:requests", []));
-  const [adoptionAnimals, setAdoptionAnimals] = useState(() => readStoredJson("castragestao:adoptions", []));
-  const [requestTypes, setRequestTypes] = useState(() =>
-    readStoredJson("castragestao:requestTypes", initialRequestTypes),
-  );
-  const [documentTypes, setDocumentTypes] = useState(() => readStoredJson("castragestao:documentTypes", initialDocumentTypes));
-  const [speciesOptions, setSpeciesOptions] = useState(() => readStoredJson("castragestao:species", initialSpecies));
-  const [sizeOptions, setSizeOptions] = useState(() => readStoredJson("castragestao:sizes", initialSizes));
-  const [municipalities, setMunicipalities] = useState(() => readStoredJson("castragestao:municipalities", initialMunicipalities));
-  const [aiSettings, setAiSettings] = useState(() => readStoredJson("castragestao:aiSettings", initialAiSettings));
-  const [scheduleDays, setScheduleDays] = useState(() => readStoredJson("castragestao:scheduleDays", publicScheduleDays));
-  const [scheduleRules, setScheduleRules] = useState(() => readStoredJson("castragestao:scheduleRules", []));
-  const [teams, setTeams] = useState(() => readStoredJson("castragestao:teams", initialTeams));
+  const [requests, setRequests] = useState([]);
+  const [adoptionAnimals, setAdoptionAnimals] = useState([]);
+  const [requestTypes, setRequestTypes] = useState(initialRequestTypes);
+  const [documentTypes, setDocumentTypes] = useState(initialDocumentTypes);
+  const [speciesOptions, setSpeciesOptions] = useState(initialSpecies);
+  const [sizeOptions, setSizeOptions] = useState(initialSizes);
+  const [municipalities, setMunicipalities] = useState(initialMunicipalities);
+  const [aiSettings, setAiSettings] = useState(initialAiSettings);
+  const [scheduleDays, setScheduleDays] = useState(publicScheduleDays);
+  const [scheduleRules, setScheduleRules] = useState([]);
+  const [teams, setTeams] = useState(initialTeams);
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -212,48 +211,12 @@ function App() {
   const metrics = useMemo(() => buildMetrics(requests), [requests]);
 
   useEffect(() => {
-    localStorage.setItem("castragestao:requests", JSON.stringify(requests));
-  }, [requests]);
+    if (!currentUser) return;
+    api.getRequests().then(setRequests).catch(console.error);
+    api.getAdoptions().then(setAdoptionAnimals).catch(console.error);
+    api.getSchedule().then((days) => { if (days.length) setScheduleDays(days); }).catch(console.error);
+  }, [currentUser]);
 
-  useEffect(() => {
-    localStorage.setItem("castragestao:adoptions", JSON.stringify(adoptionAnimals));
-  }, [adoptionAnimals]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:requestTypes", JSON.stringify(requestTypes));
-  }, [requestTypes]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:documentTypes", JSON.stringify(documentTypes));
-  }, [documentTypes]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:species", JSON.stringify(speciesOptions));
-  }, [speciesOptions]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:sizes", JSON.stringify(sizeOptions));
-  }, [sizeOptions]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:municipalities", JSON.stringify(municipalities));
-  }, [municipalities]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:aiSettings", JSON.stringify(aiSettings));
-  }, [aiSettings]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:scheduleDays", JSON.stringify(scheduleDays));
-  }, [scheduleDays]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:scheduleRules", JSON.stringify(scheduleRules));
-  }, [scheduleRules]);
-
-  useEffect(() => {
-    localStorage.setItem("castragestao:teams", JSON.stringify(teams));
-  }, [teams]);
 
   if (!currentUser) {
     return <LoginView onLogin={setCurrentUser} adoptionAnimals={adoptionAnimals} />;
@@ -279,61 +242,43 @@ function App() {
 
   const visibleMenu = menu;
 
-  function updateStatus(requestId, status) {
-    setRequests((current) =>
-      current.map((request) =>
-        request.id === requestId
-          ? {
-              ...request,
-              status,
-              history: [...request.history, `Status alterado para ${statusLabels[status]}`],
-            }
-          : request,
-      ),
-    );
+  async function updateStatus(requestId, status) {
+    try {
+      const updated = await api.updateRequestStatus(requestId, status, `Status alterado para ${statusLabels[status]}`);
+      setRequests((current) => current.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (err) {
+      console.error("Erro ao atualizar status:", err);
+    }
   }
 
-  function patchRequest(requestId, patch, historyEntry = "") {
-    setRequests((current) =>
-      current.map((request) =>
-        request.id === requestId
-          ? {
-              ...request,
-              ...patch,
-              history: historyEntry ? [...request.history, historyEntry] : request.history,
-            }
-          : request,
-      ),
-    );
+  async function patchRequest(requestId, patch, historyEntry = "") {
+    try {
+      const updated = await api.patchRequest(requestId, patch);
+      setRequests((current) => current.map((r) => (r.id === updated.id ? updated : r)));
+    } catch (err) {
+      console.error("Erro ao atualizar solicitação:", err);
+    }
   }
 
-  function createRequest(payload) {
-    const nextNumber = String(requests.length + 45).padStart(5, "0");
-    const newRequest = {
-      ...payload,
-      id: Date.now(),
-      protocol: `${nextNumber}/2026`,
-      cpf: payload.cpf || "***.***.***-**",
-      phone: payload.phone || "(nao informado)",
-      status: "AGUARDANDO_ATRIBUIR",
-      responsible: "Sistema",
-      createdAt: "25/04/2026",
-      appointment: null,
-      history: [
-        "Solicitacao criada pelo tutor",
-        "Aguardando atribuicao pela equipe",
-        "Protocolo gerado automaticamente",
-        "Requerimento preparado para geracao com todos os dados cadastrados",
-        payload.fee && payload.fee.toLowerCase() !== "gratuito"
-          ? "Debito pendente de integracao via API de taxas"
-          : "Sem debito vinculado",
-        payload.preferredSchedule ? `Preferencia de agenda: ${payload.preferredSchedule}` : "Sem preferencia de agenda",
-      ],
-    };
-    setRequests((current) => [newRequest, ...current]);
-    setSelectedId(newRequest.id);
-    setActive("admin");
-    return newRequest;
+  async function createRequest(payload) {
+    try {
+      const newRequest = await api.createRequest({
+        animal_name: payload.animalName || payload.animal_name,
+        species: payload.species,
+        size: payload.size,
+        request_type: payload.requestType || payload.request_type,
+        municipality: payload.municipality,
+        notes: payload.notes,
+        tutor_name: currentUser.name,
+        tutor_email: currentUser.email,
+      });
+      setRequests((current) => [newRequest, ...current]);
+      setSelectedId(newRequest.id);
+      setActive("admin");
+      return newRequest;
+    } catch (err) {
+      console.error("Erro ao criar solicitação:", err);
+    }
   }
 
   const ActiveView = {
@@ -752,7 +697,6 @@ function getAnimalMainPhoto(animal) {
 }
 
 function LoginView({ onLogin, adoptionAnimals = [] }) {
-  const [registeredUsers, setRegisteredUsers] = useState(() => readStoredJson("castragestao:registeredUsers", []));
   const [email, setEmail] = useState(envUsers[0].email);
   const [password, setPassword] = useState(envUsers[0].password);
   const [showPassword, setShowPassword] = useState(false);
@@ -775,17 +719,15 @@ function LoginView({ onLogin, adoptionAnimals = [] }) {
     state: "",
   });
 
-  const allUsers = [...envUsers, ...registeredUsers];
-
-  function submit(event) {
+  async function submit(event) {
     event.preventDefault();
-    const user = allUsers.find((item) => item.email === email.trim() && item.password === password);
-    if (!user) {
+    try {
+      const user = await api.login(email.trim(), password);
+      setError("");
+      onLogin(user);
+    } catch {
       setError("Email ou senha incorretos.");
-      return;
     }
-    setError("");
-    onLogin(user);
   }
 
   function fillUser(user) {
@@ -838,7 +780,7 @@ function LoginView({ onLogin, adoptionAnimals = [] }) {
     setAuthMessage("");
   }
 
-  function submitRegister(event) {
+  async function submitRegister(event) {
     event.preventDefault();
     const cleanCpf = registerData.cpf.replace(/\D/g, "");
     const cleanPhone = registerData.phone.replace(/\D/g, "");
@@ -861,40 +803,20 @@ function LoginView({ onLogin, adoptionAnimals = [] }) {
       return;
     }
 
-    if (allUsers.some((user) => user.email.toLowerCase() === registerData.email.trim().toLowerCase())) {
-      setAuthMessage("Ja existe um cadastro com este email.");
-      return;
+    try {
+      await api.register(registerData);
+      setEmail(registerData.email.trim());
+      setPassword(registerData.password);
+      setAuthMessage("");
+      setAuthMode("login");
+    } catch {
+      setAuthMessage("Erro ao cadastrar. Tente novamente ou use outro email.");
     }
-
-    const newUser = {
-      role: "tutor",
-      name: registerData.tutor.trim(),
-      email: registerData.email.trim(),
-      password: registerData.password,
-      cpf: registerData.cpf,
-      phone: registerData.phone,
-      cep: registerData.cep,
-      address: registerData.address,
-      number: registerData.number,
-      neighborhood: registerData.neighborhood,
-      city: registerData.city,
-      state: registerData.state,
-      profileComplete: true,
-    };
-    const nextUsers = [...registeredUsers, newUser];
-    setRegisteredUsers(nextUsers);
-    localStorage.setItem("castragestao:registeredUsers", JSON.stringify(nextUsers));
-    setEmail(newUser.email);
-    setPassword(newUser.password);
-    setAuthMessage("");
-    setAuthMode("login");
-    onLogin(newUser);
   }
 
   function submitForgot(event) {
     event.preventDefault();
-    const user = allUsers.find((item) => item.email.toLowerCase() === forgotEmail.trim().toLowerCase());
-    setAuthMessage(user ? `Senha cadastrada neste ambiente: ${user.password}` : "Email nao encontrado.");
+    setAuthMessage("Recuperação de senha: entre em contato com o administrador do sistema.");
   }
 
   return (
@@ -910,54 +832,33 @@ function LoginView({ onLogin, adoptionAnimals = [] }) {
         </section>
 
         <section className="login-card">
-          <div className="castration-login-banner">
-            <span className="eyebrow">Solicitacao municipal</span>
-            <strong>Castração animal</strong>
-          </div>
           <div className="brand login-brand">
             <div className="brand-mark">
               <PawPrint size={24} />
             </div>
             <div>
               <strong>CastraGestao</strong>
-              <span>Ambiente de testes</span>
+              <span>Solicitacao municipal</span>
             </div>
           </div>
 
-          <div>
-            <span className="eyebrow">Acesso controlado</span>
-            <h1>Entrar no sistema</h1>
+          <div className="login-welcome">
+            <h1>Castração animal gratuita</h1>
+            <p>Selecione como deseja continuar</p>
           </div>
 
-          <form className="login-form" onSubmit={submit}>
-            <label className="field">
-              <span>Email</span>
-              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" autoComplete="username" />
-            </label>
-            <label className="field password-field">
-              <span>Senha</span>
-              <div>
-                <input value={password} onChange={(event) => setPassword(event.target.value)} type={showPassword ? "text" : "password"} autoComplete="current-password" />
-                <button type="button" onClick={() => setShowPassword((current) => !current)} aria-label={showPassword ? "Ocultar senha" : "Ver senha"}>
-                  <Eye size={18} />
-                </button>
-              </div>
-            </label>
-            {error && <p className="form-error">{error}</p>}
-            <button className="primary-action" type="submit">Entrar</button>
-          </form>
+          <div className="login-main-actions">
+            <button className="login-big-action primary" onClick={() => openAuthMode("register")}>
+              <PawPrint size={28} />
+              <strong>Solicitar Castração</strong>
+              <span>Agendar para o seu animal</span>
+            </button>
 
-          <div className="login-secondary-actions">
-            <button className="link-button" type="button" onClick={() => openAuthMode("register")}>Criar cadastro</button>
-            <button className="link-button" type="button" onClick={() => openAuthMode("forgot")}>Esqueceu a senha?</button>
-          </div>
-
-          <div className="test-users">
-            {envUsers.map((user) => (
-              <button className="ghost-button" key={user.role} onClick={() => fillUser(user)}>
-                {user.role === "admin" ? "Usar admin" : "Usar tutor"}
-              </button>
-            ))}
+            <button className="login-big-action secondary" onClick={() => openAuthMode("vet")}>
+              <Lock size={28} />
+              <strong>Área do Veterinário</strong>
+              <span>Acesso interno</span>
+            </button>
           </div>
         </section>
 
@@ -993,22 +894,31 @@ function LoginView({ onLogin, adoptionAnimals = [] }) {
           </form>
         </div>
       )}
-      {authMode === "forgot" && (
+      {authMode === "vet" && (
         <div className="modal-backdrop">
-          <form className="auth-modal compact-auth-modal" onSubmit={submitForgot}>
+          <form className="auth-modal compact-auth-modal" onSubmit={submit}>
             <div className="detail-title">
               <div>
-                <span className="eyebrow">Acesso</span>
-                <h3>Recuperar senha</h3>
+                <span className="eyebrow">Acesso interno</span>
+                <h3>Área do Veterinário</h3>
               </div>
               <button className="ghost-button" type="button" onClick={closeAuthMode}>Fechar</button>
             </div>
             <label className="field">
-              <span>Email cadastrado</span>
-              <input value={forgotEmail} onChange={(event) => setForgotEmail(event.target.value)} type="email" autoComplete="email" />
+              <span>Email</span>
+              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
             </label>
-            {authMessage && <p className="sms-status confirmed">{authMessage}</p>}
-            <button className="primary-action" type="submit">Ver senha</button>
+            <label className="field password-field">
+              <span>Senha</span>
+              <div>
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} autoComplete="current-password" />
+                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label="Ver senha">
+                  <Eye size={18} />
+                </button>
+              </div>
+            </label>
+            {error && <p className="form-error">{error}</p>}
+            <button className="primary-action" type="submit">Entrar</button>
           </form>
         </div>
       )}
