@@ -1,4 +1,4 @@
-const CACHE_NAME = "castragestao-v1";
+const CACHE_NAME = "castragestao-v3";
 const STATIC_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/pwa-icon.svg"];
 
 self.addEventListener("install", (event) => {

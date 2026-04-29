@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL || "http://localhost:3002/api";
+const BASE = import.meta.env.VITE_API_URL || "/api";
 
 function getToken() {
   return localStorage.getItem("castragestao:token");
@@ -27,45 +27,37 @@ async function request(method, path, body) {
 }
 
 export const api = {
-  // Auth
   async login(email, password) {
     const data = await request("POST", "/auth/login", { email, password });
     localStorage.setItem("castragestao:token", data.token);
     return data.user;
   },
-  async register(userData) {
-    const data = await request("POST", "/auth/register", {
-      name: userData.tutor,
-      email: userData.email,
-      password: userData.password,
-      role: "tutor",
-    });
-    return data;
-  },
   logout() {
     localStorage.removeItem("castragestao:token");
   },
 
-  // Requests
   getRequests: () => request("GET", "/requests"),
   createRequest: (body) => request("POST", "/requests", body),
-  updateRequestStatus: (id, status, notes) => request("PATCH", `/requests/${id}/status`, { status, notes }),
+  consultRequestsByCredentials: (cpf, validationKey) => request("POST", "/requests/consult", { cpf, validationKey }),
   patchRequest: (id, patch) => request("PATCH", `/requests/${id}`, patch),
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),
 
-  // Adoptions
   getAdoptions: () => request("GET", "/adoptions"),
+  consultAdoptionsByCredentials: (cpf, validationKey) => request("POST", "/adoptions/consult", { cpf, validationKey }),
   createAdoption: (body) => request("POST", "/adoptions", body),
   updateAdoption: (id, body) => request("PATCH", `/adoptions/${id}`, body),
   deleteAdoption: (id) => request("DELETE", `/adoptions/${id}`),
+  registerInterest: (id, body) => request("POST", `/adoptions/${id}/interest`, body),
+  getInterests: (id) => request("GET", `/adoptions/${id}/interests`),
+  removeInterest: (id, index) => request("DELETE", `/adoptions/${id}/interest/${index}`),
 
-  // Schedule
   getSchedule: () => request("GET", "/schedule"),
   createScheduleDay: (body) => request("POST", "/schedule", body),
   updateScheduleDay: (id, body) => request("PATCH", `/schedule/${id}`, body),
   deleteScheduleDay: (id) => request("DELETE", `/schedule/${id}`),
 
-  // Config
   getConfig: (key) => request("GET", `/config/${key}`),
   setConfig: (key, value) => request("PUT", `/config/${key}`, value),
+
+  validateDocument: (body) => request("POST", "/ai/validate", body),
 };

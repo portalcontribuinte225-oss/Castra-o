@@ -40,8 +40,8 @@ npm run preview
 - Dashboard do tutor com solicitações e próxima ação.
 - Formulário multi-etapas de nova solicitação.
 - Dashboard administrativo com fila, detalhe e transições de status.
-- Fluxo corrigido com `REAGENDAMENTO_SOLICITADO` separado de `REAGENDADA`.
-- Estado intermediário `AGUARDANDO_AGENDAMENTO` entre deferimento e agendamento.
+- Fluxo simplificado com status oficiais `EM_ANALISE`, `AGUARDANDO_CIRURGIA` e `ARQUIVADA`.
+- Decisões e resultados registrados como tags: `DEFERIDA`, `INDEFERIDA`, `COMPARECEU`, `CANCELADA` e `REAGENDADA`.
 - Agenda semanal, módulo de adoção, mapas territoriais e relatórios preparados para dados criados no teste.
 - Manifesto PWA, ícone e service worker básico.
 

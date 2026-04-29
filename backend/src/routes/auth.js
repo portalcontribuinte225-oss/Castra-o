@@ -7,8 +7,11 @@ const router = Router();
 
 router.post("/login", async (req, res) => {
   const { email, password } = req.body;
+  const loginEmail = String(email || "").trim().toLowerCase();
+  const adminEmail = String(process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
+  const normalizedEmail = loginEmail === "master" && adminEmail ? adminEmail : loginEmail;
   try {
-    const { rows } = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
+    const { rows } = await pool.query("SELECT * FROM users WHERE lower(email) = $1", [normalizedEmail]);
     const user = rows[0];
     if (!user) return res.status(401).json({ error: "Credenciais inválidas" });
 
