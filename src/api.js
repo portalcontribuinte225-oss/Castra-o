@@ -42,6 +42,13 @@ export const api = {
   patchRequest: (id, patch) => request("PATCH", `/requests/${id}`, patch),
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),
 
+  lookupAnimalByMicrochip: (microchip) => request("POST", "/animals/lookup", { microchip }),
+  consultAnimalByMicrochip: (body) => request("POST", "/animals/consult", body),
+  createAnimalDeathRequest: (animalId, body) => request("POST", `/animals/${animalId}/death`, body),
+  createAnimalTransferRequest: (animalId, body) => request("POST", `/animals/${animalId}/transfer`, body),
+  createRequestDeathAction: (requestId, body) => request("POST", `/animals/requests/${requestId}/death`, body),
+  createRequestTransferAction: (requestId, body) => request("POST", `/animals/requests/${requestId}/transfer`, body),
+
   getAdoptions: () => request("GET", "/adoptions"),
   consultAdoptionsByCredentials: (cpf, validationKey) => request("POST", "/adoptions/consult", { cpf, validationKey }),
   createAdoption: (body) => request("POST", "/adoptions", body),
@@ -50,6 +57,10 @@ export const api = {
   registerInterest: (id, body) => request("POST", `/adoptions/${id}/interest`, body),
   getInterests: (id) => request("GET", `/adoptions/${id}/interests`),
   removeInterest: (id, index) => request("DELETE", `/adoptions/${id}/interest/${index}`),
+
+  getAccessRequests: () => request("GET", "/access-requests"),
+  createAccessRequest: (body) => request("POST", "/access-requests", body),
+  reviewAccessRequest: (id, body) => request("PATCH", `/access-requests/${id}/review`, body),
 
   getSchedule: () => request("GET", "/schedule"),
   createScheduleDay: (body) => request("POST", "/schedule", body),

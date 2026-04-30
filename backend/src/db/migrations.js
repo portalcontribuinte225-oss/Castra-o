@@ -93,6 +93,79 @@ export async function runMigrations() {
       value JSONB NOT NULL,
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS animals (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      microchip TEXT UNIQUE NOT NULL,
+      name TEXT,
+      species TEXT,
+      sex TEXT,
+      size TEXT,
+      breed TEXT,
+      color TEXT,
+      birth_date TEXT,
+      status TEXT NOT NULL DEFAULT 'ATIVO',
+      current_tutor_id UUID REFERENCES users(id),
+      metadata JSONB DEFAULT '{}',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS animal_tutors (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      animal_id UUID NOT NULL REFERENCES animals(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id),
+      tutor_name TEXT,
+      tutor_email TEXT,
+      cpf TEXT,
+      phone TEXT,
+      address TEXT,
+      neighborhood TEXT,
+      city TEXT,
+      state TEXT,
+      cep TEXT,
+      relationship TEXT DEFAULT 'TUTOR',
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      started_at TIMESTAMPTZ DEFAULT NOW(),
+      ended_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS animal_records (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      animal_id UUID NOT NULL REFERENCES animals(id) ON DELETE CASCADE,
+      request_id UUID REFERENCES requests(id) ON DELETE SET NULL,
+      record_type TEXT NOT NULL,
+      title TEXT NOT NULL,
+      notes TEXT,
+      data JSONB DEFAULT '{}',
+      created_by UUID REFERENCES users(id),
+      occurred_at TIMESTAMPTZ DEFAULT NOW(),
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS access_requests (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      requester_type TEXT NOT NULL,
+      organization_name TEXT,
+      responsible_name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT,
+      document TEXT,
+      city TEXT,
+      state TEXT,
+      intended_use TEXT,
+      assigned_sector TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDENTE',
+      review_note TEXT,
+      reviewed_by UUID REFERENCES users(id),
+      reviewed_at TIMESTAMPTZ,
+      created_user_id UUID REFERENCES users(id),
+      temporary_password TEXT,
+      history JSONB DEFAULT '[]',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 
   await pool.query(`
@@ -117,6 +190,19 @@ export async function runMigrations() {
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS workflow_data JSONB DEFAULT '{}';
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS latitude TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS longitude TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS animal_id UUID REFERENCES animals(id);
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS animal_microchip TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_name TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_email TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_cpf TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_phone TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_address TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_neighborhood TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_city TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_state TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_cep TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS death_date TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS death_cause TEXT;
     ALTER TABLE requests ALTER COLUMN status SET DEFAULT 'EM_ANALISE';
 
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS location_name TEXT;
@@ -128,6 +214,25 @@ export async function runMigrations() {
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS health JSONB DEFAULT '[]';
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]';
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS main_photo_index INT DEFAULT 0;
+
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS requester_type TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS organization_name TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS responsible_name TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS phone TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS document TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS city TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS state TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS intended_use TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS assigned_sector TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDENTE';
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS review_note TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS reviewed_by UUID REFERENCES users(id);
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS created_user_id UUID REFERENCES users(id);
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS temporary_password TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]';
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
   `);
 
   await pool.query(`
@@ -139,6 +244,25 @@ export async function runMigrations() {
       WHERE validation_key IS NOT NULL;
     CREATE INDEX IF NOT EXISTS adoptions_interests_gin_idx
       ON adoptions USING GIN (interests);
+    CREATE UNIQUE INDEX IF NOT EXISTS animals_microchip_unique_idx
+      ON animals (microchip);
+    CREATE INDEX IF NOT EXISTS animal_tutors_animal_active_idx
+      ON animal_tutors (animal_id, active);
+    CREATE INDEX IF NOT EXISTS animal_tutors_cpf_idx
+      ON animal_tutors (cpf)
+      WHERE cpf IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS animal_records_animal_occurred_idx
+      ON animal_records (animal_id, occurred_at DESC);
+    CREATE INDEX IF NOT EXISTS requests_animal_id_idx
+      ON requests (animal_id)
+      WHERE animal_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS requests_animal_microchip_idx
+      ON requests (animal_microchip)
+      WHERE animal_microchip IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS access_requests_status_created_idx
+      ON access_requests (status, created_at DESC);
+    CREATE INDEX IF NOT EXISTS access_requests_email_idx
+      ON access_requests (lower(email));
   `);
 
   await pool.query(`

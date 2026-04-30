@@ -1,0 +1,181 @@
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import crypto from "crypto";
+import { pool } from "../db/index.js";
+import { auth } from "../middleware/auth.js";
+
+const router = Router();
+
+const REQUESTER_TYPES = new Set(["ONG", "PROTETOR"]);
+const REQUEST_STATUSES = new Set(["PENDENTE", "APROVADO", "RECUSADO"]);
+
+const typeLabels = {
+  ONG: "ONG",
+  PROTETOR: "Protetor",
+};
+
+const roleByType = {
+  ONG: "ong",
+  PROTETOR: "protetor",
+};
+
+const sectorByType = {
+  ONG: "ONGs",
+  PROTETOR: "Protetores",
+};
+
+function normalizeEmail(value = "") {
+  return String(value).trim().toLowerCase();
+}
+
+function normalizeType(value = "") {
+  const type = String(value).trim().toUpperCase();
+  if (["ONGS", "ORGANIZACAO", "ORGANIZACAO_NAO_GOVERNAMENTAL"].includes(type)) return "ONG";
+  if (["PROTETOR_ANIMAIS", "PROTETOR_INDEPENDENTE"].includes(type)) return "PROTETOR";
+  return type;
+}
+
+function temporaryPassword() {
+  return `Acesso-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+}
+
+function publicAccessRequest(row = {}) {
+  if (!row) return row;
+  return {
+    ...row,
+    temporary_password: row.status === "APROVADO" ? row.temporary_password : "",
+  };
+}
+
+router.get("/", auth, async (_req, res) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM access_requests ORDER BY created_at DESC");
+    res.json(rows.map(publicAccessRequest));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post("/", async (req, res) => {
+  const body = req.body || {};
+  const requesterType = normalizeType(body.requester_type || body.requesterType);
+  const responsibleName = String(body.responsible_name || body.responsibleName || "").trim();
+  const email = normalizeEmail(body.email);
+  const assignedSector = String(body.assigned_sector || body.assignedSector || sectorByType[requesterType] || "").trim();
+
+  if (!REQUESTER_TYPES.has(requesterType)) return res.status(400).json({ error: "Tipo de solicitante invalido." });
+  if (!responsibleName) return res.status(400).json({ error: "Nome do responsavel e obrigatorio." });
+  if (!email) return res.status(400).json({ error: "Email e obrigatorio." });
+
+  try {
+    const { rows } = await pool.query(
+      `INSERT INTO access_requests (
+        requester_type,
+        organization_name,
+        responsible_name,
+        email,
+        phone,
+        document,
+        city,
+        state,
+        intended_use,
+        assigned_sector,
+        history
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+      RETURNING *`,
+      [
+        requesterType,
+        String(body.organization_name || body.organizationName || "").trim(),
+        responsibleName,
+        email,
+        String(body.phone || "").trim(),
+        String(body.document || "").trim(),
+        String(body.city || "").trim(),
+        String(body.state || "").trim(),
+        String(body.intended_use || body.intendedUse || "").trim(),
+        assignedSector,
+        JSON.stringify([{ status: "PENDENTE", notes: "Solicitacao enviada para credenciamento.", at: new Date() }]),
+      ],
+    );
+    res.status(201).json(publicAccessRequest(rows[0]));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.patch("/:id/review", auth, async (req, res) => {
+  const body = req.body || {};
+  const status = String(body.status || "").trim().toUpperCase();
+  const reviewNote = String(body.review_note || body.reviewNote || "").trim();
+
+  if (!REQUEST_STATUSES.has(status) || status === "PENDENTE") {
+    return res.status(400).json({ error: "Decisao invalida para credenciamento." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const { rows: existingRows } = await client.query("SELECT * FROM access_requests WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const accessRequest = existingRows[0];
+    if (!accessRequest) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Solicitacao de credenciamento nao encontrada." });
+    }
+
+    let createdUserId = accessRequest.created_user_id || null;
+    let password = accessRequest.temporary_password || "";
+
+    if (status === "APROVADO") {
+      password = password || temporaryPassword();
+      const hash = await bcrypt.hash(password, 10);
+      const { rows: userRows } = await client.query(
+        `INSERT INTO users (name, email, password, role)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (email)
+         DO UPDATE SET name = EXCLUDED.name, password = EXCLUDED.password, role = EXCLUDED.role
+         RETURNING id`,
+        [
+          accessRequest.responsible_name,
+          normalizeEmail(accessRequest.email),
+          hash,
+          roleByType[accessRequest.requester_type] || "protetor",
+        ],
+      );
+      createdUserId = userRows[0].id;
+    }
+
+    const historyEntry = {
+      status,
+      notes: reviewNote || (status === "APROVADO" ? "Credenciamento aprovado." : "Credenciamento recusado."),
+      by: req.user.id,
+      at: new Date(),
+    };
+
+    const { rows } = await client.query(
+      `UPDATE access_requests
+       SET status = $1,
+           review_note = $2,
+           reviewed_by = $3,
+           reviewed_at = NOW(),
+           created_user_id = $4,
+           temporary_password = $5,
+           history = history || $6::jsonb,
+           updated_at = NOW()
+       WHERE id = $7
+       RETURNING *`,
+      [status, reviewNote, req.user.id, createdUserId, status === "APROVADO" ? password : "", JSON.stringify([historyEntry]), req.params.id],
+    );
+
+    await client.query("COMMIT");
+    res.json(publicAccessRequest(rows[0]));
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+export { typeLabels, sectorByType };
+export default router;

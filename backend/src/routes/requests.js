@@ -18,6 +18,9 @@ const ALLOWED_REQUEST_TAGS = new Set([
   "RETORNO_TUTOR",
   "MUTIRAO",
   "PRESENCIAL",
+  "MICROCHIP",
+  "OBITO",
+  "TROCA_TUTOR",
 ]);
 
 function pick(...values) {
@@ -207,6 +210,8 @@ router.post("/", optionalAuth, async (req, res) => {
         animal_name,
         species,
         size,
+        animal_id,
+        animal_microchip,
         animals,
         request_type,
         municipality,
@@ -228,10 +233,10 @@ router.post("/", optionalAuth, async (req, res) => {
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10, $11, $12, $13, $14, $15, $16::jsonb,
-        $17, $18, $19, 'EM_ANALISE', $20, $21, $22, $23,
-        $24, $25, $26, $27, $28::jsonb, $29::jsonb, $30::jsonb,
-        $31, $32
+        $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
+        $19, $20, $21, 'EM_ANALISE', $22, $23, $24, $25,
+        $26, $27, $28, $29, $30::jsonb, $31::jsonb, $32::jsonb,
+        $33, $34
       )
       RETURNING *`,
       [
@@ -250,6 +255,8 @@ router.post("/", optionalAuth, async (req, res) => {
         pick(body.animal_name, body.animalName, firstAnimal.name),
         pick(body.species, firstAnimal.species),
         pick(body.size, firstAnimal.size),
+        pick(body.animal_id, body.animalId, firstAnimal.id) || null,
+        pick(body.animal_microchip, body.animalMicrochip, firstAnimal.microchip) || null,
         JSON.stringify(animals),
         requestType,
         pick(body.municipality, body.scheduleMunicipality),
@@ -269,6 +276,20 @@ router.post("/", optionalAuth, async (req, res) => {
         pick(body.longitude, body.lng) || null,
       ]
     );
+
+    if (rows[0].animal_id) {
+      await client.query(
+        `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data, created_by)
+         VALUES ($1, $2, 'SOLICITACAO_PROCEDIMENTO', 'Solicitacao de procedimento aberta', $3, $4::jsonb, $5)`,
+        [
+          rows[0].animal_id,
+          rows[0].id,
+          body.notes || null,
+          JSON.stringify({ protocol, request_type: requestType || null, animal_microchip: rows[0].animal_microchip || null }),
+          req.user?.id || null,
+        ],
+      );
+    }
 
     await client.query("COMMIT");
     res.status(201).json(rows[0]);
@@ -303,6 +324,19 @@ router.patch("/:id", auth, async (req, res) => {
     scheduleAddressUrl: "schedule_address_url",
     scheduleMunicipality: "schedule_municipality",
     responsibleUnit: "responsible_unit",
+    animalId: "animal_id",
+    animalMicrochip: "animal_microchip",
+    targetTutorName: "target_tutor_name",
+    targetTutorEmail: "target_tutor_email",
+    targetTutorCpf: "target_tutor_cpf",
+    targetTutorPhone: "target_tutor_phone",
+    targetTutorAddress: "target_tutor_address",
+    targetTutorNeighborhood: "target_tutor_neighborhood",
+    targetTutorCity: "target_tutor_city",
+    targetTutorState: "target_tutor_state",
+    targetTutorCep: "target_tutor_cep",
+    deathDate: "death_date",
+    deathCause: "death_cause",
   };
   const allowed = [
     "tutor_name", "tutor_email", "cpf", "phone", "address", "neighborhood",
@@ -311,7 +345,11 @@ router.patch("/:id", auth, async (req, res) => {
     "schedule_location_name", "schedule_address_url", "schedule_municipality",
     "responsible_unit", "veterinarian", "signature_data_url", "signed_at",
     "documents", "assigned_sector", "tags", "workflow_data",
-    "latitude", "longitude",
+    "latitude", "longitude", "animal_id", "animal_microchip",
+    "target_tutor_name", "target_tutor_email", "target_tutor_cpf",
+    "target_tutor_phone", "target_tutor_address", "target_tutor_neighborhood",
+    "target_tutor_city", "target_tutor_state", "target_tutor_cep",
+    "death_date", "death_cause",
   ];
   const ignoredKeys = new Set(["history_note", "historyNote"]);
   const workflowPatch = {};

@@ -484,9 +484,26 @@ button:disabled {
   color: #fff;
   box-shadow: 0 6px 20px rgba(15, 118, 110, 0.35);
 }
+.login-big-action.access {
+  background: #fff7ed;
+  color: #7c2d12;
+  border-color: #fed7aa;
+}
 .login-vet-action {
-  grid-column: 1 / -1;
   min-height: 104px;
+}
+
+.access-request-modal {
+  width: min(720px, 94vw);
+}
+
+.access-type-field > div {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.compact-success {
+  min-height: 220px;
+  align-content: center;
 }
 
 /* Public castration form (no login) */
@@ -832,7 +849,7 @@ button:disabled {
 
 .consultation-search-row {
   display: grid;
-  grid-template-columns: minmax(180px, 0.9fr) minmax(220px, 1.1fr) auto;
+  grid-template-columns: minmax(170px, 1fr) minmax(170px, 0.9fr) minmax(210px, 1.1fr) auto;
   gap: 12px;
   align-items: end;
 }
@@ -896,6 +913,117 @@ button:disabled {
 
 .consult-adoption-info strong { font-size: 14px; }
 .consult-adoption-info span { font-size: 12px; color: var(--muted); }
+
+.animal-record-panel {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  padding: 16px;
+}
+
+.animal-record-header,
+.animal-record-actions {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.animal-record-header h3 {
+  margin: 2px 0 4px;
+  font-size: 1.35rem;
+}
+
+.animal-record-header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.animal-status-chip {
+  border-radius: 999px;
+  background: #dcfce7;
+  color: #166534;
+  font-size: 0.78rem;
+  font-weight: 800;
+  padding: 5px 10px;
+  text-transform: uppercase;
+}
+
+.animal-record-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.info-tile {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 10px;
+}
+
+.info-tile span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.info-tile strong {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+
+.animal-action-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 12px;
+  align-items: end;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.animal-form-notes {
+  grid-column: 1 / -2;
+}
+
+.animal-history {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.animal-history h4 {
+  margin: 0;
+}
+
+.animal-history-item {
+  border-left: 3px solid var(--teal);
+  padding: 6px 0 6px 10px;
+}
+
+.animal-history-item span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.animal-history-item strong,
+.animal-history-item p {
+  display: block;
+  margin: 2px 0 0;
+}
+
+.animal-history-item p {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
 
 .adoption-status-badge {
   display: inline-block;
@@ -1912,6 +2040,53 @@ button:disabled {
   line-height: 1.4;
 }
 
+.animal-photo-upload-card {
+  border: 1px solid #dbeaf3;
+  border-radius: var(--radius);
+  background: #ffffff;
+  padding: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.animal-photo-upload-card strong,
+.animal-photo-upload-card span,
+.animal-photo-upload-card small {
+  display: block;
+}
+
+.animal-photo-upload-card span,
+.animal-photo-upload-card small {
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-top: 2px;
+}
+
+.animal-photo-preview {
+  width: 120px;
+  aspect-ratio: 4 / 3;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f8fafc;
+  overflow: hidden;
+  padding: 0;
+}
+
+.animal-photo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.animal-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .address-lookup-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2784,7 +2959,9 @@ button:disabled {
 }
 
 .document-preview-frame img,
-.document-preview-frame iframe {
+.document-preview-frame iframe,
+.document-preview-frame object,
+.document-preview-frame embed {
   width: 100%;
   height: 100%;
   min-height: 520px;
@@ -3570,6 +3747,31 @@ main {
   color: var(--muted);
 }
 
+.request-card-meta,
+.microchip-line {
+  display: block;
+}
+
+.microchip-line {
+  margin-top: 3px;
+  color: #1479b8;
+  font-size: 0.82rem;
+  overflow-wrap: anywhere;
+}
+
+.request-animal-actions {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.request-animal-actions .animal-record-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
 .adoption-card p {
   display: -webkit-box;
   margin: 7px 0 0;
@@ -3861,6 +4063,31 @@ main {
   gap: 10px;
 }
 
+.inline-microchip-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 10px;
+  row-gap: 4px;
+  align-items: end;
+}
+
+.inline-microchip-fields .field {
+  min-width: 0;
+}
+
+.inline-microchip-fields .compact-checkbox {
+  min-height: 44px;
+  padding-bottom: 9px;
+  max-width: 118px;
+  font-size: 0.72rem;
+  line-height: 1.1;
+  color: var(--muted);
+}
+
+.inline-microchip-fields .compact-checkbox input {
+  flex: 0 0 auto;
+}
+
 .animal-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3880,6 +4107,28 @@ main {
 .health-card > strong,
 .choice-card > strong {
   font-size: 0.92rem;
+}
+
+.optional-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.inline-link-button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: #0b7fc3;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.inline-link-button:hover {
+  color: #075f93;
 }
 
 .yes-no-field,
@@ -3918,13 +4167,14 @@ main {
   place-items: center;
   gap: 2px;
   padding: 6px 8px;
+  min-height: 42px;
 }
 
 .compact-choice-field button small {
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: 0.56rem;
   font-weight: 600;
-  line-height: 1.1;
+  line-height: 1;
 }
 
 .yes-no-field button.selected,
@@ -3960,6 +4210,28 @@ main {
   width: 18px;
   height: 18px;
 }
+
+.cadunico-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: end;
+}
+
+.cadunico-row .toggle-switch {
+  min-height: 44px;
+  padding-bottom: 8px;
+  font-weight: 700;
+  justify-content: flex-start;
+}
+
+.cadunico-checkbox {
+  min-height: 44px;
+  align-self: end;
+  padding-bottom: 10px;
+  white-space: nowrap;
+}
+
 
 
 
@@ -5565,6 +5837,25 @@ main {
   color: #4b5563;
 }
 
+.schedule-status.pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.access-review-status {
+  margin: 0 0 14px;
+  border: 1px solid #bae6fd;
+  border-radius: var(--radius);
+  background: #f0f9ff;
+  color: #075985;
+  padding: 10px 12px;
+  font-size: 0.9rem;
+}
+
+.access-request-card .config-card-details span:last-child {
+  line-height: 1.45;
+}
+
 .schedule-rule-actions {
   min-width: 160px;
   justify-items: stretch;
@@ -6180,6 +6471,7 @@ main {
   }
 
   .summary-row,
+  .animal-photo-upload-card,
   .adoption-grid,
   .settings-grid,
   .public-animal-grid,
@@ -6190,6 +6482,20 @@ main {
 
   .consultation-search-row {
     grid-template-columns: 1fr;
+  }
+
+  .animal-record-header,
+  .animal-record-actions {
+    flex-direction: column;
+  }
+
+  .animal-record-grid,
+  .animal-action-form {
+    grid-template-columns: 1fr;
+  }
+
+  .animal-form-notes {
+    grid-column: auto;
   }
 
   .consultation-card-header {
@@ -6212,6 +6518,7 @@ main {
   .schedule-rule-row,
   .health-grid,
   .animal-choice-grid,
+  .inline-microchip-fields,
   .animal-main-grid,
   .admin-calendar-grid,
   .request-type-grid,
@@ -6314,6 +6621,7 @@ main {
   .reports-breakdown-grid,
   .workflow-grid,
   .two-column-fields,
+  .cadunico-row,
   .address-lookup-grid,
   .health-grid,
   .clean-form,
@@ -6321,6 +6629,7 @@ main {
   .modal-form-grid,
   .toggle-row,
   .animal-choice-grid,
+  .inline-microchip-fields,
   .animal-main-grid,
   .config-editor-grid,
   .document-check-grid,
@@ -6333,6 +6642,10 @@ main {
 
   .consultation-results > .summary-row {
     grid-template-columns: 1fr;
+  }
+
+  .animal-photo-actions {
+    justify-content: stretch;
   }
 
   .request-stepper,

@@ -68,11 +68,15 @@ const workflowTagLabels = {
   RETORNO_TUTOR: "Retorno tutor",
   MUTIRAO: "Mutirão",
   PRESENCIAL: "Presencial",
+  MICROCHIP: "Microchip",
+  OBITO: "Óbito",
+  TROCA_TUTOR: "Troca de tutor",
 };
 
 const menu = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "admin", label: "Solicitações de castração", icon: LayoutDashboard },
+  { id: "credenciamento", label: "Credenciamentos", icon: ClipboardList },
   { id: "adocao", label: "Adoção", icon: HeartHandshake },
   { id: "relatorios", label: "Relatórios", icon: Activity },
   { id: "config", label: "Configurações", icon: Settings },
@@ -139,6 +143,15 @@ const initialSizes = [
   { id: "grande", name: "Grande", weightStart: "8", weightEnd: "12", weightUnit: "kg", description: "8-12 kg", active: true },
 ];
 const initialMunicipalities = [];
+const accessRequesterTypes = [
+  { id: "ONG", label: "ONG", sector: "ONGs", role: "ong" },
+  { id: "PROTETOR", label: "Protetor de animais", sector: "Protetores", role: "protetor" },
+];
+const defaultAccessSectors = accessRequesterTypes.map((type) => ({
+  id: `setor_${type.id.toLowerCase()}`,
+  name: type.sector,
+  active: true,
+}));
 const aiProviderOptions = {
   OpenAI: {
     keyUrl: "https://platform.openai.com/api-keys",
@@ -164,7 +177,7 @@ const CONFIG_KEYS = {
   teams: "castragestao:teams",
   scheduleRules: "castragestao:schedule-rules",
 };
-const initialTeams = { sectors: [], users: [] };
+const initialTeams = { sectors: defaultAccessSectors, users: [] };
 const initialScheduleRules = [
   {
     id: "agenda_recorrente_padrao_2026",
@@ -271,6 +284,19 @@ function requestResultLabel(request = {}) {
   return tag ? workflowTagLabels[tag] : statusLabels[request.status] || request.status || "Sem status";
 }
 
+function requestTypeLabel(request = {}) {
+  const labels = {
+    ANIMAL_OBITO: "Óbito do animal",
+    TROCA_TUTOR: "Troca de tutor",
+    Microchipagem: "Microchipagem",
+    Ambos: "Castração e microchipagem",
+    Castracao: "Castração",
+    "Castração": "Castração",
+  };
+  const type = request.type || request.request_type || request.requestTypeId || "";
+  return labels[type] || type || "Castração";
+}
+
 function normalizeRequest(request = {}) {
   const workflowData = request.workflowData || request.workflow_data || {};
   const rawStatus = request.status || "EM_ANALISE";
@@ -285,8 +311,10 @@ function normalizeRequest(request = {}) {
           species: request.species || "Nao informado",
           size: request.size || "Nao informado",
           sex: request.sex || "Nao informado",
-          age: request.age || "Nao informado",
+          age: request.birthDate || request.birth_date || request.age || "",
+          birthDate: request.birthDate || request.birth_date || "",
           procedure: request.procedure || request.request_type || request.type || "",
+          microchip: request.microchip || request.animal_microchip || request.animalMicrochip || request.microchip_number || request.microchipNumber || "",
         },
       ];
 
@@ -334,6 +362,11 @@ function normalizeRequest(request = {}) {
     previousSchedule: request.previousSchedule || workflowData.previousSchedule || "",
     rejectionReason: request.rejectionReason || workflowData.rejectionReason || "",
     rejectionNote: request.rejectionNote || workflowData.rejectionNote || "",
+    performedProcedures: request.performedProcedures || workflowData.performedProcedures || "",
+    attendanceNote: request.attendanceNote || workflowData.attendanceNote || "",
+    cadUnico: request.cadUnico || workflowData.cadUnico || "",
+    cadUnicoNotApplicable: Boolean(request.cadUnicoNotApplicable || workflowData.cadUnicoNotApplicable),
+    isFarmer: Boolean(request.isFarmer || request.is_farmer || workflowData.isFarmer || workflowData.is_farmer),
     documents: Array.isArray(request.documents) ? request.documents : [],
     rawHistory: Array.isArray(request.history) ? request.history : [],
     history,
@@ -390,7 +423,8 @@ function App() {
     const stored = readStoredJson(CONFIG_KEYS.scheduleRules, null);
     return Array.isArray(stored) && stored.length > 0 ? stored : initialScheduleRules;
   });
-  const [teams, setTeams] = useState(() => readStoredJson(CONFIG_KEYS.teams, initialTeams));
+  const [teams, setTeams] = useState(() => normalizeTeams(readStoredJson(CONFIG_KEYS.teams, initialTeams)));
+  const [accessRequests, setAccessRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [publicForm, setPublicForm] = useState(false);
@@ -428,6 +462,7 @@ function App() {
   useEffect(() => {
     if (!currentUser) return;
     api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(console.error);
+    api.getAccessRequests().then((list) => setAccessRequests(list.map(normalizeAccessRequest))).catch(console.error);
     api.getSchedule().then((days) => {
       if (!days.length) return;
       setScheduleDays(days.map(normalizeScheduleDay).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date)));
@@ -449,6 +484,8 @@ function App() {
         animal_name: payload.animalName || payload.animal_name,
         species: payload.species,
         size: payload.size,
+        animal_id: payload.animal_id || payload.animalId || "",
+        animal_microchip: payload.animal_microchip || payload.animalMicrochip || "",
         request_type: payload.requestType || payload.request_type,
         municipality: payload.municipality,
         notes: payload.notes,
@@ -476,16 +513,37 @@ function App() {
         requestTypeId: payload.requestTypeId || "",
         fee: payload.fee || "",
         tags: payload.tags || [],
+        workflow_data: payload.workflowData || payload.workflow_data || {},
       });
-      setRequests((current) => [normalizeRequest(newRequest), ...current]);
-      if (currentUser) {
-        setSelectedId(newRequest.id);
-        setActive("admin");
-      }
+      registerCreatedRequest(newRequest, { openAdmin: Boolean(currentUser) });
       return newRequest;
     } catch (err) {
       console.error("Erro ao criar solicitação:", err);
     }
+  }
+
+  async function createAccessRequest(payload) {
+    const created = await api.createAccessRequest(payload);
+    return normalizeAccessRequest(created);
+  }
+
+  async function reviewAccessRequest(requestId, decision) {
+    const updated = await api.reviewAccessRequest(requestId, decision);
+    const normalized = normalizeAccessRequest(updated);
+    setAccessRequests((current) => current.map((item) => (item.id === normalized.id ? normalized : item)));
+    return normalized;
+  }
+
+  function registerCreatedRequest(newRequest, options = {}) {
+    const normalized = normalizeRequest(newRequest);
+    setRequests((current) => (
+      current.some((request) => request.id === normalized.id)
+        ? current.map((request) => (request.id === normalized.id ? normalized : request))
+        : [normalized, ...current]
+    ));
+    if (normalized.id) setSelectedId(normalized.id);
+    if (options.openAdmin && currentUser?.role === "admin") setActive("admin");
+    return normalized;
   }
 
   if (publicForm) {
@@ -500,6 +558,7 @@ function App() {
         speciesOptions={speciesOptions}
         sizeOptions={sizeOptions}
         aiSettings={aiSettings}
+        onRequestCreated={registerCreatedRequest}
       />
     );
   }
@@ -512,8 +571,9 @@ function App() {
     return (
       <LoginView
         onLogin={setCurrentUser}
-        onPublicRequest={() => { setPublicFormInitialScreen("agenda"); setPublicForm(true); }}
+        onPublicRequest={() => { setPublicFormInitialScreen("formulario"); setPublicForm(true); }}
         onPublicConsult={() => { setPublicFormInitialScreen("consulta"); setPublicForm(true); }}
+        onAccessRequest={createAccessRequest}
         adoptionAnimals={adoptionAnimals}
         onInterestSent={handleInterestSent}
       />
@@ -525,6 +585,7 @@ function App() {
   const ActiveView = {
     admin: AdminDashboard,
     adocao: AdoptionView,
+    credenciamento: AccessRequestsView,
     dashboard: DashboardView,
     relatorios: ReportsView,
     config: ConfigView,
@@ -593,7 +654,7 @@ function App() {
             <ShieldCheck size={18} />
             <div className="public-animal-meta">
               <strong>{currentUser.name || "Usuário"}</strong>
-              <span>{currentUser.role === "admin" ? "Admin" : "Tutor"}</span>
+              <span>{userRoleLabel(currentUser.role)}</span>
             </div>
           </div>
           <button className="logout-button" onClick={() => setCurrentUser(null)}>
@@ -617,7 +678,7 @@ function App() {
                 type="search"
                 value={globalSearch}
                 onChange={(event) => setGlobalSearch(event.target.value)}
-                placeholder="Protocolo, CPF, tutor..."
+                placeholder="Protocolo, CPF, tutor, microchip..."
               />
             </label>
             <button className="icon-button" aria-label="Notificacoes">
@@ -655,6 +716,8 @@ function App() {
           setScheduleRules={setScheduleRules}
           teams={teams}
           setTeams={setTeams}
+          accessRequests={accessRequests}
+          reviewAccessRequest={reviewAccessRequest}
           setActive={setActive}
           configArea={configArea}
           globalSearch={globalSearch}
@@ -673,6 +736,47 @@ function readStoredJson(key, fallback) {
   }
 }
 
+function normalizeTeams(value = initialTeams) {
+  const sectors = Array.isArray(value.sectors) ? value.sectors : [];
+  const users = Array.isArray(value.users) ? value.users : [];
+  const sectorNames = new Set(sectors.map((sector) => normalizeText(sector.name)));
+  const missingSectors = defaultAccessSectors.filter((sector) => !sectorNames.has(normalizeText(sector.name)));
+  return { sectors: [...sectors, ...missingSectors], users };
+}
+
+function normalizeAccessRequest(item = {}) {
+  const requesterType = item.requesterType || item.requester_type || "";
+  const type = accessRequesterTypes.find((option) => option.id === requesterType);
+  return {
+    ...item,
+    requesterType,
+    requesterLabel: type?.label || requesterType || "Solicitante",
+    organizationName: item.organizationName || item.organization_name || "",
+    responsibleName: item.responsibleName || item.responsible_name || "",
+    intendedUse: item.intendedUse || item.intended_use || "",
+    assignedSector: item.assignedSector || item.assigned_sector || type?.sector || "",
+    reviewNote: item.reviewNote || item.review_note || "",
+    temporaryPassword: item.temporaryPassword || item.temporary_password || "",
+    createdAt: item.createdAt || item.created_at || "",
+    reviewedAt: item.reviewedAt || item.reviewed_at || "",
+    status: item.status || "PENDENTE",
+  };
+}
+
+function userRoleLabel(role = "") {
+  return {
+    admin: "Admin",
+    tutor: "Tutor",
+    ong: "ONG",
+    protetor: "Protetor",
+    servidor_publico: "Servidor publico",
+  }[role] || role || "Usuario";
+}
+
+function canManagePublicAnimalFlows(role = "") {
+  return ["admin", "ong", "protetor", "servidor_publico"].includes(role);
+}
+
 function TutorMobileApp({
   currentUser,
   requests,
@@ -684,11 +788,11 @@ function TutorMobileApp({
   scheduleDays,
   speciesOptions,
   sizeOptions,
+  onRequestCreated,
   setCurrentUser,
 }) {
   const [screen, setScreen] = useState("home");
   const [selectedSchedule, setSelectedSchedule] = useState("");
-  const [selectedRequestType, setSelectedRequestType] = useState("");
 
   return (
     <main className="tutor-app">
@@ -716,8 +820,6 @@ function TutorMobileApp({
             scheduleDays={scheduleDays}
             selectedDate={selectedSchedule}
             requestTypes={requestTypes}
-            selectedType={selectedRequestType}
-            onTypeSelect={setSelectedRequestType}
             onSelect={(date) => {
               setSelectedSchedule(date);
               setScreen("solicitacao");
@@ -749,7 +851,6 @@ function TutorMobileApp({
             speciesOptions={speciesOptions}
             sizeOptions={sizeOptions}
             initialSchedule={selectedSchedule}
-            initialType={selectedRequestType}
           />
         </section>
       )}
@@ -759,7 +860,7 @@ function TutorMobileApp({
           <button className="back-button" onClick={() => setScreen("home")}>
             Voltar
           </button>
-          <ValidationKeyConsultation fallbackRequests={requests} currentUser={currentUser} />
+          <ValidationKeyConsultation fallbackRequests={requests} currentUser={currentUser} onRequestCreated={onRequestCreated} />
         </section>
       )}
 
@@ -777,13 +878,16 @@ function TutorMobileApp({
 
 const ADOPTION_STATUS_LABEL = { disponivel: "Disponível", em_processo: "Em processo", adotado: "Adotado" };
 
-function ValidationKeyConsultation({ fallbackRequests = [], currentUser }) {
+function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated }) {
+  const [microchip, setMicrochip] = useState("");
   const [cpf, setCpf] = useState(formatCpf(currentUser?.cpf || ""));
   const [validationKey, setValidationKey] = useState("");
   const [resultRequests, setResultRequests] = useState(null);
   const [resultAdoptions, setResultAdoptions] = useState([]);
+  const [animalRecord, setAnimalRecord] = useState(null);
   const [status, setStatus] = useState("");
   const [searchOk, setSearchOk] = useState(false);
+  const [isConsulting, setIsConsulting] = useState(false);
 
   const hasSearched = resultRequests !== null;
   const visibleRequests = hasSearched ? resultRequests : fallbackRequests;
@@ -796,6 +900,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser }) {
     event.preventDefault();
     const cleanCpf = onlyDigits(cpf);
     const key = validationKey.trim();
+    const chip = microchip.trim();
     if (cleanCpf.length !== 11) {
       setStatus("Informe um CPF valido.");
       setSearchOk(false);
@@ -808,24 +913,36 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser }) {
     }
     setStatus("Consultando...");
     setSearchOk(false);
+    setIsConsulting(true);
     try {
-      const [reqList, adoptList] = await Promise.all([
+      const [record, reqList, adoptList] = await Promise.all([
+        chip
+          ? api.consultAnimalByMicrochip({ microchip: chip, cpf: cleanCpf, validationKey: key })
+          : Promise.resolve(null),
         api.consultRequestsByCredentials(cleanCpf, key),
         api.consultAdoptionsByCredentials(cleanCpf, key),
       ]);
       const normalizedReqs = Array.isArray(reqList) ? reqList.map(normalizeRequest) : [];
       const normalizedAdopts = Array.isArray(adoptList) ? adoptList : [];
+      setAnimalRecord(record);
       setResultRequests(normalizedReqs);
       setResultAdoptions(normalizedAdopts);
-      const total = normalizedReqs.length + normalizedAdopts.length;
+      const total = normalizedReqs.length + normalizedAdopts.length + (record?.animal ? 1 : 0);
       setSearchOk(total > 0);
-      setStatus(total > 0
-        ? `${normalizedReqs.length} solicitação(ões) e ${normalizedAdopts.length} adoção(ões) encontrada(s).`
-        : "Nenhum registro encontrado para este CPF/chave.");
+      if (record?.animal) {
+        setStatus(`Animal localizado. ${normalizedReqs.length} solicitação(ões) e ${normalizedAdopts.length} adoção(ões) vinculada(s).`);
+      } else {
+        setStatus(total > 0
+          ? `${normalizedReqs.length} solicitação(ões) e ${normalizedAdopts.length} adoção(ões) encontrada(s).`
+          : "Nenhum registro encontrado para este CPF/chave.");
+      }
     } catch (err) {
+      setAnimalRecord(null);
       setResultRequests([]);
       setResultAdoptions([]);
-      setStatus(err.message || "Não foi possível consultar CPF/chave.");
+      setStatus(err.message || "Não foi possível consultar o microchip.");
+    } finally {
+      setIsConsulting(false);
     }
   }
 
@@ -838,9 +955,9 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser }) {
             <ShieldCheck size={20} />
           </div>
           <div>
-          <span className="eyebrow">Consulta por validação</span>
-          <h2>Acompanhar solicitações</h2>
-          <p>Digite CPF e chave de validação. A chave é única por CPF e vincula todas as suas solicitações e adoções.</p>
+          <span className="eyebrow">Prontuário animal</span>
+          <h2>Consultar prontuário</h2>
+          <p>Digite CPF, chave de validação e, quando houver, o microchip para abrir o prontuário do animal.</p>
           </div>
           </div>
           <div className="consultation-inline-metrics">
@@ -858,6 +975,10 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser }) {
         </div>
         <div className="consultation-search-row">
         <label className="field">
+          <span>Microchip</span>
+          <input value={microchip} onChange={(event) => setMicrochip(event.target.value.toUpperCase())} placeholder="Opcional" />
+        </label>
+        <label className="field">
           <span>CPF</span>
           <input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} placeholder="000.000.000-00" />
         </label>
@@ -865,13 +986,31 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser }) {
           <span>Chave de validação</span>
           <input value={validationKey} onChange={(event) => setValidationKey(event.target.value.toUpperCase())} placeholder="Cole ou digite sua chave" />
         </label>
-        <button className="primary-action consultation-submit" type="submit">
+        <button className="primary-action consultation-submit" type="submit" disabled={isConsulting}>
           <Search size={18} />
-          Consultar
+          {isConsulting ? "Consultando" : "Consultar"}
         </button>
         </div>
         {status && <p className={searchOk ? "sms-status confirmed" : "helper-text"}>{status}</p>}
       </form>
+
+      {animalRecord?.animal && (
+        <AnimalRecordPanel
+          record={animalRecord}
+          cpf={onlyDigits(cpf)}
+          validationKey={validationKey.trim()}
+          onRequestCreated={(request) => {
+            const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
+            setResultRequests((current) => (
+              Array.isArray(current) && current.some((item) => item.id === normalized.id)
+                ? current.map((item) => (item.id === normalized.id ? normalized : item))
+                : [normalized, ...(Array.isArray(current) ? current : [])]
+            ));
+            setStatus(`Solicitação ${normalized.protocol} criada e enviada para análise.`);
+            setSearchOk(true);
+          }}
+        />
+      )}
 
       {hasSearched && resultAdoptions.length > 0 && (
         <div className="consultation-adoptions">
@@ -891,7 +1030,24 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser }) {
         </div>
       )}
 
-      <TutorDashboard requests={visibleRequests} setActive={() => {}} currentUser={currentUser} compact />
+      <TutorDashboard
+        requests={visibleRequests}
+        setActive={() => {}}
+        currentUser={currentUser}
+        compact
+        cpf={onlyDigits(cpf)}
+        validationKey={validationKey.trim()}
+        onRequestCreated={(request) => {
+          const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
+          setResultRequests((current) => (
+            Array.isArray(current) && current.some((item) => item.id === normalized.id)
+              ? current.map((item) => (item.id === normalized.id ? normalized : item))
+              : [normalized, ...(Array.isArray(current) ? current : [])]
+          ));
+          setStatus(`Solicitação ${normalized.protocol} criada e enviada para análise.`);
+          setSearchOk(true);
+        }}
+      />
     </div>
   );
 }
@@ -900,16 +1056,10 @@ function PublicSchedulePicker({
   requests,
   scheduleDays = [],
   selectedDate = "",
-  requestTypes = initialRequestTypes,
-  selectedType = "",
-  onTypeSelect,
   onSelect,
   pendingReservation = null,
 }) {
   const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
-  const configuredRequestTypes = requestTypes.filter((type) => type.name.trim() && type.active !== false);
-  const selectedRequestType = configuredRequestTypes.find((type) => type.name === selectedType) || null;
-  const canOverrideDailyLimit = Boolean(selectedRequestType?.overrideDailyLimit);
   const scheduleWithUsage = scheduleDays.filter((day) => day.active !== false).map((day) => {
     const confirmed = countUsedVacancies(requests, day.date);
     const pending = pendingReservation?.date === day.date ? (pendingReservation.count || 0) : 0;
@@ -945,17 +1095,6 @@ function PublicSchedulePicker({
         <div>
           <h2>Datas disponíveis</h2>
         </div>
-        <label className="field schedule-type-field">
-          <span>Tipo</span>
-        <select value={selectedType} onChange={(event) => onTypeSelect?.(event.target.value)}>
-          <option value="">Selecione o serviço</option>
-          {configuredRequestTypes.map((type) => (
-            <option key={type.id} value={type.name}>
-              {type.name}
-            </option>
-          ))}
-        </select>
-        </label>
       </div>
       <div className="calendar-month-header">
         <button
@@ -996,11 +1135,11 @@ function PublicSchedulePicker({
                   day.available && !day.isPast && day.remaining > 0 ? "has-vacancy" : "",
                 ].filter(Boolean).join(" ")}
                 type="button"
-                disabled={!day.available || (!canOverrideDailyLimit && day.remaining === 0) || day.isPast || !selectedType}
+                disabled={!day.available || day.remaining === 0 || day.isPast}
                 onClick={() => onSelect(day.date)}
               >
                 <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
-                <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.remaining > 0 ? `${day.remaining} vagas` : canOverrideDailyLimit ? "Extra" : "Lotado"}</small>
+                <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.remaining > 0 ? `${day.remaining} vagas` : "Lotado"}</small>
                 {day.kind === "Mutirao" && <em>Mutirão</em>}
                 {day.locationName && <small>{day.locationName}</small>}
               </button>
@@ -1278,12 +1417,13 @@ function getAnimalMainPhoto(animal) {
   return photos[animal.mainPhotoIndex || 0] || photos[0] || "";
 }
 
-function LoginView({ onLogin, onPublicRequest, onPublicConsult, adoptionAnimals = [], onInterestSent }) {
+function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest, adoptionAnimals = [], onInterestSent }) {
   const [email, setEmail] = useState(envUsers[0].email);
   const [password, setPassword] = useState(envUsers[0].password);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [showVetModal, setShowVetModal] = useState(false);
+  const [showAccessModal, setShowAccessModal] = useState(false);
   const [showMobileAdoption, setShowMobileAdoption] = useState(false);
 
   async function submit(event) {
@@ -1317,7 +1457,6 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, adoptionAnimals 
             </div>
             <div>
               <strong>Sistema municipal</strong>
-              <span>Solicitação municipal</span>
             </div>
           </div>
 
@@ -1329,29 +1468,41 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, adoptionAnimals 
           <div className="login-main-actions">
             <button className="login-big-action primary" onClick={onPublicRequest}>
               <PawPrint size={28} />
-              <strong>Solicitar Castração</strong>
-              <span>Agendar para o seu pet</span>
+              <strong>Cadastrar animal</strong>
+              <span>Primeiro cadastro do tutor e animal</span>
             </button>
 
             <button className="login-big-action consult" onClick={onPublicConsult}>
               <Search size={28} />
-              <strong>Consultar solicitações</strong>
-              <span>Ver andamento e adoções</span>
+              <strong>Prontuário</strong>
+              <span>Consultar histórico e solicitar procedimento</span>
             </button>
 
             <button className="login-big-action secondary login-vet-action" onClick={() => setShowVetModal(true)}>
               <Lock size={28} />
-              <strong>Área do Veterinário</strong>
+              <strong>Área interna</strong>
               <span>Acesso interno</span>
+            </button>
+
+            <button className="login-big-action access" onClick={() => setShowAccessModal(true)}>
+              <Users size={28} />
+              <strong>Solicitar credenciamento</strong>
+              <span>ONGs e protetores</span>
             </button>
           </div>
         </section>
 
       </div>
+      {showAccessModal && (
+        <PublicAccessRequestModal
+          onClose={() => setShowAccessModal(false)}
+          onSubmit={onAccessRequest}
+        />
+      )}
       {showVetModal && (
         <div className="modal-backdrop">
           <form className="auth-modal compact-auth-modal" onSubmit={submit}>
-            <ModalHeader title="Área do Veterinário" eyebrow="Acesso interno" onClose={() => { setShowVetModal(false); setError(""); }} />
+            <ModalHeader title="Área interna" eyebrow="Acesso ao sistema" onClose={() => { setShowVetModal(false); setError(""); }} />
             <label className="field">
               <span>Email</span>
               <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
@@ -1371,6 +1522,104 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, adoptionAnimals 
         </div>
       )}
     </main>
+  );
+}
+
+function PublicAccessRequestModal({ onClose, onSubmit }) {
+  const [form, setForm] = useState({
+    requesterType: "ONG",
+    organizationName: "",
+    responsibleName: "",
+    email: "",
+    phone: "",
+    document: "",
+    city: "",
+    state: "",
+    intendedUse: "",
+  });
+  const [status, setStatus] = useState("");
+  const [sent, setSent] = useState(false);
+  const selectedType = accessRequesterTypes.find((type) => type.id === form.requesterType) || accessRequesterTypes[0];
+
+  function patch(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function submit(event) {
+    event.preventDefault();
+    if (!form.responsibleName.trim() || !form.email.trim()) {
+      setStatus("Informe o responsável e o email para contato.");
+      return;
+    }
+    setStatus("Enviando solicitação...");
+    try {
+      await onSubmit?.({
+        requester_type: form.requesterType,
+        organization_name: form.organizationName,
+        responsible_name: form.responsibleName,
+        email: form.email,
+        phone: form.phone,
+        document: form.document,
+        city: form.city,
+        state: form.state,
+        intended_use: form.intendedUse,
+        assigned_sector: selectedType.sector,
+      });
+      setSent(true);
+      setStatus("");
+    } catch (err) {
+      setStatus(err.message || "Não foi possível enviar a solicitação.");
+    }
+  }
+
+  return (
+    <div className="modal-backdrop">
+      <form className="auth-modal access-request-modal" onSubmit={submit}>
+        <ModalHeader title="Solicitar credenciamento" eyebrow="Acesso à plataforma" onClose={onClose} />
+        {sent ? (
+          <div className="public-form-success compact-success">
+            <CheckCircle2 size={42} />
+            <h2>Solicitação enviada</h2>
+            <p>Um usuário interno vai analisar o pedido e liberar o acesso se estiver tudo certo.</p>
+            <button className="primary-action" type="button" onClick={onClose}>Fechar</button>
+          </div>
+        ) : (
+          <>
+            <div className="compact-choice-field access-type-field">
+              <span>Tipo de solicitante</span>
+              <div>
+                {accessRequesterTypes.map((type) => (
+                  <button
+                    key={type.id}
+                    className={form.requesterType === type.id ? "selected" : ""}
+                    type="button"
+                    onClick={() => patch("requesterType", type.id)}
+                  >
+                    <span>{type.label}</span>
+                    <small>{type.sector}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Field label="Nome da ONG ou grupo" value={form.organizationName} placeholder="Opcional para protetor independente" onChange={(value) => patch("organizationName", value)} />
+            <Field label="Responsável" value={form.responsibleName} placeholder="Nome completo" onChange={(value) => patch("responsibleName", value)} />
+            <Field label="Email" type="email" value={form.email} placeholder="email@dominio.com" onChange={(value) => patch("email", value)} />
+            <div className="form-grid two">
+              <Field label="Telefone" value={form.phone} placeholder="(00) 00000-0000" onChange={(value) => patch("phone", value)} />
+              <Field label="CPF/CNPJ ou matrícula" value={form.document} placeholder="Identificação" onChange={(value) => patch("document", value)} />
+              <Field label="Cidade" value={form.city} placeholder="Município" onChange={(value) => patch("city", value)} />
+              <Field label="UF" value={form.state} placeholder="UF" onChange={(value) => patch("state", value.toUpperCase().slice(0, 2))} />
+            </div>
+            <label className="field">
+              <span>Como pretende auxiliar</span>
+              <textarea value={form.intendedUse} placeholder="Ex: cadastrar animais para adoção, indicar vagas de castração, acompanhar animais de rua..." onChange={(event) => patch("intendedUse", event.target.value)} />
+            </label>
+            {status && <p className={status.includes("Enviando") ? "helper-text" : "form-error"}>{status}</p>}
+            <button className="primary-action" type="submit">Enviar solicitação</button>
+          </>
+        )}
+      </form>
+    </div>
   );
 }
 
@@ -1400,16 +1649,12 @@ function PetWelcomeArt({ className = "" }) {
 
 const GUEST_USER = { role: "guest", name: "", email: "", neighborhood: "", address: "", cpf: "", cep: "", number: "", city: "", state: "", phone: "" };
 
-function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda", scheduleDays = [], requestTypes = [], requests = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings }) {
-  const [screen, setScreen] = useState(initialScreen === "consulta" ? "consulta" : "agenda");
-  const [selectedSchedule, setSelectedSchedule] = useState("");
-  const [selectedType, setSelectedType] = useState("");
+function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda", scheduleDays = [], requestTypes = [], requests = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }) {
+  const [screen, setScreen] = useState(initialScreen === "consulta" ? "consulta" : "formulario");
   const [done, setDone] = useState(null);
-  const [pendingCount, setPendingCount] = useState(0);
 
-  function goToAgenda() {
-    setPendingCount(0);
-    setScreen("agenda");
+  function goToStart() {
+    setScreen("formulario");
   }
 
   const header = (backFn) => (
@@ -1440,35 +1685,12 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
     );
   }
 
-  if (screen === "agenda") {
-    return (
-      <main className="public-form-page">
-        {header(onBack)}
-        <section className="tutor-home">
-          <PublicSchedulePicker
-            requests={requests}
-            scheduleDays={scheduleDays}
-            selectedDate={selectedSchedule}
-            requestTypes={requestTypes}
-            selectedType={selectedType}
-            onTypeSelect={setSelectedType}
-            pendingReservation={pendingCount > 0 ? { date: selectedSchedule, count: pendingCount } : null}
-            onSelect={(date) => {
-              setSelectedSchedule(date);
-              setScreen("formulario");
-            }}
-          />
-        </section>
-      </main>
-    );
-  }
-
   if (screen === "consulta") {
     return (
       <main className="public-form-page">
         {header(onBack)}
         <section className="tutor-screen">
-          <ValidationKeyConsultation fallbackRequests={requests} currentUser={GUEST_USER} />
+          <ValidationKeyConsultation fallbackRequests={requests} currentUser={GUEST_USER} onRequestCreated={onRequestCreated} />
         </section>
       </main>
     );
@@ -1476,28 +1698,25 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
 
   return (
     <main className="public-form-page">
-      {header(goToAgenda)}
+      {header(goToStart)}
       <NewRequest
         createRequest={createRequest}
         currentUser={GUEST_USER}
         compact
-        onBack={goToAgenda}
-        onDone={(request) => { setPendingCount(0); setDone(request); }}
+        onBack={goToStart}
+        onDone={(request) => { setDone(request); }}
         requests={requests}
         scheduleDays={scheduleDays}
         requestTypes={requestTypes}
         aiSettings={aiSettings}
         speciesOptions={speciesOptions}
         sizeOptions={sizeOptions}
-        initialSchedule={selectedSchedule}
-        initialType={selectedType}
-        onAnimalsChange={setPendingCount}
       />
     </main>
   );
 }
 
-function TutorDashboard({ requests, setActive, currentUser, compact = false }) {
+function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf = "", validationKey = "", onRequestCreated }) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
   const next = safeRequests.find((request) => request.status !== "ARQUIVADA" && requestHasTag(request, "DEFERIDA") && (request.appointment || request.preferredSchedule));
 
@@ -1535,11 +1754,11 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }) {
               onAction={() => setActive("solicitacao")}
             />
           )}
-          {safeRequests.slice(0, 4).map((request) => (
+          {safeRequests.slice(0, compact ? safeRequests.length : 4).map((request) => (
             <article className="request-card" key={request.id}>
               <div>
                 <strong>#{request.protocol}</strong>
-                <span>{request.animals.map((animal) => animal.name).join(", ")} - {request.type}</span>
+                <span>{request.animals.map((animal) => animal.name).join(", ")} - {requestTypeLabel(request)}</span>
               </div>
               <StatusBadge status={request.status} />
               <span>{request.appointment || request.createdAt}</span>
@@ -1570,7 +1789,6 @@ function NewRequest({
   sizeOptions = initialSizes,
   initialSchedule = "",
   initialType = "",
-  onAnimalsChange,
 }) {
   const activeSpecies = speciesOptions.filter((item) => item.active !== false).map((item) => item.name);
   const activeSizes = sizeOptions.filter((item) => item.active !== false);
@@ -1585,6 +1803,9 @@ function NewRequest({
     number: currentUser.number || "",
     city: currentUser.city || "",
     state: currentUser.state || "",
+    cadUnico: currentUser.cadUnico || "",
+    cadUnicoNotApplicable: Boolean(currentUser.cadUnicoNotApplicable),
+    isFarmer: Boolean(currentUser.isFarmer || currentUser.is_farmer),
     latitude: "",
     longitude: "",
     type: initialType,
@@ -1601,6 +1822,7 @@ function NewRequest({
       breedDescription: "",
       size: "",
       age: "",
+      birthDate: "",
       procedure: "",
       coat: "",
       hasChip: "",
@@ -1618,7 +1840,7 @@ function NewRequest({
   const [cepStatus, setCepStatus] = useState("");
   const [locationStatus, setLocationStatus] = useState("");
   const [documentUploads, setDocumentUploads] = useState({});
-  const [formStep, setFormStep] = useState(internalSimple ? -1 : skipTutorStep ? 1 : 0);
+  const [formStep, setFormStep] = useState(skipTutorStep ? 1 : 0);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
   const [smsCode, setSmsCode] = useState("");
@@ -1641,7 +1863,6 @@ function NewRequest({
 
   const configuredRequestTypes = requestTypes.filter((type) => type.name.trim() && type.active !== false);
   const selectedRequestType = configuredRequestTypes.find((type) => type.name === requestData.type) || null;
-  const canOverrideDailyLimit = Boolean(selectedRequestType?.overrideDailyLimit);
   const selectedTypeDocuments = (selectedRequestType?.documents || [])
     .map(normalizeDocumentType)
     .filter((document) => document.active !== false);
@@ -1653,19 +1874,22 @@ function NewRequest({
   const canSubmit = requiredIssues.length === 0;
   const formSteps = internalSimple
     ? [
-        { step: -1, label: "Agenda" },
         { step: 0, label: "Tutor" },
         { step: 1, label: "Animal" },
+        { step: 2, label: "Agenda" },
+        { step: 3, label: "Finalização" },
       ]
     : skipTutorStep
     ? [
         { step: 1, label: "Animal" },
-        { step: 2, label: "Documentos" },
+        { step: 2, label: "Agenda" },
+        { step: 3, label: "Documentos" },
       ]
     : [
         { step: 0, label: "Tutor" },
         { step: 1, label: "Animal" },
-        { step: 2, label: "Documentos" },
+        { step: 2, label: "Agenda" },
+        { step: 3, label: "Documentos" },
       ];
   const currentStepIndex = Math.max(formSteps.findIndex((item) => item.step === formStep), 0);
   const availableScheduleDays = scheduleDays.filter((day) => day.active !== false).map((day) => {
@@ -1673,9 +1897,6 @@ function NewRequest({
     return { ...day, used, remaining: Math.max(day.vacancies - used, 0), isPast: isPastScheduleDay(day.date) };
   });
 
-  useEffect(() => {
-    onAnimalsChange?.(animals.length);
-  }, [animals.length]);
   function addAnimal() {
     setAnimals((current) => [
       ...current,
@@ -1687,6 +1908,7 @@ function NewRequest({
         breedDescription: "",
         size: "",
         age: "",
+        birthDate: "",
         procedure: "",
         coat: "",
         hasChip: "",
@@ -1712,6 +1934,14 @@ function NewRequest({
 
   function updateRequestField(field, value) {
     setRequestData((current) => ({ ...current, [field]: value }));
+  }
+
+  function toggleCadUnicoNotApplicable(checked) {
+    setRequestData((current) => ({
+      ...current,
+      cadUnicoNotApplicable: checked,
+      cadUnico: checked ? "" : current.cadUnico,
+    }));
   }
 
   function updateMaskedRequestField(field, value) {
@@ -1763,28 +1993,22 @@ function NewRequest({
     const issues = [];
     const cleanCpf = requestData.cpf.replace(/\D/g, "");
     const cleanPhone = requestData.phone.replace(/\D/g, "");
-    const cleanCep = requestData.cep.replace(/\D/g, "");
     const filledAnimals = animals.length > 0 ? animals : [{}];
 
     if (!requestData.tutor.trim()) issues.push("Informe o nome do tutor.");
     if (cleanCpf.length !== 11) issues.push("Informe um CPF válido.");
     if (!internalSimple) {
-      if (!requestData.email.trim() || !requestData.email.includes("@")) issues.push("Informe um email válido.");
       if (cleanPhone.length < 10) issues.push("Informe um celular válido.");
       if (!skipTutorStep && !smsConfirmed) issues.push("Confirme o código SMS recebido no celular cadastrado.");
-      if (cleanCep.length !== 8) issues.push("Informe um CEP válido.");
       if (!requestData.address.trim()) issues.push("Informe o endereço.");
-      if (!requestData.number.trim()) issues.push("Informe o número.");
       if (!requestData.neighborhood.trim()) issues.push("Informe o bairro.");
       if (!requestData.city.trim()) issues.push("Informe a cidade.");
       if (requestData.state.trim().length !== 2) issues.push("Informe a UF.");
     }
+    if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
     if (!requestData.schedule) issues.push("Escolha uma data disponível.");
-    if (!selectedRequestType) issues.push("Selecione o tipo de solicitação.");
     filledAnimals.forEach((animal, index) => {
       const label = filledAnimals.length > 1 ? ` do animal ${index + 1}` : " do animal";
-      if (!animal.name?.trim()) issues.push(`Informe o nome${label}.`);
-      if (!animal.age?.trim()) issues.push(`Informe a idade aproximada${label}.`);
       if (!animal.procedure) issues.push(`Selecione o procedimento${label}.`);
       if (!animal.species) issues.push(`Selecione a espécie${label}.`);
       if (!animal.sex) issues.push(`Selecione o sexo${label}.`);
@@ -1799,11 +2023,6 @@ function NewRequest({
   function getStepIssues(step = formStep) {
     const cleanCpf = requestData.cpf.replace(/\D/g, "");
     const cleanPhone = requestData.phone.replace(/\D/g, "");
-    const cleanCep = requestData.cep.replace(/\D/g, "");
-
-    if (step === -1) {
-      return [!requestData.schedule, !selectedRequestType].filter(Boolean);
-    }
 
     if (step === 0) {
       if (internalSimple) {
@@ -1815,12 +2034,9 @@ function NewRequest({
       return [
         !requestData.tutor.trim(),
         cleanCpf.length !== 11,
-        !requestData.email.trim() || !requestData.email.includes("@"),
         cleanPhone.length < 10,
         !smsConfirmed,
-        cleanCep.length !== 8,
         !requestData.address.trim(),
-        !requestData.number.trim(),
         !requestData.neighborhood.trim(),
         !requestData.city.trim(),
         requestData.state.trim().length !== 2,
@@ -1830,8 +2046,6 @@ function NewRequest({
     if (step === 1) {
       return animals
         .flatMap((animal) => [
-          !animal.name?.trim(),
-          !animal.age?.trim(),
           !animal.procedure,
           !animal.species,
           !animal.sex,
@@ -1842,7 +2056,11 @@ function NewRequest({
     }
 
     if (step === 2) {
-      return [!requestData.schedule, !selectedRequestType, !requiredDocsApproved].filter(Boolean);
+      return [!requestData.schedule].filter(Boolean);
+    }
+
+    if (step === 3) {
+      return [!requestData.schedule, !requiredDocsApproved, !accepted].filter(Boolean);
     }
 
     return [];
@@ -1852,22 +2070,21 @@ function NewRequest({
     if (!submitAttempted) return false;
     const cleanCpf = requestData.cpf.replace(/\D/g, "");
     const cleanPhone = requestData.phone.replace(/\D/g, "");
-    const cleanCep = requestData.cep.replace(/\D/g, "");
     const firstAnimal = animals[0] || {};
     const checks = {
       tutor: !requestData.tutor.trim(),
       cpf: cleanCpf.length !== 11,
-      email: !requestData.email.trim() || !requestData.email.includes("@"),
+      email: Boolean(requestData.email.trim()) && !requestData.email.includes("@"),
       phone: cleanPhone.length < 10 || !smsConfirmed,
       sms: !smsConfirmed,
-      cep: cleanCep.length !== 8,
+      cep: false,
       address: !requestData.address.trim(),
-      number: !requestData.number.trim(),
+      number: false,
       neighborhood: !requestData.neighborhood.trim(),
       city: !requestData.city.trim(),
       state: requestData.state.trim().length !== 2,
-      animalName: !firstAnimal.name?.trim(),
-      animalAge: !firstAnimal.age?.trim(),
+      animalName: false,
+      animalAge: false,
       procedure: !firstAnimal.procedure,
       species: !firstAnimal.species,
       sex: !firstAnimal.sex,
@@ -1981,10 +2198,33 @@ function NewRequest({
           fileType: file.type,
           fileSize: file.size,
           status: "attached",
-          message: `Não foi possível concluir a validação automática: ${err.message || "erro inesperado"}. Arquivo anexado para conferência manual.`,
-          confidence: 0,
+          message: "Arquivo anexado para conferência manual.",
+          confidence: null,
+          error: true,
         },
       }));
+    }
+  }
+
+  async function handleAnimalPhotoFile(file) {
+    if (!file) return;
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      setDocumentUploads((current) => ({
+        ...current,
+        animal_photo: {
+          documentId: "animal_photo",
+          documentName: "Foto de registro animal",
+          fileName: file.name || `foto-animal-${Date.now()}.jpg`,
+          fileType: file.type || getDataUrlMimeType(dataUrl) || "image/jpeg",
+          fileSize: file.size || 0,
+          status: "attached",
+          message: "Foto opcional anexada ao cadastro do animal.",
+          dataUrl,
+        },
+      }));
+    } catch {
+      setSubmissionError("Não foi possível anexar a foto do animal.");
     }
   }
 
@@ -2003,7 +2243,12 @@ function NewRequest({
       await submitInternal();
       return;
     }
-    setShowSignatureModal(true);
+    await submitWithSignature("", accepted);
+  }
+
+  function openDeclarationPdf() {
+    const html = buildDeclarationPdfHtml(requestData, animals);
+    printHtmlViaIframe(html);
   }
 
   async function submitInternal() {
@@ -2019,7 +2264,7 @@ function NewRequest({
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
-      type: requestData.type,
+      type: requestData.type || animals[0]?.procedure || "Cadastro animal",
       requestTypeId: selectedRequestType?.id || "",
       fee: selectedRequestType?.fee || "",
       phone: requestData.phone || "",
@@ -2034,12 +2279,17 @@ function NewRequest({
       veterinarian: selectedScheduleDay?.veterinarian || selectedScheduleDay?.responsible || "",
       latitude,
       longitude,
+      workflowData: {
+        cadUnico: requestData.cadUnicoNotApplicable ? "" : requestData.cadUnico,
+        cadUnicoNotApplicable: requestData.cadUnicoNotApplicable,
+        isFarmer: requestData.isFarmer,
+      },
       animals: animals.map((animal, index) => ({
         ...animal,
-        name: animal.name || `Animal ${index + 1}`,
-        age: animal.age || "Idade não informada",
+        name: animal.name || "",
+        age: animal.birthDate || animal.age || "",
       })),
-      documents: [],
+      documents: Object.values(documentUploads).filter((upload) => upload?.documentId === "animal_photo"),
       signatureDataUrl: "",
       signedAt: "",
       tags: ["PRESENCIAL"],
@@ -2062,6 +2312,11 @@ function NewRequest({
     const uploadedDocuments = selectedTypeDocuments
       .map((document) => documentUploads[document.id])
       .filter((upload) => upload && acceptableUploadStatuses.includes(upload.status));
+    const animalPhotoUpload = documentUploads.animal_photo;
+    const allUploadedDocuments = [
+      ...uploadedDocuments,
+      ...(animalPhotoUpload ? [animalPhotoUpload] : []),
+    ];
     const localPayload = {
       tutor: requestData.tutor || currentUser.name,
       neighborhood: requestData.neighborhood || "Bairro não informado",
@@ -2069,7 +2324,7 @@ function NewRequest({
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
-      type: requestData.type,
+      type: requestData.type || animals[0]?.procedure || "Cadastro animal",
       requestTypeId: selectedRequestType?.id || "",
       fee: selectedRequestType?.fee || "",
       phone: requestData.phone || "",
@@ -2084,12 +2339,17 @@ function NewRequest({
       veterinarian: selectedScheduleDay?.veterinarian || selectedScheduleDay?.responsible || "",
       latitude,
       longitude,
+      workflowData: {
+        cadUnico: requestData.cadUnicoNotApplicable ? "" : requestData.cadUnico,
+        cadUnicoNotApplicable: requestData.cadUnicoNotApplicable,
+        isFarmer: requestData.isFarmer,
+      },
       animals: animals.map((animal, index) => ({
         ...animal,
-        name: animal.name || `Animal ${index + 1}`,
-        age: animal.age || "Idade não informada",
+        name: animal.name || "",
+        age: animal.birthDate || animal.age || "",
       })),
-      documents: uploadedDocuments,
+      documents: allUploadedDocuments,
       signatureDataUrl: sigData,
       signedAt: new Date().toISOString(),
     };
@@ -2126,20 +2386,6 @@ function NewRequest({
               <span>Data escolhida na agenda</span>
             </div>
           </div>
-          {configuredRequestTypes.length === 0 ? (
-            <div className="document-config-note">
-              <Settings size={18} />
-              <span>Nenhum tipo de solicitação configurado.</span>
-            </div>
-          ) : (
-            <div className="selected-schedule-note compact-context request-type-summary">
-              <FileText size={18} />
-              <div>
-                <strong>{requestData.type || "Tipo não selecionado"}</strong>
-                <span>Tipo escolhido na agenda</span>
-              </div>
-            </div>
-          )}
         </div>
 
         <div className="request-stepper" aria-label="Etapas da solicitação">
@@ -2157,18 +2403,6 @@ function NewRequest({
         {submissionError && <p className="form-error">{submissionError}</p>}
 
         <div className="single-request-form clean-form">
-          {formStep === -1 && <FormSection title="Agenda">
-            <PublicSchedulePicker
-              requests={requests}
-              scheduleDays={scheduleDays}
-              selectedDate={requestData.schedule}
-              requestTypes={requestTypes}
-              selectedType={requestData.type}
-              onTypeSelect={(value) => updateRequestField("type", value)}
-              onSelect={(date) => updateRequestField("schedule", date)}
-            />
-          </FormSection>}
-
           {formStep === 0 && <FormSection title="Tutor e endereço">
             <Field
               label="Nome"
@@ -2184,6 +2418,31 @@ function NewRequest({
               placeholder="000.000.000-00"
               invalid={showInvalid("cpf")}
             />
+            <div className="cadunico-row">
+              <Field
+                label="CadÚnico"
+                value={requestData.cadUnico}
+                onChange={(value) => updateRequestField("cadUnico", value)}
+                placeholder="Número do CadÚnico"
+                readOnly={requestData.cadUnicoNotApplicable}
+              />
+              <label className="checkbox-row cadunico-checkbox">
+                <input
+                  type="checkbox"
+                  checked={requestData.cadUnicoNotApplicable}
+                  onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)}
+                />
+                Não se aplica
+              </label>
+            </div>
+            <label className="checkbox-row farmer-checkbox">
+              <input
+                type="checkbox"
+                checked={requestData.isFarmer}
+                onChange={(event) => updateRequestField("isFarmer", event.target.checked)}
+              />
+              É agricultor(a)
+            </label>
             <div className="form-subsection-title">Endereço</div>
             <div className="address-lookup-grid">
               <div className="cep-with-map">
@@ -2292,13 +2551,7 @@ function NewRequest({
                   label="Procedimento"
                   value={animal.procedure}
                   options={["Castração", "Microchipagem", "Ambos"]}
-                  onChange={(value) => {
-                    updateAnimal(index, "procedure", value);
-                    if (value !== "Castração") {
-                      updateAnimal(index, "hasChip", "");
-                      updateAnimal(index, "microchip", "");
-                    }
-                  }}
+                  onChange={(value) => updateAnimal(index, "procedure", value)}
                   invalid={submitAttempted && !animal.procedure}
                 />
                 <div className="animal-main-grid">
@@ -2307,14 +2560,15 @@ function NewRequest({
                     value={animal.name}
                     onChange={(value) => updateAnimal(index, "name", value)}
                     placeholder="Nome do animal"
-                    invalid={submitAttempted && !animal.name?.trim()}
                   />
                   <Field
-                    label="Idade aproximada"
-                    value={animal.age}
-                    onChange={(value) => updateAnimal(index, "age", value)}
-                    placeholder="Ex: 2 anos, 8 meses"
-                    invalid={submitAttempted && !animal.age?.trim()}
+                    label="Data de nascimento"
+                    value={animal.birthDate || animal.age}
+                    onChange={(value) => {
+                      updateAnimal(index, "birthDate", value);
+                      updateAnimal(index, "age", value);
+                    }}
+                    type="date"
                   />
                   <Field
                     label="Cor da pelagem"
@@ -2322,27 +2576,23 @@ function NewRequest({
                     onChange={(value) => updateAnimal(index, "coat", value)}
                     placeholder="Ex: preto, caramelo"
                   />
-                </div>
-                {animal.procedure === "Castração" && (
-                  <div className="choice-card">
-                    <YesNoField
-                      label="Já possui microchip?"
-                      value={animal.hasChip}
-                      onChange={(value) => {
-                        updateAnimal(index, "hasChip", value);
-                        if (value === "Nao") updateAnimal(index, "microchip", "");
-                      }}
+                  <div className="inline-microchip-fields">
+                    <Field
+                      label="Código do microchip"
+                      value={animal.microchip}
+                      onChange={(value) => updateAnimal(index, "microchip", value)}
+                      placeholder="Número do chip, quando houver"
                     />
-                    {animal.hasChip === "Sim" && (
-                      <Field
-                        label="Código do microchip"
-                        value={animal.microchip}
-                        onChange={(value) => updateAnimal(index, "microchip", value)}
-                        placeholder="Número do chip (identificação do animal)"
+                    <label className="checkbox-row compact-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={animal.hasChip === "Sim"}
+                        onChange={(event) => updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao")}
                       />
-                    )}
+                      Animal já é chipado
+                    </label>
                   </div>
-                )}
+                </div>
                 <div className="choice-card">
                   <strong>Características</strong>
                   <div className="animal-choice-grid">
@@ -2385,7 +2635,7 @@ function NewRequest({
                   />
                 )}
                 <div className="health-card">
-                  <strong>Saúde e cuidados</strong>
+                  <strong>Saúde e cuidados <span className="optional-label">opcional</span></strong>
                   <div className="health-grid">
                   <YesNoField
                     label="Vermifugado?"
@@ -2430,12 +2680,60 @@ function NewRequest({
             </div>
           </FormSection>}
 
-          {!internalSimple && formStep === 2 && <FormSection title="Documentos comprobatórios">
+          {formStep === 2 && <FormSection title="Agenda">
+            <PublicSchedulePicker
+              requests={requests}
+              scheduleDays={scheduleDays}
+              selectedDate={requestData.schedule}
+              pendingReservation={{ date: requestData.schedule, count: animals.length }}
+              onSelect={(date) => updateRequestField("schedule", date)}
+            />
+          </FormSection>}
+
+          {!internalSimple && formStep === 3 && <FormSection title="Documentos comprobatórios">
+            <div className="animal-photo-upload-card">
+              <div>
+                <strong>Foto de registro animal</strong>
+                <span>Opcional</span>
+                {documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}
+              </div>
+              {documentUploads.animal_photo?.dataUrl && (
+                <button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}>
+                  <img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" />
+                </button>
+              )}
+              <div className="animal-photo-actions">
+                <label className="secondary-action file-button">
+                  Enviar foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onClick={(event) => { event.currentTarget.value = ""; }}
+                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
+                  />
+                </label>
+                <label className="ghost-button file-button">
+                  Abrir câmera
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onClick={(event) => { event.currentTarget.value = ""; }}
+                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
+                  />
+                </label>
+                {documentUploads.animal_photo && (
+                  <button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>
+                    Remover
+                  </button>
+                )}
+              </div>
+            </div>
             <div className="document-upload-list">
               {!selectedRequestType && (
                 <EmptyState
-                  title="Selecione um tipo de solicitação"
-                  text="Os documentos exigidos aparecem aqui somente após o admin configurar e o tutor selecionar o tipo."
+                  title="Nenhum documento obrigatório"
+                  text="Este cadastro seguirá sem anexos obrigatórios nesta etapa."
                 />
               )}
               {selectedTypeDocuments.map((document) => {
@@ -2455,14 +2753,58 @@ function NewRequest({
             <div className="declaration-box">
               <FileText size={20} />
               <p>
-                O tutor declara ciência dos cuidados pré e pós-cirúrgicos, responsabilidades de acompanhamento e
-                autorização para registro do procedimento.
+                O tutor declara ciência dos cuidados pré e pós-cirúrgicos, responsabilidades de acompanhamento e autorização
+                para registro do procedimento.{" "}
+                <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>
+                  Ler declaração em PDF
+                </button>
               </p>
             </div>
             <label className={showInvalid("accepted") ? "checkbox-row invalid" : "checkbox-row"}>
               <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-              Li e aceito a declaração pós-cirúrgica.
+              Li e aceito a declaração.
             </label>
+          </FormSection>}
+
+          {internalSimple && formStep === 3 && <FormSection title="Finalização">
+            <div className="animal-photo-upload-card">
+              <div>
+                <strong>Foto de registro animal</strong>
+                <span>Opcional</span>
+                {documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}
+              </div>
+              {documentUploads.animal_photo?.dataUrl && (
+                <button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}>
+                  <img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" />
+                </button>
+              )}
+              <div className="animal-photo-actions">
+                <label className="secondary-action file-button">
+                  Enviar foto
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onClick={(event) => { event.currentTarget.value = ""; }}
+                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
+                  />
+                </label>
+                <label className="ghost-button file-button">
+                  Abrir câmera
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onClick={(event) => { event.currentTarget.value = ""; }}
+                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
+                  />
+                </label>
+                {documentUploads.animal_photo && (
+                  <button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>
+                    Remover
+                  </button>
+                )}
+              </div>
+            </div>
           </FormSection>}
 
         </div>
@@ -2493,16 +2835,60 @@ function NewRequest({
         </div>
       </div>
       {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
-      {showSignatureModal && (
-        <SignatureModal
-          requestData={requestData}
-          animals={animals}
-          onConfirm={(sigData) => { setShowSignatureModal(false); submitWithSignature(sigData, true); }}
-          onClose={() => setShowSignatureModal(false)}
-        />
-      )}
     </section>
   );
+}
+
+function buildDeclarationPdfHtml(requestData, animals = []) {
+  const animalRows = animals.map((animal, index) => `
+    <div class="animal-card">
+      <div class="animal-card-title">Animal ${index + 1}${animal.name ? ` - ${escapeHtml(animal.name)}` : ""}</div>
+      <div class="data-grid three">
+        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "—")}</strong></div>
+        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "—")}</strong></div>
+        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "—")}</strong></div>
+        <div class="data-item"><span>Procedimento</span><strong>${escapeHtml(animal.procedure || "—")}</strong></div>
+      </div>
+    </div>
+  `).join("");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Declaração da solicitação</title>
+    <style>${PDF_BASE_STYLES}</style>
+  </head>
+  <body>
+    <header class="pdf-header">
+      <div>
+        <span class="kicker">Declaração do tutor</span>
+        <h1>Solicitação de castração animal</h1>
+      </div>
+      <div class="header-box"><span>Data</span><strong>${new Date().toLocaleDateString("pt-BR")}</strong></div>
+    </header>
+    <section class="section">
+      <div class="section-title">Dados do tutor</div>
+      <div class="data-grid two">
+        <div class="data-item"><span>Nome</span><strong>${escapeHtml(requestData.tutor || "—")}</strong></div>
+        <div class="data-item"><span>CPF</span><strong>${escapeHtml(requestData.cpf || "—")}</strong></div>
+      </div>
+    </section>
+    <section class="section">
+      <div class="section-title">Animais</div>
+      ${animalRows || "<p>Nenhum animal informado.</p>"}
+    </section>
+    <section class="section">
+      <div class="section-title">Declaração</div>
+      <div class="declaration-card">
+        <p>Declaro que as informações prestadas são verdadeiras e autorizo o uso dos dados para triagem, agendamento e acompanhamento da solicitação de castração animal.</p>
+        <p>Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal e da necessidade de cumprir as orientações fornecidas pela equipe responsável.</p>
+        <p>Ao marcar o aceite no sistema, confirmo que li e concordo com esta declaração.</p>
+      </div>
+    </section>
+    <footer class="footer"><span>Sistema municipal de castração animal</span><span>Gerado em ${new Date().toLocaleString("pt-BR")}</span></footer>
+  </body>
+</html>`;
 }
 
 function SignatureModal({ requestData, animals, onConfirm, onClose }) {
@@ -2569,6 +2955,7 @@ function SignatureModal({ requestData, animals, onConfirm, onClose }) {
       <div class="data-grid four">
         <div class="data-item" style="grid-column:span 2"><span>Nome completo</span><strong>${escapeHtml(requestData.tutor || "—")}</strong></div>
         <div class="data-item"><span>CPF</span><strong>${escapeHtml(requestData.cpf || "—")}</strong></div>
+        <div class="data-item"><span>CadÚnico</span><strong>${escapeHtml(requestData.cadUnicoNotApplicable ? "Não se aplica" : requestData.cadUnico || "—")}</strong></div>
         <div class="data-item"><span>Celular</span><strong>${escapeHtml(requestData.phone || "—")}</strong></div>
         <div class="data-item"><span>E-mail</span><strong>${escapeHtml(requestData.email || "—")}</strong></div>
         <div class="data-item" style="grid-column:span 3"><span>Endereço</span><strong>${escapeHtml(address || "—")}</strong></div>
@@ -2774,19 +3161,25 @@ function SegmentedControl({ label, value, options, onChange, invalid = false }) 
 }
 
 function DocumentPreviewModal({ document, onClose }) {
-  const mimeType = document.fileType || getDataUrlMimeType(document.dataUrl);
+  const dataUrl = getDocumentPreviewSource(document);
+  const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
   const isImage = mimeType?.startsWith("image/");
   const isPdf = mimeType === "application/pdf";
+  const canPreview = Boolean(dataUrl) && (isImage || isPdf);
 
   return (
     <div className="modal-backdrop">
       <div className="document-preview-modal" role="dialog" aria-modal="true">
         <ModalHeader title={document.documentName || document.fileName} eyebrow={document.eyebrow || "Anexo"} subtitle={document.fileName} onClose={onClose} />
         <div className="document-preview-frame">
-          {isImage && <img src={document.dataUrl} alt={document.documentName || document.fileName} />}
-          {isPdf && <iframe title={document.fileName} src={document.dataUrl} />}
-          {!isImage && !isPdf && (
-            <EmptyState title="Prévia indisponível" text="Este tipo de arquivo foi anexado, mas não possui prévia no navegador." />
+          {isImage && <img src={dataUrl} alt={document.documentName || document.fileName} />}
+          {isPdf && (
+            <object title={document.fileName} data={dataUrl} type="application/pdf">
+              <embed src={dataUrl} type="application/pdf" />
+            </object>
+          )}
+          {!canPreview && (
+            <EmptyState title="Prévia indisponível" text="Este anexo não possui arquivo de prévia salvo em formato compatível." />
           )}
         </div>
       </div>
@@ -2813,9 +3206,11 @@ function AdminDashboard({
   const [assignRequest, setAssignRequest] = useState(null);
   const [rescheduleRequest, setRescheduleRequest] = useState(null);
   const [rejectRequest, setRejectRequest] = useState(null);
+  const [attendanceRequest, setAttendanceRequest] = useState(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [assignment, setAssignment] = useState({ sectorId: "", userId: "" });
   const [rejectData, setRejectData] = useState({ reason: "", note: "" });
+  const [attendanceData, setAttendanceData] = useState({ procedures: "", note: "" });
 
   const visibleRequests = useMemo(
     () => (Array.isArray(requests) ? requests : [])
@@ -2895,6 +3290,32 @@ function AdminDashboard({
       { status: "ARQUIVADA", tags: mergeTags(request.tags, [tag]) },
       note,
     );
+    setPreviewRequest(null);
+  }
+
+  function openAttendance(request) {
+    setAttendanceRequest(request);
+    setAttendanceData({ procedures: "", note: "" });
+  }
+
+  function confirmAttendance(event) {
+    event.preventDefault();
+    if (!attendanceRequest || !attendanceData.procedures.trim()) return;
+    const procedures = attendanceData.procedures.trim();
+    const note = attendanceData.note.trim();
+    patchRequest?.(
+      attendanceRequest.id,
+      {
+        status: "ARQUIVADA",
+        tags: mergeTags(attendanceRequest.tags, ["COMPARECEU"]),
+        workflow_data: {
+          performedProcedures: procedures,
+          attendanceNote: note,
+        },
+      },
+      `Comparecimento confirmado. Procedimentos realizados: ${procedures}${note ? `. Observação: ${note}` : ""}`,
+    );
+    setAttendanceRequest(null);
     setPreviewRequest(null);
   }
 
@@ -2988,11 +3409,12 @@ function AdminDashboard({
                   <div><span className="eyebrow">#{request.protocol}</span><h3>{request.tutor}</h3></div>
                   <StatusBadge status={request.status} className="triage-status-badge" />
                 </div>
-                <p>Tipo: {request.type || "Castracao"}</p>
+                <p>Tipo: {requestTypeLabel(request)}</p>
                 <p>Data: {request.preferredSchedule || request.appointment || "Aguardando"}</p>
                 <p>Responsavel: {request.responsible || "Nao atribuido"}</p>
                 <p>Setor: {request.assignedSectorName || "Sem setor"}</p>
                 <p>Animal: {request.animals.map((animal) => animal.name).join(", ") || "Animal nao informado"}</p>
+                <MicrochipLine request={request} />
                 {request.tags.length > 0 && (
                   <div className="workflow-tag-list">
                     {request.tags.map((tag) => <span key={tag}>{workflowTagLabels[tag] || tag}</span>)}
@@ -3027,6 +3449,7 @@ function AdminDashboard({
           onApprove={approveRequest}
           onReject={openReject}
           onArchive={archiveWithTag}
+          onAttendance={openAttendance}
           onReschedule={openRescheduleFromPreview}
         />
       )}
@@ -3086,11 +3509,35 @@ function AdminDashboard({
           </form>
         </div>
       )}
+
+      {attendanceRequest && (
+        <div className="modal-backdrop">
+          <form className="workflow-modal" onSubmit={confirmAttendance}>
+            <ModalHeader title="Procedimentos realizados" eyebrow="Comparecimento" onClose={() => setAttendanceRequest(null)} />
+            <label className="field">
+              <span>Procedimento</span>
+              <select value={attendanceData.procedures} onChange={(event) => setAttendanceData((current) => ({ ...current, procedures: event.target.value }))}>
+                <option value="">Selecione</option>
+                <option>Castração</option>
+                <option>Microchipagem</option>
+                <option>Castração e microchipagem</option>
+                <option>Avaliação clínica</option>
+                <option>Outro</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Observacao interna</span>
+              <textarea value={attendanceData.note} onChange={(event) => setAttendanceData((current) => ({ ...current, note: event.target.value }))} placeholder="Descreva detalhes, intercorrências ou procedimentos adicionais." />
+            </label>
+            <button className="primary-action" type="submit" disabled={!attendanceData.procedures}>Confirmar comparecimento</button>
+          </form>
+        </div>
+      )}
     </section>
   );
 }
 
-function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onReschedule }) {
+function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule }) {
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [bundleLoading, setBundleLoading] = useState(false);
@@ -3190,7 +3637,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
         <div className="analysis-actions">
           {canApprove && <button className="primary-action" type="button" onClick={() => onApprove?.(request)}>Deferir</button>}
           {canAnalyze && <button className="secondary-action danger-action" type="button" onClick={() => onReject?.(request)}>Indeferir</button>}
-          {canRecordAttendance && <button className="primary-action" type="button" onClick={() => onArchive?.(request, "COMPARECEU", "Comparecimento confirmado")}>Compareceu</button>}
+          {canRecordAttendance && <button className="primary-action" type="button" onClick={() => onAttendance?.(request)}>Compareceu</button>}
           {canRecordAttendance && <button className="secondary-action danger-action" type="button" onClick={() => onArchive?.(request, "CANCELADA", "Cirurgia cancelada")}>Cancelou</button>}
           {canReschedule && <button className="ghost-button" type="button" onClick={() => onReschedule?.(request)}>Reagendar</button>}
         </div>
@@ -3315,7 +3762,10 @@ function ScheduleView({
             <article className="request-card" key={request.id}>
               <span>{request.appointment || request.preferredSchedule}</span>
               <strong>{request.tutor}</strong>
-              <span>{request.animals[0].name} - {request.animals[0].procedure}</span>
+              <span className="request-card-meta">
+                {request.animals[0].name} - {request.animals[0].procedure}
+                <MicrochipLine request={request} />
+              </span>
               <StatusBadge status={request.status} />
             </article>
           ))}
@@ -3374,7 +3824,7 @@ function AdoptionView({
   const [adoptionFilters, setAdoptionFilters] = useState({ species: "", sex: "" });
   const [editingAnimalId, setEditingAnimalId] = useState(null);
   const [interestsModal, setInterestsModal] = useState(null); // { animal, list }
-  const canManageAdoptions = currentUser.role === "admin";
+  const canManageAdoptions = canManagePublicAnimalFlows(currentUser.role);
   const availableAnimals = adoptionAnimals.filter((animal) => animal.status !== "adotado");
   const adoptedAnimals = adoptionAnimals.filter((animal) => animal.status === "adotado");
   const baseDisplayedAnimals = canManageAdoptions && adoptionTab === "adopted" ? adoptedAnimals : availableAnimals;
@@ -3901,6 +4351,121 @@ function getRequestClosedByName(request = {}, teams = initialTeams, currentUser 
   const byMatch = historyText.match(/\bpor\s+([^-|]+)/i);
   const byFromText = getTeamUserName(byMatch?.[1], teams, currentUser);
   return byFromText || getRequestUserName(request);
+}
+
+function AccessRequestsView({ accessRequests = [], reviewAccessRequest, teams = initialTeams }) {
+  const [filter, setFilter] = useState("PENDENTE");
+  const [reviewing, setReviewing] = useState(null);
+  const [reviewNote, setReviewNote] = useState("");
+  const [status, setStatus] = useState("");
+  const filtered = accessRequests.filter((item) => filter === "TODOS" || item.status === filter);
+  const pendingCount = accessRequests.filter((item) => item.status === "PENDENTE").length;
+  const approvedCount = accessRequests.filter((item) => item.status === "APROVADO").length;
+  const rejectedCount = accessRequests.filter((item) => item.status === "RECUSADO").length;
+
+  async function decide(decision) {
+    if (!reviewing) return;
+    setStatus("Registrando decisão...");
+    try {
+      const updated = await reviewAccessRequest?.(reviewing.id, { status: decision, review_note: reviewNote });
+      setStatus(decision === "APROVADO" && updated?.temporaryPassword
+        ? `Acesso aprovado. Senha inicial: ${updated.temporaryPassword}`
+        : "Decisão registrada.");
+      setReviewing(null);
+      setReviewNote("");
+    } catch (err) {
+      setStatus(err.message || "Não foi possível revisar o credenciamento.");
+    }
+  }
+
+  return (
+    <section className="workspace">
+      <div className="metrics-grid">
+        <Metric title="Pendentes" value={pendingCount} icon={ClipboardList} />
+        <Metric title="Aprovados" value={approvedCount} icon={CheckCircle2} />
+        <Metric title="Recusados" value={rejectedCount} icon={X} />
+      </div>
+
+      <div className="panel wide">
+        <PanelHeader
+          title="Solicitações de credenciamento"
+          aside={(
+            <div className="config-status-filter">
+              {["PENDENTE", "APROVADO", "RECUSADO", "TODOS"].map((item) => (
+                <button key={item} className={filter === item ? "selected" : ""} type="button" onClick={() => setFilter(item)}>
+                  {item === "TODOS" ? "Todos" : accessStatusLabel(item)}
+                </button>
+              ))}
+            </div>
+          )}
+        />
+        {status && <p className="access-review-status">{status}</p>}
+        <div className="config-editor-grid access-request-grid">
+          {filtered.length === 0 && (
+            <EmptyState title="Nenhum credenciamento encontrado" text="As solicitações enviadas pela home aparecerão aqui para análise." />
+          )}
+          {filtered.map((item) => {
+            const sector = (teams.sectors || []).find((candidate) => normalizeText(candidate.name) === normalizeText(item.assignedSector));
+            return (
+              <article className="request-type-card config-summary-card access-request-card" key={item.id}>
+                <div className="config-card-title">
+                  <strong>{item.organizationName || item.responsibleName}</strong>
+                  <small className={`schedule-status ${item.status === "PENDENTE" ? "pending" : item.status === "APROVADO" ? "active" : "inactive"}`}>
+                    {accessStatusLabel(item.status)}
+                  </small>
+                </div>
+                <div className="config-card-details">
+                  <span>{item.requesterLabel}</span>
+                  <span>Responsável: {item.responsibleName}</span>
+                  <span>{item.email}</span>
+                  {item.phone && <span>{item.phone}</span>}
+                  {(item.city || item.state) && <span>{[item.city, item.state].filter(Boolean).join("/")}</span>}
+                  <span>Setor: {sector?.name || item.assignedSector || "Sem setor"}</span>
+                  {item.intendedUse && <span>{item.intendedUse}</span>}
+                  {item.temporaryPassword && <span>Senha inicial: {item.temporaryPassword}</span>}
+                </div>
+                <div className="form-actions">
+                  <button className="ghost-button" type="button" onClick={() => { setReviewing(item); setReviewNote(item.reviewNote || ""); }}>
+                    Analisar
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+
+      {reviewing && (
+        <div className="modal-backdrop">
+          <div className="workflow-modal" role="dialog" aria-modal="true">
+            <ModalHeader title="Analisar credenciamento" eyebrow={reviewing.requesterLabel} onClose={() => setReviewing(null)} />
+            <div className="detail-grid compact-detail-grid">
+              <p><span>Solicitante</span>{reviewing.organizationName || reviewing.responsibleName}</p>
+              <p><span>Responsável</span>{reviewing.responsibleName}</p>
+              <p><span>Email</span>{reviewing.email}</p>
+              <p><span>Setor</span>{reviewing.assignedSector}</p>
+            </div>
+            <label className="field">
+              <span>Observação da análise</span>
+              <textarea value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Motivo da aprovação, pendência ou recusa" />
+            </label>
+            <div className="form-actions">
+              <button className="danger-action" type="button" onClick={() => decide("RECUSADO")}>Recusar</button>
+              <button className="primary-action" type="button" onClick={() => decide("APROVADO")}>Aprovar e criar usuário</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function accessStatusLabel(status = "") {
+  return {
+    PENDENTE: "Pendente",
+    APROVADO: "Aprovado",
+    RECUSADO: "Recusado",
+  }[status] || status || "Pendente";
 }
 
 function parseAnyDate(value) {
@@ -4459,7 +5024,7 @@ function ConfigView({
   setTeams,
   configArea = "environment",
 }) {
-  const roles = ["Super Admin", "Coordenador", "Triagem", "Analista", "Agendador", "Veterinário", "Adoção", "Auditor"];
+  const roles = ["Super Admin", "Coordenador", "Triagem", "Analista", "Agendador", "Veterinário", "Adoção", "Auditor", "Servidor Público"];
   const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false };
   const emptyAgendaForm = {
     description: "Agenda padrão",
@@ -5855,6 +6420,264 @@ function SimpleConfigList({ title, items, allItems = items, filterValue = "activ
   );
 }
 
+function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }) {
+  const [procedureOpen, setProcedureOpen] = useState(false);
+  const [deathOpen, setDeathOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [procedureForm, setProcedureForm] = useState({ request_type: "Castração", notes: "" });
+  const [deathForm, setDeathForm] = useState({ death_date: "", death_cause: "", notes: "" });
+  const [transferForm, setTransferForm] = useState({
+    target_tutor_name: "",
+    target_tutor_cpf: "",
+    target_tutor_phone: "",
+    target_tutor_email: "",
+    notes: "",
+  });
+  const [formStatus, setFormStatus] = useState("");
+  const [saving, setSaving] = useState("");
+  const animal = record.animal || {};
+  const tutor = record.tutor || {};
+  const history = Array.isArray(record.history) ? record.history : [];
+
+  async function submitProcedure(event) {
+    event.preventDefault();
+    const tutorCpf = onlyDigits(tutor.cpf || cpf);
+    if (tutorCpf.length !== 11) {
+      setFormStatus("CPF do tutor não está válido para abrir procedimento.");
+      return;
+    }
+    try {
+      setSaving("procedure");
+      const created = await api.createRequest({
+        tutor_name: tutor.tutor_name || tutor.name || "",
+        tutor_email: tutor.tutor_email || tutor.email || "",
+        cpf: tutorCpf,
+        phone: tutor.phone || "",
+        address: tutor.address || "",
+        neighborhood: tutor.neighborhood || "",
+        city: tutor.city || "",
+        state: tutor.state || "",
+        cep: tutor.cep || "",
+        animal_id: animal.id,
+        animal_microchip: animal.microchip,
+        animal_name: animal.name,
+        species: animal.species,
+        size: animal.size,
+        request_type: procedureForm.request_type,
+        notes: procedureForm.notes,
+        tags: ["MICROCHIP"],
+        workflow_data: { animal_request_type: "procedure_from_record" },
+        animals: [{
+          id: animal.id,
+          microchip: animal.microchip,
+          name: animal.name,
+          species: animal.species,
+          sex: animal.sex,
+          size: animal.size,
+          procedure: procedureForm.request_type,
+        }],
+      });
+      setProcedureOpen(false);
+      setProcedureForm({ request_type: "Castração", notes: "" });
+      setFormStatus("Solicitação de procedimento enviada para análise.");
+      onRequestCreated?.(created);
+    } catch (err) {
+      setFormStatus(err.message || "Não foi possível solicitar o procedimento.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function submitDeath(event) {
+    event.preventDefault();
+    if (!deathForm.death_date || !deathForm.death_cause.trim()) {
+      setFormStatus("Informe data e causa do óbito.");
+      return;
+    }
+    try {
+      setSaving("death");
+      const created = await api.createAnimalDeathRequest(animal.id, {
+        ...deathForm,
+        cpf,
+        validationKey,
+      });
+      setDeathOpen(false);
+      setDeathForm({ death_date: "", death_cause: "", notes: "" });
+      setFormStatus("Registro de óbito enviado para análise.");
+      onRequestCreated?.(created);
+    } catch (err) {
+      setFormStatus(err.message || "Não foi possível registrar o óbito.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  async function submitTransfer(event) {
+    event.preventDefault();
+    if (!transferForm.target_tutor_name.trim() || onlyDigits(transferForm.target_tutor_cpf).length !== 11) {
+      setFormStatus("Informe nome e CPF válido do novo tutor.");
+      return;
+    }
+    try {
+      setSaving("transfer");
+      const created = await api.createAnimalTransferRequest(animal.id, {
+        ...transferForm,
+        target_tutor_cpf: onlyDigits(transferForm.target_tutor_cpf),
+        cpf,
+        validationKey,
+      });
+      setTransferOpen(false);
+      setTransferForm({ target_tutor_name: "", target_tutor_cpf: "", target_tutor_phone: "", target_tutor_email: "", notes: "" });
+      setFormStatus("Solicitação de troca de tutor enviada para análise.");
+      onRequestCreated?.(created);
+    } catch (err) {
+      setFormStatus(err.message || "Não foi possível solicitar a troca de tutor.");
+    } finally {
+      setSaving("");
+    }
+  }
+
+  return (
+    <section className="animal-record-panel">
+      <div className="animal-record-header">
+        <div>
+          <span className="eyebrow">Animal encontrado</span>
+          <h3>{animal.name || "Animal sem nome"}</h3>
+          <p>{[animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização"}</p>
+        </div>
+        <span className="animal-status-chip">{animal.status || "ativo"}</span>
+      </div>
+
+      <div className="animal-record-grid">
+        <InfoTile label="Microchip" value={animal.microchip || "Não informado"} />
+        <InfoTile label="Tutor atual" value={tutor.tutor_name || tutor.name || "Não informado"} />
+        <InfoTile label="CPF do tutor" value={maskCpf(tutor.cpf || cpf)} />
+        <InfoTile label="Contato" value={[tutor.phone, tutor.tutor_email].filter(Boolean).join(" · ") || "Não informado"} />
+      </div>
+
+      <div className="animal-record-actions">
+        <button className="primary-action" type="button" onClick={() => { setProcedureOpen((value) => !value); setDeathOpen(false); setTransferOpen(false); }}>
+          Solicitar procedimento
+        </button>
+        <button className="secondary-action" type="button" onClick={() => { setDeathOpen((value) => !value); setProcedureOpen(false); setTransferOpen(false); }}>
+          Registrar óbito
+        </button>
+        <button className="secondary-action" type="button" onClick={() => { setTransferOpen((value) => !value); setProcedureOpen(false); setDeathOpen(false); }}>
+          Solicitar troca de tutor
+        </button>
+      </div>
+
+      {procedureOpen && (
+        <div className="modal-backdrop">
+          <form className="workflow-modal animal-action-modal" onSubmit={submitProcedure} role="dialog" aria-modal="true">
+            <ModalHeader title="Solicitar procedimento" eyebrow={animal.name || "Animal"} onClose={() => setProcedureOpen(false)} />
+            <div className="detail-grid compact-detail-grid">
+              <p><span>Microchip</span>{animal.microchip || "Não informado"}</p>
+              <p><span>Tutor</span>{tutor.tutor_name || tutor.name || "Não informado"}</p>
+            </div>
+            <label className="field">
+              <span>Procedimento</span>
+              <select value={procedureForm.request_type} onChange={(event) => setProcedureForm((current) => ({ ...current, request_type: event.target.value }))}>
+                <option>Castração</option>
+                <option>Microchipagem</option>
+                <option>Castração e microchipagem</option>
+              </select>
+            </label>
+            <label className="field animal-form-notes">
+              <span>Observações</span>
+              <textarea value={procedureForm.notes} onChange={(event) => setProcedureForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Descreva a necessidade do procedimento" />
+            </label>
+            <div className="form-actions">
+              <button className="ghost-button" type="button" onClick={() => setProcedureOpen(false)}>Cancelar</button>
+              <button className="primary-action" type="submit" disabled={saving === "procedure"}>{saving === "procedure" ? "Enviando..." : "Enviar procedimento"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {deathOpen && (
+        <div className="modal-backdrop">
+          <form className="workflow-modal animal-action-modal" onSubmit={submitDeath} role="dialog" aria-modal="true">
+            <ModalHeader title="Registrar óbito" eyebrow={animal.name || "Animal"} onClose={() => setDeathOpen(false)} />
+            <div className="detail-grid compact-detail-grid">
+              <p><span>Microchip</span>{animal.microchip || "Não informado"}</p>
+              <p><span>Tutor</span>{tutor.tutor_name || tutor.name || "Não informado"}</p>
+            </div>
+            <label className="field"><span>Data do óbito</span><input type="date" value={deathForm.death_date} onChange={(event) => setDeathForm((current) => ({ ...current, death_date: event.target.value }))} /></label>
+            <label className="field"><span>Causa mortis</span><input value={deathForm.death_cause} onChange={(event) => setDeathForm((current) => ({ ...current, death_cause: event.target.value }))} placeholder="Causa informada pelo tutor" /></label>
+            <label className="field animal-form-notes"><span>Observações</span><textarea value={deathForm.notes} onChange={(event) => setDeathForm((current) => ({ ...current, notes: event.target.value }))} /></label>
+            <div className="form-actions">
+              <button className="ghost-button" type="button" onClick={() => setDeathOpen(false)}>Cancelar</button>
+              <button className="primary-action" type="submit" disabled={saving === "death"}>{saving === "death" ? "Enviando..." : "Enviar óbito"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {transferOpen && (
+        <div className="modal-backdrop">
+          <form className="workflow-modal animal-action-modal" onSubmit={submitTransfer} role="dialog" aria-modal="true">
+            <ModalHeader title="Solicitar troca de tutor" eyebrow={animal.name || "Animal"} onClose={() => setTransferOpen(false)} />
+            <div className="detail-grid compact-detail-grid">
+              <p><span>Microchip</span>{animal.microchip || "Não informado"}</p>
+              <p><span>Tutor atual</span>{tutor.tutor_name || tutor.name || "Não informado"}</p>
+            </div>
+            <label className="field"><span>Novo tutor</span><input value={transferForm.target_tutor_name} onChange={(event) => setTransferForm((current) => ({ ...current, target_tutor_name: event.target.value }))} /></label>
+            <label className="field"><span>CPF do novo tutor</span><input value={transferForm.target_tutor_cpf} onChange={(event) => setTransferForm((current) => ({ ...current, target_tutor_cpf: formatCpf(event.target.value) }))} placeholder="000.000.000-00" /></label>
+            <div className="two-column-fields">
+              <label className="field"><span>Telefone</span><input value={transferForm.target_tutor_phone} onChange={(event) => setTransferForm((current) => ({ ...current, target_tutor_phone: event.target.value }))} /></label>
+              <label className="field"><span>Email</span><input value={transferForm.target_tutor_email} onChange={(event) => setTransferForm((current) => ({ ...current, target_tutor_email: event.target.value }))} /></label>
+            </div>
+            <label className="field animal-form-notes"><span>Motivo</span><textarea value={transferForm.notes} onChange={(event) => setTransferForm((current) => ({ ...current, notes: event.target.value }))} /></label>
+            <div className="form-actions">
+              <button className="ghost-button" type="button" onClick={() => setTransferOpen(false)}>Cancelar</button>
+              <button className="primary-action" type="submit" disabled={saving === "transfer"}>{saving === "transfer" ? "Enviando..." : "Enviar troca"}</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {formStatus && <p className={formStatus.includes("enviad") || formStatus.includes("análise") ? "sms-status confirmed" : "helper-text"}>{formStatus}</p>}
+
+      <div className="animal-history">
+        <h4>Prontuário do animal</h4>
+        {history.length === 0 && <p className="helper-text">Nenhum evento registrado para este microchip.</p>}
+        {history.slice(0, 8).map((item, index) => (
+          <article className="animal-history-item" key={`${item.source || "history"}-${item.request_id || item.id || index}`}>
+            <span>{formatDateTime(item.occurred_at) || "Sem data"}</span>
+            <strong>{animalHistoryTitle(item)}</strong>
+            {(item.protocol || item.status || item.notes) && (
+              <p>{[item.protocol ? `#${item.protocol}` : "", item.status ? statusLabels[item.status] || item.status : "", item.notes].filter(Boolean).join(" · ")}</p>
+            )}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function InfoTile({ label, value }) {
+  return (
+    <div className="info-tile">
+      <span>{label}</span>
+      <strong>{value || "Não informado"}</strong>
+    </div>
+  );
+}
+
+function animalHistoryTitle(item = {}) {
+  const labels = {
+    ANIMAL_OBITO: "Registro de óbito",
+    TROCA_TUTOR: "Troca de tutor",
+    SOLICITACAO_OBITO: "Solicitação de óbito",
+    SOLICITACAO_TROCA_TUTOR: "Solicitação de troca de tutor",
+    SOLICITACAO_PROCEDIMENTO: "Solicitação de procedimento",
+    IMPORTACAO_SOLICITACAO: "Cadastro importado",
+    SOLICITACAO: "Solicitação",
+  };
+  return labels[item.type] || item.title || item.type || "Evento";
+}
+
 function ConfigSectionHeader({ title, createLabel, onCreate, children }) {
   return (
     <div className="config-section-header">
@@ -5956,11 +6779,12 @@ function StatusBadge({ status, className = "" }) {
   return <span className={`status-badge ${status.toLowerCase()} ${className}`.trim()}>{statusLabels[status]}</span>;
 }
 
-function Field({ label, value, onChange, placeholder, readOnly = false, invalid = false }) {
+function Field({ label, value, onChange, placeholder, readOnly = false, invalid = false, type = "text" }) {
   return (
     <label className={invalid ? "field invalid" : "field"}>
       <span>{label}</span>
       <input
+        type={type}
         value={value}
         readOnly={readOnly || !onChange}
         placeholder={placeholder}
@@ -5980,7 +6804,7 @@ function YesNoField({ label, value, onChange }) {
             key={option}
             type="button"
             className={value === option ? "selected" : ""}
-            onClick={() => onChange(option)}
+            onClick={() => onChange(value === option ? "" : option)}
           >
             {option}
           </button>
@@ -6005,7 +6829,7 @@ function CompactChoiceField({ label, value, options, onChange, invalid = false }
             type="button"
             title={optionTitle}
             className={value === optionLabel ? "selected" : ""}
-            onClick={() => onChange(optionLabel)}
+            onClick={() => onChange(value === optionLabel ? "" : optionLabel)}
           >
             <span>{optionLabel}</span>
             {optionSubtitle && <small>{optionSubtitle}</small>}
@@ -6073,8 +6897,9 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
     rejected: "Conclusão: documento recusado.",
   }[upload?.status] || "Conclusão: aguardando envio.";
   const confidence = Number(upload?.confidence);
-  const hasConfidence = Number.isFinite(confidence);
-  const providerLabel = [upload?.provider, upload?.model].filter(Boolean).join(" / ");
+  const showTechnicalDetails = upload?.status === "approved" || upload?.status === "rejected";
+  const hasConfidence = showTechnicalDetails && Number.isFinite(confidence);
+  const providerLabel = showTechnicalDetails ? [upload?.provider, upload?.model].filter(Boolean).join(" / ") : "";
 
   return (
     <article className={`document-upload-card scanner-card ${upload?.status || "empty"}`}>
@@ -6145,8 +6970,8 @@ async function validateDocumentWithAI(document, file, aiSettings = initialAiSett
     console.error("Erro ao validar documento com IA externa:", err);
     return {
       status: "attached",
-      message: `IA externa não analisou o arquivo: ${err.message || "falha desconhecida"}. Arquivo anexado para conferência manual.`,
-      confidence: 0,
+      message: "Arquivo anexado para conferência manual.",
+      confidence: null,
       provider: aiSettings.provider || "IA externa",
       model: aiSettings.model || "",
       error: true,
@@ -6226,6 +7051,7 @@ function matchesRequestSearch(request, query) {
   const normalizedQuery = normalizeText(query);
   if (!normalizedQuery) return true;
   const animalNames = request.animals?.map((animal) => animal.name).join(" ") || "";
+  const animalMicrochips = getRequestMicrochips(request).join(" ");
   const searchable = [
     request.protocol,
     request.tutor,
@@ -6237,8 +7063,24 @@ function matchesRequestSearch(request, query) {
     request.assignedSectorName,
     request.address,
     animalNames,
+    animalMicrochips,
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
+}
+
+function getRequestMicrochips(request = {}) {
+  return [
+    request.animalMicrochip,
+    request.animal_microchip,
+    ...(request.animals || []).map((animal) => animal.microchip),
+  ]
+    .filter(Boolean);
+}
+
+function MicrochipLine({ request }) {
+  const microchips = getRequestMicrochips(request);
+  if (!microchips.length) return null;
+  return <span className="microchip-line">Microchip: {microchips.join(", ")}</span>;
 }
 
 function onlyDigits(value = "") {
@@ -6293,6 +7135,21 @@ function getDataUrlMimeType(dataUrl = "") {
   return match?.[1] || "";
 }
 
+function getDocumentPreviewSource(document = {}) {
+  const raw = document.dataUrl
+    || document.data_url
+    || document.previewUrl
+    || document.preview_url
+    || document.url
+    || document.content
+    || "";
+  if (!raw) return "";
+  if (String(raw).startsWith("data:") || String(raw).startsWith("blob:") || String(raw).startsWith("http")) return raw;
+
+  const mimeType = document.fileType || document.type || document.mimeType || "application/pdf";
+  return `data:${mimeType};base64,${raw}`;
+}
+
 function isRequestDocumentAttachment(document = {}) {
   return document?.documentId?.startsWith?.("requerimento-")
     || document?.documentName === "Requerimento municipal";
@@ -6314,9 +7171,11 @@ async function prepareProcessDocumentPreview(item, request) {
   }
 
   const document = item.document || {};
-  const fileType = document.fileType || getDataUrlMimeType(document.dataUrl);
+  const dataUrl = getDocumentPreviewSource(document);
+  const fileType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
   return {
     ...document,
+    dataUrl,
     fileType,
     eyebrow: "Anexo",
     documentName: document.documentName || item.tipo || "Documento anexado",
@@ -6388,7 +7247,7 @@ function generateRequestPdf(request, options = {}) {
         <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "—")}</strong></div>
         <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "—")}</strong></div>
         <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "—")}</strong></div>
-        <div class="data-item"><span>Idade</span><strong>${escapeHtml(animal.age || "—")}</strong></div>
+        <div class="data-item"><span>Data de nascimento</span><strong>${escapeHtml(animal.birthDate || animal.age || "—")}</strong></div>
         <div class="data-item"><span>Raça</span><strong>${escapeHtml(animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "—"))}</strong></div>
         <div class="data-item"><span>Pelagem</span><strong>${escapeHtml(animal.coat || "—")}</strong></div>
         <div class="data-item"><span>Procedimento</span><strong>${escapeHtml(animal.procedure || "—")}</strong></div>
@@ -6441,6 +7300,7 @@ function generateRequestPdf(request, options = {}) {
             <div class="data-grid four">
               <div class="data-item"><span class="label">Nome</span><strong>${escapeHtml(request.tutor || "—")}</strong></div>
               <div class="data-item"><span class="label">CPF</span><strong>${escapeHtml(request.cpf || "—")}</strong></div>
+              <div class="data-item"><span class="label">CadÚnico</span><strong>${escapeHtml(request.cadUnicoNotApplicable ? "Não se aplica" : request.cadUnico || "—")}</strong></div>
               <div class="data-item"><span class="label">Celular</span><strong>${escapeHtml(request.phone || "—")}</strong></div>
               <div class="data-item"><span class="label">Email</span><strong>${escapeHtml(request.email || "—")}</strong></div>
               <div class="data-item"><span class="label">CEP</span><strong>${escapeHtml(request.cep || "—")}</strong></div>
@@ -6570,6 +7430,7 @@ async function createRequestPdfDataUrl(request = {}) {
   y = drawRequestPdfInfoGrid(page1, [
     ["NOME", request.tutor || "-"],
     ["CPF", request.cpf || "-"],
+    ["CADUNICO", request.cadUnicoNotApplicable ? "Nao se aplica" : request.cadUnico || "-"],
     ["CELULAR", request.phone || "-"],
     ["EMAIL", request.email || "-"],
     ["CEP", request.cep || "-"],
@@ -6652,7 +7513,7 @@ function drawRequestPdfAnimalCard(page, animal = {}, index, y, ctx) {
     ["ESPÉCIE", animal.species || "-"],
     ["SEXO", animal.sex || "-"],
     ["PORTE", animal.size || "-"],
-    ["IDADE", animal.age || "-"],
+    ["DATA DE NASCIMENTO", animal.birthDate || animal.age || "-"],
     ["RAÇA", animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "-")],
     ["PELAGEM", animal.coat || "-"],
     ["PROCEDIMENTO", animal.procedure || "-"],
@@ -6935,8 +7796,9 @@ function countRequestAnimals(request) {
 
 function countUsedVacancies(requests, date) {
   return requests
-    .filter((r) => r.preferredSchedule === date)
-    .reduce((sum, r) => sum + countRequestAnimals(r), 0);
+    .map(normalizeRequest)
+    .filter((request) => (request.preferredSchedule || request.appointment || request.schedule_date) === date)
+    .reduce((sum, request) => sum + countRequestAnimals(request), 0);
 }
 
 function isPastScheduleDay(dateText) {
