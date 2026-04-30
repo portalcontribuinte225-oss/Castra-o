@@ -359,6 +359,7 @@ function normalizeRequest(request = {}) {
     scheduleMunicipality: request.scheduleMunicipality || request.schedule_municipality || "",
     responsibleUnit: request.responsibleUnit || request.responsible_unit || "",
     veterinarian: request.veterinarian || "",
+    animalMicrochip: request.animalMicrochip || request.animal_microchip || animals.find((animal) => animal.microchip)?.microchip || "",
     previousSchedule: request.previousSchedule || workflowData.previousSchedule || "",
     rejectionReason: request.rejectionReason || workflowData.rejectionReason || "",
     rejectionNote: request.rejectionNote || workflowData.rejectionNote || "",
@@ -901,12 +902,13 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     const cleanCpf = onlyDigits(cpf);
     const key = validationKey.trim();
     const chip = microchip.trim();
-    if (cleanCpf.length !== 11) {
+    const hasValidCredential = cleanCpf.length === 11 && !/^0+$/.test(cleanCpf) && Boolean(key);
+    if (!chip && cleanCpf.length !== 11) {
       setStatus("Informe um CPF valido.");
       setSearchOk(false);
       return;
     }
-    if (!key) {
+    if (!chip && !key) {
       setStatus("Informe a chave de validação.");
       setSearchOk(false);
       return;
@@ -915,15 +917,20 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     setSearchOk(false);
     setIsConsulting(true);
     try {
-      const [record, reqList, adoptList] = await Promise.all([
-        chip
-          ? api.consultAnimalByMicrochip({ microchip: chip, cpf: cleanCpf, validationKey: key })
-          : Promise.resolve(null),
-        api.consultRequestsByCredentials(cleanCpf, key),
-        api.consultAdoptionsByCredentials(cleanCpf, key),
-      ]);
+      const [record, reqList, adoptList] = chip
+        ? await Promise.all([
+            api.consultAnimalByMicrochip({ microchip: chip, ...(hasValidCredential ? { cpf: cleanCpf, validationKey: key } : {}) }),
+            Promise.resolve([]),
+            Promise.resolve([]),
+          ])
+        : await Promise.all([
+            Promise.resolve(null),
+            api.consultRequestsByCredentials(cleanCpf, key),
+            api.consultAdoptionsByCredentials(cleanCpf, key),
+          ]);
       const normalizedReqs = Array.isArray(reqList) ? reqList.map(normalizeRequest) : [];
       const normalizedAdopts = Array.isArray(adoptList) ? adoptList : [];
+
       setAnimalRecord(record);
       setResultRequests(normalizedReqs);
       setResultAdoptions(normalizedAdopts);
@@ -934,7 +941,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
       } else {
         setStatus(total > 0
           ? `${normalizedReqs.length} solicitação(ões) e ${normalizedAdopts.length} adoção(ões) encontrada(s).`
-          : "Nenhum registro encontrado para este CPF/chave.");
+          : chip ? "Nenhum registro encontrado para este microchip." : "Nenhum registro encontrado para este CPF/chave.");
       }
     } catch (err) {
       setAnimalRecord(null);
@@ -957,7 +964,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
           <div>
           <span className="eyebrow">Prontuário animal</span>
           <h2>Consultar prontuário</h2>
-          <p>Digite CPF, chave de validação e, quando houver, o microchip para abrir o prontuário do animal.</p>
+          <p>Digite o microchip para abrir o prontuário. CPF e chave continuam disponíveis para consulta do tutor.</p>
           </div>
           </div>
           <div className="consultation-inline-metrics">
@@ -976,7 +983,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         <div className="consultation-search-row">
         <label className="field">
           <span>Microchip</span>
-          <input value={microchip} onChange={(event) => setMicrochip(event.target.value.toUpperCase())} placeholder="Opcional" />
+          <input value={microchip} onChange={(event) => setMicrochip(event.target.value.toUpperCase())} placeholder="Digite o microchip" />
         </label>
         <label className="field">
           <span>CPF</span>
@@ -1060,11 +1067,19 @@ function PublicSchedulePicker({
   pendingReservation = null,
 }) {
   const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
+  const requiredVacancies = Math.max(Number(pendingReservation?.count) || 1, 1);
   const scheduleWithUsage = scheduleDays.filter((day) => day.active !== false).map((day) => {
     const confirmed = countUsedVacancies(requests, day.date);
     const pending = pendingReservation?.date === day.date ? (pendingReservation.count || 0) : 0;
     const used = confirmed + pending;
-    return { ...day, used, remaining: Math.max(day.vacancies - used, 0), isPast: isPastScheduleDay(day.date) };
+    const confirmedRemaining = Math.max(day.vacancies - confirmed, 0);
+    return {
+      ...day,
+      used,
+      remaining: Math.max(day.vacancies - used, 0),
+      hasEnoughVacancies: confirmedRemaining >= requiredVacancies,
+      isPast: isPastScheduleDay(day.date),
+    };
   });
   const scheduleMonths = buildScheduleMonths(scheduleWithUsage);
   const activeScheduleMonth = scheduleMonths[scheduleMonthIndex] || "";
@@ -1132,14 +1147,14 @@ function PublicSchedulePicker({
                   "calendar-day-button",
                   selectedDate === day.date ? "selected" : "",
                   day.kind === "Mutirao" ? "mutirao-day" : "",
-                  day.available && !day.isPast && day.remaining > 0 ? "has-vacancy" : "",
+                  day.available && !day.isPast && day.hasEnoughVacancies ? "has-vacancy" : "",
                 ].filter(Boolean).join(" ")}
                 type="button"
-                disabled={!day.available || day.remaining === 0 || day.isPast}
+                disabled={!day.available || !day.hasEnoughVacancies || day.isPast}
                 onClick={() => onSelect(day.date)}
               >
                 <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
-                <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.remaining > 0 ? `${day.remaining} vagas` : "Lotado"}</small>
+                <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.hasEnoughVacancies ? `${day.remaining} vagas` : "Sem vagas suficientes"}</small>
                 {day.kind === "Mutirao" && <em>Mutirão</em>}
                 {day.locationName && <small>{day.locationName}</small>}
               </button>
@@ -1468,7 +1483,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
           <div className="login-main-actions">
             <button className="login-big-action primary" onClick={onPublicRequest}>
               <PawPrint size={28} />
-              <strong>Cadastrar animal</strong>
+              <strong>Solicitações</strong>
               <span>Primeiro cadastro do tutor e animal</span>
             </button>
 
@@ -1480,8 +1495,8 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
 
             <button className="login-big-action secondary login-vet-action" onClick={() => setShowVetModal(true)}>
               <Lock size={28} />
-              <strong>Área interna</strong>
-              <span>Acesso interno</span>
+              <strong>Credenciados</strong>
+              <span>Acesso credenciado</span>
             </button>
 
             <button className="login-big-action access" onClick={() => setShowAccessModal(true)}>
@@ -1502,7 +1517,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
       {showVetModal && (
         <div className="modal-backdrop">
           <form className="auth-modal compact-auth-modal" onSubmit={submit}>
-            <ModalHeader title="Área interna" eyebrow="Acesso ao sistema" onClose={() => { setShowVetModal(false); setError(""); }} />
+            <ModalHeader title="Credenciados" eyebrow="Acesso ao sistema" onClose={() => { setShowVetModal(false); setError(""); }} />
             <label className="field">
               <span>Email</span>
               <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
@@ -1835,13 +1850,12 @@ function NewRequest({
     },
   ]);
   const [accepted, setAccepted] = useState(false);
-  const [signatureDataUrl, setSignatureDataUrl] = useState("");
-  const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [cepStatus, setCepStatus] = useState("");
   const [locationStatus, setLocationStatus] = useState("");
   const [documentUploads, setDocumentUploads] = useState({});
   const [formStep, setFormStep] = useState(skipTutorStep ? 1 : 0);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
   const [smsCode, setSmsCode] = useState("");
   const [smsInput, setSmsInput] = useState("");
@@ -1892,10 +1906,13 @@ function NewRequest({
         { step: 3, label: "Documentos" },
       ];
   const currentStepIndex = Math.max(formSteps.findIndex((item) => item.step === formStep), 0);
-  const availableScheduleDays = scheduleDays.filter((day) => day.active !== false).map((day) => {
-    const used = countUsedVacancies(requests, day.date);
-    return { ...day, used, remaining: Math.max(day.vacancies - used, 0), isPast: isPastScheduleDay(day.date) };
-  });
+  function selectedScheduleHasCapacity() {
+    if (!requestData.schedule) return false;
+    const selectedDay = scheduleDays.find((day) => day.date === requestData.schedule && day.active !== false);
+    if (!selectedDay || isPastScheduleDay(selectedDay.date)) return false;
+    const remaining = Math.max((Number(selectedDay.vacancies) || 0) - countUsedVacancies(requests, selectedDay.date), 0);
+    return remaining >= Math.max(animals.length, 1);
+  }
 
   function addAnimal() {
     setAnimals((current) => [
@@ -2007,6 +2024,8 @@ function NewRequest({
     }
     if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
     if (!requestData.schedule) issues.push("Escolha uma data disponível.");
+    else if (!selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
+    if (configuredRequestTypes.length > 0 && !requestData.type) issues.push("Selecione o tipo de solicitação.");
     filledAnimals.forEach((animal, index) => {
       const label = filledAnimals.length > 1 ? ` do animal ${index + 1}` : " do animal";
       if (!animal.procedure) issues.push(`Selecione o procedimento${label}.`);
@@ -2045,7 +2064,8 @@ function NewRequest({
 
     if (step === 1) {
       return animals
-        .flatMap((animal) => [
+        .flatMap((animal, index) => [
+          index === 0 && configuredRequestTypes.length > 0 && !requestData.type,
           !animal.procedure,
           !animal.species,
           !animal.sex,
@@ -2056,11 +2076,11 @@ function NewRequest({
     }
 
     if (step === 2) {
-      return [!requestData.schedule].filter(Boolean);
+      return [!requestData.schedule || !selectedScheduleHasCapacity()].filter(Boolean);
     }
 
     if (step === 3) {
-      return [!requestData.schedule, !requiredDocsApproved, !accepted].filter(Boolean);
+      return [!requestData.schedule || !selectedScheduleHasCapacity(), !requiredDocsApproved, !accepted].filter(Boolean);
     }
 
     return [];
@@ -2085,6 +2105,7 @@ function NewRequest({
       state: requestData.state.trim().length !== 2,
       animalName: false,
       animalAge: false,
+      type: configuredRequestTypes.length > 0 && !requestData.type,
       procedure: !firstAnimal.procedure,
       species: !firstAnimal.species,
       sex: !firstAnimal.sex,
@@ -2092,7 +2113,6 @@ function NewRequest({
       breedType: !firstAnimal.breedType,
       documents: !requiredDocsApproved,
       accepted: !accepted,
-      signature: !signatureDataUrl,
     };
     return Boolean(checks[field]);
   }
@@ -2238,12 +2258,18 @@ function NewRequest({
 
   async function submit() {
     setSubmitAttempted(true);
+    if (submitting) return;
     if (!canSubmit) return;
-    if (internalSimple) {
-      await submitInternal();
-      return;
+    setSubmitting(true);
+    try {
+      if (internalSimple) {
+        await submitInternal();
+      } else {
+        await submitAccepted();
+      }
+    } finally {
+      setSubmitting(false);
     }
-    await submitWithSignature("", accepted);
   }
 
   function openDeclarationPdf() {
@@ -2290,7 +2316,6 @@ function NewRequest({
         age: animal.birthDate || animal.age || "",
       })),
       documents: Object.values(documentUploads).filter((upload) => upload?.documentId === "animal_photo"),
-      signatureDataUrl: "",
       signedAt: "",
       tags: ["PRESENCIAL"],
     };
@@ -2303,7 +2328,7 @@ function NewRequest({
     }
   }
 
-  async function submitWithSignature(sigData, isAccepted) {
+  async function submitAccepted() {
     setSubmissionError("");
     const selectedScheduleDay = scheduleDays.find((day) => day.date === requestData.schedule);
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
@@ -2350,7 +2375,6 @@ function NewRequest({
         age: animal.birthDate || animal.age || "",
       })),
       documents: allUploadedDocuments,
-      signatureDataUrl: sigData,
       signedAt: new Date().toISOString(),
     };
     try {
@@ -2378,16 +2402,6 @@ function NewRequest({
           </div>
         </div>
 
-        <div className="request-context-bar">
-          <div className="selected-schedule-note compact-context">
-            <CalendarDays size={18} />
-            <div>
-              <strong>{requestData.schedule || "Nenhuma data selecionada"}</strong>
-              <span>Data escolhida na agenda</span>
-            </div>
-          </div>
-        </div>
-
         <div className="request-stepper" aria-label="Etapas da solicitação">
           {formSteps.map((item, index) => (
             <div
@@ -2403,7 +2417,13 @@ function NewRequest({
         {submissionError && <p className="form-error">{submissionError}</p>}
 
         <div className="single-request-form clean-form">
-          {formStep === 0 && <FormSection title="Tutor e endereço">
+          {formStep === 0 && <FormSection title="Tutor e endereço" action={
+            <label className="toggle-switch farmer-toggle">
+              <input type="checkbox" checked={requestData.isFarmer} onChange={(event) => updateRequestField("isFarmer", event.target.checked)} />
+              <span className="toggle-track"><span className="toggle-thumb" /></span>
+              Agricultor?
+            </label>
+          }>
             <Field
               label="Nome"
               value={requestData.tutor}
@@ -2435,14 +2455,6 @@ function NewRequest({
                 Não se aplica
               </label>
             </div>
-            <label className="checkbox-row farmer-checkbox">
-              <input
-                type="checkbox"
-                checked={requestData.isFarmer}
-                onChange={(event) => updateRequestField("isFarmer", event.target.checked)}
-              />
-              É agricultor(a)
-            </label>
             <div className="form-subsection-title">Endereço</div>
             <div className="address-lookup-grid">
               <div className="cep-with-map">
@@ -2542,6 +2554,20 @@ function NewRequest({
           </FormSection>}
 
           {formStep === 1 && <FormSection title="Dados dos animais">
+            {configuredRequestTypes.length > 0 && (
+              <label className={showInvalid("type") ? "field invalid" : "field"}>
+                <span>Tipo de solicitação</span>
+                <select
+                  value={requestData.type}
+                  onChange={(event) => updateRequestField("type", event.target.value)}
+                >
+                  <option value="">Selecione o tipo</option>
+                  {configuredRequestTypes.map((type) => (
+                    <option key={type.id || type.name} value={type.name}>{type.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             {animals.map((animal, index) => (
               <div className="animal-form" key={`animal-${index}`}>
                 <div className="animal-form-header">
@@ -2581,15 +2607,19 @@ function NewRequest({
                       label="Código do microchip"
                       value={animal.microchip}
                       onChange={(value) => updateAnimal(index, "microchip", value)}
-                      placeholder="Número do chip, quando houver"
+                      placeholder={animal.hasChip === "Sim" ? "Número do chip" : "Marque o campo ao lado"}
+                      readOnly={animal.hasChip !== "Sim"}
                     />
-                    <label className="checkbox-row compact-checkbox">
+                    <label className="checkbox-row compact-checkbox" title="Animal já é chipado">
                       <input
                         type="checkbox"
+                        aria-label="Animal já é chipado"
                         checked={animal.hasChip === "Sim"}
-                        onChange={(event) => updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao")}
+                        onChange={(event) => {
+                          updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao");
+                          if (!event.target.checked) updateAnimal(index, "microchip", "");
+                        }}
                       />
-                      Animal já é chipado
                     </label>
                   </div>
                 </div>
@@ -2828,8 +2858,8 @@ function NewRequest({
               Continuar
             </button>
           ) : (
-            <button className="primary-action nav-next-action" type="button" disabled={!canSubmit} onClick={submit}>
-              Encerrar
+            <button className="primary-action nav-next-action" type="button" disabled={!canSubmit || submitting} onClick={submit}>
+              {submitting ? "Enviando..." : "Encerrar"}
             </button>
           )}
         </div>
@@ -3209,8 +3239,8 @@ function AdminDashboard({
   const [attendanceRequest, setAttendanceRequest] = useState(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [assignment, setAssignment] = useState({ sectorId: "", userId: "" });
-  const [rejectData, setRejectData] = useState({ reason: "", note: "" });
-  const [attendanceData, setAttendanceData] = useState({ procedures: "", note: "" });
+  const [rejectData, setRejectData] = useState({ note: "" });
+  const [attendanceData, setAttendanceData] = useState({ microchip: "", note: "" });
 
   const visibleRequests = useMemo(
     () => (Array.isArray(requests) ? requests : [])
@@ -3295,25 +3325,38 @@ function AdminDashboard({
 
   function openAttendance(request) {
     setAttendanceRequest(request);
-    setAttendanceData({ procedures: "", note: "" });
+    const normalized = normalizeRequest(request);
+    setAttendanceData({
+      microchip: normalized.animalMicrochip || normalized.animals?.find((animal) => animal.microchip)?.microchip || "",
+      note: "",
+    });
   }
 
   function confirmAttendance(event) {
     event.preventDefault();
-    if (!attendanceRequest || !attendanceData.procedures.trim()) return;
-    const procedures = attendanceData.procedures.trim();
+    if (!attendanceRequest) return;
+    const normalized = normalizeRequest(attendanceRequest);
+    const microchip = attendanceData.microchip.trim();
     const note = attendanceData.note.trim();
+    const performedProcedures = getPerformedProceduresLabel(normalized);
+    const currentAnimals = Array.isArray(normalized.animals) ? normalized.animals : [];
+    const animals = microchip
+      ? currentAnimals.map((animal, index) => index === 0 ? { ...animal, hasChip: "Sim", microchip } : animal)
+      : currentAnimals;
     patchRequest?.(
       attendanceRequest.id,
       {
         status: "ARQUIVADA",
         tags: mergeTags(attendanceRequest.tags, ["COMPARECEU"]),
+        animalMicrochip: microchip,
+        animals,
         workflow_data: {
-          performedProcedures: procedures,
+          performedProcedures,
+          attendanceMicrochip: microchip,
           attendanceNote: note,
         },
       },
-      `Comparecimento confirmado. Procedimentos realizados: ${procedures}${note ? `. Observação: ${note}` : ""}`,
+      `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`,
     );
     setAttendanceRequest(null);
     setPreviewRequest(null);
@@ -3321,21 +3364,22 @@ function AdminDashboard({
 
   function openReject(request) {
     setRejectRequest(request);
-    setRejectData({ reason: "", note: "" });
+    setRejectData({ note: "" });
   }
 
   function confirmReject(event) {
     event.preventDefault();
-    if (!rejectRequest || !rejectData.reason.trim()) return;
+    if (!rejectRequest) return;
+    const note = rejectData.note.trim();
     patchRequest?.(
       rejectRequest.id,
       {
         status: "ARQUIVADA",
         tags: mergeTags(rejectRequest.tags, ["INDEFERIDA"]),
-        rejectionReason: rejectData.reason.trim(),
-        rejectionNote: rejectData.note.trim(),
+        rejectionReason: note || "Indeferido",
+        rejectionNote: note,
       },
-      `Indeferida por ${currentUser.name}. Motivo: ${rejectData.reason.trim()}`,
+      `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`,
     );
     setRejectRequest(null);
     setPreviewRequest(null);
@@ -3343,23 +3387,68 @@ function AdminDashboard({
 
   function confirmReschedule(date) {
     if (!rescheduleRequest) return;
+    const patch = {
+      status: rescheduleRequest.status,
+      tags: mergeTags(rescheduleRequest.tags, ["REAGENDADA"]),
+      previousSchedule: rescheduleRequest.preferredSchedule || rescheduleRequest.appointment || "Não informado",
+      preferredSchedule: date,
+      appointment: date,
+    };
     patchRequest?.(
       rescheduleRequest.id,
-      {
-        status: rescheduleRequest.status,
-        tags: mergeTags(rescheduleRequest.tags, ["REAGENDADA"]),
-        previousSchedule: rescheduleRequest.preferredSchedule || rescheduleRequest.appointment || "Não informado",
-        preferredSchedule: date,
-        appointment: date,
-      },
+      patch,
       `Reagendada por ${currentUser.name}: ${rescheduleRequest.preferredSchedule || "sem data"} -> ${date}`,
     );
+    setPreviewRequest((current) => current?.id === rescheduleRequest.id ? normalizeRequest({ ...current, ...patch }) : current);
     setRescheduleRequest(null);
   }
 
   function openRescheduleFromPreview(request) {
-    setPreviewRequest(null);
     setRescheduleRequest(request);
+  }
+
+  function rejectRequestFromProcess(request, data = {}) {
+    if (!request) return;
+    const note = String(data.note || "").trim();
+    patchRequest?.(
+      request.id,
+      {
+        status: "ARQUIVADA",
+        tags: mergeTags(request.tags, ["INDEFERIDA"]),
+        rejectionReason: note || "Indeferido",
+        rejectionNote: note,
+      },
+      `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`,
+    );
+    setPreviewRequest(null);
+  }
+
+  function confirmAttendanceFromProcess(request, data = {}) {
+    if (!request) return;
+    const normalized = normalizeRequest(request);
+    const microchip = String(data.microchip || "").trim();
+    const note = String(data.note || "").trim();
+    const performedProcedures = getPerformedProceduresLabel(normalized);
+    const currentAnimals = Array.isArray(normalized.animals) ? normalized.animals : [];
+    const animals = microchip
+      ? currentAnimals.map((animal, index) => index === 0 ? { ...animal, hasChip: "Sim", microchip } : animal)
+      : currentAnimals;
+    patchRequest?.(
+      request.id,
+      {
+        status: "ARQUIVADA",
+        tags: mergeTags(request.tags, ["COMPARECEU"]),
+        animalMicrochip: microchip,
+        animals,
+        workflow_data: {
+          performedProcedures,
+          attendanceMicrochip: microchip,
+          attendanceNote: note,
+        },
+      },
+      `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`,
+    );
+    setPreviewRequest(null);
   }
 
   function openRequestPreview(request) {
@@ -3411,7 +3500,7 @@ function AdminDashboard({
                 </div>
                 <p>Tipo: {requestTypeLabel(request)}</p>
                 <p>Data: {request.preferredSchedule || request.appointment || "Aguardando"}</p>
-                <p>Responsavel: {request.responsible || "Nao atribuido"}</p>
+                <p>Responsável: {request.responsible || "Não atribuído"}</p>
                 <p>Setor: {request.assignedSectorName || "Sem setor"}</p>
                 <p>Animal: {request.animals.map((animal) => animal.name).join(", ") || "Animal nao informado"}</p>
                 <MicrochipLine request={request} />
@@ -3445,11 +3534,13 @@ function AdminDashboard({
       {previewRequest && (
         <RequestPreviewModal
           request={previewRequest}
+          requestTypes={requestTypes}
+          scheduleDays={activeScheduleDays}
           onClose={() => setPreviewRequest(null)}
           onApprove={approveRequest}
-          onReject={openReject}
+          onReject={rejectRequestFromProcess}
           onArchive={archiveWithTag}
-          onAttendance={openAttendance}
+          onAttendance={confirmAttendanceFromProcess}
           onReschedule={openRescheduleFromPreview}
         />
       )}
@@ -3503,9 +3594,8 @@ function AdminDashboard({
         <div className="modal-backdrop">
           <form className="workflow-modal" onSubmit={confirmReject}>
             <ModalHeader title="Justificativa obrigatória" eyebrow="Reprovar" onClose={() => setRejectRequest(null)} />
-            <label className="field"><span>Motivo</span><select value={rejectData.reason} onChange={(event) => setRejectData((current) => ({ ...current, reason: event.target.value }))}><option value="">Selecione</option><option>Documento ilegivel</option><option>Dados incompletos</option><option>CPF/documento divergente</option><option>Endereco fora da area atendida</option><option>Animal fora dos criterios</option><option>Tutor nao respondeu</option><option>Outro</option></select></label>
             <label className="field"><span>Observacao interna</span><textarea value={rejectData.note} onChange={(event) => setRejectData((current) => ({ ...current, note: event.target.value }))} /></label>
-            <button className="primary-action" type="submit" disabled={!rejectData.reason}>Confirmar reprovação</button>
+            <button className="primary-action" type="submit">Confirmar reprovação</button>
           </form>
         </div>
       )}
@@ -3515,21 +3605,18 @@ function AdminDashboard({
           <form className="workflow-modal" onSubmit={confirmAttendance}>
             <ModalHeader title="Procedimentos realizados" eyebrow="Comparecimento" onClose={() => setAttendanceRequest(null)} />
             <label className="field">
-              <span>Procedimento</span>
-              <select value={attendanceData.procedures} onChange={(event) => setAttendanceData((current) => ({ ...current, procedures: event.target.value }))}>
-                <option value="">Selecione</option>
-                <option>Castração</option>
-                <option>Microchipagem</option>
-                <option>Castração e microchipagem</option>
-                <option>Avaliação clínica</option>
-                <option>Outro</option>
-              </select>
+              <span>Código do microchip</span>
+              <input
+                value={attendanceData.microchip}
+                onChange={(event) => setAttendanceData((current) => ({ ...current, microchip: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+                placeholder="Informe o código aplicado ou lido"
+              />
             </label>
             <label className="field">
               <span>Observacao interna</span>
               <textarea value={attendanceData.note} onChange={(event) => setAttendanceData((current) => ({ ...current, note: event.target.value }))} placeholder="Descreva detalhes, intercorrências ou procedimentos adicionais." />
             </label>
-            <button className="primary-action" type="submit" disabled={!attendanceData.procedures}>Confirmar comparecimento</button>
+            <button className="primary-action" type="submit">Confirmar comparecimento</button>
           </form>
         </div>
       )}
@@ -3537,36 +3624,91 @@ function AdminDashboard({
   );
 }
 
-function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule }) {
+function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, requestTypes = [], scheduleDays = [] }) {
+  const normalizedRequest = normalizeRequest(request);
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewLoadingId, setPreviewLoadingId] = useState("");
+  const [downloadLoadingId, setDownloadLoadingId] = useState("");
   const [bundleLoading, setBundleLoading] = useState(false);
+  const [rejectData, setRejectData] = useState({ note: "" });
+  const [attendanceData, setAttendanceData] = useState({
+    microchip: normalizedRequest.animalMicrochip || normalizedRequest.animals?.find((animal) => animal.microchip)?.microchip || "",
+    note: normalizedRequest.attendanceNote || "",
+  });
   const canAnalyze = request.status === "EM_ANALISE";
   const canApprove = canAnalyze && !requestHasTag(request, "DEFERIDA");
   const canRecordAttendance = request.status === "AGUARDANDO_CIRURGIA";
   const canReschedule = request.status === "AGUARDANDO_CIRURGIA"
     && Boolean(request.preferredSchedule || request.appointment);
 
-  const documents = getUserUploadedProcessDocuments(request.documents);
-  const anexos = [
-    {
-      id: `requerimento-${request.protocol || request.id || "processo"}`,
-      kind: "request",
-      nome: `Requerimento ${request.protocol || ""}.pdf`.trim(),
-      tipo: "Requerimento municipal",
-      status: "Gerado",
-      message: "Gerado automaticamente com os dados do cadastro.",
-    },
-    ...documents.map((document, index) => ({
-      id: document.documentId || document.fileName || index,
+  const uploadedDocs = getUserUploadedProcessDocuments(request.documents);
+  const requestTypeConfig = requestTypes.find(
+    (t) => (t.id && t.id === request.requestTypeId) || t.name === request.type,
+  );
+  const requiredDocTypes = (requestTypeConfig?.documents || [])
+    .map(normalizeDocumentType)
+    .filter((dt) => dt.active !== false);
+
+  const requerimento = {
+    id: `requerimento-${request.protocol || request.id || "processo"}`,
+    kind: "request",
+    nome: `Requerimento ${request.protocol || ""}.pdf`.trim(),
+    tipo: "Requerimento municipal",
+    status: "Gerado",
+    available: true,
+  };
+
+  const requiredRows = requiredDocTypes.map((dt) => {
+    const uploaded = uploadedDocs.find(
+      (d) => d.documentName === dt.name || d.documentId === dt.id,
+    );
+    if (uploaded) {
+      return {
+        id: uploaded.documentId || uploaded.fileName || dt.id,
+        kind: "attachment",
+        nome: uploaded.fileName || uploaded.documentName || dt.name,
+        tipo: dt.name,
+        status: uploaded.status === "approved" ? "Aprovado" : uploaded.status === "rejected" ? "Recusado" : "Aguardando análise",
+        message: uploaded.message || "",
+        available: true,
+        document: uploaded,
+      };
+    }
+    return {
+      id: `missing-${dt.id}`,
+      kind: "missing",
+      nome: dt.name,
+      tipo: dt.name,
+      status: "Não enviado",
+      available: false,
+    };
+  });
+
+  const extraDocs = uploadedDocs
+    .filter((d) => !requiredDocTypes.find((dt) => d.documentName === dt.name || d.documentId === dt.id))
+    .map((d, index) => ({
+      id: d.documentId || d.fileName || `extra-${index}`,
       kind: "attachment",
-      nome: document.fileName || document.documentName || `Documento ${index + 1}`,
-      tipo: document.documentName || "Documento anexado",
-      status: document.status === "approved" ? "Aprovado" : document.status === "rejected" ? "Recusado" : "Anexado",
-      message: document.message || "",
-      document,
-    })),
-  ];
+      nome: d.fileName || d.documentName || `Documento ${index + 1}`,
+      tipo: d.documentName || "Documento anexado",
+      status: d.status === "approved" ? "Aprovado" : d.status === "rejected" ? "Recusado" : "Aguardando análise",
+      message: d.message || "",
+      available: true,
+      document: d,
+    }));
+
+  const anexos = [requerimento, ...requiredRows, ...extraDocs];
+  const missingRequiredDocuments = requiredRows.filter((item) => item.status === "Não enviado").length;
+  const approvedDocuments = anexos.filter((item) => item.status === "Aprovado" || item.status === "Gerado").length;
+  const timeline = buildRequestTimeline(normalizedRequest);
+
+  function statusClass(status) {
+    if (status === "Aprovado") return "approved";
+    if (status === "Recusado") return "rejected";
+    if (status === "Não enviado") return "missing";
+    if (status === "Gerado") return "generated";
+    return "pending";
+  }
 
   async function handlePreview(item) {
     setPreviewLoadingId(item.id);
@@ -3576,7 +3718,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
       console.error("Erro ao preparar prévia do documento:", err);
       setPreviewAttachment({
         documentName: "Prévia indisponível",
-        fileName: item.nome || "documento",
+        fileName: item.tipo || "documento",
         fileType: "",
         dataUrl: "",
       });
@@ -3585,62 +3727,176 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     }
   }
 
+  async function handleDownload(item) {
+    setDownloadLoadingId(item.id);
+    try {
+      const prepared = await prepareProcessDocumentPreview(item, request);
+      if (prepared?.dataUrl) {
+        const anchor = window.document.createElement("a");
+        anchor.href = prepared.dataUrl;
+        anchor.download = prepared.fileName || item.nome || item.tipo || "documento";
+        anchor.click();
+      }
+    } catch (err) {
+      console.error("Erro ao baixar documento:", err);
+    } finally {
+      setDownloadLoadingId("");
+    }
+  }
+
   async function handleBundlePreview() {
     setBundleLoading(true);
     try {
       setPreviewAttachment(await generateDocumentBundlePdf(request));
-    } catch {
-      setPreviewAttachment({
-        documentName: "Juntada indisponível",
-        fileName: `Juntada ${request.protocol || ""}`.trim(),
-        fileType: "",
-        dataUrl: "",
-      });
+    } catch (error) {
+      console.error("Erro ao preparar juntada:", error);
+      setPreviewAttachment(await generateFallbackBundlePdf(request, error));
     } finally {
       setBundleLoading(false);
     }
   }
 
+  function confirmRejectInline(event) {
+    event.preventDefault();
+    onReject?.(request, rejectData);
+  }
+
+  function confirmAttendanceInline(event) {
+    event.preventDefault();
+    onAttendance?.(request, attendanceData);
+  }
+
+  function renderAttachments() {
+    return (
+      <div className="process-attachments-list">
+        {anexos.map((anexo, index) => (
+          <article className="process-attachment-row" key={`${anexo.kind}-${anexo.id}`}>
+            <div className="process-attachment-main">
+              <span className="process-attachment-number">{String(index + 1).padStart(2, "0")}</span>
+              <FileText size={18} className="process-attachment-icon" />
+              <div className="process-attachment-info">
+                <strong>{anexo.tipo}</strong>
+              </div>
+              <span className={`attachment-status attachment-status--${statusClass(anexo.status)}`}>{anexo.status}</span>
+            </div>
+            <div className="process-attachment-actions">
+              {anexo.available ? (
+                <>
+                  <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
+                    <Eye size={16} />
+                  </button>
+                  <button className="icon-action" title="Baixar" type="button" disabled={downloadLoadingId === anexo.id} onClick={() => handleDownload(anexo)}>
+                    <Download size={16} />
+                  </button>
+                </>
+              ) : (
+                <span className="attachment-unavailable"><X size={14} />Não enviado</span>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+    );
+  }
+
+  function renderFlowStep(step, children = null) {
+    const isCurrent = step.state === "current";
+    const isDone = step.state === "done";
+    const isBlocked = step.state === "blocked";
+    return (
+      <section className={`process-flow-step ${step.state}`} key={step.id}>
+        <div className="process-flow-marker">
+          <span />
+        </div>
+        <div className="process-flow-card">
+          <div className="process-flow-head">
+            <div>
+              <strong>{step.label}</strong>
+              <p>{step.description}</p>
+              {step.detail && <small>{step.detail}</small>}
+            </div>
+            <span className={`process-flow-status ${step.state}`}>
+              {isDone ? "Concluída" : isCurrent ? "Etapa atual" : isBlocked ? "Bloqueada" : "Travada"}
+            </span>
+          </div>
+          {isCurrent && children}
+        </div>
+      </section>
+    );
+  }
+
+  function renderDocumentDecision() {
+    return (
+      <form className="process-step-action" onSubmit={confirmRejectInline}>
+        <div className="process-document-score">
+          <span>{approvedDocuments}/{anexos.length}</span>
+          <small>anexos prontos</small>
+        </div>
+        {renderAttachments()}
+        <label className="field">
+          <span>Observação interna</span>
+          <textarea value={rejectData.note} onChange={(event) => setRejectData((current) => ({ ...current, note: event.target.value }))} />
+        </label>
+        <div className="analysis-actions process-action-buttons">
+          {canApprove && <button className="primary-action" type="button" onClick={() => onApprove?.(request)}>Aprovar e avançar</button>}
+          <button className="secondary-action danger-action" type="submit">Indeferir e encerrar</button>
+        </div>
+      </form>
+    );
+  }
+
+  function renderProcedureDecision() {
+    return (
+      <form className="process-step-action" onSubmit={confirmAttendanceInline}>
+        <label className="field">
+          <span>Código do microchip</span>
+          <input
+            value={attendanceData.microchip}
+            onChange={(event) => setAttendanceData((current) => ({ ...current, microchip: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+            placeholder="Informe o código aplicado ou lido"
+          />
+        </label>
+        <label className="field">
+          <span>Observação interna</span>
+          <textarea value={attendanceData.note} onChange={(event) => setAttendanceData((current) => ({ ...current, note: event.target.value }))} />
+        </label>
+        <div className="analysis-actions process-action-buttons">
+          {canReschedule && <button className="ghost-button" type="button" onClick={() => onReschedule?.(request)}>Reagendar</button>}
+          <button className="secondary-action danger-action" type="button" onClick={() => onArchive?.(request, "CANCELADA", "Cirurgia cancelada")}>Cancelar</button>
+          <button className="primary-action" type="submit">Confirmar comparecimento</button>
+        </div>
+      </form>
+    );
+  }
+
+  function renderStepAction(step) {
+    if (step.id === "documents" && canAnalyze) return renderDocumentDecision();
+    if (step.id === "scheduled" && canRecordAttendance) return renderProcedureDecision();
+    return null;
+  }
+
   return (
     <div className="modal-backdrop">
-      <div className="config-modal request-preview-modal request-preview-pdf-only" role="dialog" aria-modal="true">
+      <div className="config-modal request-preview-modal process-modal chronological-process-modal" role="dialog" aria-modal="true">
         <ModalHeader
-          title="Documentos do processo"
+          title={`Processo #${request.protocol}`}
           eyebrow={`Processo #${request.protocol}`}
           onClose={onClose}
           actions={<button className="secondary-action" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>{bundleLoading ? "Preparando..." : "Baixar juntada"}</button>}
         />
 
-        <div className="process-attachments-list">
-          {anexos.map((anexo, index) => (
-            <article className="process-attachment-row" key={`${anexo.kind}-${anexo.id}`}>
-              <div className="process-attachment-main">
-                <span className="process-attachment-number">{String(index + 1).padStart(2, "0")}</span>
-                <div>
-                  <strong>{anexo.nome}</strong>
-                  <p>{anexo.tipo}</p>
-                  <div className="process-attachment-tags">
-                    <span>{anexo.status}</span>
-                  </div>
-                  {anexo.message && <p className="helper-text">{anexo.message}</p>}
-                </div>
-              </div>
-              <div className="process-attachment-actions">
-                <button className="secondary-action" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
-                  Pré Visualizar
-                </button>
-              </div>
-            </article>
-          ))}
+        <div className="process-compact-summary">
+          <p><span>Tutor</span>{normalizedRequest.tutor}</p>
+          <p><span>Tipo</span>{getRequestTypeName(normalizedRequest, requestTypes)}</p>
+          <p><span>Animais</span>{normalizedRequest.animals.length}</p>
+          <p><span>Data</span>{normalizedRequest.preferredSchedule || "Aguardando"}</p>
+          <StatusBadge status={normalizedRequest.status} />
         </div>
 
-        <div className="analysis-actions">
-          {canApprove && <button className="primary-action" type="button" onClick={() => onApprove?.(request)}>Deferir</button>}
-          {canAnalyze && <button className="secondary-action danger-action" type="button" onClick={() => onReject?.(request)}>Indeferir</button>}
-          {canRecordAttendance && <button className="primary-action" type="button" onClick={() => onAttendance?.(request)}>Compareceu</button>}
-          {canRecordAttendance && <button className="secondary-action danger-action" type="button" onClick={() => onArchive?.(request, "CANCELADA", "Cirurgia cancelada")}>Cancelou</button>}
-          {canReschedule && <button className="ghost-button" type="button" onClick={() => onReschedule?.(request)}>Reagendar</button>}
+        <div className="process-flow">
+          {timeline.map((step) => renderFlowStep(step, renderStepAction(step)))}
         </div>
+
         {previewAttachment && (
           <DocumentPreviewModal
             document={previewAttachment}
@@ -3651,6 +3907,72 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     </div>
   );
 }
+
+function getCurrentProcessStage(request = {}) {
+  if (request.status === "ARQUIVADA") {
+    if (requestHasTag(request, "INDEFERIDA")) return { label: "Indeferido", description: request.rejectionReason || "Processo encerrado por indeferimento." };
+    if (requestHasTag(request, "CANCELADA")) return { label: "Cancelado", description: "Processo encerrado por cancelamento." };
+    if (requestHasTag(request, "COMPARECEU")) return { label: "Encerrado", description: "Procedimento confirmado e processo encerrado." };
+    return { label: "Arquivado", description: "Processo encerrado." };
+  }
+  if (request.status === "AGUARDANDO_CIRURGIA") return { label: "Aguardando procedimento", description: "Solicitação deferida e aguardando atendimento." };
+  return { label: "Análise documental", description: "Solicitação recebida e aguardando conferência." };
+}
+
+function buildRequestTimeline(request = {}) {
+  const created = request.createdAt ? formatDateTime(request.createdAt) : "Data não informada";
+  const hasDeferred = request.status === "AGUARDANDO_CIRURGIA" || requestHasTag(request, "DEFERIDA") || requestHasTag(request, "COMPARECEU");
+  const isRejected = requestHasTag(request, "INDEFERIDA");
+  const isCanceled = requestHasTag(request, "CANCELADA");
+  const attended = requestHasTag(request, "COMPARECEU");
+  const archived = request.status === "ARQUIVADA";
+
+  return [
+    {
+      id: "received",
+      label: "Solicitação recebida",
+      description: `Protocolo ${request.protocol || "sem protocolo"}`,
+      detail: created,
+      state: "done",
+    },
+    {
+      id: "documents",
+      label: "Análise documental",
+      description: isRejected ? "Indeferida na análise." : hasDeferred || archived ? "Análise concluída." : "Aguardando conferência.",
+      detail: request.rejectionReason || "",
+      state: isRejected || hasDeferred || archived ? "done" : "current",
+    },
+    {
+      id: "approved",
+      label: "Deferimento",
+      description: isRejected ? "Não avançou para deferimento." : hasDeferred ? "Solicitação deferida." : "Aguardando decisão.",
+      detail: request.responsible ? `Responsável: ${request.responsible}` : "",
+      state: isRejected ? "blocked" : hasDeferred ? "done" : "pending",
+    },
+    {
+      id: "scheduled",
+      label: "Aguardando procedimento",
+      description: request.preferredSchedule ? `Agendado para ${request.preferredSchedule}` : "Aguardando data.",
+      detail: request.scheduleLocationName || "",
+      state: attended || isCanceled ? "done" : hasDeferred ? "current" : "pending",
+    },
+    {
+      id: "finished",
+      label: "Encerramento",
+      description: attended ? "Comparecimento confirmado." : isCanceled ? "Procedimento cancelado." : archived ? "Processo arquivado." : "Aguardando conclusão.",
+      detail: request.animalMicrochip ? `Microchip: ${request.animalMicrochip}` : request.attendanceNote || "",
+      state: archived ? "done" : "pending",
+    },
+  ];
+}
+
+function getPerformedProceduresLabel(request = {}) {
+  const animals = Array.isArray(request.animals) ? request.animals : [];
+  const procedures = animals.map((animal) => animal.procedure).filter(Boolean);
+  const uniqueProcedures = [...new Set(procedures)];
+  return uniqueProcedures.length ? uniqueProcedures.join(", ") : request.type || request.request_type || "Procedimento realizado";
+}
+
 function ScheduleView({
   requests,
   createRequest,
@@ -4380,10 +4702,10 @@ function AccessRequestsView({ accessRequests = [], reviewAccessRequest, teams = 
 
   return (
     <section className="workspace">
-      <div className="metrics-grid">
+      <div className="metrics-grid access-metrics-grid">
         <Metric title="Pendentes" value={pendingCount} icon={ClipboardList} />
-        <Metric title="Aprovados" value={approvedCount} icon={CheckCircle2} />
-        <Metric title="Recusados" value={rejectedCount} icon={X} />
+        <Metric title="Aprovadas" value={approvedCount} icon={CheckCircle2} />
+        <Metric title="Recusadas" value={rejectedCount} icon={X} />
       </div>
 
       <div className="panel wide">
@@ -6565,6 +6887,10 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }) {
         <button className="secondary-action" type="button" onClick={() => { setTransferOpen((value) => !value); setProcedureOpen(false); setDeathOpen(false); }}>
           Solicitar troca de tutor
         </button>
+        <button className="ghost-button" type="button" onClick={() => printAnimalRecordPdf(animal, tutor, history)}>
+          <Download size={16} />
+          Exportar prontuário
+        </button>
       </div>
 
       {procedureOpen && (
@@ -6673,6 +6999,7 @@ function animalHistoryTitle(item = {}) {
     SOLICITACAO_TROCA_TUTOR: "Solicitação de troca de tutor",
     SOLICITACAO_PROCEDIMENTO: "Solicitação de procedimento",
     IMPORTACAO_SOLICITACAO: "Cadastro importado",
+    CIRURGIA_REALIZADA: "Cirurgia realizada",
     SOLICITACAO: "Solicitação",
   };
   return labels[item.type] || item.title || item.type || "Evento";
@@ -7047,6 +7374,10 @@ function normalizeText(value = "") {
     .toLowerCase();
 }
 
+function normalizeSearchKey(value = "") {
+  return normalizeText(value).replace(/[^a-z0-9]/g, "");
+}
+
 function matchesRequestSearch(request, query) {
   const normalizedQuery = normalizeText(query);
   if (!normalizedQuery) return true;
@@ -7065,16 +7396,25 @@ function matchesRequestSearch(request, query) {
     animalNames,
     animalMicrochips,
   ];
-  return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
+  const searchableText = searchable.filter(Boolean).join(" ");
+  return normalizeText(searchableText).includes(normalizedQuery)
+    || normalizeSearchKey(searchableText).includes(normalizeSearchKey(query));
 }
 
 function getRequestMicrochips(request = {}) {
-  return [
+  const values = [
     request.animalMicrochip,
     request.animal_microchip,
     ...(request.animals || []).map((animal) => animal.microchip),
   ]
     .filter(Boolean);
+  const seen = new Set();
+  return values.filter((value) => {
+    const key = normalizeSearchKey(value);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function MicrochipLine({ request }) {
@@ -7233,126 +7573,282 @@ function printHtmlViaIframe(html) {
   }
 }
 
-function generateRequestPdf(request, options = {}) {
-  const animals = request.animals || [];
-  const validationKey = request.validationKey || request.validation_key || "";
-  const signatureImage = request.signatureDataUrl || request.signature_data_url || "";
-  const signedAt = request.signedAt || request.signed_at || request.createdAt || request.created_at || new Date().toISOString();
-  const maskedCpf = maskCpf(request.cpf || "");
-  const scheduleAddressUrl = request.scheduleAddressUrl || request.schedule_address_url || "";
-  const animalCards = animals.map((animal, i) => `
-    <div class="animal-card">
-      <div class="animal-card-title">Animal ${i + 1}${animal.name ? ` — ${escapeHtml(animal.name)}` : ""}</div>
-      <div class="data-grid three">
+function printAnimalRecordPdf(animal = {}, tutor = {}, history = []) {
+  const typeLabels = {
+    ANIMAL_OBITO: "Registro de óbito",
+    TROCA_TUTOR: "Troca de tutor",
+    SOLICITACAO_OBITO: "Solicitação de óbito",
+    SOLICITACAO_TROCA_TUTOR: "Solicitação de troca de tutor",
+    SOLICITACAO_PROCEDIMENTO: "Solicitação de procedimento",
+    IMPORTACAO_SOLICITACAO: "Cadastro importado",
+    CIRURGIA_REALIZADA: "Cirurgia realizada",
+    SOLICITACAO: "Solicitação",
+  };
+  const statusLabels = {
+    EM_ANALISE: "Em análise",
+    AGUARDANDO_CIRURGIA: "Aguardando cirurgia",
+    ARQUIVADA: "Arquivada",
+  };
+
+  const historyRows = history.length
+    ? history.map((item) => {
+        const label = typeLabels[item.type] || item.title || item.type || "Evento";
+        const detail = [
+          item.protocol ? `#${item.protocol}` : "",
+          item.status ? (statusLabels[item.status] || item.status) : "",
+          item.notes || "",
+        ].filter(Boolean).join(" · ");
+        const date = item.occurred_at
+          ? new Date(item.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
+          : "—";
+        return `
+          <tr>
+            <td>${escapeHtml(date)}</td>
+            <td><strong>${escapeHtml(label)}</strong>${detail ? `<br><span class="detail">${escapeHtml(detail)}</span>` : ""}</td>
+          </tr>`;
+      }).join("")
+    : `<tr><td colspan="2" class="empty-row">Nenhum evento registrado.</td></tr>`;
+
+  const address = [tutor.address, tutor.neighborhood, tutor.city, tutor.state, tutor.cep].filter(Boolean).join(", ");
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Prontuário — ${escapeHtml(animal.name || animal.microchip || "Animal")}</title>
+    <style>
+      ${PDF_BASE_STYLES}
+      body { display: flex; flex-direction: column; gap: 12px; }
+      table { width: 100%; border-collapse: collapse; font-size: 11px; }
+      th { background: #f0f7ff; color: #10364f; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 6px 10px; text-align: left; border-bottom: 1px solid #dbeaf3; }
+      td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+      td:first-child { white-space: nowrap; color: #64748b; font-size: 10px; width: 90px; }
+      .detail { color: #64748b; font-size: 10px; }
+      .empty-row { color: #94a3b8; font-style: italic; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <header class="pdf-header">
+      <div>
+        <span class="kicker">Prontuário Animal</span>
+        <h1>${escapeHtml(animal.name || "Animal não identificado")}</h1>
+        <span style="font-size:11px;opacity:.8">${[animal.species, animal.sex, animal.size].filter(Boolean).join(" · ")}</span>
+      </div>
+      <div class="header-box">
+        <span>Microchip</span>
+        <strong style="font-size:13px">${escapeHtml(animal.microchip || "—")}</strong>
+      </div>
+    </header>
+
+    <section class="section">
+      <div class="section-title">Dados do animal</div>
+      <div class="data-grid four">
         <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "—")}</strong></div>
         <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "—")}</strong></div>
         <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "—")}</strong></div>
-        <div class="data-item"><span>Data de nascimento</span><strong>${escapeHtml(animal.birthDate || animal.age || "—")}</strong></div>
-        <div class="data-item"><span>Raça</span><strong>${escapeHtml(animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "—"))}</strong></div>
-        <div class="data-item"><span>Pelagem</span><strong>${escapeHtml(animal.coat || "—")}</strong></div>
-        <div class="data-item"><span>Procedimento</span><strong>${escapeHtml(animal.procedure || "—")}</strong></div>
-        ${animal.microchip ? `<div class="data-item"><span>Microchip</span><strong>${escapeHtml(animal.microchip)}</strong></div>` : ""}
-        <div class="data-item"><span>Vermifugado</span><strong>${escapeHtml(animal.dewormed || "—")}</strong></div>
-        <div class="data-item"><span>Vacinas em dia</span><strong>${escapeHtml(animal.vaccinated || "—")}</strong></div>
-        <div class="data-item"><span>Já teve cria</span><strong>${escapeHtml(animal.hadLitter || "—")}</strong></div>
-        <div class="data-item"><span>Alimentação</span><strong>${escapeHtml(animal.food || "—")}</strong></div>
+        <div class="data-item"><span>Raça</span><strong>${escapeHtml(animal.breed || "—")}</strong></div>
+        ${animal.color ? `<div class="data-item"><span>Cor / pelagem</span><strong>${escapeHtml(animal.color)}</strong></div>` : ""}
+        ${animal.status ? `<div class="data-item"><span>Status</span><strong>${escapeHtml(animal.status)}</strong></div>` : ""}
       </div>
-    </div>
-  `).join("");
-  const totalPages = 2;
-  const html = `
-    <!doctype html>
-    <html>
-      <head>
-        <title>Solicitação ${escapeHtml(request.protocol)}</title>
-        <style>
-          ${PDF_BASE_STYLES}
-          .page { page-break-after: always; display: flex; flex-direction: column; gap: 11px; }
-          .page:last-child { page-break-after: auto; }
-          .validation-box { border: 2px dashed #38a8e8; border-radius: 10px; padding: 10px 14px; background: #f0fbff; }
-          .validation-box strong { font-size: 17px; letter-spacing: .07em; display: block; margin: 3px 0; }
-          .validation-box p { margin: 4px 0 0; color: #5b6b7a; font-size: 11px; }
-          .signature-image { width: 100%; max-height: 110px; object-fit: contain; border: 1px solid #dbeaf3; border-radius: 8px; background: #fff; margin-top: 6px; }
-        </style>
-      </head>
-      <body>
-        <section class="page">
-          <header class="pdf-header">
-            <div>
-              <span class="kicker">Requerimento municipal</span>
-              <h1>Solicitação de castração animal</h1>
-            </div>
-            <div class="header-box"><span>Protocolo</span><strong>${escapeHtml(request.protocol || "—")}</strong></div>
-          </header>
+    </section>
 
-          <section class="section">
-            <div class="section-title">Agendamento</div>
-            <div class="data-grid four">
-              <div class="data-item"><span class="label">Data escolhida</span><strong>${escapeHtml(request.preferredSchedule || "—")}</strong></div>
-              <div class="data-item"><span class="label">Tipo</span><strong>${escapeHtml(request.type || "—")}</strong></div>
-              <div class="data-item"><span class="label">Local</span><strong>${escapeHtml(request.scheduleLocationName || "A confirmar")}</strong></div>
-              <div class="data-item"><span class="label">Abertura</span><strong>${escapeHtml(request.createdAt || new Date().toLocaleDateString("pt-BR"))}</strong></div>
-            </div>
-          </section>
+    <section class="section">
+      <div class="section-title">Dados do tutor</div>
+      <div class="data-grid three">
+        <div class="data-item"><span>Nome</span><strong>${escapeHtml(tutor.tutor_name || tutor.name || "—")}</strong></div>
+        <div class="data-item"><span>CPF</span><strong>${escapeHtml(maskCpf(tutor.cpf || ""))}</strong></div>
+        <div class="data-item"><span>Telefone</span><strong>${escapeHtml(tutor.phone || "—")}</strong></div>
+        ${tutor.tutor_email || tutor.email ? `<div class="data-item"><span>Email</span><strong>${escapeHtml(tutor.tutor_email || tutor.email)}</strong></div>` : ""}
+        ${address ? `<div class="data-item" style="grid-column:1/-1"><span>Endereço</span><strong>${escapeHtml(address)}</strong></div>` : ""}
+      </div>
+    </section>
 
-          <section class="section">
-            <div class="section-title">Dados do tutor</div>
-            <div class="data-grid four">
-              <div class="data-item"><span class="label">Nome</span><strong>${escapeHtml(request.tutor || "—")}</strong></div>
-              <div class="data-item"><span class="label">CPF</span><strong>${escapeHtml(request.cpf || "—")}</strong></div>
-              <div class="data-item"><span class="label">CadÚnico</span><strong>${escapeHtml(request.cadUnicoNotApplicable ? "Não se aplica" : request.cadUnico || "—")}</strong></div>
-              <div class="data-item"><span class="label">Celular</span><strong>${escapeHtml(request.phone || "—")}</strong></div>
-              <div class="data-item"><span class="label">Email</span><strong>${escapeHtml(request.email || "—")}</strong></div>
-              <div class="data-item"><span class="label">CEP</span><strong>${escapeHtml(request.cep || "—")}</strong></div>
-              <div class="data-item" style="grid-column: span 3"><span class="label">Endereço</span><strong>${escapeHtml(request.address || "—")}</strong></div>
-            </div>
-          </section>
+    <section class="section">
+      <div class="section-title">Histórico / Prontuário</div>
+      <table>
+        <thead><tr><th>Data</th><th>Evento</th></tr></thead>
+        <tbody>${historyRows}</tbody>
+      </table>
+    </section>
 
-          <section class="section">
-            <div class="section-title">Animais (${animals.length})</div>
-            ${animalCards}
-          </section>
+    <footer class="footer">
+      <span>Sistema municipal de castração animal</span>
+      <span>Gerado em ${new Date().toLocaleString("pt-BR")}</span>
+    </footer>
+  </body>
+</html>`;
+  printHtmlViaIframe(html);
+}
 
-          <section class="section">
-            <div class="section-title">Validação</div>
-            <div class="validation-box">
-              <span class="label">Chave de validação</span>
-              <strong>${escapeHtml(validationKey || "A definir")}</strong>
-              <p>Chave pessoal gerada na sua primeira solicitação. Guarde junto com o CPF para consultar solicitações e adoções.</p>
-            </div>
-          </section>
+function generateRequestPdf(request, options = {}) {
+  const animals = request.animals || [];
+  const validationKey = request.validationKey || request.validation_key || "";
+  const signedAt = request.signedAt || request.signed_at || request.createdAt || request.created_at || new Date().toISOString();
+  const maskedCpf = maskCpf(request.cpf || "");
+  const fullAddress = [
+    [request.address, request.number].filter(Boolean).join(", "),
+    request.neighborhood,
+    request.city && request.state ? `${request.city}/${request.state}` : (request.city || request.state || ""),
+    request.cep ? `CEP ${request.cep}` : "",
+  ].filter(Boolean).join(" — ");
 
-          <footer class="footer"><span>Sistema municipal</span><span>Página 1 de ${totalPages}</span></footer>
-        </section>
+  const row = (label, value) => `
+    <div class="field">
+      <span>${label}</span>
+      <strong>${escapeHtml(String(value || "—"))}</strong>
+    </div>`;
 
-        <section class="page">
-          <header class="pdf-header">
-            <div>
-              <span class="kicker">Declaração do tutor</span>
-              <h1>Responsabilidade e autorização</h1>
-            </div>
-            <div class="header-box"><span>Protocolo</span><strong>${escapeHtml(request.protocol || "—")}</strong></div>
-          </header>
-          <div class="declaration-card">
-            <p>Eu, <strong>${escapeHtml(request.tutor || "—")}</strong>, inscrito(a) no CPF <strong>${escapeHtml(request.cpf || "—")}</strong>, declaro que as informações prestadas neste requerimento são verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.</p>
-            <p>Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal, da necessidade de cumprir as orientações fornecidas pela equipe responsável e de manter os contatos informados disponíveis para comunicações sobre a solicitação.</p>
-            <p>Estou ciente de que a solicitação poderá passar por análise documental, validação das informações, confirmação de agenda e eventuais solicitações de complementação antes da realização do atendimento.</p>
-          </div>
-          <section class="section">
-            <div class="section-title">Assinatura eletrônica do tutor</div>
-            <div class="data-grid four">
-              <div class="data-item"><span class="label">Assinado por</span><strong>${escapeHtml(request.tutor || "—")}</strong></div>
-              <div class="data-item"><span class="label">CPF</span><strong>${escapeHtml(maskedCpf || "—")}</strong></div>
-              <div class="data-item"><span class="label">Data/hora</span><strong>${escapeHtml(formatDateTime(signedAt))}</strong></div>
-              <div class="data-item"><span class="label">Método</span><strong>Assinatura eletrônica</strong></div>
-            </div>
-            ${signatureImage ? `<img class="signature-image" src="${signatureImage}" alt="Assinatura do tutor" />` : ""}
-          </section>
-          <footer class="footer"><span>Sistema municipal</span><span>Página 2 de ${totalPages}</span></footer>
-        </section>
-      </body>
-    </html>
-  `;
+  const animalBlocks = animals.map((animal, i) => {
+    const breed = animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "—");
+    return `
+    <div class="animal-block">
+      <div class="animal-block-title">Animal ${i + 1}${animal.name ? ` — ${escapeHtml(animal.name)}` : ""}</div>
+      <div class="fields-row">
+        ${row("Espécie", animal.species)}
+        ${row("Sexo", animal.sex)}
+        ${row("Porte", animal.size)}
+        ${row("Nascimento", animal.birthDate || animal.age)}
+        ${row("Raça", breed)}
+        ${row("Pelagem / cor", animal.coat)}
+        ${row("Procedimento", animal.procedure)}
+        ${animal.microchip ? row("Microchip", animal.microchip) : ""}
+        ${row("Vermifugado", animal.dewormed)}
+        ${row("Vacinas em dia", animal.vaccinated)}
+        ${row("Já teve cria", animal.hadLitter)}
+        ${row("Alimentação", animal.food)}
+      </div>
+    </div>`;
+  }).join("");
+
+  const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Solicitação ${escapeHtml(request.protocol || "")}</title>
+    <style>
+      ${PDF_BASE_STYLES}
+      body { display: flex; flex-direction: column; gap: 14px; }
+      .page { page-break-after: always; display: flex; flex-direction: column; gap: 14px; }
+      .page:last-child { page-break-after: auto; }
+
+      .block { display: flex; flex-direction: column; gap: 8px; }
+      .block-title {
+        font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+        color: #10364f; border-bottom: 1.5px solid #10364f; padding-bottom: 3px;
+      }
+      .fields-row { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+      .field { display: flex; flex-direction: column; gap: 1px; min-width: 100px; }
+      .field span { font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
+      .field strong { font-size: 11px; color: #172026; }
+      .field.wide { min-width: 220px; flex: 1; }
+
+      .address-line { font-size: 11px; color: #172026; line-height: 1.5; }
+
+      .animal-block { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 8px 10px; border-left: 3px solid #fb923c; }
+      .animal-block-title { font-size: 10px; font-weight: 900; color: #c2410c; }
+
+      .validation-block { background: #f0f9ff; border-left: 3px solid #38a8e8; padding: 10px 14px; display: flex; flex-direction: column; gap: 3px; }
+      .validation-block span { font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
+      .validation-block strong { font-size: 18px; letter-spacing: .1em; color: #0f172a; }
+      .validation-block p { margin: 2px 0 0; font-size: 10px; color: #64748b; }
+
+      .declaration-card { font-size: 11px; line-height: 1.7; color: #172026; display: flex; flex-direction: column; gap: 8px; }
+      .declaration-card p { margin: 0; text-align: justify; }
+
+      .acceptance-grid { display: flex; flex-wrap: wrap; gap: 10px 20px; }
+      .signature-image { width: 100%; max-height: 100px; object-fit: contain; border-top: 1px solid #dbeaf3; padding-top: 8px; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <section class="page">
+      <header class="pdf-header">
+        <div>
+          <span class="kicker">Requerimento municipal</span>
+          <h1>Solicitação de castração animal</h1>
+        </div>
+        <div class="header-box">
+          <span>Protocolo</span>
+          <strong>${escapeHtml(request.protocol || "—")}</strong>
+          <span style="margin-top:6px">Abertura</span>
+          <strong style="font-size:11px">${escapeHtml(request.createdAt ? new Date(request.createdAt).toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR"))}</strong>
+        </div>
+      </header>
+
+      <div class="block">
+        <div class="block-title">Dados do tutor</div>
+        <div class="fields-row">
+          ${row("Nome completo", request.tutor)}
+          ${row("CPF", request.cpf)}
+          ${row("CadÚnico", request.cadUnicoNotApplicable ? "Não se aplica" : request.cadUnico)}
+          ${row("Celular", request.phone)}
+          ${row("Email", request.email)}
+          ${row("Agricultor(a)", request.isFarmer ? "Sim" : "Não")}
+        </div>
+      </div>
+
+      <div class="block">
+        <div class="block-title">Endereço</div>
+        <p class="address-line">${escapeHtml(fullAddress || "—")}</p>
+      </div>
+
+      <div class="block">
+        <div class="block-title">Animais (${animals.length})</div>
+        ${animalBlocks || "<p style='font-size:11px;color:#64748b'>Nenhum animal informado.</p>"}
+      </div>
+
+      <div class="block">
+        <div class="block-title">Agendamento</div>
+        <div class="fields-row">
+          ${row("Data escolhida", request.preferredSchedule || "A confirmar")}
+          ${row("Tipo de procedimento", request.type)}
+          ${row("Local", request.scheduleLocationName || "A confirmar")}
+          ${request.scheduleMunicipality ? row("Município", request.scheduleMunicipality) : ""}
+        </div>
+      </div>
+
+      <div class="validation-block">
+        <span>Chave de validação</span>
+        <strong>${escapeHtml(validationKey || "A definir")}</strong>
+        <p>Guarde junto com o CPF para consultar suas solicitações e adoções no sistema.</p>
+      </div>
+
+      <footer class="footer">
+        <span>Sistema municipal de castração animal</span>
+        <span>Página 1 de 2</span>
+      </footer>
+    </section>
+
+    <section class="page">
+      <header class="pdf-header">
+        <div>
+          <span class="kicker">Declaração do tutor</span>
+          <h1>Responsabilidade e autorização</h1>
+        </div>
+        <div class="header-box"><span>Protocolo</span><strong>${escapeHtml(request.protocol || "—")}</strong></div>
+      </header>
+
+      <div class="declaration-card">
+        <p>Eu, <strong>${escapeHtml(request.tutor || "—")}</strong>, inscrito(a) no CPF <strong>${escapeHtml(maskedCpf || "—")}</strong>, declaro que as informações prestadas neste requerimento são verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.</p>
+        <p>Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal, da necessidade de cumprir as orientações fornecidas pela equipe responsável e de manter os contatos informados disponíveis para comunicações sobre a solicitação.</p>
+        <p>Estou ciente de que a solicitação poderá passar por análise documental, validação das informações, confirmação de agenda e eventuais solicitações de complementação antes da realização do atendimento.</p>
+      </div>
+
+      <div class="block">
+        <div class="block-title">Aceite eletrônico</div>
+        <div class="acceptance-grid">
+          ${row("Aceite registrado por", request.tutor)}
+          ${row("CPF", maskedCpf)}
+          ${row("Data / hora", formatDateTime(signedAt))}
+          ${row("Método", "Li e aceito")}
+        </div>
+      </div>
+
+      <footer class="footer">
+        <span>Sistema municipal de castração animal</span>
+        <span>Página 2 de 2</span>
+      </footer>
+    </section>
+  </body>
+</html>`;
 
   if (options.returnHtml) return html;
   printHtmlViaIframe(html);
@@ -7362,20 +7858,42 @@ function generateRequestPdf(request, options = {}) {
 async function generateDocumentBundlePdf(request = {}) {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const output = await PDFDocument.create();
-  const requestDataUrl = await createRequestPdfDataUrl(request);
-  await appendPdfDataUrl(output, requestDataUrl);
+  try {
+    const requestDataUrl = await createRequestPdfDataUrl(request);
+    await appendPdfDataUrl(output, requestDataUrl);
+  } catch (error) {
+    await appendUnsupportedAttachmentPage(output, {
+      title: "Requerimento municipal",
+      fileName: `Não foi possível gerar o requerimento do processo ${request.protocol || ""}`.trim(),
+      StandardFonts,
+      rgb,
+    });
+  }
 
   const documents = getUserUploadedProcessDocuments(request.documents);
   for (const document of documents) {
-    const mimeType = document.fileType || getDataUrlMimeType(document.dataUrl);
-    if (!document.dataUrl) continue;
-    if (mimeType === "application/pdf") {
-      await appendPdfDataUrl(output, document.dataUrl);
+    const dataUrl = getDocumentPreviewSource(document);
+    const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
+    if (!dataUrl) {
+      await appendUnsupportedAttachmentPage(output, {
+        title: document.documentName || "Documento anexado",
+        fileName: document.fileName || "Arquivo sem prévia",
+        StandardFonts,
+        rgb,
+      });
       continue;
     }
-    if (mimeType?.startsWith("image/")) {
-      await appendImageDataUrl(output, document.dataUrl, mimeType);
-      continue;
+    try {
+      if (mimeType === "application/pdf") {
+        await appendPdfDataUrl(output, dataUrl);
+        continue;
+      }
+      if (mimeType?.startsWith("image/")) {
+        await appendImageDataUrl(output, dataUrl, mimeType);
+        continue;
+      }
+    } catch (error) {
+      console.warn("Aviso: anexo ignorado na juntada:", error);
     }
     await appendUnsupportedAttachmentPage(output, {
       title: document.documentName || "Documento anexado",
@@ -7385,6 +7903,25 @@ async function generateDocumentBundlePdf(request = {}) {
     });
   }
 
+  const bytes = await output.save();
+  return {
+    documentName: "Juntada do processo",
+    fileName: `Juntada ${request.protocol || ""}.pdf`.trim(),
+    fileType: "application/pdf",
+    eyebrow: "Juntada",
+    dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
+  };
+}
+
+async function generateFallbackBundlePdf(request = {}, error = null) {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const output = await PDFDocument.create();
+  await appendUnsupportedAttachmentPage(output, {
+    title: "Juntada do processo",
+    fileName: `Não foi possível preparar a juntada ${request.protocol || ""}`.trim(),
+    StandardFonts,
+    rgb,
+  });
   const bytes = await output.save();
   return {
     documentName: "Juntada do processo",
@@ -7427,15 +7964,21 @@ async function createRequestPdfDataUrl(request = {}) {
     ["ABERTURA", request.createdAt || new Date().toLocaleDateString("pt-BR")],
   ], y, { ...ctx, columns: 4 });
   y = drawRequestPdfSectionTitle(page1, "Dados do tutor", y - 8, ctx);
+  const fullAddr = [
+    [request.address, request.number].filter(Boolean).join(", "),
+    request.neighborhood,
+    request.city && request.state ? `${request.city}/${request.state}` : (request.city || request.state || ""),
+    request.cep ? `CEP ${request.cep}` : "",
+  ].filter(Boolean).join(" - ");
   y = drawRequestPdfInfoGrid(page1, [
     ["NOME", request.tutor || "-"],
     ["CPF", request.cpf || "-"],
     ["CADUNICO", request.cadUnicoNotApplicable ? "Nao se aplica" : request.cadUnico || "-"],
     ["CELULAR", request.phone || "-"],
     ["EMAIL", request.email || "-"],
-    ["CEP", request.cep || "-"],
-    ["ENDEREÇO", request.address || "-"],
-  ], y, { ...ctx, columns: 4, wideLast: true });
+    ["AGRICULTOR", request.isFarmer ? "Sim" : "Nao"],
+    ["ENDEREÇO COMPLETO", fullAddr || "-"],
+  ], y, { ...ctx, columns: 3, wideLast: true });
   y = drawRequestPdfSectionTitle(page1, `Animais (${animals.length})`, y - 8, ctx);
   for (const [index, animal] of animals.slice(0, 2).entries()) {
     y = drawRequestPdfAnimalCard(page1, animal, index, y, ctx);
@@ -7447,14 +7990,13 @@ async function createRequestPdfDataUrl(request = {}) {
   const page2 = pdf.addPage(pageSize);
   y = drawRequestPdfHeader(page2, "DECLARAÇÃO DO TUTOR", "Responsabilidade e autorização", request.protocol || "-", ctx);
   y = drawRequestPdfDeclaration(page2, request, y, ctx);
-  y = drawRequestPdfSectionTitle(page2, "Assinatura eletrônica do tutor", y - 16, ctx);
+  y = drawRequestPdfSectionTitle(page2, "Aceite eletrônico do tutor", y - 16, ctx);
   y = drawRequestPdfInfoGrid(page2, [
-    ["ASSINADO POR", request.tutor || "-"],
+    ["ACEITE REGISTRADO POR", request.tutor || "-"],
     ["CPF", maskCpf(request.cpf || "") || "-"],
     ["DATA/HORA", formatDateTime(signedAt)],
-    ["MÉTODO", "Assinatura eletrônica"],
+    ["MÉTODO", "Li e aceito"],
   ], y, { ...ctx, columns: 4 });
-  await drawRequestPdfSignatureImage(pdf, page2, request.signatureDataUrl || request.signature_data_url, y - 120, ctx);
   drawRequestPdfFooter(page2, "Sistema municipal", "Página 2 de 2", ctx);
 
   return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
@@ -7513,12 +8055,15 @@ function drawRequestPdfAnimalCard(page, animal = {}, index, y, ctx) {
     ["ESPÉCIE", animal.species || "-"],
     ["SEXO", animal.sex || "-"],
     ["PORTE", animal.size || "-"],
-    ["DATA DE NASCIMENTO", animal.birthDate || animal.age || "-"],
+    ["NASCIMENTO", animal.birthDate || animal.age || "-"],
     ["RAÇA", animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "-")],
     ["PELAGEM", animal.coat || "-"],
     ["PROCEDIMENTO", animal.procedure || "-"],
     ["MICROCHIP", animal.microchip || "-"],
     ["VERMIFUGADO", animal.dewormed || "-"],
+    ["VACINAS", animal.vaccinated || "-"],
+    ["JA TEVE CRIA", animal.hadLitter || "-"],
+    ["ALIMENTACAO", animal.food || "-"],
   ], y - 34, { font, bold, colors, rgb, margin: margin + 10, columns: 3 });
   return y - height - 10;
 }
@@ -7623,9 +8168,9 @@ async function appendImageDataUrl(targetPdf, dataUrl, mimeType = "") {
 async function appendUnsupportedAttachmentPage(targetPdf, { title, fileName, StandardFonts, rgb }) {
   const page = targetPdf.addPage([595.28, 841.89]);
   const font = await targetPdf.embedFont(StandardFonts.Helvetica);
-  page.drawText(title, { x: 48, y: 780, size: 16, font, color: rgb(0.06, 0.21, 0.31) });
-  page.drawText(fileName, { x: 48, y: 752, size: 11, font, color: rgb(0.25, 0.32, 0.38) });
-  page.drawText("Arquivo anexado sem prévia compatível para inclusão automática na juntada.", {
+  page.drawText(pdfText(title).slice(0, 70), { x: 48, y: 780, size: 16, font, color: rgb(0.06, 0.21, 0.31) });
+  page.drawText(pdfText(fileName).slice(0, 90), { x: 48, y: 752, size: 11, font, color: rgb(0.25, 0.32, 0.38) });
+  page.drawText(pdfText("Arquivo anexado sem prévia compatível para inclusão automática na juntada."), {
     x: 48,
     y: 704,
     size: 11,
@@ -7849,10 +8394,13 @@ function buildMonthCalendarDays(monthKey = getCurrentScheduleMonthKey()) {
   return [...offsets, ...days];
 }
 
-function FormSection({ title, children }) {
+function FormSection({ title, action, children }) {
   return (
     <div className="form-section">
-      <h3>{title}</h3>
+      <div className="form-section-header">
+        <h3>{title}</h3>
+        {action}
+      </div>
       {children}
     </div>
   );

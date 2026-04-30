@@ -360,7 +360,10 @@ router.post("/consult", optionalAuth, async (req, res) => {
       return res.status(404).json({ error: "Animal nao encontrado." });
     }
 
-    const authorized = await ensureAuthorized(client, req, animal);
+    const cleanCpf = normalizeCpf(req.body?.cpf);
+    const cleanKey = String(req.body?.validationKey || "").trim();
+    const hasCredential = cleanCpf.length === 11 && !/^0+$/.test(cleanCpf) && Boolean(cleanKey);
+    const authorized = hasCredential ? await ensureAuthorized(client, req, animal) : true;
     if (!authorized) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Consulta nao autorizada para este animal." });

@@ -415,6 +415,53 @@ router.patch("/:id", auth, async (req, res) => {
       `UPDATE requests SET ${setParts.join(", ")}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`,
       values
     );
+
+    const updatedTags = parseJsonArray(rows[0].tags);
+    const previousTags = parseJsonArray(existingRows[0].tags);
+    const isNewAttendance = updatedTags.includes("COMPARECEU") && !previousTags.includes("COMPARECEU");
+
+    if (isNewAttendance) {
+      const wf = parseJsonObject(rows[0].workflow_data);
+      const performedProcedures = wf.performedProcedures || "";
+      const attendanceNote = wf.attendanceNote || "";
+
+      let animalId = rows[0].animal_id || null;
+
+      if (!animalId && rows[0].animal_microchip) {
+        const clean = String(rows[0].animal_microchip).toUpperCase().replace(/[^A-Z0-9]/g, "");
+        const { rows: animalRows } = await pool.query(
+          `SELECT id FROM animals
+           WHERE regexp_replace(upper(COALESCE(microchip, '')), '[^A-Z0-9]', '', 'g') = $1
+           LIMIT 1`,
+          [clean],
+        );
+        if (animalRows[0]) animalId = animalRows[0].id;
+      }
+
+      if (animalId && performedProcedures) {
+        try {
+          await pool.query(
+            `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data, occurred_at)
+             VALUES ($1, $2, 'CIRURGIA_REALIZADA', $3, $4, $5::jsonb, NOW())`,
+            [
+              animalId,
+              rows[0].id,
+              `Cirurgia realizada — ${rows[0].protocol || rows[0].id}`,
+              [performedProcedures, attendanceNote].filter(Boolean).join(" | "),
+              JSON.stringify({
+                protocol: rows[0].protocol,
+                request_type: rows[0].request_type,
+                performed_procedures: performedProcedures,
+                attendance_note: attendanceNote,
+              }),
+            ],
+          );
+        } catch (recordErr) {
+          console.warn("Aviso: falha ao gravar prontuário do animal:", recordErr.message);
+        }
+      }
+    }
+
     res.json(rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
