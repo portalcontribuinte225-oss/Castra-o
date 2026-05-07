@@ -3,12 +3,23 @@ import bcrypt from "bcryptjs";
 
 export async function runMigrations() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS municipalities (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name TEXT NOT NULL,
+      state TEXT,
+      slug TEXT UNIQUE,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'tutor',
+      municipality_id UUID REFERENCES municipalities(id),
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
@@ -33,10 +44,12 @@ export async function runMigrations() {
       status TEXT NOT NULL DEFAULT 'EM_ANALISE',
       request_type TEXT,
       municipality TEXT,
+      municipality_id UUID REFERENCES municipalities(id),
       notes TEXT,
       assigned_sector TEXT,
       schedule_date TEXT,
       schedule_location_name TEXT,
+      schedule_address TEXT,
       schedule_address_url TEXT,
       schedule_municipality TEXT,
       responsible_unit TEXT,
@@ -73,6 +86,7 @@ export async function runMigrations() {
       health JSONB DEFAULT '[]',
       photo_url TEXT,
       status TEXT DEFAULT 'disponivel',
+      municipality_id UUID REFERENCES municipalities(id),
       interests JSONB DEFAULT '[]',
       adopted_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -83,7 +97,10 @@ export async function runMigrations() {
       date TEXT NOT NULL,
       weekday TEXT,
       vacancies INT NOT NULL DEFAULT 0,
+      slots JSONB DEFAULT '[]',
+      municipality_id UUID REFERENCES municipalities(id),
       location_name TEXT,
+      location_address TEXT,
       address_url TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     );
@@ -135,6 +152,7 @@ export async function runMigrations() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       animal_id UUID NOT NULL REFERENCES animals(id) ON DELETE CASCADE,
       request_id UUID REFERENCES requests(id) ON DELETE SET NULL,
+      municipality_id UUID REFERENCES municipalities(id),
       record_type TEXT NOT NULL,
       title TEXT NOT NULL,
       notes TEXT,
@@ -154,6 +172,7 @@ export async function runMigrations() {
       document TEXT,
       city TEXT,
       state TEXT,
+      municipality_id UUID REFERENCES municipalities(id),
       intended_use TEXT,
       assigned_sector TEXT,
       status TEXT NOT NULL DEFAULT 'PENDENTE',
@@ -169,6 +188,8 @@ export async function runMigrations() {
   `);
 
   await pool.query(`
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
+
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS protocol TEXT UNIQUE;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS validation_key TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS cpf TEXT;
@@ -176,10 +197,12 @@ export async function runMigrations() {
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS address TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS neighborhood TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS city TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS state TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS cep TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS animals JSONB DEFAULT '[]';
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS schedule_location_name TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS schedule_address TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS schedule_address_url TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS schedule_municipality TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS responsible_unit TEXT;
@@ -206,14 +229,19 @@ export async function runMigrations() {
     ALTER TABLE requests ALTER COLUMN status SET DEFAULT 'EM_ANALISE';
 
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS location_name TEXT;
+    ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS location_address TEXT;
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS address_url TEXT;
+    ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS slots JSONB DEFAULT '[]';
+    ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
 
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS interests JSONB DEFAULT '[]';
+    ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS adopted_at TIMESTAMPTZ;
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS sex TEXT;
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS health JSONB DEFAULT '[]';
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]';
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS main_photo_index INT DEFAULT 0;
+    ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
 
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS requester_type TEXT;
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS organization_name TEXT;
@@ -223,6 +251,7 @@ export async function runMigrations() {
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS document TEXT;
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS city TEXT;
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS state TEXT;
+    ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS intended_use TEXT;
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS assigned_sector TEXT;
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDENTE';
@@ -233,6 +262,21 @@ export async function runMigrations() {
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS temporary_password TEXT;
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS history JSONB DEFAULT '[]';
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
+
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code TEXT;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_code_expires_at TIMESTAMPTZ;
+    UPDATE users SET role = 'suporte' WHERE lower(role) = 'admin' AND municipality_id IS NULL;
+    UPDATE users SET role = 'admin_municipal' WHERE lower(role) = 'admin' AND municipality_id IS NOT NULL;
+    ALTER TABLE animal_records ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
+
+    ALTER TABLE config ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
+    ALTER TABLE config DROP CONSTRAINT IF EXISTS config_pkey;
+    CREATE UNIQUE INDEX IF NOT EXISTS config_key_municipality_idx ON config (key, COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid));
+
+    UPDATE animal_records ar
+    SET municipality_id = r.municipality_id
+    FROM requests r
+    WHERE ar.request_id = r.id AND ar.municipality_id IS NULL;
   `);
 
   await pool.query(`
@@ -263,6 +307,14 @@ export async function runMigrations() {
       ON access_requests (status, created_at DESC);
     CREATE INDEX IF NOT EXISTS access_requests_email_idx
       ON access_requests (lower(email));
+    CREATE INDEX IF NOT EXISTS requests_municipality_created_idx
+      ON requests (municipality_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS schedule_days_municipality_date_idx
+      ON schedule_days (municipality_id, date);
+    CREATE INDEX IF NOT EXISTS adoptions_municipality_created_idx
+      ON adoptions (municipality_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS animal_records_municipality_occurred_idx
+      ON animal_records (animal_id, municipality_id, occurred_at DESC);
   `);
 
   await pool.query(`
@@ -306,33 +358,9 @@ export async function runMigrations() {
     ALTER TABLE requests
       ADD CONSTRAINT requests_status_check
       CHECK (status IN ('EM_ANALISE', 'AGUARDANDO_CIRURGIA', 'ARQUIVADA'));
-  `);
 
-  await pool.query(`
-    INSERT INTO adoptions (
-      animal_name,
-      species,
-      sex,
-      age,
-      description,
-      health,
-      photo_url,
-      photos,
-      main_photo_index,
-      status
-    )
-    SELECT
-      'Luna',
-      'Felino',
-      'Femea',
-      '2 anos',
-      'Calma, carinhosa e muito companheira. Adora colo, usa a caixinha de areia certinho e se adapta bem em apartamento.',
-      '[]'::jsonb,
-      '',
-      '[]'::jsonb,
-      0,
-      'disponivel'
-    WHERE NOT EXISTS (SELECT 1 FROM adoptions);
+    ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
+    ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS schedule_rule_id TEXT DEFAULT '';
   `);
 
   const adminEmail = process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL;
@@ -341,12 +369,13 @@ export async function runMigrations() {
     const adminHash = await bcrypt.hash(adminPassword, 10);
     await pool.query(
       `INSERT INTO users (name, email, password, role)
-       VALUES ($1, $2, $3, 'admin')
+       VALUES ($1, $2, $3, 'master')
        ON CONFLICT (email)
        DO UPDATE SET
          name = EXCLUDED.name,
          password = EXCLUDED.password,
-         role = 'admin'`,
+         role = 'master',
+         municipality_id = NULL`,
       ["Administrador", adminEmail.trim().toLowerCase(), adminHash],
     );
   }

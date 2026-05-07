@@ -1,0 +1,129 @@
+import { pool } from "../db/index.js";
+import { checkAndConsumeQuota } from "./whatsappQuota.js";
+
+const WHATSAPP_CONFIG_KEY = "whatsapp";
+
+function parseJsonObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function onlyDigits(value = "") {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function toE164Brazil(value = "") {
+  const digits = onlyDigits(value);
+  if (!digits) return "";
+  if (digits.startsWith("55")) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+function getScheduleAddress(request = {}) {
+  return [
+    request.schedule_location_name,
+    request.schedule_address,
+    request.schedule_municipality || request.city,
+  ].filter(Boolean).join(" - ");
+}
+
+function buildConfirmationVariables(request = {}) {
+  return [
+    request.tutor_name || "Tutor",
+    request.protocol || "-",
+    request.schedule_date || "data a confirmar",
+    request.schedule_location_name || "local a confirmar",
+    request.schedule_address || getScheduleAddress(request) || "endereço a confirmar",
+    request.schedule_address_url || "link indisponível",
+  ];
+}
+
+async function getMunicipalityWhatsappConfig(municipalityId) {
+  if (!municipalityId) return {};
+  const { rows } = await pool.query(
+    "SELECT value FROM config WHERE key=$1 AND municipality_id=$2",
+    [WHATSAPP_CONFIG_KEY, municipalityId],
+  );
+  return parseJsonObject(rows[0]?.value);
+}
+
+function getRuntimeConfig(config = {}) {
+  return {
+    active: Boolean(config.active),
+    provider: config.provider || "cloud_api",
+    mode: config.mode || "template",
+    accessToken: config.accessToken || process.env.WHATSAPP_TOKEN || "",
+    phoneNumberId: config.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "",
+    templateName: config.confirmationTemplate || process.env.WHATSAPP_TEMPLATE_CONFIRMATION || "confirmacao_agenda_castracao",
+    languageCode: config.languageCode || process.env.WHATSAPP_TEMPLATE_LANG || "pt_BR",
+  };
+}
+
+async function sendCloudApiTemplate(config, request) {
+  const to = toE164Brazil(request.phone);
+  if (!to) return { status: "skipped", reason: "telefone ausente" };
+  const variables = buildConfirmationVariables(request);
+  const body = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to,
+    type: "template",
+    template: {
+      name: config.templateName,
+      language: { code: config.languageCode },
+      components: [
+        {
+          type: "body",
+          parameters: variables.map((text) => ({ type: "text", text: String(text || "-") })),
+        },
+      ],
+    },
+  };
+
+  const response = await fetch(`https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      status: "failed",
+      reason: payload?.error?.message || response.statusText,
+      providerResponse: payload,
+    };
+  }
+  return {
+    status: "sent",
+    providerMessageId: payload?.messages?.[0]?.id || "",
+    providerResponse: payload,
+  };
+}
+
+export async function notifyScheduleConfirmation(request = {}) {
+  const rawConfig = await getMunicipalityWhatsappConfig(request.municipality_id);
+  const config = getRuntimeConfig(rawConfig);
+  if (!config.active) {
+    return { status: "skipped", reason: "WhatsApp não configurado para o município" };
+  }
+  if (config.provider !== "cloud_api") {
+    return { status: "skipped", reason: `Provedor ${config.provider} ainda não implementado` };
+  }
+  if (!config.accessToken || !config.phoneNumberId || !config.templateName) {
+    return { status: "skipped", reason: "Credenciais ou template do WhatsApp incompletos" };
+  }
+  const quota = await checkAndConsumeQuota(request.municipality_id);
+  if (!quota.allowed) {
+    return { status: "skipped", reason: quota.reason };
+  }
+  return sendCloudApiTemplate(config, request);
+}
+
+export function whatsappHistoryNote(result = {}) {
+  if (result.status === "sent") return `WhatsApp: confirmação de agenda enviada${result.providerMessageId ? ` (${result.providerMessageId})` : ""}.`;
+  if (result.status === "failed") return `WhatsApp: falha ao enviar confirmação de agenda. ${result.reason || ""}`.trim();
+  return `WhatsApp: confirmação de agenda não enviada. ${result.reason || "Configuração ausente."}`;
+}

@@ -1,4 +1,5 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { createRoot } from "react-dom/client";
 import { api } from "./api.js";
 import {
@@ -8,6 +9,7 @@ import {
   CalendarDays,
   Cat,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ClipboardCheck,
   Download,
@@ -20,6 +22,7 @@ import {
   ListChecks,
   Lock,
   MapPin,
+  MessageCircle,
   Menu,
   Navigation,
   PawPrint,
@@ -35,15 +38,6 @@ import {
 } from "lucide-react";
 import "./styles.css";
 
-const envUsers = [
-  {
-    role: "admin",
-    name: "Administrador",
-    email: import.meta.env.VITE_ADMIN_EMAIL || "",
-    password: "",
-  },
-];
-
 const statuses = [
   "EM_ANALISE",
   "AGUARDANDO_CIRURGIA",
@@ -52,7 +46,7 @@ const statuses = [
 
 const statusLabels = {
   EM_ANALISE: "Em análise",
-  AGUARDANDO_CIRURGIA: "Aguardando cirurgia",
+  AGUARDANDO_CIRURGIA: "Aguardando Procedimento",
   ARQUIVADA: "Arquivada",
 };
 
@@ -61,21 +55,22 @@ const workflowTagLabels = {
   DEFERIDA: "Deferida",
   INDEFERIDA: "Indeferida",
   COMPARECEU: "Compareceu",
-  NAO_COMPARECEU: "Nao compareceu",
+  NAO_COMPARECEU: "Não compareceu",
   CANCELADA: "Cancelada",
   ATRIBUIDA: "Atribuída",
   PRIORIDADE: "Prioridade",
   RETORNO_TUTOR: "Retorno tutor",
   MUTIRAO: "Mutirão",
-  PRESENCIAL: "Presencial",
   MICROCHIP: "Microchip",
   OBITO: "Óbito",
   TROCA_TUTOR: "Troca de tutor",
 };
 
+const hiddenWorkflowTags = new Set(["PRESENCIAL", "MICROCHIP", "ATRIBUIDA"]);
+
 const menu = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-  { id: "admin", label: "Solicitações de castração", icon: LayoutDashboard },
+  { id: "admin", label: "Processos", icon: LayoutDashboard },
   { id: "credenciamento", label: "Credenciamentos", icon: ClipboardList },
   { id: "adocao", label: "Adoção", icon: HeartHandshake },
   { id: "relatorios", label: "Relatórios", icon: Activity },
@@ -84,39 +79,62 @@ const menu = [
 
 const configSidebarItems = [
   { id: "environment", label: "Configurar Ambiente" },
+  { id: "municipalities", label: "Criar Municípios", globalOnly: true },
   { id: "users", label: "Criar Usuários" },
   { id: "sectors", label: "Criar Setores" },
+  { id: "permissions", label: "Permissões" },
+];
+
+const RESTRICTED_ROLES = ["ong", "protetor"];
+const MENU_LABELS = {
+  dashboard: "Dashboard",
+  admin: "Processos",
+  credenciamento: "Credenciamentos",
+  adocao: "Adoção",
+  relatorios: "Relatórios",
+  config: "Configurações",
+};
+const CONFIG_ITEM_LABELS = {
+  environment: "Configurar Ambiente",
+  users: "Criar Usuários",
+  sectors: "Criar Setores",
+  permissions: "Permissões",
+};
+
+const brazilStatesFallback = [
+  { id: 12, sigla: "AC", nome: "Acre" },
+  { id: 27, sigla: "AL", nome: "Alagoas" },
+  { id: 16, sigla: "AP", nome: "Amapá" },
+  { id: 13, sigla: "AM", nome: "Amazonas" },
+  { id: 29, sigla: "BA", nome: "Bahia" },
+  { id: 23, sigla: "CE", nome: "Ceará" },
+  { id: 53, sigla: "DF", nome: "Distrito Federal" },
+  { id: 32, sigla: "ES", nome: "Espírito Santo" },
+  { id: 52, sigla: "GO", nome: "Goiás" },
+  { id: 21, sigla: "MA", nome: "Maranhão" },
+  { id: 51, sigla: "MT", nome: "Mato Grosso" },
+  { id: 50, sigla: "MS", nome: "Mato Grosso do Sul" },
+  { id: 31, sigla: "MG", nome: "Minas Gerais" },
+  { id: 15, sigla: "PA", nome: "Pará" },
+  { id: 25, sigla: "PB", nome: "Paraíba" },
+  { id: 41, sigla: "PR", nome: "Paraná" },
+  { id: 26, sigla: "PE", nome: "Pernambuco" },
+  { id: 22, sigla: "PI", nome: "Piauí" },
+  { id: 33, sigla: "RJ", nome: "Rio de Janeiro" },
+  { id: 24, sigla: "RN", nome: "Rio Grande do Norte" },
+  { id: 43, sigla: "RS", nome: "Rio Grande do Sul" },
+  { id: 11, sigla: "RO", nome: "Rondônia" },
+  { id: 14, sigla: "RR", nome: "Roraima" },
+  { id: 42, sigla: "SC", nome: "Santa Catarina" },
+  { id: 35, sigla: "SP", nome: "São Paulo" },
+  { id: 28, sigla: "SE", nome: "Sergipe" },
+  { id: 17, sigla: "TO", nome: "Tocantins" },
 ];
 
 
 const initialDocumentTypes = [
-  {
-    id: "cnh",
-    name: "Carteira Nacional de Habilitação (CNH)",
-    required: true,
-    active: true,
-    accept: ["image/jpeg", "image/png", "application/pdf"],
-    maxSizeMb: 5,
-    modelHint: "Documento oficial com nome, foto, número de registro e validade legíveis.",
-    aiCriteria: "Nome completo; foto; número de registro; data de validade; documento sem cortes.",
-    rejectionRules: "Imagem borrada; documento vencido; arquivo cortado; documento diferente de CNH.",
-  },
-  {
-    id: "comprovante_residencia",
-    name: "Comprovante de Residência",
-    required: true,
-    active: true,
-    accept: ["image/jpeg", "image/png", "application/pdf"],
-    maxSizeMb: 5,
-    modelHint: "Comprovante recente com nome, endereço completo, cidade e data de emissão legíveis.",
-    aiCriteria: "Nome; endereço completo; cidade; data de emissão recente; documento legível.",
-    rejectionRules: "Endereço incompleto; cidade divergente; imagem ilegível; comprovante antigo.",
-  },
 ];
 const initialRequestTypes = [
-  { id: "cadunico", name: "CadUnico", fee: "", billingAmount: "", active: true, documents: initialDocumentTypes },
-  { id: "animal-de-rua", name: "Animal de Rua", fee: "", billingAmount: "", active: true, documents: initialDocumentTypes },
-  { id: "ninhada", name: "Ninhada", fee: "", billingAmount: "", active: true, documents: initialDocumentTypes },
 ];
 const DEFAULT_DOCUMENT_ACCEPT = ["image/jpeg", "image/png", "application/pdf"];
 const DEFAULT_DOCUMENT_MAX_SIZE_MB = 5;
@@ -134,24 +152,14 @@ function normalizeDocumentType(document = {}) {
   };
 }
 const initialSpecies = [
-  { id: "canino", name: "Canino", active: true },
-  { id: "felino", name: "Felino", active: true },
 ];
 const initialSizes = [
-  { id: "pequeno", name: "Pequeno", weightStart: "0", weightEnd: "5", weightUnit: "kg", description: "0-5 kg", active: true },
-  { id: "medio", name: "Médio", weightStart: "5", weightEnd: "8", weightUnit: "kg", description: "5-8 kg", active: true },
-  { id: "grande", name: "Grande", weightStart: "8", weightEnd: "12", weightUnit: "kg", description: "8-12 kg", active: true },
 ];
 const initialMunicipalities = [];
 const accessRequesterTypes = [
   { id: "ONG", label: "ONG", sector: "ONGs", role: "ong" },
   { id: "PROTETOR", label: "Protetor de animais", sector: "Protetores", role: "protetor" },
 ];
-const defaultAccessSectors = accessRequesterTypes.map((type) => ({
-  id: `setor_${type.id.toLowerCase()}`,
-  name: type.sector,
-  active: true,
-}));
 const aiProviderOptions = {
   OpenAI: {
     keyUrl: "https://platform.openai.com/api-keys",
@@ -167,40 +175,57 @@ const aiProviderOptions = {
   },
 };
 const initialAiSettings = { active: false, provider: "OpenAI", model: "gpt-4o", apiKey: "", endpoint: "" };
-const AI_SETTINGS_STORAGE_KEY = "castragestao:ai-settings";
+const initialWhatsappQuota = { plan: 0, contractStart: "", contractEnd: "" };
+const initialWhatsappSettings = {
+  active: false,
+  provider: "cloud_api",
+  phoneNumberId: "",
+  accessToken: "",
+  confirmationTemplate: "confirmacao_agenda_castracao",
+  languageCode: "pt_BR",
+};
 const CONFIG_KEYS = {
   requestTypes: "castragestao:request-types",
   documentTypes: "castragestao:document-types",
   species: "castragestao:species",
   sizes: "castragestao:sizes",
-  municipalities: "castragestao:municipalities",
   teams: "castragestao:teams",
   scheduleRules: "castragestao:schedule-rules",
+  whatsapp: "whatsapp",
+  whatsappQuota: "whatsapp_quota",
+  permissionGroups: "permission_groups",
 };
-const initialTeams = { sectors: defaultAccessSectors, users: [] };
-const initialScheduleRules = [
-  {
-    id: "agenda_recorrente_padrao_2026",
-    description: "Agenda recorrente padrão 2026",
-    createdAt: "01/01/2026 00:00:00",
-    active: true,
-    unavailable: false,
-    type: "Recorrência",
-    kind: "Agenda",
-    repeatEvery: 1,
-    weekdays: [1, 2, 3],
-    start: "01/01/2026",
-    end: "31/12/2026",
-    time: "08:00",
-    vacancies: 10,
-    municipalityId: "",
-    municipalityName: "",
-    locationName: "",
-    addressUrl: "",
-    latitude: "",
-    longitude: "",
-  },
+const CONFIG_KEYS_LIST = [
+  CONFIG_KEYS.requestTypes,
+  CONFIG_KEYS.documentTypes,
+  CONFIG_KEYS.species,
+  CONFIG_KEYS.sizes,
+  CONFIG_KEYS.teams,
+  CONFIG_KEYS.scheduleRules,
 ];
+const initialTeams = { sectors: [], users: [] };
+const initialScheduleRules = [
+];
+
+function normalizeScheduleSlots(inputSlots, fallbackTime = "08:00", fallbackVacancies = 0) {
+  const slots = Array.isArray(inputSlots) ? inputSlots : [];
+  const normalized = slots
+    .map((slot) => ({
+      time: String(slot?.time || "").trim(),
+      vacancies: Math.max(Number(slot?.vacancies) || 0, 0),
+    }))
+    .filter((slot) => slot.time && slot.vacancies > 0);
+
+  if (normalized.length > 0) return normalized.sort((left, right) => left.time.localeCompare(right.time));
+  return [{
+    time: fallbackTime || "08:00",
+    vacancies: Math.max(Number(fallbackVacancies) || 0, 0),
+  }];
+}
+
+function sumScheduleSlotsVacancies(slots, fallbackTime = "08:00", fallbackVacancies = 0) {
+  return normalizeScheduleSlots(slots, fallbackTime, fallbackVacancies).reduce((sum, slot) => sum + slot.vacancies, 0);
+}
 
 function formatScheduleDate(date) {
   return [
@@ -220,21 +245,25 @@ function generateScheduleDaysFromRule(rule) {
   const start = new Date(startYear, startMonth - 1, startDay);
   const end = new Date(endYear, endMonth - 1, endDay);
   const days = [];
+  const slots = normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies);
+  const vacancies = sumScheduleSlotsVacancies(slots, rule.time, rule.vacancies);
 
   for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
     if (!rule.weekdays.includes(date.getDay())) continue;
     days.push({
       date: formatScheduleDate(date),
       weekday: getScheduleWeekdayLabel(date),
-      vacancies: rule.vacancies,
+      vacancies,
+      slots,
       active: rule.active !== false,
       scheduleRuleId: rule.id,
       description: rule.description,
-      startTime: rule.time,
+      startTime: slots[0]?.time || rule.time,
       kind: rule.kind,
       municipalityId: rule.municipalityId,
       municipalityName: rule.municipalityName,
       locationName: rule.locationName,
+      locationAddress: rule.locationAddress,
       addressUrl: rule.addressUrl,
       latitude: rule.latitude,
       longitude: rule.longitude,
@@ -278,10 +307,45 @@ function requestHasTag(request, tag) {
   return Array.isArray(request?.tags) && request.tags.includes(tag);
 }
 
-function requestResultLabel(request = {}) {
+function requestResultTag(request = {}) {
   const resultOrder = ["COMPARECEU", "NAO_COMPARECEU", "INDEFERIDA", "CANCELADA", "DEFERIDA"];
-  const tag = resultOrder.find((item) => requestHasTag(request, item));
+  return resultOrder.find((item) => requestHasTag(request, item)) || "";
+}
+
+function visibleWorkflowTags(tags = [], request = {}) {
+  const resultTag = request.status === "ARQUIVADA" ? requestResultTag(request) : "";
+  return tags.filter((tag) => !hiddenWorkflowTags.has(tag) && tag !== resultTag);
+}
+
+function requestResultLabel(request = {}) {
+  const tag = requestResultTag(request);
   return tag ? workflowTagLabels[tag] : statusLabels[request.status] || request.status || "Sem status";
+}
+
+function triageStatusTone(request = {}) {
+  if (request.status === "EM_ANALISE") return requestHasTag(request, "ATRIBUIDA") ? "triage-status--analysis" : "triage-status--inbox";
+  if (request.status === "AGUARDANDO_CIRURGIA") return "triage-status--surgery";
+  if (request.status === "ARQUIVADA") return "triage-status--archived";
+  return "";
+}
+
+function displayText(value = "") {
+  const text = String(value || "").trim();
+  const labels = {
+    "Animal nao informado": "Animal não informado",
+    "Comprovante de ResidÃªncia": "Comprovante de Residência",
+    "Endereco completo": "Endereço completo",
+    "EndereÃ§o completo": "Endereço completo",
+    "Gestao Municipal": "Gestão Municipal",
+    "MÃ©dio": "Médio",
+    "Nao": "Não",
+    "Nao compareceu": "Não compareceu",
+    "Nao informado": "Não informado",
+    "Nao se aplica": "Não se aplica",
+    "Tutor nao informado": "Tutor não informado",
+    "castracao": "Castração",
+  };
+  return labels[text] || text;
 }
 
 function requestTypeLabel(request = {}) {
@@ -291,10 +355,40 @@ function requestTypeLabel(request = {}) {
     Microchipagem: "Microchipagem",
     Ambos: "Castração e microchipagem",
     Castracao: "Castração",
+    castracao: "Castração",
     "Castração": "Castração",
   };
   const type = request.type || request.request_type || request.requestTypeId || "";
-  return labels[type] || type || "Castração";
+  return labels[type] || displayText(type) || "Castração";
+}
+
+function procedureLabel(value = "") {
+  const text = displayText(value);
+  const normalized = text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+  const labels = {
+    ambos: "Castração/Microchipagem",
+    "castracao e microchipagem": "Castração/Microchipagem",
+    "castracao/microchipagem": "Castração/Microchipagem",
+    castracao: "Castração",
+    microchipagem: "Microchipagem",
+  };
+  return labels[normalized] || text;
+}
+
+function requestProcedureLabel(request = {}) {
+  const requestType = request.request_type || request.type || request.requestTypeId || "";
+  if (["ANIMAL_OBITO", "TROCA_TUTOR"].includes(requestType)) return requestTypeLabel(request);
+  const animals = Array.isArray(request.animals) ? request.animals : [];
+  const animalProcedures = animals
+    .map((animal) => procedureLabel(animal.procedure || ""))
+    .filter(Boolean);
+  const uniqueProcedures = [...new Set(animalProcedures)];
+  if (uniqueProcedures.length > 0) return uniqueProcedures.join(", ");
+  return procedureLabel(request.procedure || requestType || "") || requestTypeLabel(request);
 }
 
 function normalizeRequest(request = {}) {
@@ -307,10 +401,10 @@ function normalizeRequest(request = {}) {
     ? request.animals
     : [
         {
-          name: request.animal_name || request.animalName || "Animal nao informado",
-          species: request.species || "Nao informado",
-          size: request.size || "Nao informado",
-          sex: request.sex || "Nao informado",
+          name: request.animal_name || request.animalName || "Animal não informado",
+          species: request.species || "Não informado",
+          size: request.size || "Não informado",
+          sex: request.sex || "Não informado",
           age: request.birthDate || request.birth_date || request.age || "",
           birthDate: request.birthDate || request.birth_date || "",
           procedure: request.procedure || request.request_type || request.type || "",
@@ -335,7 +429,7 @@ function normalizeRequest(request = {}) {
     validationKey: request.validationKey || request.validation_key || "",
     signatureDataUrl: request.signatureDataUrl || request.signature_data_url || "",
     signedAt: request.signedAt || request.signed_at || "",
-    tutor: request.tutor || request.tutor_name || request.tutorName || "Tutor nao informado",
+    tutor: request.tutor || request.tutor_name || request.tutorName || "Tutor não informado",
     email: request.email || request.tutor_email || request.tutorEmail || "",
     cpf: request.cpf || "",
     phone: request.phone || "",
@@ -355,12 +449,17 @@ function normalizeRequest(request = {}) {
     assignedSectorName: request.assignedSectorName || request.assigned_sector || workflowData.assignedSectorName || "",
     responsible: request.responsible || workflowData.responsible || request.responsible_unit || "",
     scheduleLocationName: request.scheduleLocationName || request.schedule_location_name || "",
+    scheduleAddress: request.scheduleAddress || request.schedule_address || "",
     scheduleAddressUrl: request.scheduleAddressUrl || request.schedule_address_url || "",
+    municipalityId: request.municipalityId || request.municipality_id || "",
+    municipalityName: request.municipalityName || request.municipality_name || request.municipality || request.scheduleMunicipality || request.schedule_municipality || "",
     scheduleMunicipality: request.scheduleMunicipality || request.schedule_municipality || "",
     responsibleUnit: request.responsibleUnit || request.responsible_unit || "",
     veterinarian: request.veterinarian || "",
     animalMicrochip: request.animalMicrochip || request.animal_microchip || animals.find((animal) => animal.microchip)?.microchip || "",
     previousSchedule: request.previousSchedule || workflowData.previousSchedule || "",
+    scheduleTime: request.scheduleTime || request.schedule_time || workflowData.scheduleTime || workflowData.schedule_time || "",
+    scheduleSlotTime: request.scheduleSlotTime || request.schedule_slot_time || workflowData.scheduleSlotTime || workflowData.schedule_slot_time || request.scheduleTime || request.schedule_time || "",
     rejectionReason: request.rejectionReason || workflowData.rejectionReason || "",
     rejectionNote: request.rejectionNote || workflowData.rejectionNote || "",
     performedProcedures: request.performedProcedures || workflowData.performedProcedures || "",
@@ -375,16 +474,73 @@ function normalizeRequest(request = {}) {
   };
 }
 
+function normalizeScheduleDateText(dateText = "") {
+  const value = String(dateText || "").trim();
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return value;
+  const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) return `${isoMatch[3]}/${isoMatch[2]}/${isoMatch[1]}`;
+  return value;
+}
+
+function isSameScheduleDate(dateText = "", targetDate = "") {
+  const normalized = normalizeScheduleDateText(dateText);
+  return normalized === targetDate || normalized.startsWith(`${targetDate} `);
+}
+
+function isRequestOnScheduleDate(request = {}, targetDate = "") {
+  return [
+    request.preferredSchedule,
+    request.appointment,
+    request.schedule_date,
+  ].some((dateText) => isSameScheduleDate(dateText, targetDate));
+}
+
 function normalizeScheduleDay(day = {}) {
+  const slots = normalizeScheduleSlots(day.slots, day.startTime || day.start_time || day.time, day.vacancies);
   return {
     ...day,
+    date: normalizeScheduleDateText(day.date),
+    vacancies: sumScheduleSlotsVacancies(slots, day.startTime || day.start_time || day.time, day.vacancies),
+    slots,
+    startTime: day.startTime || day.start_time || slots[0]?.time || "",
+    municipalityId: day.municipalityId || day.municipality_id || "",
+    scheduleRuleId: day.scheduleRuleId || day.schedule_rule_id || "",
     locationName: day.locationName || day.location_name || "",
+    locationAddress: day.locationAddress || day.location_address || "",
     addressUrl: day.addressUrl || day.address_url || "",
   };
 }
 
 function mergeTags(current = [], next = []) {
   return [...new Set([...(Array.isArray(current) ? current : []), ...next].filter(Boolean))];
+}
+
+function getItemMunicipalityId(item = {}) {
+  return item.municipalityId || item.municipality_id || "";
+}
+
+function filterByMunicipalityScope(items = [], municipalityId = "") {
+  const list = Array.isArray(items) ? items : [];
+  if (!municipalityId) return list;
+  return list.filter((item) => getItemMunicipalityId(item) === municipalityId);
+}
+
+function scopeConfigItems(items = [], municipality = {}) {
+  if (!Array.isArray(items)) return [];
+  const municipalityId = municipality.id || "";
+  const municipalityName = getMunicipalityLabel(municipalityId, [municipality]);
+  return items.map((item) => ({
+    ...item,
+    municipalityId: getItemMunicipalityId(item) || municipalityId,
+    municipalityName: item.municipalityName || municipalityName,
+    documents: Array.isArray(item.documents)
+      ? item.documents.map((document) => ({
+        ...document,
+        municipalityId: getItemMunicipalityId(document) || municipalityId,
+        municipalityName: document.municipalityName || municipalityName,
+      }))
+      : item.documents,
+  }));
 }
 
 function App() {
@@ -410,43 +566,203 @@ function App() {
   const [configArea, setConfigArea] = useState("environment");
   const [requests, setRequests] = useState([]);
   const [adoptionAnimals, setAdoptionAnimals] = useState([]);
-  const [requestTypes, setRequestTypes] = useState(() => readStoredJson(CONFIG_KEYS.requestTypes, initialRequestTypes));
-  const [documentTypes, setDocumentTypes] = useState(() => readStoredJson(CONFIG_KEYS.documentTypes, initialDocumentTypes));
-  const [speciesOptions, setSpeciesOptions] = useState(() => readStoredJson(CONFIG_KEYS.species, initialSpecies));
-  const [sizeOptions, setSizeOptions] = useState(() => readStoredJson(CONFIG_KEYS.sizes, initialSizes));
-  const [municipalities, setMunicipalities] = useState(() => readStoredJson(CONFIG_KEYS.municipalities, initialMunicipalities));
-  const [aiSettings, setAiSettings] = useState(() => ({
-    ...initialAiSettings,
-    ...readStoredJson(AI_SETTINGS_STORAGE_KEY, {}),
-  }));
-  const [scheduleDays, setScheduleDays] = useState(initialScheduleDays);
-  const [scheduleRules, setScheduleRules] = useState(() => {
-    const stored = readStoredJson(CONFIG_KEYS.scheduleRules, null);
-    return Array.isArray(stored) && stored.length > 0 ? stored : initialScheduleRules;
-  });
-  const [teams, setTeams] = useState(() => normalizeTeams(readStoredJson(CONFIG_KEYS.teams, initialTeams)));
+  const [requestTypes, setRequestTypes] = useState([]);
+  const [documentTypes, setDocumentTypes] = useState([]);
+  const [speciesOptions, setSpeciesOptions] = useState([]);
+  const [sizeOptions, setSizeOptions] = useState([]);
+  const [municipalities, setMunicipalities] = useState(initialMunicipalities);
+  const [aiSettings, setAiSettings] = useState(initialAiSettings);
+  const [scheduleDays, setScheduleDays] = useState([]);
+  const [scheduleRules, setScheduleRules] = useState([]);
+  const [teams, setTeams] = useState(() => normalizeTeams(initialTeams));
   const [accessRequests, setAccessRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [publicForm, setPublicForm] = useState(false);
   const [publicFormInitialScreen, setPublicFormInitialScreen] = useState("agenda");
+  const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(localStorage.getItem("castragestao:municipalityId") || "");
+  const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem("castragestao:globalMunicipalityFilterId") || "");
+  const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [configMenuOpen, setConfigMenuOpen] = useState(true);
+  const [tenantConfigReady, setTenantConfigReady] = useState(false);
+  const [loadedConfigKeys, setLoadedConfigKeys] = useState({});
+  const [sidebarResetOpen, setSidebarResetOpen] = useState(false);
+  const [sidebarResetPassword, setSidebarResetPassword] = useState("");
+  const [sidebarResetConfirm, setSidebarResetConfirm] = useState("");
+  const [sidebarResetStatus, setSidebarResetStatus] = useState("");
+  const [sidebarResetSaving, setSidebarResetSaving] = useState(false);
+  const [topbarQuota, setTopbarQuota] = useState(null);
+  const [permissionGroups, setPermissionGroups] = useState([]);
 
   const selected = requests.find((request) => request.id === selectedId) || requests[0] || null;
   const metrics = useMemo(() => buildMetrics(requests), [requests]);
 
   useEffect(() => {
     api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
+    api.getMunicipalities().then((list) => {
+      const active = Array.isArray(list) ? list : [];
+      setMunicipalities(active);
+      if (geoTriedRef.current || !active.length) return;
+      geoTriedRef.current = true;
+      const stored = localStorage.getItem("castragestao:municipalityId");
+      if (stored && active.some((m) => m.id === stored)) {
+        setSelectedMunicipalityId(stored);
+        return;
+      }
+      const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+      function applyMatch(city, state) {
+        if (!city) return false;
+        const stateMatch = (m) => !state || !m.state || m.state.toUpperCase() === state;
+        const match =
+          active.find((m) => normalize(m.name) === city && stateMatch(m)) ||
+          active.find((m) => normalize(m.name).includes(city) && stateMatch(m)) ||
+          active.find((m) => city.includes(normalize(m.name)) && stateMatch(m));
+        if (match) {
+          setSelectedMunicipalityId(match.id);
+          localStorage.setItem("castragestao:municipalityId", match.id);
+          return true;
+        }
+        return false;
+      }
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=pt`)
+              .then((r) => r.json())
+              .then((data) => {
+                const city = normalize(data.address?.city || data.address?.town || data.address?.municipality || data.address?.county || "");
+                const state = (data.address?.state_code || data.address?.["ISO3166-2-lvl4"] || "").replace(/^BR-/, "").toUpperCase().trim();
+                if (!applyMatch(city, state)) {
+                  fetch("https://ipapi.co/json/")
+                    .then((r) => r.json())
+                    .then((d) => { if (!d.error) applyMatch(normalize(d.city), (d.region_code || "").toUpperCase()); })
+                    .catch(() => {});
+                }
+              })
+              .catch(() => {
+                fetch("https://ipapi.co/json/")
+                  .then((r) => r.json())
+                  .then((d) => { if (!d.error) applyMatch(normalize(d.city), (d.region_code || "").toUpperCase()); })
+                  .catch(() => {});
+              });
+          },
+          () => {
+            fetch("https://ipapi.co/json/")
+              .then((r) => r.json())
+              .then((d) => { if (!d.error) applyMatch(normalize(d.city), (d.region_code || "").toUpperCase()); })
+              .catch(() => {});
+          },
+          { timeout: 8000 }
+        );
+      } else {
+        fetch("https://ipapi.co/json/")
+          .then((r) => r.json())
+          .then((d) => { if (!d.error) applyMatch(normalize(d.city), (d.region_code || "").toUpperCase()); })
+          .catch(() => {});
+      }
+    }).catch(() => {});
   }, []);
 
-  useEffect(() => { localStorage.setItem(CONFIG_KEYS.requestTypes, JSON.stringify(requestTypes)); }, [requestTypes]);
-  useEffect(() => { localStorage.setItem(CONFIG_KEYS.documentTypes, JSON.stringify(documentTypes)); }, [documentTypes]);
-  useEffect(() => { localStorage.setItem(CONFIG_KEYS.species, JSON.stringify(speciesOptions)); }, [speciesOptions]);
-  useEffect(() => { localStorage.setItem(CONFIG_KEYS.sizes, JSON.stringify(sizeOptions)); }, [sizeOptions]);
-  useEffect(() => { localStorage.setItem(CONFIG_KEYS.municipalities, JSON.stringify(municipalities)); }, [municipalities]);
-  useEffect(() => { localStorage.setItem(CONFIG_KEYS.teams, JSON.stringify(teams)); }, [teams]);
-  useEffect(() => { localStorage.setItem(CONFIG_KEYS.scheduleRules, JSON.stringify(scheduleRules)); }, [scheduleRules]);
+  useEffect(() => {
+    if (!selectedMunicipalityId) return;
+    if (municipalities.some((municipality) => municipality.id === selectedMunicipalityId)) return;
+    setSelectedMunicipalityId("");
+    localStorage.removeItem("castragestao:municipalityId");
+  }, [municipalities, selectedMunicipalityId]);
+
+  useEffect(() => {
+    if (!globalMunicipalityFilterId) return;
+    if (municipalities.some((municipality) => municipality.id === globalMunicipalityFilterId)) return;
+    setGlobalMunicipalityFilterId("");
+    localStorage.removeItem("castragestao:globalMunicipalityFilterId");
+  }, [municipalities, globalMunicipalityFilterId]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    setTenantConfigReady(false);
+    setLoadedConfigKeys({});
+    if (isGlobalRole(currentUser.role)) {
+      const loadGlobalMunicipalityConfigs = async () => {
+        try {
+          const municipalityList = await api.getMunicipalitiesAdmin();
+          const activeMunicipalities = Array.isArray(municipalityList) ? municipalityList : [];
+          setMunicipalities(activeMunicipalities);
+          const configEntries = await Promise.all(activeMunicipalities.map(async (municipality) => {
+            const values = await Promise.all(CONFIG_KEYS_LIST.map((key) =>
+              api.getConfig(key, municipality.id).then((value) => [key, value]).catch(() => [key, null]),
+            ));
+            return { municipality, values: Object.fromEntries(values) };
+          }));
+          setRequestTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.requestTypes], municipality)));
+          setDocumentTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.documentTypes], municipality)));
+          setSpeciesOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.species], municipality)));
+          setSizeOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.sizes], municipality)));
+          setTeams({
+            sectors: configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.sectors, municipality)),
+            users: configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.users, municipality)),
+          });
+          setScheduleRules(configEntries.flatMap(({ municipality, values }) => (
+            Array.isArray(values[CONFIG_KEYS.scheduleRules])
+              ? values[CONFIG_KEYS.scheduleRules].map((rule) => {
+                const slots = normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies);
+                return {
+                  ...rule,
+                  municipalityId: rule.municipalityId || municipality.id,
+                  municipalityName: rule.municipalityName || getMunicipalityLabel(municipality.id, [municipality]),
+                  slots,
+                  time: slots[0]?.time || rule.time,
+                  vacancies: sumScheduleSlotsVacancies(slots, rule.time, rule.vacancies),
+                };
+              })
+              : []
+          )));
+        } finally {
+          setTenantConfigReady(true);
+        }
+      };
+      loadGlobalMunicipalityConfigs().catch(console.error);
+      return;
+    }
+    const configLoaders = [
+      [CONFIG_KEYS.requestTypes, setRequestTypes],
+      [CONFIG_KEYS.documentTypes, setDocumentTypes],
+      [CONFIG_KEYS.species, setSpeciesOptions],
+      [CONFIG_KEYS.sizes, setSizeOptions],
+      [CONFIG_KEYS.teams, setTeams],
+      [CONFIG_KEYS.permissionGroups, (value) => setPermissionGroups(Array.isArray(value) ? value : [])],
+      [CONFIG_KEYS.scheduleRules, (rules) => setScheduleRules((Array.isArray(rules) ? rules : []).map((rule) => {
+        const slots = normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies);
+        return { ...rule, slots, time: slots[0]?.time || rule.time, vacancies: sumScheduleSlotsVacancies(slots, rule.time, rule.vacancies) };
+      }))],
+    ];
+    Promise.allSettled(configLoaders.map(([key, setter]) =>
+      api.getConfig(key).then((value) => {
+        if (value !== undefined && value !== null) {
+          setter(value);
+          setLoadedConfigKeys((current) => ({ ...current, [key]: true }));
+        }
+      }),
+    )).finally(() => setTenantConfigReady(true));
+  }, [currentUser?.id, currentUser?.municipalityId]);
+
+  useEffect(() => {
+    const municipalityId = currentUser?.municipalityId;
+    if (!municipalityId || isGlobalRole(currentUser?.role)) { setTopbarQuota(null); return; }
+    api.getConfig(CONFIG_KEYS.whatsappQuota, municipalityId)
+      .then((value) => setTopbarQuota(value?.plan ? value : null))
+      .catch(() => setTopbarQuota(null));
+  }, [currentUser?.municipalityId, currentUser?.role]);
+
+  const canPersistTenantConfig = currentUser && tenantConfigReady && !isGlobalRole(currentUser.role);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.requestTypes]) api.setConfig(CONFIG_KEYS.requestTypes, requestTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, requestTypes]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.documentTypes]) api.setConfig(CONFIG_KEYS.documentTypes, documentTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, documentTypes]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
 
   useEffect(() => {
     api.getConfig("ai").then((saved) => {
@@ -454,7 +770,6 @@ function App() {
         const merged = { ...initialAiSettings, ...saved, active: Boolean(saved.active) };
         const validModels = aiProviderOptions[merged.provider]?.models || [];
         if (validModels.length && !validModels.includes(merged.model)) merged.model = validModels[0];
-        localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(merged));
         setAiSettings(merged);
       }
     }).catch(() => {});
@@ -464,10 +779,14 @@ function App() {
     if (!currentUser) return;
     api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(console.error);
     api.getAccessRequests().then((list) => setAccessRequests(list.map(normalizeAccessRequest))).catch(console.error);
-    api.getSchedule().then((days) => {
+    api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
+    const municipalityId = isGlobalRole(currentUser.role) ? "" : currentUser.municipalityId || "";
+    api.getSchedule(municipalityId).then((days) => {
       if (!days.length) return;
       setScheduleDays(days.map(normalizeScheduleDay).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date)));
     }).catch(console.error);
+    const loadMunicipalities = isGlobalRole(currentUser.role) ? api.getMunicipalitiesAdmin : api.getMunicipalities;
+    loadMunicipalities().then((list) => setMunicipalities(Array.isArray(list) ? list : [])).catch(() => {});
   }, [currentUser]);
 
   async function patchRequest(requestId, patch, historyNote = "") {
@@ -500,8 +819,10 @@ function App() {
         city: payload.city || "",
         state: payload.state || "",
         preferredSchedule: payload.preferredSchedule || "",
+        municipalityId: payload.municipalityId || currentUser?.municipalityId || "",
         schedule_date: payload.preferredSchedule || payload.schedule_date || "",
         scheduleLocationName: payload.scheduleLocationName || "",
+        scheduleAddress: payload.scheduleAddress || "",
         scheduleAddressUrl: payload.scheduleAddressUrl || "",
         scheduleMunicipality: payload.scheduleMunicipality || "",
         responsibleUnit: payload.responsibleUnit || "",
@@ -515,6 +836,8 @@ function App() {
         fee: payload.fee || "",
         tags: payload.tags || [],
         workflow_data: payload.workflowData || payload.workflow_data || {},
+        latitude: payload.latitude || "",
+        longitude: payload.longitude || "",
       });
       registerCreatedRequest(newRequest, { openAdmin: Boolean(currentUser) });
       return newRequest;
@@ -543,8 +866,62 @@ function App() {
         : [normalized, ...current]
     ));
     if (normalized.id) setSelectedId(normalized.id);
-    if (options.openAdmin && currentUser?.role === "admin") setActive("admin");
+    if (options.openAdmin && canManagePublicAnimalFlows(currentUser?.role)) setActive("admin");
     return normalized;
+  }
+
+  function handleMunicipalitySelect(id) {
+    setSelectedMunicipalityId(id);
+    localStorage.setItem("castragestao:municipalityId", id);
+  }
+
+  function closeSidebarReset() {
+    setSidebarResetOpen(false);
+    setSidebarResetPassword("");
+    setSidebarResetConfirm("");
+    setSidebarResetStatus("");
+    setSidebarResetSaving(false);
+  }
+
+  async function submitSidebarReset(event) {
+    event.preventDefault();
+    if (sidebarResetSaving) return;
+    if (sidebarResetPassword.length < 6) {
+      setSidebarResetStatus("A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+    if (sidebarResetPassword !== sidebarResetConfirm) {
+      setSidebarResetStatus("As senhas não conferem.");
+      return;
+    }
+    setSidebarResetSaving(true);
+    setSidebarResetStatus("Salvando nova senha...");
+    try {
+      await api.upsertAuthUser({
+        name: currentUser.name,
+        email: currentUser.email,
+        role: currentUser.role,
+        municipalityId: currentUser.municipalityId || currentUser.municipality_id || "",
+        password: sidebarResetPassword,
+      });
+      setSidebarResetStatus("Senha redefinida com sucesso.");
+      setSidebarResetPassword("");
+      setSidebarResetConfirm("");
+    } catch (err) {
+      setSidebarResetStatus(err?.message || "Não foi possível redefinir a senha.");
+    } finally {
+      setSidebarResetSaving(false);
+    }
+  }
+
+  function handleGlobalMunicipalityFilter(id) {
+    setGlobalMunicipalityFilterId(id);
+    if (id) {
+      localStorage.setItem("castragestao:globalMunicipalityFilterId", id);
+    } else {
+      localStorage.removeItem("castragestao:globalMunicipalityFilterId");
+    }
+    setSelectedId(null);
   }
 
   if (publicForm) {
@@ -553,7 +930,10 @@ function App() {
         createRequest={createRequest}
         onBack={() => setPublicForm(false)}
         initialScreen={publicFormInitialScreen}
+        initialMunicipalityId={selectedMunicipalityId}
+        onMunicipalitySelect={handleMunicipalitySelect}
         scheduleDays={scheduleDays}
+        municipalities={municipalities}
         requestTypes={requestTypes}
         requests={requests}
         speciesOptions={speciesOptions}
@@ -577,11 +957,51 @@ function App() {
         onAccessRequest={createAccessRequest}
         adoptionAnimals={adoptionAnimals}
         onInterestSent={handleInterestSent}
+        municipalities={municipalities}
+        selectedMunicipalityId={selectedMunicipalityId}
+        onMunicipalitySelect={handleMunicipalitySelect}
       />
     );
   }
 
-  const visibleMenu = menu;
+  const currentUserRole = normalizeText(currentUser?.role || "");
+  const currentTeamUser = (teams.users || []).find((u) =>
+    (u.email && currentUser?.email && u.email.toLowerCase() === currentUser.email.toLowerCase()) ||
+    String(u.id) === String(currentUser?.id),
+  );
+  const currentPermissionGroup = permissionGroups.find((g) => g.id === currentTeamUser?.permissionGroupId) || null;
+  const visibleMenu = (() => {
+    if (isGlobalRole(currentUserRole)) return menu;
+    if (RESTRICTED_ROLES.includes(currentUserRole)) return menu.filter((item) => item.id === "adocao");
+    if (!currentPermissionGroup) return menu;
+    return menu.filter((item) => (currentPermissionGroup.allowedMenuItems || []).includes(item.id));
+  })();
+  const visibleConfigSidebarItems = (() => {
+    const base = configSidebarItems.filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role));
+    if (isGlobalRole(currentUserRole)) return base;
+    if (RESTRICTED_ROLES.includes(currentUserRole)) return [];
+    if (!currentPermissionGroup) return base;
+    return base.filter((item) => item.globalOnly || (currentPermissionGroup.allowedConfigItems || []).includes(item.id));
+  })();
+  const scopedMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : "";
+  const activeMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : currentUser?.municipalityId || "";
+  const scopedRequests = filterByMunicipalityScope(requests, scopedMunicipalityId);
+  const scopedAdoptionAnimals = filterByMunicipalityScope(adoptionAnimals, scopedMunicipalityId);
+  const scopedScheduleDays = filterByMunicipalityScope(scheduleDays, scopedMunicipalityId);
+  const scopedRequestTypes = filterByMunicipalityScope(requestTypes, scopedMunicipalityId);
+  const scopedDocumentTypes = filterByMunicipalityScope(documentTypes, scopedMunicipalityId);
+  const scopedSpeciesOptions = filterByMunicipalityScope(speciesOptions, scopedMunicipalityId);
+  const scopedSizeOptions = filterByMunicipalityScope(sizeOptions, scopedMunicipalityId);
+  const scopedScheduleRules = filterByMunicipalityScope(scheduleRules, scopedMunicipalityId);
+  const scopedTeams = {
+    sectors: filterByMunicipalityScope(teams.sectors || [], scopedMunicipalityId),
+    users: filterByMunicipalityScope(teams.users || [], scopedMunicipalityId),
+  };
+  const scopedMunicipalities = scopedMunicipalityId
+    ? municipalities.filter((municipality) => municipality.id === scopedMunicipalityId)
+    : municipalities;
+  const scopedSelected = scopedRequests.find((request) => request.id === selectedId) || scopedRequests[0] || null;
+  const scopedMetrics = buildMetrics(scopedRequests);
 
   const ActiveView = {
     admin: AdminDashboard,
@@ -629,7 +1049,7 @@ function App() {
                 </button>
                 {item.id === "config" && active === "config" && configMenuOpen && (
                   <div className="sidebar-subnav" aria-label="Subabas de configurações">
-                    {configSidebarItems.map((subitem) => (
+                    {visibleConfigSidebarItems.map((subitem) => (
                       <button
                         key={subitem.id}
                         className={configArea === subitem.id ? "active" : ""}
@@ -658,6 +1078,9 @@ function App() {
               <span>{userRoleLabel(currentUser.role)}</span>
             </div>
           </div>
+          <button className="sidebar-reset-button" type="button" onClick={() => setSidebarResetOpen(true)}>
+            Redefinir senha
+          </button>
           <button className="logout-button" onClick={() => setCurrentUser(null)}>
             Sair
           </button>
@@ -670,9 +1093,22 @@ function App() {
             <Menu size={20} />
           </button>
           <div className="main-reader">
-            <h1>Sistema de gestão de castração animal</h1>
+            <h1>Bem-estar e proteção animal</h1>
           </div>
           <div className="topbar-actions">
+            {isGlobalRole(currentUser?.role) && municipalities.length > 0 && (
+              <label className="topbar-municipality-filter" aria-label="Filtrar município">
+                <MapPin size={18} />
+                <select value={globalMunicipalityFilterId} onChange={(event) => handleGlobalMunicipalityFilter(event.target.value)}>
+                  <option value="">Todos os municípios</option>
+                  {municipalities.map((municipality) => (
+                    <option key={municipality.id} value={municipality.id}>
+                      {[municipality.name, municipality.state].filter(Boolean).join("/")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="topbar-search" aria-label="Buscar no sistema">
               <Search size={20} />
               <input
@@ -682,6 +1118,12 @@ function App() {
                 placeholder="Protocolo, CPF, tutor, microchip..."
               />
             </label>
+            {!isGlobalRole(currentUser?.role) && (
+              <div className="topbar-quota-chip" title="Notificações WhatsApp restantes no mês">
+                <MessageCircle size={15} />
+                <span>{topbarQuota ? Math.max(0, topbarQuota.plan - (topbarQuota.currentPeriodUsed || 0)).toLocaleString("pt-BR") : "0"}</span>
+              </div>
+            )}
             <button className="icon-button" aria-label="Notificacoes">
               <Bell size={20} />
             </button>
@@ -689,60 +1131,127 @@ function App() {
         </header>
 
         <ActiveView
-          requests={requests}
-          selected={selected}
+          requests={scopedRequests}
+          selected={scopedSelected}
           selectedId={selectedId}
           setSelectedId={setSelectedId}
-          metrics={metrics}
+          metrics={scopedMetrics}
           patchRequest={patchRequest}
           createRequest={createRequest}
-          adoptionAnimals={adoptionAnimals}
+          adoptionAnimals={scopedAdoptionAnimals}
           setAdoptionAnimals={setAdoptionAnimals}
           currentUser={currentUser}
-          scheduleDays={scheduleDays}
-          requestTypes={requestTypes}
-          documentTypes={documentTypes}
+          scheduleDays={scopedScheduleDays}
+          requestTypes={scopedRequestTypes}
+          documentTypes={scopedDocumentTypes}
           setRequestTypes={setRequestTypes}
           setDocumentTypes={setDocumentTypes}
-          speciesOptions={speciesOptions}
+          speciesOptions={scopedSpeciesOptions}
           setSpeciesOptions={setSpeciesOptions}
-          sizeOptions={sizeOptions}
+          sizeOptions={scopedSizeOptions}
           setSizeOptions={setSizeOptions}
-          municipalities={municipalities}
+          municipalities={scopedMunicipalities}
           setMunicipalities={setMunicipalities}
           aiSettings={aiSettings}
           setAiSettings={setAiSettings}
           setScheduleDays={setScheduleDays}
-          scheduleRules={scheduleRules}
+          scheduleRules={scopedScheduleRules}
           setScheduleRules={setScheduleRules}
-          teams={teams}
+          teams={scopedTeams}
           setTeams={setTeams}
           accessRequests={accessRequests}
           reviewAccessRequest={reviewAccessRequest}
           setActive={setActive}
           configArea={configArea}
           globalSearch={globalSearch}
+          selectedMunicipalityId={activeMunicipalityId}
+          permissionGroups={permissionGroups}
+          setPermissionGroups={setPermissionGroups}
         />
       </main>
+
+      {sidebarResetOpen && (
+        <div className="modal-backdrop">
+          <form className="workflow-modal reset-form" onSubmit={submitSidebarReset} role="dialog" aria-modal="true">
+            <ModalHeader title="Redefinir senha" subtitle={currentUser.email || currentUser.name} onClose={closeSidebarReset} />
+            <label className="field">
+              <span>Nova senha</span>
+              <input
+                type="password"
+                value={sidebarResetPassword}
+                onChange={(event) => setSidebarResetPassword(event.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                autoComplete="new-password"
+              />
+            </label>
+            <label className="field">
+              <span>Confirmar nova senha</span>
+              <input
+                type="password"
+                value={sidebarResetConfirm}
+                onChange={(event) => setSidebarResetConfirm(event.target.value)}
+                placeholder="Repita a nova senha"
+                autoComplete="new-password"
+              />
+            </label>
+            {sidebarResetStatus && <p className={sidebarResetStatus.includes("sucesso") ? "form-success" : "form-error"}>{sidebarResetStatus}</p>}
+            <div className="reset-form-actions">
+              <button className="ghost-button" type="button" onClick={closeSidebarReset}>Cancelar</button>
+              <button className="primary-action" type="submit" disabled={sidebarResetSaving}>
+                {sidebarResetSaving ? "Salvando..." : "Redefinir senha"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }
 
-function readStoredJson(key, fallback) {
-  try {
-    const value = localStorage.getItem(key);
-    return value ? JSON.parse(value) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 function normalizeTeams(value = initialTeams) {
   const sectors = Array.isArray(value.sectors) ? value.sectors : [];
-  const users = Array.isArray(value.users) ? value.users : [];
-  const sectorNames = new Set(sectors.map((sector) => normalizeText(sector.name)));
-  const missingSectors = defaultAccessSectors.filter((sector) => !sectorNames.has(normalizeText(sector.name)));
-  return { sectors: [...sectors, ...missingSectors], users };
+  const users = Array.isArray(value.users) ? value.users.map((user) => {
+    const sectorIds = getUserSectorIds(user);
+    return { ...user, sectorIds, sectorId: user.sectorId || sectorIds[0] || "", municipalityId: user.municipalityId || user.municipality_id || "" };
+  }) : [];
+  return { sectors, users };
+}
+
+function getUserSectorIds(user = {}) {
+  const ids = Array.isArray(user.sectorIds) ? user.sectorIds : [];
+  return [...new Set([...ids, user.sectorId].filter(Boolean))];
+}
+
+function userBelongsToSector(user = {}, sectorId = "") {
+  return Boolean(sectorId && getUserSectorIds(user).includes(sectorId));
+}
+
+function getUserSectorNames(user = {}, sectors = []) {
+  const names = getUserSectorIds(user)
+    .map((sectorId) => sectors.find((sector) => sector.id === sectorId)?.name)
+    .filter(Boolean);
+  return names.length ? names.join(", ") : "Sem setor";
+}
+
+function getMunicipalityLabel(municipalityId = "", municipalities = []) {
+  const municipality = municipalities.find((item) => item.id === municipalityId);
+  return municipality ? [municipality.name, municipality.state].filter(Boolean).join("/") : "Sem município";
+}
+
+function defaultMunicipalityUserToTeamUser(user = {}, municipalityId = "") {
+  return {
+    id: user.id || `usuario_padrao_${municipalityId}`,
+    name: user.name || "Administrador municipal",
+    email: user.email || "",
+    defaultMunicipalityUser: true,
+    sectorIds: Array.isArray(user.sectorIds) ? user.sectorIds : [],
+    sectorId: user.sectorId || user.sectorIds?.[0] || "",
+    municipalityId: user.municipality_id || user.municipalityId || municipalityId,
+    role: "admin_municipal",
+    matricula: "",
+    cargo: "Administrador municipal",
+    active: true,
+  };
 }
 
 function normalizeAccessRequest(item = {}) {
@@ -766,120 +1275,39 @@ function normalizeAccessRequest(item = {}) {
 
 function userRoleLabel(role = "") {
   return {
-    admin: "Admin",
+    master: "Master",
+    suporte: "Suporte",
+    admin_municipal: "Administrador municipal",
+    analista: "Analista",
     tutor: "Tutor",
     ong: "ONG",
     protetor: "Protetor",
-    servidor_publico: "Servidor publico",
-  }[role] || role || "Usuario";
+    servidor_publico: "Servidor público",
+  }[role] || role || "Usuário";
 }
 
 function canManagePublicAnimalFlows(role = "") {
-  return ["admin", "ong", "protetor", "servidor_publico"].includes(role);
-}
-
-function TutorMobileApp({
-  currentUser,
-  requests,
-  createRequest,
-  adoptionAnimals,
-  setAdoptionAnimals,
-  requestTypes,
-  aiSettings,
-  scheduleDays,
-  speciesOptions,
-  sizeOptions,
-  onRequestCreated,
-  setCurrentUser,
-}) {
-  const [screen, setScreen] = useState("home");
-  const [selectedSchedule, setSelectedSchedule] = useState("");
-
-  return (
-    <main className="tutor-app">
-      <header className="tutor-topbar">
-        <div className="brand login-brand">
-          <div className="brand-mark">
-            <PawPrint size={22} />
-          </div>
-          <div>
-            <strong>Sistema municipal</strong>
-            <span>Ola, {currentUser.name}</span>
-          </div>
-        </div>
-        <button className="ghost-button" onClick={() => setCurrentUser(null)}>
-          Sair
-        </button>
-      </header>
-
-      {screen === "home" && (
-        <section className="tutor-home">
-          <p className="tutor-home-intro">Selecione uma vaga disponivel e preencha os dados da castracao em seguida.</p>
-
-          <PublicSchedulePicker
-            requests={requests}
-            scheduleDays={scheduleDays}
-            selectedDate={selectedSchedule}
-            requestTypes={requestTypes}
-            onSelect={(date) => {
-              setSelectedSchedule(date);
-              setScreen("solicitacao");
-            }}
-          />
-
-          <div className="tutor-action-grid compact-actions">
-            <button className="tutor-big-action" onClick={() => setScreen("consulta")}>
-              <Search size={28} />
-              <strong>Consultar solicitacao</strong>
-              <span>Ver protocolo e andamento</span>
-            </button>
-          </div>
-        </section>
-      )}
-
-      {screen === "solicitacao" && (
-        <section className="tutor-screen">
-          <NewRequest
-            createRequest={createRequest}
-            currentUser={currentUser}
-            compact
-            onBack={() => setScreen("home")}
-            onDone={() => setScreen("home")}
-            requests={requests}
-            scheduleDays={scheduleDays}
-            requestTypes={requestTypes}
-            aiSettings={aiSettings}
-            speciesOptions={speciesOptions}
-            sizeOptions={sizeOptions}
-            initialSchedule={selectedSchedule}
-          />
-        </section>
-      )}
-
-      {screen === "consulta" && (
-        <section className="tutor-screen">
-          <button className="back-button" onClick={() => setScreen("home")}>
-            Voltar
-          </button>
-          <ValidationKeyConsultation fallbackRequests={requests} currentUser={currentUser} onRequestCreated={onRequestCreated} />
-        </section>
-      )}
-
-      {screen === "adocao" && (
-        <section className="tutor-screen">
-          <button className="back-button" onClick={() => setScreen("home")}>
-            Voltar
-          </button>
-          <AdoptionView adoptionAnimals={adoptionAnimals} setAdoptionAnimals={setAdoptionAnimals} currentUser={currentUser} />
-        </section>
-      )}
-    </main>
-  );
+  return [
+    "master",
+    "suporte",
+    "admin_municipal",
+    "coordenador",
+    "triagem",
+    "analista",
+    "agendador",
+    "veterinario",
+    "adocao",
+    "auditor",
+    "ong",
+    "protetor",
+    "servidor publico",
+    "servidor_publico",
+  ].includes(normalizeText(role));
 }
 
 const ADOPTION_STATUS_LABEL = { disponivel: "Disponível", em_processo: "Em processo", adotado: "Adotado" };
 
-function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated }) {
+function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, municipalityId }) {
   const [microchip, setMicrochip] = useState("");
   const [cpf, setCpf] = useState(formatCpf(currentUser?.cpf || ""));
   const [validationKey, setValidationKey] = useState("");
@@ -904,7 +1332,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     const chip = microchip.trim();
     const hasValidCredential = cleanCpf.length === 11 && !/^0+$/.test(cleanCpf) && Boolean(key);
     if (!chip && cleanCpf.length !== 11) {
-      setStatus("Informe um CPF valido.");
+      setStatus("Informe um CPF válido.");
       setSearchOk(false);
       return;
     }
@@ -925,8 +1353,8 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
           ])
         : await Promise.all([
             Promise.resolve(null),
-            api.consultRequestsByCredentials(cleanCpf, key),
-            api.consultAdoptionsByCredentials(cleanCpf, key),
+            api.consultRequestsByCredentials(cleanCpf, key, municipalityId),
+            api.consultAdoptionsByCredentials(cleanCpf, key, municipalityId),
           ]);
       const normalizedReqs = Array.isArray(reqList) ? reqList.map(normalizeRequest) : [];
       const normalizedAdopts = Array.isArray(adoptList) ? adoptList : [];
@@ -962,7 +1390,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
             <ShieldCheck size={20} />
           </div>
           <div>
-          <span className="eyebrow">Prontuário animal</span>
           <h2>Consultar prontuário</h2>
           <p>Digite o microchip para abrir o prontuário. CPF e chave continuam disponíveis para consulta do tutor.</p>
           </div>
@@ -1072,12 +1499,14 @@ function PublicSchedulePicker({
     const confirmed = countUsedVacancies(requests, day.date);
     const pending = pendingReservation?.date === day.date ? (pendingReservation.count || 0) : 0;
     const used = confirmed + pending;
+    const offeredSlot = getOfferedScheduleSlot(day, requests, requiredVacancies);
     const confirmedRemaining = Math.max(day.vacancies - confirmed, 0);
     return {
       ...day,
       used,
       remaining: Math.max(day.vacancies - used, 0),
-      hasEnoughVacancies: confirmedRemaining >= requiredVacancies,
+      hasEnoughVacancies: confirmedRemaining >= requiredVacancies && Boolean(offeredSlot),
+      offeredSlot,
       isPast: isPastScheduleDay(day.date),
     };
   });
@@ -1106,11 +1535,6 @@ function PublicSchedulePicker({
 
   return (
     <section className="panel public-schedule-picker">
-      <div className="showcase-header schedule-picker-header">
-        <div>
-          <h2>Datas disponíveis</h2>
-        </div>
-      </div>
       <div className="calendar-month-header">
         <button
           type="button"
@@ -1154,9 +1578,8 @@ function PublicSchedulePicker({
                 onClick={() => onSelect(day.date)}
               >
                 <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
-                <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.hasEnoughVacancies ? `${day.remaining} vagas` : "Sem vagas suficientes"}</small>
+                <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} - ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
                 {day.kind === "Mutirao" && <em>Mutirão</em>}
-                {day.locationName && <small>{day.locationName}</small>}
               </button>
             )
         )}
@@ -1209,7 +1632,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
   async function submitInterest(e) {
     e.preventDefault();
     try {
-      const updated = await api.registerInterest(selectedAnimal.id, interestForm);
+      const updated = await api.registerInterest(selectedAnimal.id, interestForm, selectedAnimal.municipality_id);
       setInterestSent(true);
       onInterestSent?.(updated);
     } catch (err) {
@@ -1261,9 +1684,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
     <section className={`${filteredAnimals.length <= 2 ? "adoption-showcase few-animals" : "adoption-showcase"} ${showViewAll ? "" : "compact-gallery"}`.trim()}>
       <div className="showcase-header adoption-showcase-header">
         <div>
-          <span className="eyebrow">Adoção</span>
-          <h2>Adote um amigo para a vida toda</h2>
-          <p>Conheça os animais disponíveis e escolha quem combina com sua rotina.</p>
+          <span className="eyebrow">Adote um amigo para a vida toda</span>
         </div>
         <div className="adoption-header-actions">
         {showViewAll && (
@@ -1298,7 +1719,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
                   {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={36} />}
                 </div>
                 <div className="public-animal-meta">
-                  <div className="public-animal-badges" aria-label="Status da adocao">
+                  <div className="public-animal-badges" aria-label="Status da adoção">
                     <span className="public-interest-count">
                       <Users size={13} />
                       {interestCount} interessado{interestCount === 1 ? "" : "s"}
@@ -1330,7 +1751,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
     {selectedAnimal && (
       <div className="modal-backdrop">
         <div className="animal-detail-modal adoption-profile-modal">
-          <ModalHeader title={selectedAnimal.name || selectedAnimal.animal_name || "Animal"} eyebrow="Adoção" onClose={closeAnimalModal} />
+          <ModalHeader onClose={closeAnimalModal} />
           <div className="adoption-profile-media">
             <div className={`adoption-main-photo ${getAnimalGradient(selectedAnimal)}`}>
               {getAnimalMainPhoto(selectedAnimal) ? <img src={getAnimalMainPhoto(selectedAnimal)} alt={selectedAnimal.name} /> : <PawPrint size={54} />}
@@ -1344,7 +1765,6 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
             )}
           </div>
           <div className="adoption-profile-info">
-            <span className="eyebrow">Adoção</span>
             <h2>{selectedAnimal.name || selectedAnimal.animal_name}</h2>
             <div className="adoption-profile-tags">
               {selectedAnimal.species && <Chip>{selectedAnimal.species}</Chip>}
@@ -1417,6 +1837,9 @@ function normalizeAdoptionAnimal(animal) {
     photos,
     mainPhotoIndex,
     interests: Array.isArray(animal.interests) ? animal.interests : [],
+    createdBy: animal.createdBy || animal.created_by || "",
+    createdByName: animal.createdByName || animal.created_by_name || "",
+    createdByRole: animal.createdByRole || animal.created_by_role || "",
     gradient: getAnimalGradient(animal),
   };
 }
@@ -1432,14 +1855,80 @@ function getAnimalMainPhoto(animal) {
   return photos[animal.mainPhotoIndex || 0] || photos[0] || "";
 }
 
-function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest, adoptionAnimals = [], onInterestSent }) {
-  const [email, setEmail] = useState(envUsers[0].email);
-  const [password, setPassword] = useState(envUsers[0].password);
+function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [showVetModal, setShowVetModal] = useState(false);
   const [showAccessModal, setShowAccessModal] = useState(false);
   const [showMobileAdoption, setShowMobileAdoption] = useState(false);
+  const [resetScreen, setResetScreen] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetCode, setResetCode] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetConfirm, setResetConfirm] = useState("");
+  const [resetStep, setResetStep] = useState("email");
+  const [resetError, setResetError] = useState("");
+  const [resetSuccess, setResetSuccess] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+
+  async function sendResetCode(event) {
+    event.preventDefault();
+    setResetError("");
+    setResetLoading(true);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setResetError(data.error || "Erro ao enviar código"); return; }
+      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
+      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
+      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
+      if (serviceId && templateId && publicKey && data.code) {
+        await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            service_id: serviceId,
+            template_id: templateId,
+            user_id: publicKey,
+            template_params: { to_email: resetEmail.trim(), reset_code: data.code },
+          }),
+        });
+      }
+      setResetStep("code");
+    } catch (err) {
+      setResetError("Falha na conexão. Tente novamente.");
+    } finally {
+      setResetLoading(false);
+    }
+  }
+
+  async function confirmReset(event) {
+    event.preventDefault();
+    setResetError("");
+    if (resetPassword !== resetConfirm) { setResetError("As senhas não conferem."); return; }
+    if (resetPassword.length < 6) { setResetError("A senha deve ter pelo menos 6 caracteres."); return; }
+    setResetLoading(true);
+    try {
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail.trim().toLowerCase(), code: resetCode.trim(), password: resetPassword }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setResetError(data.error || "Erro ao redefinir senha"); return; }
+      setResetSuccess(true);
+    } catch (err) {
+      setResetError("Falha na conexão. Tente novamente.");
+    } finally {
+      setResetLoading(false);
+    }
+  }
 
   async function submit(event) {
     event.preventDefault();
@@ -1466,18 +1955,34 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
         </section>
 
         <section className="login-card">
-          <div className="brand login-brand">
-            <div className="brand-mark">
-              <PawPrint size={24} />
+          <div className="login-card-topbar">
+            <div className="brand login-brand">
+              <div className="brand-mark">
+                <PawPrint size={24} />
+              </div>
+              <div>
+                {selectedMunicipalityId && municipalities.find((m) => m.id === selectedMunicipalityId) ? (
+                  <>
+                    <strong>{municipalities.find((m) => m.id === selectedMunicipalityId).name}</strong>
+                    <span className="brand-sub">Sistema municipal</span>
+                  </>
+                ) : (
+                  <strong>Sistema municipal</strong>
+                )}
+              </div>
             </div>
-            <div>
-              <strong>Sistema municipal</strong>
-            </div>
+            {municipalities.length > 0 && (
+              <MunicipalitySelectorChip
+                municipalities={municipalities}
+                selectedMunicipalityId={selectedMunicipalityId}
+                onSelect={onMunicipalitySelect}
+                compact={!!selectedMunicipalityId}
+              />
+            )}
           </div>
 
           <div className="login-welcome">
-            <h1>Castração animal gratuita</h1>
-            <p>Selecione como deseja continuar</p>
+            <h1>Bem-estar e proteção animal</h1>
           </div>
 
           <div className="login-main-actions">
@@ -1495,7 +2000,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
 
             <button className="login-big-action secondary login-vet-action" onClick={() => setShowVetModal(true)}>
               <Lock size={28} />
-              <strong>Credenciados</strong>
+              <strong>User</strong>
               <span>Acesso credenciado</span>
             </button>
 
@@ -1516,24 +2021,116 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
       )}
       {showVetModal && (
         <div className="modal-backdrop">
-          <form className="auth-modal compact-auth-modal" onSubmit={submit}>
-            <ModalHeader title="Credenciados" eyebrow="Acesso ao sistema" onClose={() => { setShowVetModal(false); setError(""); }} />
-            <label className="field">
-              <span>Email</span>
-              <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
-            </label>
-            <label className="field password-field">
-              <span>Senha</span>
-              <div>
-                <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} autoComplete="current-password" />
-                <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label="Ver senha">
-                  <Eye size={18} />
-                </button>
-              </div>
-            </label>
-            {error && <p className="form-error">{error}</p>}
-            <button className="primary-action" type="submit">Entrar</button>
-          </form>
+          {!resetScreen ? (
+            <form className="auth-modal compact-auth-modal" onSubmit={submit}>
+              <ModalHeader title="Entrar no sistema" onClose={() => { setShowVetModal(false); setError(""); setResetScreen(false); }} />
+              <label className="field">
+                <span>Email</span>
+                <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
+              </label>
+              <label className="field password-field">
+                <span>Senha</span>
+                <div>
+                  <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} autoComplete="current-password" />
+                  <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label="Ver senha">
+                    <Eye size={18} />
+                  </button>
+                </div>
+              </label>
+              {error && <p className="form-error">{error}</p>}
+              <button className="primary-action" type="submit">Entrar</button>
+              <button
+                type="button"
+                className="reset-password-link"
+                onClick={() => { setResetScreen(true); setResetStep("email"); setResetError(""); setResetSuccess(false); setResetEmail(""); setResetCode(""); setResetPassword(""); setResetConfirm(""); }}
+              >
+                Esqueceu a senha?
+              </button>
+            </form>
+          ) : (
+            <div className="auth-modal compact-auth-modal">
+              <ModalHeader
+                title="Redefinir senha"
+                onClose={() => { setShowVetModal(false); setResetScreen(false); setResetError(""); }}
+              />
+
+              {resetSuccess ? (
+                <div className="reset-success-msg">
+                  <p>Senha redefinida com sucesso!</p>
+                  <button className="primary-action" type="button" onClick={() => { setResetScreen(false); setResetSuccess(false); }}>
+                    Voltar ao login
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={resetStep === "email" ? sendResetCode : confirmReset} className="reset-form">
+                  <label className="field">
+                    <span>E-mail cadastrado</span>
+                    <input
+                      type="email"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="seu@email.com"
+                      required
+                      disabled={resetStep === "code"}
+                    />
+                  </label>
+
+                  {resetStep === "email" && (
+                    <button className="primary-action" type="submit" disabled={resetLoading}>
+                      {resetLoading ? "Enviando..." : "Enviar código"}
+                    </button>
+                  )}
+
+                  {resetStep === "code" && (
+                    <>
+                      <label className="field">
+                        <span>Código recebido</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          maxLength={6}
+                          value={resetCode}
+                          onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ""))}
+                          placeholder="000000"
+                          required
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Nova senha</span>
+                        <input
+                          type="password"
+                          value={resetPassword}
+                          onChange={(e) => setResetPassword(e.target.value)}
+                          placeholder="Mínimo 6 caracteres"
+                          required
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Confirmar nova senha</span>
+                        <input
+                          type="password"
+                          value={resetConfirm}
+                          onChange={(e) => setResetConfirm(e.target.value)}
+                          placeholder="Repita a nova senha"
+                          required
+                        />
+                      </label>
+                      <div className="reset-form-actions">
+                        <button className="ghost-button" type="button" onClick={() => { setResetStep("email"); setResetCode(""); setResetError(""); }}>
+                          Reenviar código
+                        </button>
+                        <button className="primary-action" type="submit" disabled={resetLoading}>
+                          {resetLoading ? "Salvando..." : "Redefinir senha"}
+                        </button>
+                      </div>
+                    </>
+                  )}
+
+                  {resetError && <p className="form-error">{resetError}</p>}
+                </form>
+              )}
+            </div>
+          )}
         </div>
       )}
     </main>
@@ -1590,7 +2187,7 @@ function PublicAccessRequestModal({ onClose, onSubmit }) {
   return (
     <div className="modal-backdrop">
       <form className="auth-modal access-request-modal" onSubmit={submit}>
-        <ModalHeader title="Solicitar credenciamento" eyebrow="Acesso à plataforma" onClose={onClose} />
+        <ModalHeader title="Solicitar credenciamento" onClose={onClose} />
         {sent ? (
           <div className="public-form-success compact-success">
             <CheckCircle2 size={42} />
@@ -1654,7 +2251,7 @@ function PetWelcomeArt({ className = "" }) {
       </video>
       <div className="pet-video-shade" />
       <div className="pet-video-caption">
-        <span className="eyebrow">Castração e adoção animal</span>
+        <span className="eyebrow">Bem-estar e proteção animal</span>
         <strong>Eles esperam por você. Adote e transforme duas vidas.</strong>
         <p>Cada animal adotado libera espaço para outro ser salvo.<br />Conheça quem está esperando um lar.</p>
       </div>
@@ -1662,29 +2259,157 @@ function PetWelcomeArt({ className = "" }) {
   );
 }
 
+function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSelect, compact = false }) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const searchRef = useRef(null);
+
+  const selected = municipalities.find((m) => m.id === selectedMunicipalityId);
+  const multiState = new Set(municipalities.map((m) => m.state).filter(Boolean)).size > 1;
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? municipalities.filter((m) =>
+        m.name.toLowerCase().includes(q) || (m.state || "").toLowerCase().includes(q)
+      )
+    : municipalities;
+
+  function open() {
+    setSearch("");
+    setPopoverOpen(true);
+    setTimeout(() => searchRef.current?.focus(), 50);
+  }
+
+  function pick(id) {
+    onSelect(id);
+    setPopoverOpen(false);
+    setSearch("");
+  }
+
+  return (
+    <div style={{ position: "relative", display: "inline-block" }}>
+      <button
+        type="button"
+        className={`municipality-chip-btn${selected ? " selected" : ""}${compact ? " compact" : ""}`}
+        onClick={() => (popoverOpen ? setPopoverOpen(false) : open())}
+      >
+        {compact && selected ? (
+          <><ChevronDown size={13} />trocar</>
+        ) : (
+          <><MapPin size={14} />{selected ? selected.name : "Município"}<ChevronDown size={13} /></>
+        )}
+      </button>
+      {popoverOpen && (
+        <>
+          <div className="municipality-popover-backdrop" onClick={() => setPopoverOpen(false)} />
+          <div className="municipality-popover">
+            <div className="mun-search-box">
+              <Search size={14} />
+              <input
+                ref={searchRef}
+                type="text"
+                placeholder="Buscar município..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <div className="mun-list">
+              {filtered.length === 0 && (
+                <p className="mun-empty">Nenhum resultado</p>
+              )}
+              {filtered.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  className={`mun-list-item${m.id === selectedMunicipalityId ? " active" : ""}`}
+                  onClick={() => pick(m.id)}
+                >
+                  <span>{m.name}</span>
+                  {multiState && <small>{m.state}</small>}
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 const GUEST_USER = { role: "guest", name: "", email: "", neighborhood: "", address: "", cpf: "", cep: "", number: "", city: "", state: "", phone: "" };
 
-function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda", scheduleDays = [], requestTypes = [], requests = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }) {
+function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda", initialMunicipalityId = "", onMunicipalitySelect, scheduleDays = [], municipalities = [], requestTypes = [], requests = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }) {
   const [screen, setScreen] = useState(initialScreen === "consulta" ? "consulta" : "formulario");
   const [done, setDone] = useState(null);
+  const [downloadStatus, setDownloadStatus] = useState("");
+  const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(initialMunicipalityId);
+  const [publicScheduleDays, setPublicScheduleDays] = useState(scheduleDays);
+  const [publicRequestTypes, setPublicRequestTypes] = useState(requestTypes);
+  const [publicSpeciesOptions, setPublicSpeciesOptions] = useState(speciesOptions);
+  const [publicSizeOptions, setPublicSizeOptions] = useState(sizeOptions);
+
+  function handleMunicipalitySelect(id) {
+    setSelectedMunicipalityId(id);
+    onMunicipalitySelect?.(id);
+  }
+
+  useEffect(() => {
+    if (!selectedMunicipalityId) return;
+    api.getSchedule(selectedMunicipalityId)
+      .then((days) => setPublicScheduleDays(days.map(normalizeScheduleDay).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date))))
+      .catch(console.error);
+    api.getConfig(CONFIG_KEYS.requestTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicRequestTypes(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicSpeciesOptions(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicSizeOptions(value); }).catch(() => {});
+  }, [selectedMunicipalityId]);
 
   function goToStart() {
     setScreen("formulario");
   }
 
-  const header = (backFn) => (
+  async function downloadDoneRequestPdf() {
+    if (!done || downloadStatus === "loading") return;
+    setDownloadStatus("loading");
+    try {
+      const dataUrl = await createRequestPdfDataUrl(done);
+      const protocol = done.protocol || done.id || "solicitacao";
+      downloadDataUrl(dataUrl, `Solicitacao ${protocol}.pdf`);
+      setDownloadStatus("");
+    } catch (error) {
+      console.error("Erro ao baixar solicitação:", error);
+      setDownloadStatus("error");
+    }
+  }
+
+  const simpleHeader = (
     <header className="public-form-header">
-      <button className="public-back-button" type="button" onClick={backFn}>Voltar</button>
-      <div>
-        <strong>Sistema municipal</strong>
-      </div>
+      <button className="public-back-button" type="button" onClick={onBack}>
+        <ChevronRight size={16} style={{ transform: "rotate(180deg)" }} />
+        Início
+      </button>
+      <MunicipalitySelectorChip
+        municipalities={municipalities}
+        selectedMunicipalityId={selectedMunicipalityId}
+        onSelect={handleMunicipalitySelect}
+        compact={!!selectedMunicipalityId}
+      />
+      <div><strong>Sistema municipal</strong></div>
     </header>
   );
 
   if (done) {
+    const doneMunicipality = municipalities.find((m) => m.id === selectedMunicipalityId);
     return (
       <main className="public-form-page">
-        {header(onBack)}
+        <div className="nr-topbar">
+          <button className="nr-back-btn" type="button" onClick={onBack}>
+            <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
+            Início
+          </button>
+          <div className="nr-progress-wrap">
+            <div className="nr-progress-fill" style={{ width: "100%" }} />
+          </div>
+          {doneMunicipality && <span className="nr-municipality-label">{doneMunicipality.name}</span>}
+        </div>
         <div className="public-form-success">
           <CheckCircle2 size={56} />
           <h2>Solicitação enviada!</h2>
@@ -1694,18 +2419,33 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
             <strong>{done.validationKey || done.validation_key}</strong>
             <small>Use sempre CPF + chave de validação para consultar solicitações e adoções.</small>
           </div>
-          <button className="primary-action" onClick={onBack}>Voltar ao início</button>
+          <div className="public-form-success-actions">
+            <button className="secondary-action" type="button" onClick={downloadDoneRequestPdf} disabled={downloadStatus === "loading"}>
+              <Download size={18} />
+              {downloadStatus === "loading" ? "Preparando..." : "Baixar solicitação"}
+            </button>
+            <button className="primary-action" type="button" onClick={onBack}>Voltar ao início</button>
+          </div>
+          {downloadStatus === "error" && <small className="form-error">Não foi possível gerar o PDF da solicitação.</small>}
         </div>
       </main>
     );
   }
 
   if (screen === "consulta") {
+    const consultaMunicipality = municipalities.find((m) => m.id === selectedMunicipalityId);
     return (
       <main className="public-form-page">
-        {header(onBack)}
+        <div className="nr-topbar">
+          <button className="nr-back-btn" type="button" onClick={onBack}>
+            <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
+            Início
+          </button>
+          <div className="nr-progress-wrap" />
+          {consultaMunicipality && <span className="nr-municipality-label">{consultaMunicipality.name}</span>}
+        </div>
         <section className="tutor-screen">
-          <ValidationKeyConsultation fallbackRequests={requests} currentUser={GUEST_USER} onRequestCreated={onRequestCreated} />
+          <ValidationKeyConsultation fallbackRequests={requests} currentUser={GUEST_USER} onRequestCreated={onRequestCreated} municipalityId={selectedMunicipalityId || undefined} />
         </section>
       </main>
     );
@@ -1713,27 +2453,64 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
 
   return (
     <main className="public-form-page">
-      {header(goToStart)}
-      <NewRequest
-        createRequest={createRequest}
-        currentUser={GUEST_USER}
-        compact
-        onBack={goToStart}
-        onDone={(request) => { setDone(request); }}
-        requests={requests}
-        scheduleDays={scheduleDays}
-        requestTypes={requestTypes}
-        aiSettings={aiSettings}
-        speciesOptions={speciesOptions}
-        sizeOptions={sizeOptions}
-      />
+      {!selectedMunicipalityId ? (
+        <div className="public-municipality-prompt">
+          <p>Selecione um município para iniciar a solicitação.</p>
+        </div>
+      ) : (
+        <NewRequest
+          createRequest={createRequest}
+          currentUser={GUEST_USER}
+          publicFlow
+          municipalities={municipalities}
+          selectedMunicipalityId={selectedMunicipalityId}
+          onMunicipalitySelect={handleMunicipalitySelect}
+          onBack={onBack}
+          onDone={(request) => { setDone(request); }}
+          requests={requests}
+          scheduleDays={publicScheduleDays}
+          initialMunicipalityId={selectedMunicipalityId}
+          requestTypes={publicRequestTypes}
+          aiSettings={aiSettings}
+          speciesOptions={publicSpeciesOptions}
+          sizeOptions={publicSizeOptions}
+        />
+      )}
     </main>
   );
 }
 
 function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf = "", validationKey = "", onRequestCreated }) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
+  const [detailsLoadingId, setDetailsLoadingId] = useState("");
   const next = safeRequests.find((request) => request.status !== "ARQUIVADA" && requestHasTag(request, "DEFERIDA") && (request.appointment || request.preferredSchedule));
+
+  async function openRequestDetails(request) {
+    setDetailsLoadingId(request.id || request.protocol || "");
+    try {
+      const firstAnimal = request.animals?.[0] || {};
+      const microchip = firstAnimal.microchip || request.animalMicrochip || request.animal_microchip || "";
+      if (microchip) {
+        const record = await api.consultAnimalByMicrochip({ microchip, cpf, validationKey });
+        printAnimalRecordPdf(record.animal || firstAnimal, record.tutor || request, record.history || []);
+        return;
+      }
+      printAnimalRecordPdf(
+        requestAnimalFromRequest(request),
+        requestTutorFromRequest(request),
+        requestHistoryForAnimalRecord(request),
+      );
+    } catch (error) {
+      console.error("Erro ao abrir prontuário do animal:", error);
+      printAnimalRecordPdf(
+        requestAnimalFromRequest(request),
+        requestTutorFromRequest(request),
+        requestHistoryForAnimalRecord(request),
+      );
+    } finally {
+      setDetailsLoadingId("");
+    }
+  }
 
   return (
     <section className={compact ? "simple-stack consultation-results" : "content-grid"}>
@@ -1753,13 +2530,13 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
       </div>}
 
       {!compact && <div className="summary-row">
-        <Metric title={compact ? "Ativas" : "Solicitacoes ativas"} value={safeRequests.filter((r) => r.status !== "ARQUIVADA").length} icon={ClipboardCheck} />
+        <Metric title={compact ? "Ativas" : "Solicitações ativas"} value={safeRequests.filter((r) => r.status !== "ARQUIVADA").length} icon={ClipboardCheck} />
         <Metric title="Próximo agendamento" value={next ? next.appointment || next.preferredSchedule : "Nenhum"} icon={CalendarDays} />
         <Metric title={compact ? "Avisos" : "Notificacoes"} value="4" icon={Bell} />
       </div>}
 
       <div className="panel wide">
-        <PanelHeader title={compact ? "Solicitacoes" : "Minhas solicitacoes"} action={compact ? "" : "Ver todas"} />
+        <PanelHeader title={compact ? "Solicitações" : "Minhas solicitações"} action={compact ? "" : "Ver todas"} />
         <div className="request-list">
           {safeRequests.length === 0 && (
             <EmptyState
@@ -1769,20 +2546,32 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
               onAction={() => setActive("solicitacao")}
             />
           )}
-          {safeRequests.slice(0, compact ? safeRequests.length : 4).map((request) => (
-            <article className="request-card" key={request.id}>
-              <div>
-                <strong>#{request.protocol}</strong>
-                <span>{request.animals.map((animal) => animal.name).join(", ")} - {requestTypeLabel(request)}</span>
-              </div>
-              <StatusBadge status={request.status} />
-              <span>{request.appointment || request.createdAt}</span>
-              <button className="ghost-button">
-                Detalhes
-                <ChevronRight size={16} />
-              </button>
-            </article>
-          ))}
+          {safeRequests.slice(0, compact ? safeRequests.length : 4).map((request) => {
+            const microchips = getRequestMicrochips(request);
+            const municipality = getRequestCardMunicipality(request);
+            return (
+              <article className="request-card" key={request.id}>
+                <div className="request-card-main">
+                  <strong>#{request.protocol}</strong>
+                  <span>{request.animals.map((animal) => animal.name).filter(Boolean).join(", ") || "Animal não informado"} - {requestProcedureLabel(request)}</span>
+                  {microchips.length > 0 && (
+                    <small className="request-microchip-line">
+                      Microchip: {microchips.join(", ")}
+                    </small>
+                  )}
+                </div>
+                <StatusBadge status={request.status} />
+                <div className="request-card-side">
+                  <span className="request-card-municipality">{municipality}</span>
+                  <span className="request-card-date">{formatRequestCardDate(request)}</span>
+                </div>
+                <button className="ghost-button request-details-button" type="button" onClick={() => openRequestDetails(request)} disabled={detailsLoadingId === (request.id || request.protocol || "")}>
+                  {detailsLoadingId === (request.id || request.protocol || "") ? "Abrindo..." : "Detalhes"}
+                  <ChevronRight size={16} />
+                </button>
+              </article>
+            );
+          })}
         </div>
       </div>
     </section>
@@ -1794,6 +2583,10 @@ function NewRequest({
   currentUser,
   compact = false,
   internalSimple = false,
+  publicFlow = false,
+  municipalities = [],
+  selectedMunicipalityId = "",
+  onMunicipalitySelect,
   onBack,
   onDone,
   requests = [],
@@ -1804,12 +2597,13 @@ function NewRequest({
   sizeOptions = initialSizes,
   initialSchedule = "",
   initialType = "",
+  initialMunicipalityId = "",
 }) {
   const activeSpecies = speciesOptions.filter((item) => item.active !== false).map((item) => item.name);
   const activeSizes = sizeOptions.filter((item) => item.active !== false);
-  const skipTutorStep = currentUser.role === "tutor" && currentUser.profileComplete === true;
+  const skipTutorStep = currentUser.role === "tutor" && currentUser.profileComplete;
   const [requestData, setRequestData] = useState({
-    tutor: currentUser.role === "admin" ? "" : currentUser.name,
+    tutor: canManagePublicAnimalFlows(currentUser.role) ? "" : currentUser.name,
     neighborhood: currentUser.neighborhood || "",
     address: currentUser.address || "",
     cpf: currentUser.cpf || "",
@@ -1827,6 +2621,7 @@ function NewRequest({
     phone: currentUser.phone || "",
     notes: "",
     schedule: initialSchedule,
+    municipalityId: initialMunicipalityId || currentUser.municipalityId || "",
   });
   const [animals, setAnimals] = useState([
     {
@@ -1836,6 +2631,7 @@ function NewRequest({
       breedType: "",
       breedDescription: "",
       size: "",
+      weight: "",
       age: "",
       birthDate: "",
       procedure: "",
@@ -1859,7 +2655,7 @@ function NewRequest({
   const [previewDocument, setPreviewDocument] = useState(null);
   const [smsCode, setSmsCode] = useState("");
   const [smsInput, setSmsInput] = useState("");
-  const [smsConfirmed, setSmsConfirmed] = useState(currentUser.role === "admin" || skipTutorStep);
+  const [smsConfirmed, setSmsConfirmed] = useState(canManagePublicAnimalFlows(currentUser.role) || skipTutorStep);
   const [smsStatus, setSmsStatus] = useState("");
   const [submissionError, setSubmissionError] = useState("");
 
@@ -1868,6 +2664,12 @@ function NewRequest({
       setRequestData((current) => ({ ...current, schedule: initialSchedule }));
     }
   }, [initialSchedule]);
+
+  useEffect(() => {
+    if (initialMunicipalityId) {
+      setRequestData((current) => ({ ...current, municipalityId: initialMunicipalityId }));
+    }
+  }, [initialMunicipalityId]);
 
   useEffect(() => {
     if (initialType) {
@@ -1910,8 +2712,7 @@ function NewRequest({
     if (!requestData.schedule) return false;
     const selectedDay = scheduleDays.find((day) => day.date === requestData.schedule && day.active !== false);
     if (!selectedDay || isPastScheduleDay(selectedDay.date)) return false;
-    const remaining = Math.max((Number(selectedDay.vacancies) || 0) - countUsedVacancies(requests, selectedDay.date), 0);
-    return remaining >= Math.max(animals.length, 1);
+    return Boolean(getOfferedScheduleSlot(selectedDay, requests, Math.max(animals.length, 1)));
   }
 
   function addAnimal() {
@@ -1924,6 +2725,7 @@ function NewRequest({
         breedType: "",
         breedDescription: "",
         size: "",
+        weight: "",
         age: "",
         birthDate: "",
         procedure: "",
@@ -1937,6 +2739,20 @@ function NewRequest({
         food: "",
       },
     ]);
+  }
+
+  function detectSizeFromWeight(weight) {
+    const w = parseFloat(String(weight).replace(",", "."));
+    if (isNaN(w) || w <= 0) return "";
+    const match = activeSizes.find((s) => {
+      const start = parseFloat(s.weightStart ?? "");
+      const end = parseFloat(s.weightEnd ?? "");
+      if (!isNaN(start) && !isNaN(end)) return w >= start && w <= end;
+      if (!isNaN(start)) return w >= start;
+      if (!isNaN(end)) return w <= end;
+      return false;
+    });
+    return match?.name || "";
   }
 
   function updateAnimal(index, field, value) {
@@ -1970,7 +2786,7 @@ function NewRequest({
     };
     updateRequestField(field, masks[field] ? masks[field](value) : value);
     if (field === "phone") {
-      setSmsConfirmed(currentUser.role === "admin");
+      setSmsConfirmed(canManagePublicAnimalFlows(currentUser.role));
       setSmsCode("");
       setSmsInput("");
       setSmsStatus("");
@@ -2280,9 +3096,10 @@ function NewRequest({
   async function submitInternal() {
     setSubmissionError("");
     const selectedScheduleDay = scheduleDays.find((day) => day.date === requestData.schedule);
+    const selectedScheduleSlot = selectedScheduleDay ? getOfferedScheduleSlot(selectedScheduleDay, requests, Math.max(animals.length, 1)) : null;
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
-    const { latitude, longitude } = mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" };
+    const { latitude, longitude } = addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" };
     const localPayload = {
       tutor: requestData.tutor || currentUser.name,
       neighborhood: requestData.neighborhood || "Bairro não informado",
@@ -2298,7 +3115,11 @@ function NewRequest({
       email: requestData.email || "",
       cep: requestData.cep || "",
       preferredSchedule: requestData.schedule || "",
+      municipalityId: requestData.municipalityId || selectedScheduleDay?.municipalityId || "",
+      scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+      scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleLocationName: selectedScheduleDay?.locationName || "",
+      scheduleAddress: selectedScheduleDay?.locationAddress || "",
       scheduleAddressUrl: selectedScheduleDay?.addressUrl || "",
       scheduleMunicipality: selectedScheduleDay?.municipality || requestData.city || "",
       responsibleUnit: selectedScheduleDay?.responsibleUnit || selectedScheduleDay?.unit || "",
@@ -2309,6 +3130,8 @@ function NewRequest({
         cadUnico: requestData.cadUnicoNotApplicable ? "" : requestData.cadUnico,
         cadUnicoNotApplicable: requestData.cadUnicoNotApplicable,
         isFarmer: requestData.isFarmer,
+        scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+        scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       },
       animals: animals.map((animal, index) => ({
         ...animal,
@@ -2316,8 +3139,8 @@ function NewRequest({
         age: animal.birthDate || animal.age || "",
       })),
       documents: Object.values(documentUploads).filter((upload) => upload?.documentId === "animal_photo"),
-      signedAt: "",
-      tags: ["PRESENCIAL"],
+      signedAt: new Date().toISOString(),
+      tags: [],
     };
 
     try {
@@ -2331,9 +3154,10 @@ function NewRequest({
   async function submitAccepted() {
     setSubmissionError("");
     const selectedScheduleDay = scheduleDays.find((day) => day.date === requestData.schedule);
+    const selectedScheduleSlot = selectedScheduleDay ? getOfferedScheduleSlot(selectedScheduleDay, requests, Math.max(animals.length, 1)) : null;
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
-    const { latitude, longitude } = mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" };
+    const { latitude, longitude } = addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" };
     const uploadedDocuments = selectedTypeDocuments
       .map((document) => documentUploads[document.id])
       .filter((upload) => upload && acceptableUploadStatuses.includes(upload.status));
@@ -2357,7 +3181,11 @@ function NewRequest({
       email: requestData.email || "",
       cep: requestData.cep || "",
       preferredSchedule: requestData.schedule || "",
+      municipalityId: requestData.municipalityId || selectedScheduleDay?.municipalityId || "",
+      scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+      scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleLocationName: selectedScheduleDay?.locationName || "",
+      scheduleAddress: selectedScheduleDay?.locationAddress || "",
       scheduleAddressUrl: selectedScheduleDay?.addressUrl || "",
       scheduleMunicipality: selectedScheduleDay?.municipality || requestData.city || "",
       responsibleUnit: selectedScheduleDay?.responsibleUnit || selectedScheduleDay?.unit || "",
@@ -2368,6 +3196,8 @@ function NewRequest({
         cadUnico: requestData.cadUnicoNotApplicable ? "" : requestData.cadUnico,
         cadUnicoNotApplicable: requestData.cadUnicoNotApplicable,
         isFarmer: requestData.isFarmer,
+        scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+        scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       },
       animals: animals.map((animal, index) => ({
         ...animal,
@@ -2383,173 +3213,136 @@ function NewRequest({
       const generatedValidationKey = String(newRequest?.validationKey || newRequest?.validation_key || "").trim();
 
       if (!generatedProtocol || !generatedValidationKey) {
-        setSubmissionError("Nao foi possivel concluir: protocolo/chave de validacao nao foram gerados. Tente novamente.");
+        setSubmissionError("Não foi possível concluir: protocolo/chave de validação não foram gerados. Tente novamente.");
         return;
       }
 
       onDone?.(normalizeRequest({ ...localPayload, ...newRequest, protocol: generatedProtocol, validation_key: generatedValidationKey }));
     } catch (err) {
-      setSubmissionError(err?.message || "Falha ao enviar solicitacao. Tente novamente.");
+      setSubmissionError(err?.message || "Falha ao enviar solicitação. Tente novamente.");
     }
   }
 
-  return (
-    <section className={compact ? "simple-stack" : "content-grid"}>
-      <div className="panel wide">
-        <div className="simple-form-header">
-          <div>
-            <span className="eyebrow">Nova solicitação</span>
+  const publicStepTitles = {
+    0: "Seus dados",
+    1: "Dados do animal",
+    2: "Agendamento",
+    3: internalSimple ? "Finalização" : "Documentos",
+  };
+
+  const progressPct = Math.round(((currentStepIndex + 1) / formSteps.length) * 100);
+
+  const stepperNode = (
+    <div className="request-stepper">
+      {formSteps.map((item, index) => (
+        <div
+          key={item.step}
+          className={index === currentStepIndex ? "selected" : index < currentStepIndex ? "done" : ""}
+          onClick={() => { if (index < currentStepIndex) setFormStep(item.step); }}
+        >
+          <span>{item.label}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  function goBack() {
+    if (currentStepIndex > 0) setFormStep(formSteps[currentStepIndex - 1].step);
+    else onBack?.();
+  }
+
+  const footerNode = (
+    <div className="form-actions">
+      <button
+        className="ghost-button nav-back-action"
+        type="button"
+        disabled={currentStepIndex === 0 && !onBack}
+        onClick={() => (currentStepIndex > 0 ? setFormStep(formSteps[currentStepIndex - 1].step) : onBack?.())}
+      >
+        Voltar
+      </button>
+      {currentStepIndex < formSteps.length - 1 ? (
+        <button
+          className="primary-action nav-next-action"
+          type="button"
+          disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
+          onClick={goToNextStep}
+        >
+          Continuar
+        </button>
+      ) : (
+        <button className="primary-action nav-next-action" type="button" disabled={!canSubmit || submitting} onClick={submit}>
+          {submitting ? "Enviando..." : "Encerrar"}
+        </button>
+      )}
+    </div>
+  );
+
+  if (publicFlow) {
+    return (
+      <div className="nr-shell">
+        <div className="nr-topbar">
+          <button className="nr-back-btn" type="button" onClick={onBack} aria-label="Ir para o início">
+            <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
+            Início
+          </button>
+          <div className="nr-progress-wrap" title={`${progressPct}%`}>
+            <div className="nr-progress-fill" style={{ width: `${progressPct}%` }} />
           </div>
+          {selectedMunicipalityId && municipalities.find((m) => m.id === selectedMunicipalityId) && (
+            <span className="nr-municipality-label">
+              {municipalities.find((m) => m.id === selectedMunicipalityId).name}
+            </span>
+          )}
         </div>
 
-        <div className="request-stepper" aria-label="Etapas da solicitação">
-          {formSteps.map((item, index) => (
-            <div
-              key={item.label}
-              type="button"
-              className={index === currentStepIndex ? "selected" : index < currentStepIndex ? "done" : ""}
-            >
-              <span>{index + 1}</span>
-              {item.label}
+        <div className="nr-body">
+
+          {submissionError && <p className="form-error">{submissionError}</p>}
+          <div className="single-request-form clean-form">
+          {formStep === 0 && <FormSection title="Seus dados">
+            <div className="two-column-fields">
+              <Field label="Nome" value={requestData.tutor} onChange={(value) => updateRequestField("tutor", value)} placeholder="Nome do tutor ou responsável" invalid={showInvalid("tutor")} />
+              <Field label="CPF" value={requestData.cpf} onChange={(value) => updateMaskedRequestField("cpf", value)} placeholder="000.000.000-00" invalid={showInvalid("cpf")} />
             </div>
-          ))}
-        </div>
-        {submissionError && <p className="form-error">{submissionError}</p>}
-
-        <div className="single-request-form clean-form">
-          {formStep === 0 && <FormSection title="Tutor e endereço" action={
-            <label className="toggle-switch farmer-toggle">
-              <input type="checkbox" checked={requestData.isFarmer} onChange={(event) => updateRequestField("isFarmer", event.target.checked)} />
-              <span className="toggle-track"><span className="toggle-thumb" /></span>
-              Agricultor?
-            </label>
-          }>
-            <Field
-              label="Nome"
-              value={requestData.tutor}
-              onChange={(value) => updateRequestField("tutor", value)}
-              placeholder="Nome do tutor ou responsável"
-              invalid={showInvalid("tutor")}
-            />
-            <Field
-              label="CPF"
-              value={requestData.cpf}
-              onChange={(value) => updateMaskedRequestField("cpf", value)}
-              placeholder="000.000.000-00"
-              invalid={showInvalid("cpf")}
-            />
             <div className="cadunico-row">
-              <Field
-                label="CadÚnico"
-                value={requestData.cadUnico}
-                onChange={(value) => updateRequestField("cadUnico", value)}
-                placeholder="Número do CadÚnico"
-                readOnly={requestData.cadUnicoNotApplicable}
-              />
+              <Field label="CadÚnico" value={requestData.cadUnico} onChange={(value) => updateRequestField("cadUnico", value)} placeholder="Número do CadÚnico" readOnly={requestData.cadUnicoNotApplicable} />
               <label className="checkbox-row cadunico-checkbox">
-                <input
-                  type="checkbox"
-                  checked={requestData.cadUnicoNotApplicable}
-                  onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)}
-                />
+                <input type="checkbox" checked={requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
                 Não se aplica
               </label>
             </div>
             <div className="form-subsection-title">Endereço</div>
             <div className="address-lookup-grid">
-              <div className="cep-with-map">
-                <Field
-                  label="CEP"
-                  value={requestData.cep}
-                  onChange={lookupCep}
-                  placeholder="00000-000"
-                  invalid={showInvalid("cep")}
-                />
-              </div>
-              <Field
-                label="Número"
-                value={requestData.number}
-                onChange={(value) => updateRequestField("number", value)}
-                placeholder="123"
-                invalid={showInvalid("number")}
-              />
+              <Field label="CEP" value={requestData.cep} onChange={lookupCep} placeholder="00000-000" invalid={showInvalid("cep")} />
+              <Field label="Número" value={requestData.number} onChange={(value) => updateRequestField("number", value)} placeholder="123" invalid={showInvalid("number")} />
             </div>
             {cepStatus && <p className="cep-status">{cepStatus}</p>}
-            <Field
-              label="Endereço completo"
-              value={requestData.address}
-              onChange={(value) => updateRequestField("address", value)}
-              placeholder="Rua, número, complemento"
-              invalid={showInvalid("address")}
-            />
-            <Field
-              label="Bairro"
-              value={requestData.neighborhood}
-              onChange={(value) => updateRequestField("neighborhood", value)}
-              placeholder="Informe o bairro"
-              invalid={showInvalid("neighborhood")}
-            />
-            <div className="two-column-fields">
-              <Field
-                label="Cidade"
-                value={requestData.city}
-                onChange={(value) => updateRequestField("city", value)}
-                placeholder="Cidade"
-                invalid={showInvalid("city")}
-              />
-              <Field
-                label="UF"
-                value={requestData.state}
-                onChange={(value) => updateMaskedRequestField("state", value)}
-                placeholder="SP"
-                invalid={showInvalid("state")}
-              />
+            <Field label="Endereço" value={requestData.address} onChange={(value) => updateRequestField("address", value)} placeholder="Rua, complemento" invalid={showInvalid("address")} />
+            <div className="address-city-grid">
+              <Field label="Bairro" value={requestData.neighborhood} onChange={(value) => updateRequestField("neighborhood", value)} placeholder="Bairro" invalid={showInvalid("neighborhood")} />
+              <Field label="Cidade" value={requestData.city} onChange={(value) => updateRequestField("city", value)} placeholder="Cidade" invalid={showInvalid("city")} />
+              <Field label="UF" value={requestData.state} onChange={(value) => updateMaskedRequestField("state", value)} placeholder="SP" invalid={showInvalid("state")} />
             </div>
-            {requestData.latitude && requestData.longitude && (
-              <p className="map-selected-place">Localização atual registrada: {requestData.latitude}, {requestData.longitude}.</p>
-            )}
+            {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
             {locationStatus && <p className="cep-status">{locationStatus}</p>}
             <div className="form-subsection-title">Contato</div>
-            <Field
-              label="Email"
-              value={requestData.email}
-              onChange={(value) => updateRequestField("email", value)}
-              placeholder="seuemail@exemplo.com"
-              invalid={showInvalid("email")}
-            />
-            <div className="contact-confirmation-panel">
-              <div className="phone-validation-row">
-                <Field
-                  label="Celular"
-                  value={requestData.phone}
-                  onChange={(value) => updateMaskedRequestField("phone", value)}
-                  placeholder="Digite seu WhatsApp/celular"
-                  invalid={showInvalid("phone")}
-                />
-                {!internalSimple && !smsCode && !smsConfirmed && (
-                  <button className="secondary-action" type="button" onClick={sendSmsCode}>
-                    Enviar código
-                  </button>
-                )}
-                {!internalSimple && (smsCode || smsConfirmed) && (
-                  <>
-                    <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
-                      <span>Código SMS</span>
-                      <input
-                        value={smsInput}
-                        onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))}
-                        placeholder="000000"
-                        inputMode="numeric"
-                        disabled={smsConfirmed}
-                      />
-                    </label>
-                    <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>
-                      Confirmar
-                    </button>
-                  </>
-                )}
-              </div>
+            <div className="two-column-fields">
+              <Field label="Email" value={requestData.email} onChange={(value) => updateRequestField("email", value)} placeholder="seuemail@exemplo.com" invalid={showInvalid("email")} />
+              <Field label="Celular" value={requestData.phone} onChange={(value) => updateMaskedRequestField("phone", value)} placeholder="WhatsApp / celular" invalid={showInvalid("phone")} />
             </div>
+            {!internalSimple && !smsCode && !smsConfirmed && (
+              <button className="secondary-action sms-send-btn" type="button" onClick={sendSmsCode}>Enviar código de verificação</button>
+            )}
+            {!internalSimple && (smsCode || smsConfirmed) && (
+              <div className="sms-verify-row">
+                <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
+                  <span>Código SMS</span>
+                  <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
+                </label>
+                <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
+              </div>
+            )}
             {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
           </FormSection>}
 
@@ -2557,10 +3350,7 @@ function NewRequest({
             {configuredRequestTypes.length > 0 && (
               <label className={showInvalid("type") ? "field invalid" : "field"}>
                 <span>Tipo de solicitação</span>
-                <select
-                  value={requestData.type}
-                  onChange={(event) => updateRequestField("type", event.target.value)}
-                >
+                <select value={requestData.type} onChange={(event) => updateRequestField("type", event.target.value)}>
                   <option value="">Selecione o tipo</option>
                   {configuredRequestTypes.map((type) => (
                     <option key={type.id || type.name} value={type.name}>{type.name}</option>
@@ -2570,142 +3360,49 @@ function NewRequest({
             )}
             {animals.map((animal, index) => (
               <div className="animal-form" key={`animal-${index}`}>
-                <div className="animal-form-header">
-                  <strong>Animal {index + 1}</strong>
+                <div className="animal-form-header"><strong>Animal {index + 1}</strong></div>
+                <CompactChoiceField label="Procedimento" value={animal.procedure} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedure", value)} invalid={submitAttempted && !animal.procedure} />
+                <div className="animal-choice-grid two-col">
+                  <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
+                  <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
                 </div>
-                <SegmentedControl
-                  label="Procedimento"
-                  value={animal.procedure}
-                  options={["Castração", "Microchipagem", "Ambos"]}
-                  onChange={(value) => updateAnimal(index, "procedure", value)}
-                  invalid={submitAttempted && !animal.procedure}
-                />
-                <div className="animal-main-grid">
-                  <Field
-                    label="Nome"
-                    value={animal.name}
-                    onChange={(value) => updateAnimal(index, "name", value)}
-                    placeholder="Nome do animal"
-                  />
-                  <Field
-                    label="Data de nascimento"
-                    value={animal.birthDate || animal.age}
-                    onChange={(value) => {
-                      updateAnimal(index, "birthDate", value);
-                      updateAnimal(index, "age", value);
-                    }}
-                    type="date"
-                  />
-                  <Field
-                    label="Cor da pelagem"
-                    value={animal.coat}
-                    onChange={(value) => updateAnimal(index, "coat", value)}
-                    placeholder="Ex: preto, caramelo"
-                  />
-                  <div className="inline-microchip-fields">
-                    <Field
-                      label="Código do microchip"
-                      value={animal.microchip}
-                      onChange={(value) => updateAnimal(index, "microchip", value)}
-                      placeholder={animal.hasChip === "Sim" ? "Número do chip" : "Marque o campo ao lado"}
-                      readOnly={animal.hasChip !== "Sim"}
-                    />
-                    <label className="checkbox-row compact-checkbox" title="Animal já é chipado">
-                      <input
-                        type="checkbox"
-                        aria-label="Animal já é chipado"
-                        checked={animal.hasChip === "Sim"}
-                        onChange={(event) => {
-                          updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao");
-                          if (!event.target.checked) updateAnimal(index, "microchip", "");
-                        }}
-                      />
+                <div className="animal-choice-grid breed-weight-row">
+                  <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
+                  <div className={`weight-size-field${submitAttempted && !animal.size ? " invalid" : ""}`}>
+                    <label className="field">
+                      <span>Peso (kg)</span>
+                      <input type="number" min="0" step="0.1" placeholder="Ex: 4.5" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
                     </label>
                   </div>
                 </div>
-                <div className="choice-card">
-                  <strong>Características</strong>
-                  <div className="animal-choice-grid">
-                    <CompactChoiceField
-                      label="Espécie"
-                      value={animal.species}
-                      options={activeSpecies}
-                      onChange={(value) => updateAnimal(index, "species", value)}
-                      invalid={submitAttempted && !animal.species}
-                    />
-                    <CompactChoiceField
-                      label="Sexo"
-                      value={animal.sex}
-                      options={["Macho", "Fêmea"]}
-                      onChange={(value) => updateAnimal(index, "sex", value)}
-                      invalid={submitAttempted && !animal.sex}
-                    />
-                    <CompactChoiceField
-                      label="Porte"
-                      value={animal.size}
-                      options={activeSizes.map((size) => ({ label: size.name, title: size.description, subtitle: formatSizeRange(size) }))}
-                      onChange={(value) => updateAnimal(index, "size", value)}
-                      invalid={submitAttempted && !animal.size}
-                    />
-                    <CompactChoiceField
-                      label="Raça"
-                      value={animal.breedType}
-                      options={["Indefinida", "Definida"]}
-                      onChange={(value) => updateAnimal(index, "breedType", value)}
-                      invalid={submitAttempted && !animal.breedType}
-                    />
-                  </div>
-                </div>
                 {animal.breedType === "Definida" && (
-                  <Field
-                    label="Descreva a raça"
-                    value={animal.breedDescription}
-                    onChange={(value) => updateAnimal(index, "breedDescription", value)}
-                    placeholder="Ex: Poodle, Siamês"
-                  />
+                  <Field label="Descreva a raça" value={animal.breedDescription} onChange={(value) => updateAnimal(index, "breedDescription", value)} placeholder="Ex: Poodle, Siamês" />
                 )}
+                <div className="two-column-fields">
+                  <Field label="Nome do animal" value={animal.name} onChange={(value) => updateAnimal(index, "name", value)} placeholder="Nome do animal" />
+                  <Field label="Cor da pelagem" value={animal.coat} onChange={(value) => updateAnimal(index, "coat", value)} placeholder="Ex: preto, caramelo" />
+                </div>
+                <div className="birth-weight-row">
+                  <Field label="Data de nascimento" value={animal.birthDate} type="date" onChange={(value) => { updateAnimal(index, "birthDate", value); if (value) updateAnimal(index, "age", ""); }} />
+                  <span className="birth-weight-or">ou</span>
+                  <Field label="Idade aproximada" value={animal.birthDate ? "" : (animal.age || "")} placeholder="Ex: 2 anos" onChange={(value) => { updateAnimal(index, "age", value); if (value) updateAnimal(index, "birthDate", ""); }} />
+                </div>
                 <div className="health-card">
-                  <strong>Saúde e cuidados <span className="optional-label">opcional</span></strong>
+                  <strong>Saúde e cuidados</strong>
                   <div className="health-grid">
-                  <YesNoField
-                    label="Vermifugado?"
-                    value={animal.dewormed}
-                    onChange={(value) => updateAnimal(index, "dewormed", value)}
-                  />
-                  <YesNoField
-                    label="Vacinas em dia?"
-                    value={animal.vaccinated}
-                    onChange={(value) => updateAnimal(index, "vaccinated", value)}
-                  />
-                  <YesNoField
-                    label="Já teve cria?"
-                    value={animal.hadLitter}
-                    onChange={(value) => updateAnimal(index, "hadLitter", value)}
-                  />
-                  <YesNoField
-                    label="Histórico de doenças?"
-                    value={animal.illnessHistory}
-                    onChange={(value) => updateAnimal(index, "illnessHistory", value)}
-                  />
-                  <CompactChoiceField
-                    label="Alimentação"
-                    value={animal.food}
-                    options={["Ração", "Diversos"]}
-                    onChange={(value) => updateAnimal(index, "food", value)}
-                  />
+                    <YesNoField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
+                    <YesNoField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
+                    <YesNoField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
+                    <YesNoField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
+                    <CompactChoiceField label="Alimentação" value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
                   </div>
                 </div>
               </div>
             ))}
             <div className="animal-actions-row">
-              <button className="secondary-action" type="button" onClick={addAnimal}>
-                <Plus size={18} />
-                Adicionar animal
-              </button>
+              <button className="secondary-action" type="button" onClick={addAnimal}><Plus size={18} />Adicionar animal</button>
               {animals.length > 1 && (
-                <button className="ghost-button danger-action" type="button" onClick={() => removeAnimal(animals.length - 1)}>
-                  Remover último
-                </button>
+                <button className="ghost-button danger-action" type="button" onClick={() => removeAnimal(animals.length - 1)}>Remover último</button>
               )}
             </div>
           </FormSection>}
@@ -2734,20 +3431,10 @@ function NewRequest({
               )}
               <div className="animal-photo-actions">
                 <label className="secondary-action file-button">
-                  Enviar foto
+                  {documentUploads.animal_photo ? "Trocar foto" : "Enviar foto"}
                   <input
                     type="file"
                     accept="image/*"
-                    onClick={(event) => { event.currentTarget.value = ""; }}
-                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
-                  />
-                </label>
-                <label className="ghost-button file-button">
-                  Abrir câmera
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
                     onClick={(event) => { event.currentTarget.value = ""; }}
                     onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
                   />
@@ -2780,20 +3467,19 @@ function NewRequest({
                 );
               })}
             </div>
-            <div className="declaration-box">
-              <FileText size={20} />
-              <p>
-                O tutor declara ciência dos cuidados pré e pós-cirúrgicos, responsabilidades de acompanhamento e autorização
-                para registro do procedimento.{" "}
-                <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>
-                  Ler declaração em PDF
-                </button>
-              </p>
+            <div className="declaration-accept-box">
+              <div className="declaration-text">
+                <FileText size={18} />
+                <p>
+                  O tutor declara ciência dos cuidados pré e pós-cirúrgicos, responsabilidades de acompanhamento e autorização para registro do procedimento.{" "}
+                  <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
+                </p>
+              </div>
+              <label className={showInvalid("accepted") ? "declaration-checkbox invalid" : "declaration-checkbox"}>
+                <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
+                <span>Li e concordo com os termos da declaração</span>
+              </label>
             </div>
-            <label className={showInvalid("accepted") ? "checkbox-row invalid" : "checkbox-row"}>
-              <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-              Li e aceito a declaração.
-            </label>
           </FormSection>}
 
           {internalSimple && formStep === 3 && <FormSection title="Finalização">
@@ -2837,32 +3523,112 @@ function NewRequest({
             </div>
           </FormSection>}
 
+          </div>
         </div>
 
-        <div className="form-actions">
-          <button
-            className="ghost-button nav-back-action"
-            type="button"
-            disabled={currentStepIndex === 0 && !onBack}
-            onClick={() => (currentStepIndex > 0 ? setFormStep(formSteps[currentStepIndex - 1].step) : onBack?.())}
-          >
-            Voltar
-          </button>
-          {currentStepIndex < formSteps.length - 1 ? (
-            <button
-              className="primary-action nav-next-action"
-              type="button"
-              disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
-              onClick={goToNextStep}
-            >
-              Continuar
+        <div className="nr-footer">
+          <div className="nr-footer-inner">
+            <button className="secondary-action nr-back-footer-btn" type="button" onClick={goBack}>
+              <ChevronRight size={17} style={{ transform: "rotate(180deg)" }} />
+              Voltar
             </button>
-          ) : (
-            <button className="primary-action nav-next-action" type="button" disabled={!canSubmit || submitting} onClick={submit}>
-              {submitting ? "Enviando..." : "Encerrar"}
-            </button>
-          )}
+            {currentStepIndex < formSteps.length - 1 ? (
+              <button
+                className="primary-action nr-continue-btn"
+                type="button"
+                disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
+                onClick={goToNextStep}
+              >
+                Continuar
+                <ChevronRight size={17} />
+              </button>
+            ) : (
+              <button className="primary-action nr-continue-btn" type="button" disabled={!canSubmit || submitting} onClick={submit}>
+                {submitting ? "Enviando..." : "Enviar cadastro"}
+              </button>
+            )}
+            {submissionError && <p className="form-error nr-submit-error">{submissionError}</p>}
+          </div>
         </div>
+        {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
+      </div>
+    );
+  }
+
+  return (
+    <section className={compact ? "simple-stack" : "content-grid"}>
+      <div className="panel wide">
+        <div className="nr-panel-top">
+          <strong className="nr-title">Novo Cadastro</strong>
+          {stepperNode}
+        </div>
+        {submissionError && <p className="form-error">{submissionError}</p>}
+        <div className="single-request-form clean-form">
+          {formStep === 0 && <FormSection title="Tutor e endereço">
+            <Field label="Nome" value={requestData.tutor} onChange={(value) => updateRequestField("tutor", value)} placeholder="Nome do tutor ou responsável" invalid={showInvalid("tutor")} />
+            <Field label="CPF" value={requestData.cpf} onChange={(value) => updateMaskedRequestField("cpf", value)} placeholder="000.000.000-00" invalid={showInvalid("cpf")} />
+            <div className="cadunico-row">
+              <Field label="CadÚnico" value={requestData.cadUnico} onChange={(value) => updateRequestField("cadUnico", value)} placeholder="Número do CadÚnico" readOnly={requestData.cadUnicoNotApplicable} />
+              <label className="checkbox-row cadunico-checkbox"><input type="checkbox" checked={requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />Não se aplica</label>
+            </div>
+            <div className="form-subsection-title">Endereço</div>
+            <div className="address-lookup-grid">
+              <div className="cep-with-map"><Field label="CEP" value={requestData.cep} onChange={lookupCep} placeholder="00000-000" invalid={showInvalid("cep")} /></div>
+              <Field label="Número" value={requestData.number} onChange={(value) => updateRequestField("number", value)} placeholder="123" invalid={showInvalid("number")} />
+            </div>
+            {cepStatus && <p className="cep-status">{cepStatus}</p>}
+            <Field label="Endereço completo" value={requestData.address} onChange={(value) => updateRequestField("address", value)} placeholder="Rua, número, complemento" invalid={showInvalid("address")} />
+            <Field label="Bairro" value={requestData.neighborhood} onChange={(value) => updateRequestField("neighborhood", value)} placeholder="Informe o bairro" invalid={showInvalid("neighborhood")} />
+            <div className="two-column-fields">
+              <Field label="Cidade" value={requestData.city} onChange={(value) => updateRequestField("city", value)} placeholder="Cidade" invalid={showInvalid("city")} />
+              <Field label="UF" value={requestData.state} onChange={(value) => updateMaskedRequestField("state", value)} placeholder="SP" invalid={showInvalid("state")} />
+            </div>
+            {locationStatus && <p className="cep-status">{locationStatus}</p>}
+            <div className="form-subsection-title">Contato</div>
+            <Field label="Email" value={requestData.email} onChange={(value) => updateRequestField("email", value)} placeholder="seuemail@exemplo.com" invalid={showInvalid("email")} />
+            <div className="contact-confirmation-panel">
+              <div className="phone-validation-row">
+                <Field label="Celular" value={requestData.phone} onChange={(value) => updateMaskedRequestField("phone", value)} placeholder="Digite seu WhatsApp/celular" invalid={showInvalid("phone")} />
+                {!internalSimple && !smsCode && !smsConfirmed && (<button className="secondary-action" type="button" onClick={sendSmsCode}>Enviar código</button>)}
+                {!internalSimple && (smsCode || smsConfirmed) && (<><label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}><span>Código SMS</span><input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} /></label><button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button></>)}
+              </div>
+            </div>
+            {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
+          </FormSection>}
+          {formStep === 1 && <FormSection title="Dados dos animais">
+            {configuredRequestTypes.length > 0 && (<label className={showInvalid("type") ? "field invalid" : "field"}><span>Tipo de solicitação</span><select value={requestData.type} onChange={(event) => updateRequestField("type", event.target.value)}><option value="">Selecione o tipo</option>{configuredRequestTypes.map((type) => (<option key={type.id || type.name} value={type.name}>{type.name}</option>))}</select></label>)}
+            {animals.map((animal, index) => (
+              <div className="animal-form" key={`animal-${index}`}>
+                <div className="animal-form-header"><strong>Animal {index + 1}</strong></div>
+                <SegmentedControl label="Procedimento" value={animal.procedure} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedure", value)} invalid={submitAttempted && !animal.procedure} />
+                <div className="animal-main-grid">
+                  <Field label="Nome" value={animal.name} onChange={(value) => updateAnimal(index, "name", value)} placeholder="Nome do animal" />
+                  <Field label="Data de nascimento" value={animal.birthDate || animal.age} onChange={(value) => { updateAnimal(index, "birthDate", value); updateAnimal(index, "age", value); }} type="date" />
+                  <Field label="Cor da pelagem" value={animal.coat} onChange={(value) => updateAnimal(index, "coat", value)} placeholder="Ex: preto, caramelo" />
+                  <div className="inline-microchip-fields">
+                    <Field label="Código do microchip" value={animal.microchip} onChange={(value) => updateAnimal(index, "microchip", value)} placeholder={animal.hasChip === "Sim" ? "Número do chip" : "Marque o campo ao lado"} readOnly={animal.hasChip !== "Sim"} />
+                    <label className="checkbox-row compact-checkbox" title="Animal já é chipado"><input type="checkbox" aria-label="Animal já é chipado" checked={animal.hasChip === "Sim"} onChange={(event) => { updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Não"); if (!event.target.checked) updateAnimal(index, "microchip", ""); }} /></label>
+                  </div>
+                </div>
+                <div className="choice-card"><strong>Características</strong><div className="animal-choice-grid"><CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} /><CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} /><CompactChoiceField label="Porte" value={animal.size} options={activeSizes.map((size) => ({ label: size.name, title: size.description, subtitle: formatSizeRange(size) }))} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} /><CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} /></div></div>
+                {animal.breedType === "Definida" && (<Field label="Descreva a raça" value={animal.breedDescription} onChange={(value) => updateAnimal(index, "breedDescription", value)} placeholder="Ex: Poodle, Siamês" />)}
+                <div className="health-card"><strong>Saúde e cuidados <span className="optional-label">opcional</span></strong><div className="health-grid"><YesNoField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} /><YesNoField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} /><YesNoField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} /><YesNoField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} /><CompactChoiceField label="Alimentação" value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} /></div></div>
+              </div>
+            ))}
+            <div className="animal-actions-row"><button className="secondary-action" type="button" onClick={addAnimal}><Plus size={18} />Adicionar animal</button>{animals.length > 1 && (<button className="ghost-button danger-action" type="button" onClick={() => removeAnimal(animals.length - 1)}>Remover último</button>)}</div>
+          </FormSection>}
+          {formStep === 2 && <FormSection title="Agenda"><PublicSchedulePicker requests={requests} scheduleDays={scheduleDays} selectedDate={requestData.schedule} pendingReservation={{ date: requestData.schedule, count: animals.length }} onSelect={(date) => updateRequestField("schedule", date)} /></FormSection>}
+          {!internalSimple && formStep === 3 && <FormSection title="Documentos comprobatórios">
+            <div className="animal-photo-upload-card"><div><strong>Foto de registro animal</strong><span>Opcional</span>{documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}</div>{documentUploads.animal_photo?.dataUrl && (<button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}><img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" /></button>)}<div className="animal-photo-actions"><label className="secondary-action file-button">Enviar foto<input type="file" accept="image/*" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label><label className="ghost-button file-button">Abrir câmera<input type="file" accept="image/*" capture="environment" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label>{documentUploads.animal_photo && (<button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>Remover</button>)}</div></div>
+            <div className="document-upload-list">{!selectedRequestType && (<EmptyState title="Nenhum documento obrigatório" text="Este cadastro seguirá sem anexos obrigatórios nesta etapa." />)}{selectedTypeDocuments.map((document) => { const upload = documentUploads[document.id]; return (<DocumentScannerUpload key={document.id} document={document} upload={upload} aiActive={aiSettings.active} onUpload={(file) => handleDocumentFile(document, file)} onRemove={() => removeDocumentFile(document.id)} />); })}</div>
+            <div className="declaration-box"><FileText size={20} /><p>O tutor declara ciência dos cuidados pré e pós-cirúrgicos, responsabilidades de acompanhamento e autorização para registro do procedimento.{" "}<button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração em PDF</button></p></div>
+            <label className={showInvalid("accepted") ? "checkbox-row invalid" : "checkbox-row"}><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />Li e aceito a declaração.</label>
+          </FormSection>}
+          {internalSimple && formStep === 3 && <FormSection title="Finalização">
+            <div className="animal-photo-upload-card"><div><strong>Foto de registro animal</strong><span>Opcional</span>{documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}</div>{documentUploads.animal_photo?.dataUrl && (<button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}><img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" /></button>)}<div className="animal-photo-actions"><label className="secondary-action file-button">Enviar foto<input type="file" accept="image/*" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label><label className="ghost-button file-button">Abrir câmera<input type="file" accept="image/*" capture="environment" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label>{documentUploads.animal_photo && (<button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>Remover</button>)}</div></div>
+          </FormSection>}
+        </div>
+        {footerNode}
       </div>
       {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
     </section>
@@ -2921,255 +3687,6 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
 </html>`;
 }
 
-function SignatureModal({ requestData, animals, onConfirm, onClose }) {
-  const [mode, setMode] = useState("digital");
-  const [localAccepted, setLocalAccepted] = useState(false);
-  const [sigData, setSigData] = useState("");
-  const [attachedFile, setAttachedFile] = useState("");
-
-  const canConfirm = localAccepted && (mode === "digital" ? Boolean(sigData) : Boolean(attachedFile));
-
-  function handleFileChange(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => setAttachedFile(e.target.result);
-    reader.readAsDataURL(file);
-  }
-
-  function downloadForm() {
-    const address = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
-    const animalRows = animals.map((a, i) => `
-      <div class="animal-card">
-        <div class="animal-card-title">Animal ${i + 1}${a.name ? ` — ${escapeHtml(a.name)}` : ""}</div>
-        <div class="data-grid three">
-          <div class="data-item"><span>Espécie</span><strong>${escapeHtml(a.species || "—")}</strong></div>
-          <div class="data-item"><span>Sexo</span><strong>${escapeHtml(a.sex || "—")}</strong></div>
-          <div class="data-item"><span>Porte</span><strong>${escapeHtml(a.size || "—")}</strong></div>
-          <div class="data-item"><span>Procedimento</span><strong>${escapeHtml(a.procedure || "—")}</strong></div>
-          ${a.microchip ? `<div class="data-item"><span>Microchip</span><strong>${escapeHtml(a.microchip)}</strong></div>` : ""}
-        </div>
-      </div>
-    `).join("");
-    const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Requerimento de castração animal</title>
-    <style>
-      ${PDF_BASE_STYLES}
-      body { display: flex; flex-direction: column; gap: 11px; }
-      .sig-block { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 28px; }
-      .sig-line { border-bottom: 1px solid #172026; padding-bottom: 4px; font-size: 10px; color: #5b6b7a; }
-    </style>
-  </head>
-  <body>
-    <header class="pdf-header">
-      <div>
-        <span class="kicker">Requerimento municipal</span>
-        <h1>Solicitação de castração animal</h1>
-      </div>
-      <div class="header-box"><span>Data</span><strong>${new Date().toLocaleDateString("pt-BR")}</strong></div>
-    </header>
-
-    <section class="section">
-      <div class="section-title">Agendamento</div>
-      <div class="data-grid two">
-        <div class="data-item"><span>Data escolhida</span><strong>${escapeHtml(requestData.schedule || "—")}</strong></div>
-        <div class="data-item"><span>Tipo de serviço</span><strong>${escapeHtml(requestData.type || "—")}</strong></div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Dados do tutor</div>
-      <div class="data-grid four">
-        <div class="data-item" style="grid-column:span 2"><span>Nome completo</span><strong>${escapeHtml(requestData.tutor || "—")}</strong></div>
-        <div class="data-item"><span>CPF</span><strong>${escapeHtml(requestData.cpf || "—")}</strong></div>
-        <div class="data-item"><span>CadÚnico</span><strong>${escapeHtml(requestData.cadUnicoNotApplicable ? "Não se aplica" : requestData.cadUnico || "—")}</strong></div>
-        <div class="data-item"><span>Celular</span><strong>${escapeHtml(requestData.phone || "—")}</strong></div>
-        <div class="data-item"><span>E-mail</span><strong>${escapeHtml(requestData.email || "—")}</strong></div>
-        <div class="data-item" style="grid-column:span 3"><span>Endereço</span><strong>${escapeHtml(address || "—")}</strong></div>
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Animais (${animals.length})</div>
-      ${animalRows}
-    </section>
-
-    <section class="section">
-      <div class="section-title">Declaração e assinatura</div>
-      <div class="declaration-card">
-        <p>Eu, <strong>${escapeHtml(requestData.tutor || "—")}</strong>, declaro que as informações prestadas neste requerimento são verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.</p>
-        <p>Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal e da necessidade de cumprir as orientações fornecidas pela equipe responsável.</p>
-        <div class="sig-block">
-          <div>
-            <div class="sig-line">Assinatura do tutor</div>
-          </div>
-          <div>
-            <div class="sig-line">Data: _____ / _____ / __________</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <footer class="footer"><span>Sistema municipal de castração animal</span><span>Gerado em ${new Date().toLocaleString("pt-BR")}</span></footer>
-  </body>
-</html>`;
-
-    printHtmlViaIframe(html);
-  }
-
-  return (
-    <div className="modal-backdrop">
-      <div className="config-modal signature-modal">
-        <ModalHeader title="Assinar solicitação" onClose={onClose} />
-        <div className="declaration-box">
-          <FileText size={20} />
-          <p>
-            Declaro que as informações prestadas são verdadeiras e autorizo o uso dos dados para triagem,
-            agendamento e acompanhamento da solicitação de castração animal.
-          </p>
-        </div>
-        <label className="checkbox-row">
-          <input type="checkbox" checked={localAccepted} onChange={(e) => setLocalAccepted(e.target.checked)} />
-          Li e aceito assinar eletronicamente esta solicitação.
-        </label>
-        <div className="agenda-kind-selector">
-          <button type="button" className={mode === "digital" ? "selected" : ""} onClick={() => setMode("digital")}>
-            Assinar digitalmente
-          </button>
-          <button type="button" className={mode === "attachment" ? "selected" : ""} onClick={() => setMode("attachment")}>
-            Baixar e anexar
-          </button>
-        </div>
-        {mode === "digital" && (
-          <SignaturePad value={sigData} onChange={setSigData} />
-        )}
-        {mode === "attachment" && (
-          <div className="signature-attachment-block">
-            <p className="helper-text">
-              Baixe o requerimento, imprima ou assine digitalmente em outro aplicativo, e envie o arquivo aqui.
-            </p>
-            <button className="secondary-action" type="button" onClick={downloadForm}>
-              Baixar requerimento (PDF)
-            </button>
-            <label className="field">
-              <span>Anexar documento assinado</span>
-              <input type="file" accept="image/*,.pdf" onChange={handleFileChange} />
-            </label>
-            {attachedFile && <p className="cep-status-text" style={{ color: "var(--teal)" }}>Arquivo anexado com sucesso.</p>}
-          </div>
-        )}
-        <div className="form-actions">
-          <button className="ghost-button" type="button" onClick={onClose}>Cancelar</button>
-          <button className="primary-action" type="button" disabled={!canConfirm} onClick={() => onConfirm(mode === "digital" ? sigData : attachedFile)}>
-            Confirmar e enviar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SignaturePad({ value, onChange, invalid = false }) {
-  const canvasRef = useRef(null);
-  const drawingRef = useRef(false);
-
-  const getPoint = useCallback((event) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    const touch = event.touches?.[0] || event.changedTouches?.[0];
-    const clientX = touch ? touch.clientX : event.clientX;
-    const clientY = touch ? touch.clientY : event.clientY;
-    return {
-      x: (clientX - rect.left) * (canvas.width / rect.width),
-      y: (clientY - rect.top) * (canvas.height / rect.height),
-    };
-  }, []);
-
-  const startDrawing = useCallback((event) => {
-    event.preventDefault();
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
-    const point = getPoint(event);
-    drawingRef.current = true;
-    context.beginPath();
-    context.moveTo(point.x, point.y);
-  }, [getPoint]);
-
-  const draw = useCallback((event) => {
-    if (!drawingRef.current) return;
-    event.preventDefault();
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
-    const point = getPoint(event);
-    context.lineWidth = 3;
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.strokeStyle = "#172026";
-    context.lineTo(point.x, point.y);
-    context.stroke();
-  }, [getPoint]);
-
-  const finishDrawing = useCallback(() => {
-    if (!drawingRef.current) return;
-    drawingRef.current = false;
-    const canvas = canvasRef.current;
-    if (canvas) onChange(canvas.toDataURL("image/png"));
-  }, [onChange]);
-
-  function clearSignature() {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    onChange("");
-  }
-
-  useEffect(() => {
-    if (!value) return;
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) return;
-    const image = new Image();
-    image.onload = () => {
-      context.clearRect(0, 0, canvas.width, canvas.height);
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    };
-    image.src = value;
-  }, [value]);
-
-  return (
-    <div className={invalid ? "signature-pad invalid" : "signature-pad"}>
-      <div className="signature-pad-head">
-        <div>
-          <strong>Assine no campo abaixo</strong>
-          <span>Use o dedo no celular ou o mouse no computador.</span>
-        </div>
-        <button className="ghost-button" type="button" onClick={clearSignature}>Limpar</button>
-      </div>
-      <canvas
-        ref={canvasRef}
-        width={900}
-        height={260}
-        onMouseDown={startDrawing}
-        onMouseMove={draw}
-        onMouseUp={finishDrawing}
-        onMouseLeave={finishDrawing}
-        onTouchStart={startDrawing}
-        onTouchMove={draw}
-        onTouchEnd={finishDrawing}
-        aria-label="Campo de assinatura"
-      />
-      {invalid && <p className="form-error">Desenhe a assinatura para concluir a solicitacao.</p>}
-    </div>
-  );
-}
-
 function SegmentedControl({ label, value, options, onChange, invalid = false }) {
   return (
     <div className={invalid ? "segmented-field invalid" : "segmented-field"}>
@@ -3200,7 +3717,17 @@ function DocumentPreviewModal({ document, onClose }) {
   return (
     <div className="modal-backdrop">
       <div className="document-preview-modal" role="dialog" aria-modal="true">
-        <ModalHeader title={document.documentName || document.fileName} eyebrow={document.eyebrow || "Anexo"} subtitle={document.fileName} onClose={onClose} />
+        <ModalHeader
+          title={document.documentName || document.fileName}
+          subtitle={document.fileName !== (document.documentName || document.fileName) ? document.fileName : undefined}
+          onClose={onClose}
+          actions={dataUrl ? (
+            <button className="secondary-action" type="button" onClick={() => downloadDataUrl(dataUrl, document.fileName || "documento.pdf")}>
+              <Download size={16} />
+              Baixar
+            </button>
+          ) : null}
+        />
         <div className="document-preview-frame">
           {isImage && <img src={dataUrl} alt={document.documentName || document.fileName} />}
           {isPdf && (
@@ -3231,13 +3758,14 @@ function AdminDashboard({
   teams = initialTeams,
   globalSearch = "",
 }) {
-  const [requestFilter, setRequestFilter] = useState("analysis");
+  const [requestFilter, setRequestFilter] = useState("inbox");
   const [previewRequest, setPreviewRequest] = useState(null);
   const [assignRequest, setAssignRequest] = useState(null);
   const [rescheduleRequest, setRescheduleRequest] = useState(null);
   const [rejectRequest, setRejectRequest] = useState(null);
   const [attendanceRequest, setAttendanceRequest] = useState(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
+  const [todayOnly, setTodayOnly] = useState(false);
   const [assignment, setAssignment] = useState({ sectorId: "", userId: "" });
   const [rejectData, setRejectData] = useState({ note: "" });
   const [attendanceData, setAttendanceData] = useState({ microchip: "", note: "" });
@@ -3248,13 +3776,37 @@ function AdminDashboard({
       .filter((request) => matchesRequestSearch(request, globalSearch)),
     [requests, globalSearch],
   );
+  const today = formatScheduleDate(new Date());
   const filterTabs = [
-    { id: "analysis", label: "Em análise", requests: visibleRequests.filter((r) => r.status === "EM_ANALISE") },
-    { id: "surgery", label: "Aguardando cirurgia", requests: visibleRequests.filter((r) => r.status === "AGUARDANDO_CIRURGIA") },
-    { id: "archived", label: "Arquivadas", requests: visibleRequests.filter((r) => r.status === "ARQUIVADA") },
+    {
+      id: "inbox",
+      label: "Fila de entrada",
+      requests: visibleRequests.filter(
+        (r) => r.status === "EM_ANALISE" && !r.tags.includes("ATRIBUIDA")
+      ),
+    },
+    {
+      id: "analysis",
+      label: "Em análise",
+      requests: visibleRequests.filter(
+        (r) => r.status === "EM_ANALISE" && r.tags.includes("ATRIBUIDA")
+      ),
+    },
+    {
+      id: "surgery",
+      label: "Aguardando Procedimento",
+      requests: visibleRequests.filter((r) => r.status === "AGUARDANDO_CIRURGIA"),
+    },
+    {
+      id: "archived",
+      label: "Arquivadas",
+      requests: visibleRequests.filter((r) => r.status === "ARQUIVADA"),
+    },
     { id: "all", label: "Todas", requests: visibleRequests },
   ];
+  const todayRequests = visibleRequests.filter((r) => isRequestOnScheduleDate(r, today));
   const activeTab = filterTabs.find((tab) => tab.id === requestFilter) || filterTabs[0];
+  const activeRequests = todayOnly ? todayRequests : activeTab.requests;
   const activeScheduleDays = scheduleDays
     .filter((day) => day.active !== false && !isPastScheduleDay(day.date))
     .map((day) => ({ ...day, remaining: Math.max((day.vacancies || 0) - countUsedVacancies(requests, day.date), 0) }));
@@ -3263,7 +3815,7 @@ function AdminDashboard({
   const assignableStatuses = ["EM_ANALISE", "AGUARDANDO_CIRURGIA"];
   const currentTeamUser = activeUsers.find((user) => user.email && currentUser.email && user.email.toLowerCase() === currentUser.email.toLowerCase())
     || activeUsers.find((user) => user.id === currentUser.id);
-  const currentUserSector = activeSectors.find((sector) => sector.id === currentTeamUser?.sectorId);
+  const currentUserSector = activeSectors.find((sector) => getUserSectorIds(currentTeamUser).includes(sector.id));
 
   function openAssign(request) {
     setAssignRequest(request);
@@ -3275,18 +3827,21 @@ function AdminDashboard({
     if (!assignRequest) return;
     const sector = activeSectors.find((item) => item.id === assignment.sectorId);
     const user = activeUsers.find((item) => item.id === assignment.userId);
+    if (!sector || !user) return;
+    const patch = {
+      status: assignRequest.status,
+      assignedSectorId: sector?.id || "",
+      assignedSectorName: sector?.name || "Não informado",
+      assignedUserId: user?.id || "",
+      responsible: user?.name || sector?.name || "Equipe",
+      tags: mergeTags(assignRequest.tags, ["ATRIBUIDA"]),
+    };
     patchRequest?.(
       assignRequest.id,
-      {
-        status: assignRequest.status,
-        assignedSectorId: sector?.id || "",
-        assignedSectorName: sector?.name || "Não informado",
-        assignedUserId: user?.id || "",
-        responsible: user?.name || sector?.name || "Equipe",
-        tags: mergeTags(assignRequest.tags, ["ATRIBUIDA"]),
-      },
+      patch,
       `Atribuída para ${sector?.name || "setor"}${user ? ` / ${user.name}` : ""}`,
     );
+    setPreviewRequest((current) => current?.id === assignRequest.id ? normalizeRequest({ ...current, ...patch }) : current);
     setAssignRequest(null);
   }
 
@@ -3312,6 +3867,14 @@ function AdminDashboard({
       `Solicitação deferida por ${currentUser.name}`,
     );
     setPreviewRequest(null);
+  }
+
+  function notAttendedRequest(request) {
+    patchRequest?.(
+      request.id,
+      { status: "ARQUIVADA", tags: mergeTags(request.tags, ["NAO_COMPARECEU"]) },
+      `Não comparecimento registrado por ${currentUser.name}`,
+    );
   }
 
   function archiveWithTag(request, tag, note) {
@@ -3460,7 +4023,7 @@ function AdminDashboard({
     <section className="request-workspace triage-workspace">
       <div className="workspace-heading">
         <div>
-          <h2>Solicitações de castração</h2>
+          <h2>Processos</h2>
         </div>
         <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
           <Plus size={18} />
@@ -3468,17 +4031,29 @@ function AdminDashboard({
         </button>
       </div>
 
-      <div className="request-filter-tabs">
-        {filterTabs.map((tab) => (
-          <button key={tab.id} type="button" className={requestFilter === tab.id ? "selected" : ""} onClick={() => setRequestFilter(tab.id)}>
-            {tab.label}<span>{tab.requests.length}</span>
-          </button>
-        ))}
+      <div className="request-filter-bar">
+        <div className="request-filter-tabs">
+          {filterTabs.map((tab) => (
+            <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
+              {tab.label}<span>{tab.requests.length}</span>
+            </button>
+          ))}
+        </div>
+        <button
+          className={`today-filter-toggle${todayOnly ? " selected" : ""}`}
+          type="button"
+          aria-pressed={todayOnly}
+          onClick={() => setTodayOnly((current) => !current)}
+        >
+          <CalendarDays size={16} />
+          Hoje
+          <span>{todayRequests.length}</span>
+        </button>
       </div>
 
       <div className="triage-card-grid">
-        {activeTab.requests.length === 0 && <EmptyState title="Nenhuma solicitação nesta etapa" text="Quando houver registros, eles aparecerão aqui em cards responsivos." />}
-        {activeTab.requests.map((request) => (
+        {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui em cards responsivos."} />}
+        {activeRequests.map((request) => (
           <article
             className="triage-card clickable-triage-card"
             key={request.id}
@@ -3494,36 +4069,103 @@ function AdminDashboard({
           >
             <div className="triage-row">
               <div className="triage-row-main">
-                <div className="triage-card-top">
-                  <div><span className="eyebrow">#{request.protocol}</span><h3>{request.tutor}</h3></div>
-                  <StatusBadge status={request.status} className="triage-status-badge" />
+                <div className="triage-info-columns">
+                  <section className="triage-info-block">
+                    <span className="triage-info-title">Tutor</span>
+                    <strong>{displayText(request.tutor)}</strong>
+                    <dl>
+                      <div>
+                        <dt>Tipo</dt>
+                        <dd>{requestTypeLabel(request)}</dd>
+                      </div>
+                      <div>
+                        <dt>Data</dt>
+                        <dd>{request.preferredSchedule || request.appointment || "—"}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className="triage-info-block">
+                    <span className="triage-info-title">Atendimento</span>
+                    <dl>
+                      <div>
+                        <dt>Responsável</dt>
+                        <dd>{displayText(request.responsible) || "Não atribuído"}</dd>
+                      </div>
+                      <div>
+                        <dt>Setor</dt>
+                        <dd>{displayText(request.assignedSectorName) || "—"}</dd>
+                      </div>
+                    </dl>
+                  </section>
+
+                  <section className="triage-info-block">
+                    <span className="triage-info-title">Animal</span>
+                    <strong>{request.animals.map((a) => displayText(a.name)).join(", ") || "Não informado"}</strong>
+                    <dl>
+                      <div>
+                        <dt>Procedimento</dt>
+                        <dd>{requestProcedureLabel(request)}</dd>
+                      </div>
+                    </dl>
+                  </section>
                 </div>
-                <p>Tipo: {requestTypeLabel(request)}</p>
-                <p>Data: {request.preferredSchedule || request.appointment || "Aguardando"}</p>
-                <p>Responsável: {request.responsible || "Não atribuído"}</p>
-                <p>Setor: {request.assignedSectorName || "Sem setor"}</p>
-                <p>Animal: {request.animals.map((animal) => animal.name).join(", ") || "Animal nao informado"}</p>
-                <MicrochipLine request={request} />
-                {request.tags.length > 0 && (
-                  <div className="workflow-tag-list">
-                    {request.tags.map((tag) => <span key={tag}>{workflowTagLabels[tag] || tag}</span>)}
-                  </div>
-                )}
-                {request.tags.includes("REAGENDADA") && <p className="helper-text">Antes: {request.previousSchedule || "Nao informado"} | Nova: {request.preferredSchedule}</p>}
-                {request.rejectionReason && <p className="form-error">Justificativa: {request.rejectionReason}</p>}
+
               </div>
+
+              <div className="triage-row-state">
+                <span className="triage-protocol">#{request.protocol}</span>
+                <div className="triage-status-stack">
+                  <StatusBadge status={request.status} className={`triage-status-badge ${triageStatusTone(request)}`} />
+                  {visibleWorkflowTags(request.tags, request).length > 0 && (
+                    <div className="workflow-tag-list">
+                      {visibleWorkflowTags(request.tags, request).map((tag) => (
+                        <span key={tag} className={`workflow-tag workflow-tag--${tag.toLowerCase()}`}>
+                          {workflowTagLabels[tag] || tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {request.status === "ARQUIVADA" && (
+                  <span className={`archived-result-badge archived-result-badge--${
+                    request.tags.includes("COMPARECEU") ? "success" :
+                    request.tags.includes("INDEFERIDA") ? "rejected" :
+                    request.tags.includes("CANCELADA") ? "canceled" :
+                    request.tags.includes("NAO_COMPARECEU") ? "absent" : "default"
+                  }`}>
+                    {request.tags.includes("COMPARECEU") ? "Compareceu" :
+                     request.tags.includes("INDEFERIDA") ? "Indeferida" :
+                     request.tags.includes("CANCELADA") ? "Cancelada" :
+                     request.tags.includes("NAO_COMPARECEU") ? "Não compareceu" : "Arquivada"}
+                  </span>
+                )}
+              </div>
+
               <div className="triage-row-actions" onClick={(event) => event.stopPropagation()}>
                 {assignableStatuses.includes(request.status) && (
                   <>
                     <button className="assign-corner-action" type="button" onClick={() => openAssign(request)} aria-label="Atribuir">
-                      <ClipboardList size={20} />
+                      <ClipboardList size={17} />
                       <span>Atribuir</span>
                     </button>
                     <button className="assign-corner-action assume-corner-action" type="button" onClick={() => assumeRequest(request)} aria-label="Assumir">
-                      <CheckCircle2 size={20} />
+                      <CheckCircle2 size={17} />
                       <span>Assumir</span>
                     </button>
                   </>
+                )}
+                {request.status === "AGUARDANDO_CIRURGIA" && (
+                  <button
+                    className="assign-corner-action not-attended-action"
+                    type="button"
+                    onClick={() => notAttendedRequest(request)}
+                    aria-label="Não compareceu"
+                  >
+                    <X size={17} />
+                    <span>Não compareceu</span>
+                  </button>
                 )}
               </div>
             </div>
@@ -3535,7 +4177,9 @@ function AdminDashboard({
         <RequestPreviewModal
           request={previewRequest}
           requestTypes={requestTypes}
+          aiSettings={aiSettings}
           scheduleDays={activeScheduleDays}
+          onAssign={openAssign}
           onClose={() => setPreviewRequest(null)}
           onApprove={approveRequest}
           onReject={rejectRequestFromProcess}
@@ -3548,14 +4192,24 @@ function AdminDashboard({
       {createRequestOpen && (
         <div className="modal-backdrop">
           <div className="config-modal request-preview-modal internal-request-modal" role="dialog" aria-modal="true">
-            <ModalHeader title="Criar Solicitação" eyebrow="Nova solicitação" onClose={() => setCreateRequestOpen(false)} />
+            <ModalHeader title="Nova solicitação" onClose={() => setCreateRequestOpen(false)} />
             <NewRequest
               createRequest={createRequest}
               currentUser={currentUser}
               compact
               internalSimple
               onBack={() => setCreateRequestOpen(false)}
-              onDone={() => setCreateRequestOpen(false)}
+              onDone={async (createdRequest) => {
+                setCreateRequestOpen(false);
+                if (createdRequest) {
+                  try {
+                    const dataUrl = await createRequestPdfDataUrl(createdRequest);
+                    downloadDataUrl(dataUrl, `Solicitacao ${createdRequest.protocol || createdRequest.id || "nova"}.pdf`);
+                  } catch (err) {
+                    console.error("Erro ao gerar PDF da solicitação:", err);
+                  }
+                }
+              }}
               requests={requests}
               scheduleDays={scheduleDays}
               requestTypes={requestTypes}
@@ -3570,10 +4224,10 @@ function AdminDashboard({
       {assignRequest && (
         <div className="modal-backdrop">
           <form className="workflow-modal" onSubmit={confirmAssign}>
-            <ModalHeader title="Setor e usuário" eyebrow="Atribuir" onClose={() => setAssignRequest(null)} />
+            <ModalHeader title="Atribuir setor e usuário" onClose={() => setAssignRequest(null)} />
             <label className="field"><span>Setor</span><select value={assignment.sectorId} onChange={(event) => setAssignment((current) => ({ ...current, sectorId: event.target.value, userId: "" }))}>{activeSectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label>
-            <label className="field"><span>Usuario</span><select value={assignment.userId} onChange={(event) => setAssignment((current) => ({ ...current, userId: event.target.value }))}><option value="">Somente setor</option>{activeUsers.filter((user) => !assignment.sectorId || user.sectorId === assignment.sectorId).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
-            <button className="primary-action" type="submit">Confirmar atribuição</button>
+            <label className="field"><span>Usuário</span><select value={assignment.userId} onChange={(event) => setAssignment((current) => ({ ...current, userId: event.target.value }))}><option value="">Selecione um usuário</option>{activeUsers.filter((user) => !assignment.sectorId || userBelongsToSector(user, assignment.sectorId)).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
+            <button className="primary-action" type="submit" disabled={!assignment.sectorId || !assignment.userId}>Confirmar atribuição</button>
           </form>
         </div>
       )}
@@ -3581,7 +4235,7 @@ function AdminDashboard({
       {rescheduleRequest && (
         <div className="modal-backdrop">
           <div className="workflow-modal wide-workflow-modal">
-            <ModalHeader title="Escolha nova data" eyebrow="Reagendar" onClose={() => setRescheduleRequest(null)} />
+            <ModalHeader title="Reagendar" onClose={() => setRescheduleRequest(null)} />
             {activeScheduleDays.length === 0
               ? <EmptyState title="Nenhuma data disponível" text="Configure datas de atendimento em Configurações › Ambiente › Agenda antes de reagendar." />
               : <div className="reschedule-grid">{activeScheduleDays.map((day) => <button key={day.date} className={`calendar-day-button${day.remaining > 0 ? " has-vacancy" : ""}`} type="button" disabled={day.remaining <= 0} onClick={() => confirmReschedule(day.date)}><span>{day.weekday}</span><strong>{day.date}</strong><small>{day.remaining} vagas</small></button>)}</div>
@@ -3593,8 +4247,8 @@ function AdminDashboard({
       {rejectRequest && (
         <div className="modal-backdrop">
           <form className="workflow-modal" onSubmit={confirmReject}>
-            <ModalHeader title="Justificativa obrigatória" eyebrow="Reprovar" onClose={() => setRejectRequest(null)} />
-            <label className="field"><span>Observacao interna</span><textarea value={rejectData.note} onChange={(event) => setRejectData((current) => ({ ...current, note: event.target.value }))} /></label>
+            <ModalHeader title="Reprovar solicitação" onClose={() => setRejectRequest(null)} />
+            <label className="field"><span>Observação interna</span><textarea value={rejectData.note} onChange={(event) => setRejectData((current) => ({ ...current, note: event.target.value }))} /></label>
             <button className="primary-action" type="submit">Confirmar reprovação</button>
           </form>
         </div>
@@ -3603,7 +4257,7 @@ function AdminDashboard({
       {attendanceRequest && (
         <div className="modal-backdrop">
           <form className="workflow-modal" onSubmit={confirmAttendance}>
-            <ModalHeader title="Procedimentos realizados" eyebrow="Comparecimento" onClose={() => setAttendanceRequest(null)} />
+            <ModalHeader title="Registrar comparecimento" onClose={() => setAttendanceRequest(null)} />
             <label className="field">
               <span>Código do microchip</span>
               <input
@@ -3613,7 +4267,7 @@ function AdminDashboard({
               />
             </label>
             <label className="field">
-              <span>Observacao interna</span>
+              <span>Observação interna</span>
               <textarea value={attendanceData.note} onChange={(event) => setAttendanceData((current) => ({ ...current, note: event.target.value }))} placeholder="Descreva detalhes, intercorrências ou procedimentos adicionais." />
             </label>
             <button className="primary-action" type="submit">Confirmar comparecimento</button>
@@ -3624,13 +4278,15 @@ function AdminDashboard({
   );
 }
 
-function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, requestTypes = [], scheduleDays = [] }) {
+function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, requestTypes = [], scheduleDays = [], aiSettings = initialAiSettings }) {
   const normalizedRequest = normalizeRequest(request);
-  const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [downloadLoadingId, setDownloadLoadingId] = useState("");
   const [bundleLoading, setBundleLoading] = useState(false);
-  const [rejectData, setRejectData] = useState({ note: "" });
+  const [rejectData, setRejectData] = useState({ category: "", note: "" });
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [docDecisions, setDocDecisions] = useState({});
+  const [historyOpen, setHistoryOpen] = useState(true);
   const [attendanceData, setAttendanceData] = useState({
     microchip: normalizedRequest.animalMicrochip || normalizedRequest.animals?.find((animal) => animal.microchip)?.microchip || "",
     note: normalizedRequest.attendanceNote || "",
@@ -3640,6 +4296,8 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   const canRecordAttendance = request.status === "AGUARDANDO_CIRURGIA";
   const canReschedule = request.status === "AGUARDANDO_CIRURGIA"
     && Boolean(request.preferredSchedule || request.appointment);
+  const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
+  const assignmentRequiredTitle = "Atribua um setor e um usuário ao processo antes de analisar";
 
   const uploadedDocs = getUserUploadedProcessDocuments(request.documents);
   const requestTypeConfig = requestTypes.find(
@@ -3698,9 +4356,29 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     }));
 
   const anexos = [requerimento, ...requiredRows, ...extraDocs];
-  const missingRequiredDocuments = requiredRows.filter((item) => item.status === "Não enviado").length;
-  const approvedDocuments = anexos.filter((item) => item.status === "Aprovado" || item.status === "Gerado").length;
+  const hasPendingRequiredDocuments = requiredRows.some((item) => {
+    if (item.kind !== "attachment") return false;
+    const decision = docDecisions[item.id];
+    if (decision === "approved") return false;
+    if (decision === "rejected") return true;
+    return item.status !== "Aprovado";
+  });
   const timeline = buildRequestTimeline(normalizedRequest);
+  const currentStep = timeline.find((step) => step.state === "current") || timeline[timeline.length - 1];
+
+  const rejectionReasons = [
+    "Documentação incompleta",
+    "Animal inelegível",
+    "Fora da área de atendimento",
+    "Solicitação duplicada",
+    "Tutor não localizado",
+    "Outro",
+  ];
+
+  const daysWaiting = normalizedRequest.createdAt
+    ? Math.floor((Date.now() - new Date(normalizedRequest.createdAt).getTime()) / 86400000)
+    : null;
+  const historyEntries = normalizedRequest.rawHistory.length ? normalizedRequest.rawHistory : normalizedRequest.history;
 
   function statusClass(status) {
     if (status === "Aprovado") return "approved";
@@ -3710,18 +4388,26 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     return "pending";
   }
 
+  function getAiStatusLabel(anexo, decision) {
+    if (decision === "approved") return "Aprovado manual";
+    if (decision === "rejected") return "Recusado manual";
+    if (anexo.status === "Aprovado") return "IA: aprovado";
+    if (anexo.status === "Recusado") return "IA: recusado";
+    if (anexo.status === "Gerado") return "Sistema";
+    if (anexo.status === "Não enviado") return "Pendente";
+    return aiSettings.active ? "IA: aguardando" : "Aguardando";
+  }
+
   async function handlePreview(item) {
     setPreviewLoadingId(item.id);
     try {
-      setPreviewAttachment(await prepareProcessDocumentPreview(item, request));
+      const prepared = await prepareProcessDocumentPreview(item, request);
+      if (prepared?.dataUrl) {
+        const blob = await fetch(prepared.dataUrl).then((r) => r.blob());
+        window.open(URL.createObjectURL(blob), "_blank");
+      }
     } catch (err) {
       console.error("Erro ao preparar prévia do documento:", err);
-      setPreviewAttachment({
-        documentName: "Prévia indisponível",
-        fileName: item.tipo || "documento",
-        fileType: "",
-        dataUrl: "",
-      });
     } finally {
       setPreviewLoadingId("");
     }
@@ -3747,10 +4433,22 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   async function handleBundlePreview() {
     setBundleLoading(true);
     try {
-      setPreviewAttachment(await generateDocumentBundlePdf(request));
+      const bundle = await generateDocumentBundlePdf(request);
+      if (bundle?.dataUrl) {
+        const anchor = window.document.createElement("a");
+        anchor.href = bundle.dataUrl;
+        anchor.download = bundle.fileName || `juntada-${request.protocol || request.id || "processo"}.pdf`;
+        anchor.click();
+      }
     } catch (error) {
       console.error("Erro ao preparar juntada:", error);
-      setPreviewAttachment(await generateFallbackBundlePdf(request, error));
+      const fallback = await generateFallbackBundlePdf(request, error);
+      if (fallback?.dataUrl) {
+        const anchor = window.document.createElement("a");
+        anchor.href = fallback.dataUrl;
+        anchor.download = fallback.fileName || `juntada-${request.protocol || request.id || "processo"}.pdf`;
+        anchor.click();
+      }
     } finally {
       setBundleLoading(false);
     }
@@ -3758,43 +4456,76 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
 
   function confirmRejectInline(event) {
     event.preventDefault();
+    if (!hasProcessAssignment) return;
     onReject?.(request, rejectData);
   }
 
   function confirmAttendanceInline(event) {
     event.preventDefault();
+    if (!hasProcessAssignment) return;
     onAttendance?.(request, attendanceData);
   }
 
   function renderAttachments() {
     return (
       <div className="process-attachments-list">
-        {anexos.map((anexo, index) => (
-          <article className="process-attachment-row" key={`${anexo.kind}-${anexo.id}`}>
-            <div className="process-attachment-main">
-              <span className="process-attachment-number">{String(index + 1).padStart(2, "0")}</span>
-              <FileText size={18} className="process-attachment-icon" />
-              <div className="process-attachment-info">
-                <strong>{anexo.tipo}</strong>
+        {anexos.map((anexo, index) => {
+          const decision = docDecisions[anexo.id];
+          return (
+            <article className="process-attachment-row" key={`${anexo.kind}-${anexo.id}`}>
+              <div className="process-attachment-main">
+                <span className="process-attachment-number">{index + 1}</span>
+                <FileText size={18} className="process-attachment-icon" />
+                <div className="process-attachment-info">
+                  <strong>{anexo.tipo}</strong>
+                </div>
+                <div className="attachment-ai-status">
+                  <span className={`attachment-status attachment-status--${decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : statusClass(anexo.status)}`}>
+                    {getAiStatusLabel(anexo, decision)}
+                  </span>
+                  {anexo.message && <p className="attachment-ai-message">{anexo.message}</p>}
+                </div>
               </div>
-              <span className={`attachment-status attachment-status--${statusClass(anexo.status)}`}>{anexo.status}</span>
-            </div>
-            <div className="process-attachment-actions">
-              {anexo.available ? (
-                <>
-                  <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
-                    <Eye size={16} />
-                  </button>
-                  <button className="icon-action" title="Baixar" type="button" disabled={downloadLoadingId === anexo.id} onClick={() => handleDownload(anexo)}>
-                    <Download size={16} />
-                  </button>
-                </>
-              ) : (
-                <span className="attachment-unavailable"><X size={14} />Não enviado</span>
-              )}
-            </div>
-          </article>
-        ))}
+              <div className="process-attachment-actions">
+                {anexo.available && anexo.kind !== "request" ? (
+                  <>
+                    <button
+                      className={`doc-decision-btn${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
+                      type="button"
+                      title={hasProcessAssignment ? "Aprovar documento" : assignmentRequiredTitle}
+                      disabled={!hasProcessAssignment}
+                      onClick={() => setDocDecisions((d) => ({ ...d, [anexo.id]: decision === "approved" ? undefined : "approved" }))}
+                    ><CheckCircle2 size={15} /></button>
+                    <button
+                      className={`doc-decision-btn doc-decision-btn--reject${decision === "rejected" ? " doc-decision-btn--active-reject" : ""}`}
+                      type="button"
+                      title={hasProcessAssignment ? "Recusar documento" : assignmentRequiredTitle}
+                      disabled={!hasProcessAssignment}
+                      onClick={() => setDocDecisions((d) => ({ ...d, [anexo.id]: decision === "rejected" ? undefined : "rejected" }))}
+                    ><X size={15} /></button>
+                    <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
+                      <Eye size={16} />
+                    </button>
+                    <button className="icon-action" title="Baixar" type="button" disabled={downloadLoadingId === anexo.id} onClick={() => handleDownload(anexo)}>
+                      <Download size={16} />
+                    </button>
+                  </>
+                ) : anexo.available ? (
+                  <>
+                    <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
+                      <Eye size={16} />
+                    </button>
+                    <button className="icon-action" title="Baixar" type="button" disabled={downloadLoadingId === anexo.id} onClick={() => handleDownload(anexo)}>
+                      <Download size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <span className="attachment-unavailable"><X size={14} />Não enviado</span>
+                )}
+              </div>
+            </article>
+          );
+        })}
       </div>
     );
   }
@@ -3828,18 +4559,62 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   function renderDocumentDecision() {
     return (
       <form className="process-step-action" onSubmit={confirmRejectInline}>
-        <div className="process-document-score">
-          <span>{approvedDocuments}/{anexos.length}</span>
-          <small>anexos prontos</small>
-        </div>
         {renderAttachments()}
-        <label className="field">
-          <span>Observação interna</span>
-          <textarea value={rejectData.note} onChange={(event) => setRejectData((current) => ({ ...current, note: event.target.value }))} />
-        </label>
+
+        {rejectOpen && (
+          <div className="process-reject-section">
+            <strong className="process-section-title">Indeferir solicitação</strong>
+            <label className="field">
+              <span>Motivo</span>
+              <select value={rejectData.category} onChange={(e) => setRejectData((d) => ({ ...d, category: e.target.value }))}>
+                <option value="">Selecione o motivo...</option>
+                {rejectionReasons.map((r) => <option key={r} value={r}>{r}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Observação interna</span>
+              <textarea value={rejectData.note} onChange={(e) => setRejectData((d) => ({ ...d, note: e.target.value }))} placeholder="Detalhe o motivo se necessário..." />
+            </label>
+          </div>
+        )}
+
         <div className="analysis-actions process-action-buttons">
-          {canApprove && <button className="primary-action" type="button" onClick={() => onApprove?.(request)}>Aprovar e avançar</button>}
-          <button className="secondary-action danger-action" type="submit">Indeferir e encerrar</button>
+          <button className="secondary-action" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>
+            <Download size={16} />
+            {bundleLoading ? "Preparando..." : "Baixar PDF"}
+          </button>
+          {canAnalyze && (
+            <button className="secondary-action" type="button" onClick={() => onAssign?.(request)}>
+              <ClipboardList size={16} />
+              Atribuir
+            </button>
+          )}
+          {canApprove && (
+            <button
+              className="primary-action"
+              type="button"
+              disabled={!hasProcessAssignment || hasPendingRequiredDocuments}
+              title={!hasProcessAssignment ? assignmentRequiredTitle : hasPendingRequiredDocuments ? "Valide todos os anexos obrigatórios para avançar" : "Avançar etapa"}
+              onClick={() => onApprove?.(request)}
+            >
+              Avançar
+            </button>
+          )}
+          {!rejectOpen && (
+            <button className="ghost-button danger-ghost-action" type="button" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Indeferir solicitação" : assignmentRequiredTitle} onClick={() => setRejectOpen(true)}>
+              Indeferir
+            </button>
+          )}
+          {rejectOpen && (
+            <>
+              <button className="ghost-button" type="button" onClick={() => setRejectOpen(false)}>
+                Cancelar
+              </button>
+              <button className="secondary-action danger-action" type="submit" disabled={!hasProcessAssignment || !rejectData.category}>
+                Confirmar indeferimento
+              </button>
+            </>
+          )}
         </div>
       </form>
     );
@@ -3852,18 +4627,45 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
           <span>Código do microchip</span>
           <input
             value={attendanceData.microchip}
-            onChange={(event) => setAttendanceData((current) => ({ ...current, microchip: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+            onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
             placeholder="Informe o código aplicado ou lido"
           />
         </label>
         <label className="field">
           <span>Observação interna</span>
-          <textarea value={attendanceData.note} onChange={(event) => setAttendanceData((current) => ({ ...current, note: event.target.value }))} />
+          <textarea value={attendanceData.note} onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))} />
         </label>
         <div className="analysis-actions process-action-buttons">
-          {canReschedule && <button className="ghost-button" type="button" onClick={() => onReschedule?.(request)}>Reagendar</button>}
-          <button className="secondary-action danger-action" type="button" onClick={() => onArchive?.(request, "CANCELADA", "Cirurgia cancelada")}>Cancelar</button>
-          <button className="primary-action" type="submit">Confirmar comparecimento</button>
+          <button className="secondary-action" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>
+            <Download size={16} />
+            {bundleLoading ? "Preparando..." : "Baixar PDF"}
+          </button>
+          {canRecordAttendance && (
+            <button className="secondary-action" type="button" onClick={() => onAssign?.(request)}>
+              <ClipboardList size={16} />
+              Atribuir
+            </button>
+          )}
+          {canReschedule && (
+            <button className="ghost-button" type="button" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Reagendar" : assignmentRequiredTitle} onClick={() => onReschedule?.(request)}>
+              Reagendar
+            </button>
+          )}
+          <button
+            className="secondary-action warning-action"
+            type="button"
+            disabled={!hasProcessAssignment}
+            title={hasProcessAssignment ? "Registrar não comparecimento" : assignmentRequiredTitle}
+            onClick={() => onArchive?.(request, "NAO_COMPARECEU", `Não comparecimento registrado`)}
+          >
+            Não compareceu
+          </button>
+          <button className="secondary-action danger-action" type="button" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Cancelar cirurgia" : assignmentRequiredTitle} onClick={() => onArchive?.(request, "CANCELADA", "Cirurgia cancelada")}>
+            Cancelar
+          </button>
+          <button className="primary-action" type="submit" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Confirmar comparecimento" : assignmentRequiredTitle}>
+            Confirmar comparecimento
+          </button>
         </div>
       </form>
     );
@@ -3875,50 +4677,140 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     return null;
   }
 
+  function renderProgress() {
+    return (
+      <div className="process-progress" aria-label="Andamento do processo">
+        {timeline.map((step) => (
+          <div className={`process-progress-step ${step.state}`} key={step.id}>
+            <span />
+            <strong>{step.label}</strong>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function parseHistoryEntry(entry) {
+    if (entry && typeof entry === "object") {
+      return {
+        status: statusLabels[entry.status] || workflowTagLabels[entry.status] || entry.status || "Registro",
+        note: entry.notes || entry.note || "",
+        by: /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(entry.by) ? "" : (entry.by || ""),
+        at: entry.at || entry.createdAt || "",
+      };
+    }
+    const text = String(entry || "");
+    const parts = text.split(" - ");
+    const status = parts.shift() || "Registro";
+    const at = parts.find((part) => /\d{4}-\d{2}-\d{2}T/.test(part)) || "";
+    const byPart = parts.find((part) => part.trim().startsWith("por "));
+    const note = parts.filter((part) => part !== at && part !== byPart).join(" - ");
+    return {
+      status: statusLabels[status] || workflowTagLabels[status] || displayText(status.replaceAll("_", " ").toLowerCase()),
+      note,
+      by: (() => { const v = byPart ? byPart.replace(/^por\s+/i, "") : ""; return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v) ? "" : v; })(),
+      at,
+    };
+  }
+
+  function renderHistoryTree() {
+    return (
+      <ol className="process-history-tree">
+        {historyEntries.map((entry, index) => {
+          const item = parseHistoryEntry(entry);
+          return (
+            <li key={`${item.status}-${item.at}-${index}`} className="process-history-node">
+              <span className="process-history-dot" />
+              <div className="process-history-card">
+                <div className="process-history-card-head">
+                  <strong>{item.status}</strong>
+                  {item.at && <time>{formatDateTime(item.at)}</time>}
+                </div>
+                {item.note && <p>{displayText(item.note)}</p>}
+                {item.by && <small>{displayText(item.by)}</small>}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    );
+  }
+
   return (
     <div className="modal-backdrop">
-      <div className="config-modal request-preview-modal process-modal chronological-process-modal" role="dialog" aria-modal="true">
-        <ModalHeader
-          title={`Processo #${request.protocol}`}
-          eyebrow={`Processo #${request.protocol}`}
-          onClose={onClose}
-          actions={<button className="secondary-action" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>{bundleLoading ? "Preparando..." : "Baixar juntada"}</button>}
-        />
+      <div className="config-modal request-preview-modal process-modal chronological-process-modal process-work-modal" role="dialog" aria-modal="true">
+        <header className="process-work-header">
+          <div>
+            <span>Processo #{request.protocol}</span>
+            <h2>{displayText(normalizedRequest.tutor)}</h2>
+          </div>
+          <div className="process-work-header-actions">
+            <StatusBadge status={normalizedRequest.status} />
+            <button className="icon-action process-close-action" type="button" aria-label="Fechar" onClick={onClose}>
+              <X size={18} />
+            </button>
+          </div>
+        </header>
 
-        <div className="process-compact-summary">
-          <p><span>Tutor</span>{normalizedRequest.tutor}</p>
-          <p><span>Tipo</span>{getRequestTypeName(normalizedRequest, requestTypes)}</p>
-          <p><span>Animais</span>{normalizedRequest.animals.length}</p>
-          <p><span>Data</span>{normalizedRequest.preferredSchedule || "Aguardando"}</p>
-          <StatusBadge status={normalizedRequest.status} />
+        <div className="process-work-body">
+          <aside className="process-history-rail">
+            <div className="process-history-section">
+              <button
+                type="button"
+                className="process-history-toggle"
+                onClick={() => setHistoryOpen((v) => !v)}
+              >
+                Histórico ({historyEntries.length} registros)
+                <span className="process-history-chevron">{historyOpen ? "▲" : "▼"}</span>
+              </button>
+              {historyOpen && (historyEntries.length > 0
+                ? renderHistoryTree()
+                : <p className="process-history-empty">Nenhum registro histórico.</p>
+              )}
+            </div>
+          </aside>
+
+          <main className="process-work-main">
+            <div className="process-overview-strip">
+              <section className="process-work-summary" aria-label="Resumo da solicitação">
+                <p><span>Telefone</span>{normalizedRequest.phone || "—"}</p>
+                <p><span>CPF</span>{normalizedRequest.cpf || "—"}</p>
+                <p><span>Agenda</span>{normalizedRequest.preferredSchedule || "Aguardando"}</p>
+                <p><span>Responsável</span>{displayText(normalizedRequest.responsible) || "Não atribuído"}</p>
+                <p><span>Setor</span>{displayText(normalizedRequest.assignedSectorName) || "—"}</p>
+                <p><span>Espera</span>{daysWaiting !== null ? `${daysWaiting} dia(s)` : "—"}</p>
+              </section>
+
+              {normalizedRequest.animals.length > 0 && (
+                <section className="process-animals-summary process-work-animals">
+                  {normalizedRequest.animals.map((animal, i) => (
+                    <div className="process-animal-row" key={i}>
+                      <span className="process-animal-name">{displayText(animal.name) || "Sem nome"}</span>
+                      <span className="process-animal-chip">{displayText(animal.species) || "—"}</span>
+                      <span className="process-animal-chip">{displayText(animal.sex) || "—"}</span>
+                      <span className="process-animal-chip">{displayText(animal.size) || "—"}</span>
+                      {(animal.procedure || normalizedRequest.type) && <span className="process-animal-chip process-animal-chip--proc">{procedureLabel(animal.procedure || getRequestTypeName(normalizedRequest, requestTypes))}</span>}
+                      {animal.microchip && <span className="process-animal-chip process-animal-chip--chip">Chip: {animal.microchip}</span>}
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              {renderProgress()}
+            </div>
+
+            <section className="process-current-panel">
+              {renderStepAction(currentStep) || (
+                <p className="process-muted-note">{currentStep?.description || "Nenhuma ação pendente neste momento."}</p>
+              )}
+            </section>
+          </main>
         </div>
 
-        <div className="process-flow">
-          {timeline.map((step) => renderFlowStep(step, renderStepAction(step)))}
-        </div>
-
-        {previewAttachment && (
-          <DocumentPreviewModal
-            document={previewAttachment}
-            onClose={() => setPreviewAttachment(null)}
-          />
-        )}
       </div>
     </div>
   );
 }
-
-function getCurrentProcessStage(request = {}) {
-  if (request.status === "ARQUIVADA") {
-    if (requestHasTag(request, "INDEFERIDA")) return { label: "Indeferido", description: request.rejectionReason || "Processo encerrado por indeferimento." };
-    if (requestHasTag(request, "CANCELADA")) return { label: "Cancelado", description: "Processo encerrado por cancelamento." };
-    if (requestHasTag(request, "COMPARECEU")) return { label: "Encerrado", description: "Procedimento confirmado e processo encerrado." };
-    return { label: "Arquivado", description: "Processo encerrado." };
-  }
-  if (request.status === "AGUARDANDO_CIRURGIA") return { label: "Aguardando procedimento", description: "Solicitação deferida e aguardando atendimento." };
-  return { label: "Análise documental", description: "Solicitação recebida e aguardando conferência." };
-}
-
 function buildRequestTimeline(request = {}) {
   const created = request.createdAt ? formatDateTime(request.createdAt) : "Data não informada";
   const hasDeferred = request.status === "AGUARDANDO_CIRURGIA" || requestHasTag(request, "DEFERIDA") || requestHasTag(request, "COMPARECEU");
@@ -3937,8 +4829,8 @@ function buildRequestTimeline(request = {}) {
     },
     {
       id: "documents",
-      label: "Análise documental",
-      description: isRejected ? "Indeferida na análise." : hasDeferred || archived ? "Análise concluída." : "Aguardando conferência.",
+      label: "Documentos",
+      description: isRejected ? "Documentos indeferidos." : hasDeferred || archived ? "Documentos concluídos." : "Aguardando conferência.",
       detail: request.rejectionReason || "",
       state: isRejected || hasDeferred || archived ? "done" : "current",
     },
@@ -3968,155 +4860,9 @@ function buildRequestTimeline(request = {}) {
 
 function getPerformedProceduresLabel(request = {}) {
   const animals = Array.isArray(request.animals) ? request.animals : [];
-  const procedures = animals.map((animal) => animal.procedure).filter(Boolean);
+  const procedures = animals.map((animal) => procedureLabel(animal.procedure || "")).filter(Boolean);
   const uniqueProcedures = [...new Set(procedures)];
-  return uniqueProcedures.length ? uniqueProcedures.join(", ") : request.type || request.request_type || "Procedimento realizado";
-}
-
-function ScheduleView({
-  requests,
-  createRequest,
-  currentUser,
-  scheduleDays = [],
-  requestTypes = initialRequestTypes,
-  aiSettings = initialAiSettings,
-  speciesOptions = initialSpecies,
-  sizeOptions = initialSizes,
-  municipalities = initialMunicipalities,
-}) {
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
-  const scheduled = requests.map(normalizeRequest).filter((request) => request.status !== "ARQUIVADA" && (request.appointment || request.preferredSchedule));
-  const scheduleWithUsage = scheduleDays.filter((day) => day.active !== false).map((day) => {
-    const used = countUsedVacancies(requests, day.date);
-    return { ...day, used, remaining: Math.max(day.vacancies - used, 0), isPast: isPastScheduleDay(day.date) };
-  });
-  const scheduleMonths = buildScheduleMonths(scheduleWithUsage);
-  const activeScheduleMonth = scheduleMonths[scheduleMonthIndex] || "";
-  const visibleScheduleDays = scheduleWithUsage.filter((day) => {
-    const [, month, year] = day.date.split("/");
-    return `${month}/${year}` === activeScheduleMonth;
-  });
-
-  useEffect(() => {
-    const currentMonthIndex = Math.max(scheduleMonths.indexOf(getCurrentScheduleMonthKey()), 0);
-    setScheduleMonthIndex(currentMonthIndex);
-  }, [scheduleMonths.join("|")]);
-
-  return (
-    <section className="content-grid">
-      <div className="panel wide">
-        <PanelHeader title="Agenda disponível" />
-        <div className="agenda-main-layout">
-          <div>
-        <div className="calendar-month-header admin-month-filter">
-          <button
-            type="button"
-            onClick={() => setScheduleMonthIndex((current) => Math.max(current - 1, 0))}
-            disabled={scheduleMonthIndex === 0}
-            aria-label="Mês anterior"
-          >
-            ‹
-          </button>
-          <label>
-            <span>Mes</span>
-            <select
-              value={activeScheduleMonth}
-              onChange={(event) => setScheduleMonthIndex(Math.max(scheduleMonths.indexOf(event.target.value), 0))}
-            >
-              {scheduleMonths.map((month) => (
-                <option key={month} value={month}>
-                  {formatMonthYear(month)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            type="button"
-            onClick={() => setScheduleMonthIndex((current) => Math.min(current + 1, scheduleMonths.length - 1))}
-            disabled={scheduleMonthIndex >= scheduleMonths.length - 1}
-            aria-label="Próximo mês"
-          >
-            ›
-          </button>
-        </div>
-        <div className="admin-calendar-grid">
-          {visibleScheduleDays.length === 0 && (
-            <div className="calendar-empty-month">Nenhuma data configurada para {formatMonthYear(activeScheduleMonth)}.</div>
-          )}
-          {visibleScheduleDays.map((day) => (
-            <button
-              className={[
-                "admin-calendar-day",
-                day.remaining === 0 || day.isPast ? "full" : "",
-                day.kind === "Mutirao" ? "mutirao-day" : "",
-                !day.isPast && day.remaining > 0 ? "has-vacancy" : "",
-              ].filter(Boolean).join(" ")}
-              key={day.date}
-              type="button"
-              disabled={day.remaining === 0 || day.isPast}
-              onClick={() => setSelectedDay(day)}
-            >
-              <span>{day.weekday}</span>
-              <strong>{day.date}</strong>
-              <small>
-                {day.isPast ? "Data passada" : `${day.remaining} livres de ${day.vacancies}`}
-              </small>
-              {day.kind === "Mutirao" && <em>Mutirão</em>}
-              {day.locationName && <small>{day.locationName}</small>}
-            </button>
-          ))}
-        </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel wide">
-        <PanelHeader title="Solicitacoes com data escolhida" action="Exportar PDF" />
-        <div className="request-list">
-          {scheduled.length === 0 && (
-            <EmptyState
-              title="Nenhum horario escolhido"
-              text="Ao criar uma solicitação pela agenda, a data selecionada aparecerá vinculada ao cadastro."
-            />
-          )}
-          {scheduled.map((request) => (
-            <article className="request-card" key={request.id}>
-              <span>{request.appointment || request.preferredSchedule}</span>
-              <strong>{request.tutor}</strong>
-              <span className="request-card-meta">
-                {request.animals[0].name} - {request.animals[0].procedure}
-                <MicrochipLine request={request} />
-              </span>
-              <StatusBadge status={request.status} />
-            </article>
-          ))}
-        </div>
-      </div>
-
-      {selectedDay && (
-        <div className="modal-backdrop">
-          <div className="request-modal">
-            <ModalHeader title="Criar solicitação presencial" eyebrow={`Agenda ${selectedDay.date}`} onClose={() => setSelectedDay(null)} />
-            <NewRequest
-              createRequest={createRequest}
-              currentUser={currentUser}
-              compact
-              onDone={() => setSelectedDay(null)}
-              requests={requests}
-              scheduleDays={scheduleDays}
-              requestTypes={requestTypes}
-              aiSettings={aiSettings}
-              speciesOptions={speciesOptions}
-              sizeOptions={sizeOptions}
-              initialSchedule={selectedDay.date}
-            />
-          </div>
-        </div>
-      )}
-    </section>
-  );
-
+  return uniqueProcedures.length ? uniqueProcedures.join(", ") : procedureLabel(request.type || request.request_type || "Procedimento realizado");
 }
 
 function AdoptionView({
@@ -4145,7 +4891,16 @@ function AdoptionView({
   const [adoptionTab, setAdoptionTab] = useState("available");
   const [adoptionFilters, setAdoptionFilters] = useState({ species: "", sex: "" });
   const [editingAnimalId, setEditingAnimalId] = useState(null);
-  const [interestsModal, setInterestsModal] = useState(null); // { animal, list }
+  const [interestsModal, setInterestsModal] = useState(null);
+  const emptyAdoptionModalForm = {
+    tutor: "", cpf: "", cep: "", number: "", address: "", neighborhood: "", city: "", state: "", email: "", phone: "",
+    procedimentos: "", adopted_at: new Date().toISOString().slice(0, 10),
+  };
+  const [adoptionConfirmModal, setAdoptionConfirmModal] = useState(null);
+  const [adoptionModalForm, setAdoptionModalForm] = useState(emptyAdoptionModalForm);
+  const [adoptionModalStep, setAdoptionModalStep] = useState(0);
+  const [adoptionModalCepStatus, setAdoptionModalCepStatus] = useState("");
+  const [isSavingAdoption, setIsSavingAdoption] = useState(false);
   const canManageAdoptions = canManagePublicAnimalFlows(currentUser.role);
   const availableAnimals = adoptionAnimals.filter((animal) => animal.status !== "adotado");
   const adoptedAnimals = adoptionAnimals.filter((animal) => animal.status === "adotado");
@@ -4300,7 +5055,7 @@ function AdoptionView({
     if (isSavingAnimal) return;
 
     if (!animalForm.name.trim() || !animalForm.age.trim() || !animalForm.species || !animalForm.sex || !animalForm.tone.trim()) {
-      setFormError("Preencha nome, idade, especie, sexo e descricao antes de publicar.");
+      setFormError("Preencha nome, idade, espécie, sexo e descrição antes de publicar.");
       return;
     }
 
@@ -4372,6 +5127,81 @@ function AdoptionView({
     }
   }
 
+  function openAdoptionConfirmModal(animal) {
+    setAdoptionConfirmModal(animal);
+    setAdoptionModalForm({ ...emptyAdoptionModalForm, adopted_at: new Date().toISOString().slice(0, 10) });
+    setAdoptionModalStep(0);
+    setAdoptionModalCepStatus("");
+  }
+
+  function closeAdoptionConfirmModal() {
+    if (isSavingAdoption) return;
+    setAdoptionConfirmModal(null);
+  }
+
+  function updateAdoptionModalForm(field, value) {
+    setAdoptionModalForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateAdoptionModalMasked(field, value) {
+    const masks = { cpf: formatCpf, phone: formatPhone, cep: (v) => formatCep(v) };
+    updateAdoptionModalForm(field, masks[field] ? masks[field](value) : value);
+    if (field === "cep") lookupAdoptionCep(value);
+  }
+
+  async function lookupAdoptionCep(value) {
+    const clean = value.replace(/\D/g, "");
+    if (clean.length !== 8) { setAdoptionModalCepStatus(""); return; }
+    setAdoptionModalCepStatus("Buscando endereço...");
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const data = await res.json();
+      if (data.erro) { setAdoptionModalCepStatus("CEP não encontrado."); return; }
+      setAdoptionModalForm((prev) => ({
+        ...prev,
+        cep: formatCep(value),
+        address: data.logradouro || prev.address,
+        neighborhood: data.bairro || prev.neighborhood,
+        city: data.localidade || prev.city,
+        state: data.uf || prev.state,
+      }));
+      setAdoptionModalCepStatus("Endereço preenchido.");
+    } catch {
+      setAdoptionModalCepStatus("Não foi possível buscar o CEP.");
+    }
+  }
+
+  async function submitAdoptionConfirm() {
+    if (isSavingAdoption) return;
+    setIsSavingAdoption(true);
+    try {
+      const patch = {
+        status: "adotado",
+        adopted_at: adoptionModalForm.adopted_at ? new Date(adoptionModalForm.adopted_at + "T12:00:00").toISOString() : new Date().toISOString(),
+        adoption_tutor: {
+          tutor: adoptionModalForm.tutor,
+          cpf: adoptionModalForm.cpf,
+          cep: adoptionModalForm.cep,
+          number: adoptionModalForm.number,
+          address: adoptionModalForm.address,
+          neighborhood: adoptionModalForm.neighborhood,
+          city: adoptionModalForm.city,
+          state: adoptionModalForm.state,
+          email: adoptionModalForm.email,
+          phone: adoptionModalForm.phone,
+        },
+        adoption_notes: adoptionModalForm.procedimentos,
+      };
+      const updated = await api.updateAdoption(adoptionConfirmModal.id, patch);
+      setAdoptionAnimals((current) => current.map((item) => item.id === adoptionConfirmModal.id ? { ...item, ...updated } : item));
+      setAdoptionConfirmModal(null);
+    } catch (err) {
+      console.error("Erro ao confirmar adoção:", err);
+    } finally {
+      setIsSavingAdoption(false);
+    }
+  }
+
   return (
     <section className="content-grid">
       <div className="hero-panel adoption-hero">
@@ -4403,7 +5233,7 @@ function AdoptionView({
               <div className="adoption-photo-column">
                 <label className="animal-photo-uploader">
                   {animalForm.photos.length > 0 ? (
-                    <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Previa principal do animal" />
+                    <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Prévia principal do animal" />
                   ) : (
                     <span>
                       <UploadCloud size={28} />
@@ -4537,13 +5367,13 @@ function AdoptionView({
       <div className="adoption-grid">
         {displayedAnimals.length === 0 && (
           <EmptyState
-            title={adoptionTab === "adopted" ? "Nenhum animal adotado" : "Nenhum animal para adocao"}
+            title={adoptionTab === "adopted" ? "Nenhum animal adotado" : "Nenhum animal para adoção"}
             text={
-              currentUser.role === "admin"
+              canManagePublicAnimalFlows(currentUser.role)
                 ? activeFilterCount > 0
                   ? "Nenhum animal encontrado com estes filtros."
                   : adoptionTab === "adopted"
-                  ? "Animais marcados como adotados ficarao aqui como historico interno."
+                  ? "Animais marcados como adotados ficarão aqui como histórico interno."
                   : "Cadastre o primeiro animal para testar a galeria pública."
                 : "A galeria pública ainda nao possui animais cadastrados."
             }
@@ -4587,7 +5417,7 @@ function AdoptionView({
                     Reativar
                   </button>
                 ) : (
-                  <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, "adotado")}>
+                  <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)}>
                     Marcar adotado
                   </button>
                 )}
@@ -4600,7 +5430,7 @@ function AdoptionView({
       {interestsModal && (
         <div className="modal-backdrop">
           <div className="auth-modal" style={{ maxWidth: 520 }}>
-            <ModalHeader title={`Interessados em ${interestsModal.animal.name || interestsModal.animal.animal_name}`} eyebrow="Adoção" onClose={() => setInterestsModal(null)} />
+            <ModalHeader title={`Interessados em ${interestsModal.animal.name || interestsModal.animal.animal_name}`} onClose={() => setInterestsModal(null)} />
             {interestsModal.list.length === 0 ? (
               <EmptyState title="Nenhum interesse ainda" text="Quando alguém manifestar interesse, aparecerá aqui." />
             ) : (
@@ -4623,6 +5453,78 @@ function AdoptionView({
           </div>
         </div>
       )}
+
+      {adoptionConfirmModal && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) closeAdoptionConfirmModal(); }}>
+          <div className="auth-modal adoption-confirm-modal" role="dialog" aria-modal="true">
+            <ModalHeader
+              title={`Confirmar adoção — ${adoptionConfirmModal.name || adoptionConfirmModal.animal_name}`}
+              onClose={closeAdoptionConfirmModal}
+            />
+
+            <div className="adoption-confirm-tabs">
+              <button
+                className={`adoption-confirm-tab${adoptionModalStep === 0 ? " active" : ""}`}
+                type="button"
+                onClick={() => setAdoptionModalStep(0)}
+              >
+                Tutor
+              </button>
+              <button
+                className={`adoption-confirm-tab${adoptionModalStep === 1 ? " active" : ""}`}
+                type="button"
+                onClick={() => setAdoptionModalStep(1)}
+              >
+                Procedimentos
+              </button>
+            </div>
+
+            <div className="adoption-confirm-body">
+              {adoptionModalStep === 0 && (
+                <div className="adoption-confirm-panel">
+                  <Field label="Nome" value={adoptionModalForm.tutor} onChange={(v) => updateAdoptionModalForm("tutor", v)} placeholder="Nome do tutor ou responsável" />
+                  <Field label="CPF" value={adoptionModalForm.cpf} onChange={(v) => updateAdoptionModalMasked("cpf", v)} placeholder="000.000.000-00" />
+                  <div className="address-lookup-grid">
+                    <Field label="CEP" value={adoptionModalForm.cep} onChange={(v) => updateAdoptionModalMasked("cep", v)} placeholder="00000-000" />
+                    <Field label="Número" value={adoptionModalForm.number} onChange={(v) => updateAdoptionModalForm("number", v)} placeholder="123" />
+                  </div>
+                  {adoptionModalCepStatus && <p className="cep-status">{adoptionModalCepStatus}</p>}
+                  <Field label="Endereço completo" value={adoptionModalForm.address} onChange={(v) => updateAdoptionModalForm("address", v)} placeholder="Rua, complemento" />
+                  <Field label="Bairro" value={adoptionModalForm.neighborhood} onChange={(v) => updateAdoptionModalForm("neighborhood", v)} placeholder="Informe o bairro" />
+                  <div className="two-column-fields">
+                    <Field label="Cidade" value={adoptionModalForm.city} onChange={(v) => updateAdoptionModalForm("city", v)} placeholder="Cidade" />
+                    <Field label="UF" value={adoptionModalForm.state} onChange={(v) => updateAdoptionModalForm("state", v.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase())} placeholder="SP" />
+                  </div>
+                  <Field label="Email" value={adoptionModalForm.email} onChange={(v) => updateAdoptionModalForm("email", v)} placeholder="email@exemplo.com" />
+                  <Field label="Celular" value={adoptionModalForm.phone} onChange={(v) => updateAdoptionModalMasked("phone", v)} placeholder="(00) 00000-0000" />
+                </div>
+              )}
+
+              {adoptionModalStep === 1 && (
+                <div className="adoption-confirm-panel">
+                  <Field label="Data da adoção" value={adoptionModalForm.adopted_at} onChange={(v) => updateAdoptionModalForm("adopted_at", v)} type="date" />
+                  <label className="field-label">
+                    Procedimentos realizados
+                    <textarea
+                      className="adoption-notes-textarea"
+                      value={adoptionModalForm.procedimentos}
+                      onChange={(e) => updateAdoptionModalForm("procedimentos", e.target.value)}
+                      placeholder="Descreva os procedimentos realizados, observações e encaminhamentos..."
+                      rows={6}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="adoption-confirm-footer">
+              <button className="primary-action" type="button" onClick={submitAdoptionConfirm} disabled={isSavingAdoption}>
+                {isSavingAdoption ? "Salvando..." : "Confirmar adoção"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -4638,6 +5540,30 @@ function countBy(items = [], getKey) {
     totals.set(key, (totals.get(key) || 0) + 1);
   });
   return Array.from(totals, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+}
+
+function getAdoptionCreatorRole(animal = {}) {
+  const role = normalizeText(animal.createdByRole || animal.created_by_role || "");
+  if (role.includes("ong")) return "ong";
+  if (role.includes("protetor") || role.includes("cuidador")) return "cuidador";
+  return "";
+}
+
+function buildAdoptionCreatorStats(adoptionAnimals = [], roleKey = "") {
+  const animals = adoptionAnimals.filter((animal) => getAdoptionCreatorRole(animal) === roleKey);
+  const adopted = animals.filter((animal) => animal.status === "adotado");
+  const available = animals.filter((animal) => animal.status !== "adotado");
+  const interests = animals.reduce((total, animal) => total + (animal.interests?.length || 0), 0);
+  const creators = [...new Set(animals.map((animal) => animal.createdByName || animal.created_by_name).filter(Boolean))];
+  return {
+    animals,
+    total: animals.length,
+    adopted: adopted.length,
+    available: available.length,
+    interests,
+    creators: creators.length,
+    latest: animals.slice(0, 4).map((animal) => animal.name || animal.animal_name || "Animal sem nome"),
+  };
 }
 
 function getRequestTypeName(request = {}, requestTypes = []) {
@@ -4760,7 +5686,7 @@ function AccessRequestsView({ accessRequests = [], reviewAccessRequest, teams = 
       {reviewing && (
         <div className="modal-backdrop">
           <div className="workflow-modal" role="dialog" aria-modal="true">
-            <ModalHeader title="Analisar credenciamento" eyebrow={reviewing.requesterLabel} onClose={() => setReviewing(null)} />
+            <ModalHeader title="Analisar credenciamento" subtitle={reviewing.requesterLabel} onClose={() => setReviewing(null)} />
             <div className="detail-grid compact-detail-grid">
               <p><span>Solicitante</span>{reviewing.organizationName || reviewing.responsibleName}</p>
               <p><span>Responsável</span>{reviewing.responsibleName}</p>
@@ -4815,8 +5741,45 @@ function topItems(items = [], limit = 6) {
   return items.slice(0, limit);
 }
 
+function AdoptionSourceCard({ title, subtitle, stats, icon: Icon }) {
+  const latest = stats.latest || [];
+  return (
+    <article className="adoption-source-card">
+      <div className="adoption-source-head">
+        <span className="adoption-source-icon"><Icon size={20} /></span>
+        <div>
+          <strong>{title}</strong>
+          <small>{subtitle}</small>
+        </div>
+      </div>
+      <div className="adoption-source-total">
+        <span>Animais cadastrados</span>
+        <strong>{stats.total}</strong>
+      </div>
+      <div className="adoption-source-stats">
+        <span><strong>{stats.adopted}</strong> adotados</span>
+        <span><strong>{stats.available}</strong> disponíveis</span>
+        <span><strong>{stats.interests}</strong> interessados</span>
+        <span><strong>{stats.creators}</strong> responsáveis</span>
+      </div>
+      <div className="adoption-source-list">
+        {latest.length > 0 ? latest.map((name) => <small key={name}>{name}</small>) : <small>Nenhum cadastro vinculado ainda</small>}
+      </div>
+    </article>
+  );
+}
+
 function DashboardView({ requests, adoptionAnimals = [], scheduleDays = [], municipalities = initialMunicipalities, requestTypes = initialRequestTypes, teams = initialTeams, currentUser = null }) {
   const [dashboardTab, setDashboardTab] = useState("geral");
+  const [whatsappQuotaDash, setWhatsappQuotaDash] = useState(null);
+
+  useEffect(() => {
+    const municipalityId = currentUser?.municipalityId;
+    if (!municipalityId || isGlobalRole(currentUser?.role)) return;
+    api.getConfig(CONFIG_KEYS.whatsappQuota, municipalityId)
+      .then((value) => { if (value?.plan) setWhatsappQuotaDash(value); })
+      .catch(() => {});
+  }, [currentUser?.municipalityId]);
   const activeSchedules = scheduleDays.filter((day) => day.active !== false);
   const normalizedRequests = requests.map(normalizeRequest);
   const completedRequests = normalizedRequests.filter((request) => requestHasTag(request, "COMPARECEU"));
@@ -4834,8 +5797,34 @@ function DashboardView({ requests, adoptionAnimals = [], scheduleDays = [], muni
       .sort((a, b) => b.value - a.value),
   );
   const adoptionProfile = countBy(adoptionAnimals, (animal) => animal.sex || "Sem perfil");
+  const ongAdoptionStats = buildAdoptionCreatorStats(adoptionAnimals, "ong");
+  const caregiverAdoptionStats = buildAdoptionCreatorStats(adoptionAnimals, "cuidador");
   const castrationByStatus = countBy(normalizedRequests, (request) => statusLabels[request.status] || request.status);
-  const castrationByType = countBy(requests, (request) => getRequestTypeName(request, requestTypes));
+  const castrationByType = (() => {
+    const totals = new Map();
+    const add = (key) => totals.set(key, (totals.get(key) || 0) + 1);
+    requests.forEach((request) => {
+      const animals = Array.isArray(request.animals) ? request.animals : [];
+      if (animals.length === 0) {
+        add(procedureLabel(getRequestTypeName(request, requestTypes)) || "Não informado");
+      } else {
+        animals.forEach((animal) => {
+          const norm = (animal.procedure || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+          if (norm === "ambos") {
+            add("Castração");
+            add("Microchipagem");
+          } else {
+            add(procedureLabel(animal.procedure) || procedureLabel(getRequestTypeName(request, requestTypes)) || "Não informado");
+          }
+        });
+      }
+    });
+    return Array.from(totals, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  })();
+  const requestsByMunicipality = topItems(countBy(normalizedRequests, (request) => {
+    const municipality = municipalities.find((item) => item.id === request.municipalityId);
+    return municipality ? [municipality.name, municipality.state].filter(Boolean).join("/") : request.municipalityName || "Sem município";
+  }), 8);
   const castrationByNeighborhood = topItems(countBy(requests, (request) => request.neighborhood));
   const closedRequests = normalizedRequests.filter((request) => request.status === "ARQUIVADA");
   const closedByUser = topItems(countBy(closedRequests, (request) => getRequestClosedByName(request, teams, currentUser)));
@@ -4846,7 +5835,7 @@ function DashboardView({ requests, adoptionAnimals = [], scheduleDays = [], muni
   const dashboardTabs = [
     { id: "geral", label: "Geral", helper: "Visão executiva", value: activeSchedules.length + normalizedRequests.length + adoptionAnimals.length, icon: Activity },
     { id: "adocao", label: "Adoção", helper: "Animais e interesse", value: activeAdoptions.length, icon: HeartHandshake },
-    { id: "castracao", label: "Castração", helper: "Fila e procedimentos", value: normalizedRequests.length, icon: ClipboardList },
+    { id: "castracao", label: "Gestão de Processos", helper: "Fila e procedimentos", value: normalizedRequests.length, icon: ClipboardList },
   ];
 
   return (
@@ -4925,6 +5914,20 @@ function DashboardView({ requests, adoptionAnimals = [], scheduleDays = [], muni
               <DataDonutChart title="Status dos animais" items={adoptionByStatus} />
             </div>
           </div>
+          <div className="adoption-source-grid">
+            <AdoptionSourceCard
+              title="ONGs"
+              subtitle="Cadastros e adoções feitos por organizações"
+              stats={ongAdoptionStats}
+              icon={HeartHandshake}
+            />
+            <AdoptionSourceCard
+              title="Cuidadores"
+              subtitle="Cadastros e adoções feitos por protetores/cuidadores"
+              stats={caregiverAdoptionStats}
+              icon={Users}
+            />
+          </div>
         </>
       )}
 
@@ -4933,16 +5936,22 @@ function DashboardView({ requests, adoptionAnimals = [], scheduleDays = [], muni
           <div className="map-kpi-grid">
             <Metric title="Solicitações" value={requests.length} icon={FileText} />
             <Metric title="Aprovadas" value={approvedRequests.length} icon={CheckCircle2} />
-            <Metric title="Reprovadas" value={rejectedRequests.length} icon={X} />
+            <Metric title="Indeferidas" value={rejectedRequests.length} icon={X} />
             <Metric title="Realizadas" value={completedRequests.length} icon={ClipboardCheck} />
           </div>
           <div className="charts-grid">
             <DataDonutChart title="Distribuição por status" items={castrationByStatus} />
-            <DataBarChart title="Tipos de solicitação" items={castrationByType} />
+            <DataBarChart title="Procedimentos" items={castrationByType} />
             <DataBarChart title="Processos encerrados por usuário" items={closedByUser} />
             <DataBarChart title="Solicitações por bairro" items={castrationByNeighborhood} />
             <DataBarChart title="Ocupação da agenda" items={scheduleUsage} />
           </div>
+          {isGlobalRole(currentUser?.role) && (
+            <div className="panel wide">
+              <PanelHeader title="Registros por município" />
+              <DataBarChart title="Municípios com mais solicitações" items={requestsByMunicipality} />
+            </div>
+          )}
         </>
       )}
     </section>
@@ -4954,7 +5963,52 @@ function GoogleDashboardMap({ completedRequests = [] }) {
   const mapRef = useRef(null);
   const mapInstanceRef = useRef(null);
   const markersRef = useRef([]);
+  const userMarkerRef = useRef(null);
   const [status, setStatus] = useState(apiKey ? "Carregando Google Maps..." : "Configure a chave do Google Maps para visualizar o dashboard.");
+  const [locating, setLocating] = useState(false);
+
+  function goToCurrentLocation() {
+    if (!navigator.geolocation) {
+      setStatus("Geolocalização não suportada neste navegador.");
+      return;
+    }
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        const position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        const map = mapInstanceRef.current;
+        const google = window.google;
+        if (!map || !google?.maps) {
+          setStatus("Mapa ainda carregando. Tente novamente em instantes.");
+          return;
+        }
+        map.panTo(position);
+        map.setZoom(14);
+        if (userMarkerRef.current) userMarkerRef.current.setMap(null);
+        userMarkerRef.current = new google.maps.Marker({
+          map,
+          position,
+          title: "Sua localização",
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: "#2563eb",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 3,
+            scale: 10,
+          },
+          zIndex: 999,
+        });
+      },
+      (err) => {
+        setLocating(false);
+        if (err.code === err.PERMISSION_DENIED) setStatus("Permissão de localização negada pelo navegador.");
+        else setStatus("Não foi possível obter sua localização.");
+      },
+      { timeout: 10000, enableHighAccuracy: true },
+    );
+  }
 
   const points = useMemo(() => {
     return completedRequests
@@ -4966,16 +6020,20 @@ function GoogleDashboardMap({ completedRequests = [] }) {
           lng >= -73.99 && lng <= -29.35;
       })
       .map((request) => {
-        const hasMicrochip = request.animals?.some((a) => a.microchip);
-        const castrated = true;
+        const hasMicrochip = request.animals?.some((a) => {
+          const proc = (a.procedure || "").toLowerCase();
+          return a.microchip || proc === "microchipagem" || proc === "ambos";
+        });
         const type = hasMicrochip ? "both" : "castrated";
+        const address = [request.address, request.neighborhood, request.city].filter(Boolean).join(", ");
+        const microchips = (request.animals || []).map((a) => a.microchip).filter(Boolean);
         return {
           lat: Number(request.latitude),
           lng: Number(request.longitude),
           type,
-          label: type === "both" ? "Castrado e microchipado" : "Castrado",
           title: request.tutor || "Castração realizada",
-          detail: request.scheduleLocationName || request.neighborhood || request.address || "Local informado",
+          detail: address || "Endereço não informado",
+          microchips,
           color: type === "both" ? "#7c3aed" : "#16a34a",
         };
       });
@@ -4995,6 +6053,7 @@ function GoogleDashboardMap({ completedRequests = [] }) {
         mapInstanceRef.current = new google.maps.Map(mapRef.current, {
           center: { lat: -27.2423, lng: -50.2189 },
           zoom: 6,
+          gestureHandling: "greedy",
           mapTypeControl: true,
           streetViewControl: false,
           fullscreenControl: true,
@@ -5040,7 +6099,10 @@ function GoogleDashboardMap({ completedRequests = [] }) {
         },
       });
       marker.addListener("click", () => {
-        infoWindow.setContent(`<strong>${escapeHtml(point.title)}</strong><br>${escapeHtml(point.detail)}`);
+        const chipLine = point.microchips.length
+          ? `<br><span style="color:#6b7280;font-size:11px">Microchip: ${point.microchips.map(escapeHtml).join(", ")}</span>`
+          : "";
+        infoWindow.setContent(`<strong>${escapeHtml(point.title)}</strong><br>${escapeHtml(point.detail)}${chipLine}`);
         infoWindow.open({ anchor: marker, map });
       });
       markersRef.current.push(marker);
@@ -5060,6 +6122,15 @@ function GoogleDashboardMap({ completedRequests = [] }) {
   return (
     <div className="google-dashboard-map">
       <div className="google-map-canvas dashboard" ref={mapRef} />
+      <button
+        type="button"
+        className="map-locate-btn"
+        title="Minha localização"
+        disabled={locating}
+        onClick={goToCurrentLocation}
+      >
+        <Navigation size={16} />
+      </button>
       {status && <p className="helper-text">{status}</p>}
       <div className="map-legend">
         <span><i className="legend-dot completed" /> Castrado</span>
@@ -5071,15 +6142,23 @@ function GoogleDashboardMap({ completedRequests = [] }) {
 
 
 async function geocodeAddress(addressString, apiKey) {
-  try {
-    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addressString)}&key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url);
-    const data = await res.json();
-    const loc = data.results?.[0]?.geometry?.location;
-    return loc ? { latitude: String(loc.lat), longitude: String(loc.lng) } : { latitude: "", longitude: "" };
-  } catch {
-    return { latitude: "", longitude: "" };
+  if (apiKey) {
+    try {
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(addressString)}&key=${encodeURIComponent(apiKey)}`;
+      const res = await fetch(url);
+      const data = await res.json();
+      const loc = data.results?.[0]?.geometry?.location;
+      if (loc) return { latitude: String(loc.lat), longitude: String(loc.lng) };
+    } catch {}
   }
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(addressString)}&format=json&limit=1&countrycodes=br`;
+    const res = await fetch(url, { headers: { "Accept-Language": "pt-BR" } });
+    const data = await res.json();
+    const first = data[0];
+    if (first) return { latitude: String(first.lat), longitude: String(first.lon) };
+  } catch {}
+  return { latitude: "", longitude: "" };
 }
 
 function loadGoogleMapsApi(apiKey) {
@@ -5160,30 +6239,24 @@ function EmptyState({ title, text, action, onAction }) {
 }
 
 function ReportsView({ requests = [], metrics, requestTypes = initialRequestTypes, teams = initialTeams }) {
-  const [filters, setFilters] = useState({
-    start: "",
-    end: "",
-    type: "",
-    status: "",
-    user: "",
-    fee: "",
-    search: "",
-  });
+  const emptyFilters = { start: "", end: "", type: "", status: "", user: "", fee: "" };
+  const [filters, setFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useState(null);
   const activeUsers = teams.users?.filter((user) => user.active !== false) || [];
   const normalizedReportRequests = requests.map(normalizeRequest);
-  const filteredRequests = normalizedReportRequests.filter((request) => {
+  const filteredRequests = appliedFilters ? normalizedReportRequests.filter((request) => {
     const date = getRequestDate(request);
     const typeName = getRequestTypeName(request, requestTypes);
     const feeValue = request.fee || request.billingAmount || "";
     const hasFee = feeValue && feeValue !== "Gratuito";
-    if (!isInPeriod(date, filters.start, filters.end)) return false;
-    if (filters.type && typeName !== filters.type) return false;
-    if (filters.status && request.status !== filters.status) return false;
-    if (filters.user && getRequestUserName(request) !== filters.user) return false;
-    if (filters.fee === "charged" && !hasFee) return false;
-    if (filters.fee === "free" && hasFee) return false;
-    return matchesRequestSearch(request, filters.search);
-  });
+    if (!isInPeriod(date, appliedFilters.start, appliedFilters.end)) return false;
+    if (appliedFilters.type && typeName !== appliedFilters.type) return false;
+    if (appliedFilters.status && request.status !== appliedFilters.status) return false;
+    if (appliedFilters.user && getRequestUserName(request) !== appliedFilters.user) return false;
+    if (appliedFilters.fee === "charged" && !hasFee) return false;
+    if (appliedFilters.fee === "free" && hasFee) return false;
+    return true;
+  }) : [];
   const reportMetrics = buildMetrics(filteredRequests);
   const typeOptions = countBy(requests, (request) => getRequestTypeName(request, requestTypes)).map((item) => item.label);
   const userOptions = Array.from(new Set([...activeUsers.map((user) => user.name), ...requests.map(getRequestUserName)])).filter(Boolean);
@@ -5198,8 +6271,8 @@ function ReportsView({ requests = [], metrics, requestTypes = initialRequestType
   const reportBreakdowns = [
     { title: "Status", items: statusSeries },
     { title: "Resultado", items: resultSeries },
-    { title: "Tipos de solicitacao", items: typeSeries },
-    { title: "Responsaveis", items: userSeries },
+    { title: "Tipos de solicitação", items: typeSeries },
+    { title: "Responsáveis", items: userSeries },
     { title: "Taxas", items: feeSeries },
   ];
 
@@ -5207,52 +6280,53 @@ function ReportsView({ requests = [], metrics, requestTypes = initialRequestType
     setFilters((current) => ({ ...current, [field]: value }));
   }
 
+  function applyFilters() {
+    setAppliedFilters({ ...filters });
+  }
+
+  function clearFilters() {
+    setFilters(emptyFilters);
+    setAppliedFilters(null);
+  }
+
   function exportPdf() {
-    generateReportsPdf(filteredRequests, filters, { statusSeries, resultSeries, typeSeries, userSeries, feeSeries }, requestTypes);
+    generateReportsPdf(filteredRequests, appliedFilters || emptyFilters, { statusSeries, resultSeries, typeSeries, userSeries, feeSeries }, requestTypes);
   }
 
   return (
     <section className="content-grid">
-      <div className="summary-row">
-        <Metric title="Solicitacoes" value={reportMetrics.total} icon={FileText} />
-        <Metric title="Fila ativa" value={reportMetrics.pending} icon={RefreshCw} />
-        <Metric title="Realizadas" value={reportMetrics.done} icon={CheckCircle2} />
-        <Metric title="Exportacao" value="PDF" icon={Download} />
-      </div>
-
-      <div className="panel wide">
-        <PanelHeader title="Relatorios e exportacoes" action="Exportar PDF" onAction={exportPdf} />
+      <div className="hero-panel reports-hero">
         <div className="reports-filter-grid">
-          <label className="field">
-            <span>Inicio</span>
+          <label className="field reports-hero-field">
+            <span>Início</span>
             <input type="date" value={filters.start} onChange={(event) => patchFilter("start", event.target.value)} />
           </label>
-          <label className="field">
+          <label className="field reports-hero-field">
             <span>Fim</span>
             <input type="date" value={filters.end} onChange={(event) => patchFilter("end", event.target.value)} />
           </label>
-          <label className="field">
+          <label className="field reports-hero-field">
             <span>Tipo</span>
             <select value={filters.type} onChange={(event) => patchFilter("type", event.target.value)}>
               <option value="">Todos</option>
               {typeOptions.map((type) => <option key={type} value={type}>{type}</option>)}
             </select>
           </label>
-          <label className="field">
+          <label className="field reports-hero-field">
             <span>Status</span>
             <select value={filters.status} onChange={(event) => patchFilter("status", event.target.value)}>
               <option value="">Todos</option>
               {statuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
             </select>
           </label>
-          <label className="field">
-            <span>Usuario</span>
+          <label className="field reports-hero-field">
+            <span>Usuário</span>
             <select value={filters.user} onChange={(event) => patchFilter("user", event.target.value)}>
               <option value="">Todos</option>
               {userOptions.map((user) => <option key={user} value={user}>{user}</option>)}
             </select>
           </label>
-          <label className="field">
+          <label className="field reports-hero-field">
             <span>Taxas</span>
             <select value={filters.fee} onChange={(event) => patchFilter("fee", event.target.value)}>
               <option value="">Todas</option>
@@ -5260,11 +6334,25 @@ function ReportsView({ requests = [], metrics, requestTypes = initialRequestType
               <option value="free">Gratuitas</option>
             </select>
           </label>
-          <label className="field reports-search">
-            <span>Busca</span>
-            <input value={filters.search} onChange={(event) => patchFilter("search", event.target.value)} placeholder="Protocolo, tutor, CPF..." />
-          </label>
+          <div className="reports-filter-actions">
+            <button className="ghost-button reports-clear-btn" type="button" onClick={clearFilters} disabled={!appliedFilters}>
+              Limpar
+            </button>
+            <button className="primary-action" type="button" onClick={applyFilters}>
+              <Search size={16} />
+              Buscar
+            </button>
+            <button className="primary-action" type="button" onClick={exportPdf} disabled={!appliedFilters}>
+              <Download size={16} />
+              Exportar PDF
+            </button>
+          </div>
         </div>
+      </div>
+      <div className="panel wide">
+        {!appliedFilters ? (
+          <EmptyState title="Nenhum filtro aplicado" text="Defina os filtros acima e clique em Buscar para gerar o relatório." />
+        ) : (<>
         <div className="reports-breakdown-grid">
           {reportBreakdowns.map((group) => (
             <div className="reports-breakdown" key={group.title}>
@@ -5275,7 +6363,7 @@ function ReportsView({ requests = [], metrics, requestTypes = initialRequestType
               <table>
                 <thead>
                   <tr>
-                    <th>Descricao</th>
+                    <th>Descrição</th>
                     <th>Qtd.</th>
                   </tr>
                 </thead>
@@ -5300,7 +6388,7 @@ function ReportsView({ requests = [], metrics, requestTypes = initialRequestType
                 <th>Tipo</th>
                   <th>Status</th>
                   <th>Resultado</th>
-                <th>Usuario</th>
+                <th>Usuário</th>
                 <th>Taxa</th>
               </tr>
             </thead>
@@ -5308,7 +6396,7 @@ function ReportsView({ requests = [], metrics, requestTypes = initialRequestType
               {filteredRequests.slice(0, 12).map((request) => (
                 <tr key={request.id || request.protocol}>
                   <td>{request.protocol || request.id}</td>
-                  <td>{request.tutor || request.tutor_name || "Nao informado"}</td>
+                  <td>{request.tutor || request.tutor_name || "Não informado"}</td>
                   <td>{getRequestTypeName(request, requestTypes)}</td>
                   <td>{statusLabels[request.status] || request.status}</td>
                   <td>{requestResultLabel(request)}</td>
@@ -5318,8 +6406,9 @@ function ReportsView({ requests = [], metrics, requestTypes = initialRequestType
               ))}
             </tbody>
           </table>
-          {filteredRequests.length === 0 && <EmptyState title="Nenhum registro encontrado" text="Ajuste os filtros para gerar o relatorio." />}
+          {filteredRequests.length === 0 && <EmptyState title="Nenhum registro encontrado" text="Tente ajustar os filtros." />}
         </div>
+        </>)}
       </div>
     </section>
   );
@@ -5344,9 +6433,13 @@ function ConfigView({
   setScheduleRules,
   teams = initialTeams,
   setTeams,
+  setActive,
+  currentUser = null,
   configArea = "environment",
+  selectedMunicipalityId = "",
+  permissionGroups = [],
+  setPermissionGroups,
 }) {
-  const roles = ["Super Admin", "Coordenador", "Triagem", "Analista", "Agendador", "Veterinário", "Adoção", "Auditor", "Servidor Público"];
   const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false };
   const emptyAgendaForm = {
     description: "Agenda padrão",
@@ -5360,8 +6453,11 @@ function ConfigView({
     end: "",
     time: "08:00",
     vacancies: "10",
+    slots: [{ time: "08:00", vacancies: "10" }],
     municipalityId: "",
     locationName: "",
+    locationAddress: "",
+    addressUrl: "",
     latitude: "",
     longitude: "",
   };
@@ -5369,6 +6465,8 @@ function ConfigView({
   const [configModal, setConfigModal] = useState(null);
   const [configStatusFilters, setConfigStatusFilters] = useState({});
   const [editingScheduleRuleId, setEditingScheduleRuleId] = useState(null);
+  const [agendaSaving, setAgendaSaving] = useState(false);
+  const [agendaSaveStatus, setAgendaSaveStatus] = useState("");
   const [editingSpeciesId, setEditingSpeciesId] = useState(null);
   const [editingDocumentId, setEditingDocumentId] = useState(null);
   const [agendaLocationStatus, setAgendaLocationStatus] = useState("");
@@ -5383,11 +6481,57 @@ function ConfigView({
   const [editingSectorId, setEditingSectorId] = useState(null);
   const [sectorModal, setSectorModal] = useState(false);
   const [pendingSectorUserIds, setPendingSectorUserIds] = useState([]);
-  const [newTeamUser, setNewTeamUser] = useState({ name: "", email: "", sectorId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true });
+  const emptyPermissionGroup = { name: "", allowedMenuItems: [], allowedConfigItems: [], active: true };
+  const [permissionGroupModal, setPermissionGroupModal] = useState(false);
+  const [editingGroupId, setEditingGroupId] = useState(null);
+  const [newPermissionGroup, setNewPermissionGroup] = useState(emptyPermissionGroup);
+
+  function openGroupModal(group = null) {
+    setEditingGroupId(group?.id || null);
+    setNewPermissionGroup(group ? { name: group.name, allowedMenuItems: group.allowedMenuItems || [], allowedConfigItems: group.allowedConfigItems || [], active: group.active !== false } : emptyPermissionGroup);
+    setPermissionGroupModal(true);
+  }
+
+  function savePermissionGroup(e) {
+    e.preventDefault();
+    if (!newPermissionGroup.name.trim()) return;
+    if (editingGroupId) {
+      setPermissionGroups((current) => current.map((g) => g.id === editingGroupId ? { ...g, ...newPermissionGroup } : g));
+    } else {
+      setPermissionGroups((current) => [...current, { id: crypto.randomUUID(), ...newPermissionGroup }]);
+    }
+    setPermissionGroupModal(false);
+    setEditingGroupId(null);
+  }
+
+  function deletePermissionGroup(id) {
+    setPermissionGroups((current) => current.filter((g) => g.id !== id));
+    setTeams?.((current) => ({
+      ...current,
+      users: (current.users || []).map((u) => u.permissionGroupId === id ? { ...u, permissionGroupId: "" } : u),
+    }));
+  }
+
+  const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
+  const [newTeamUser, setNewTeamUser] = useState(emptyTeamUser);
+  const [newMunicipality, setNewMunicipality] = useState({ name: "", state: "", active: true });
+  const [editingMunicipalityId, setEditingMunicipalityId] = useState(null);
+  const [municipalitySaving, setMunicipalitySaving] = useState(false);
+  const [municipalitySaveStatus, setMunicipalitySaveStatus] = useState("");
+  const [brazilStates, setBrazilStates] = useState(brazilStatesFallback);
+  const [brazilMunicipalities, setBrazilMunicipalities] = useState([]);
+  const [brazilLocationStatus, setBrazilLocationStatus] = useState("");
   const [editingTeamUserId, setEditingTeamUserId] = useState(null);
   const [userModal, setUserModal] = useState(false);
+  const [sectorPickerOpen, setSectorPickerOpen] = useState(false);
+  const [municipalityStateFilter, setMunicipalityStateFilter] = useState("");
+  const [userSaveError, setUserSaveError] = useState("");
   const [agendaForm, setAgendaForm] = useState(emptyAgendaForm);
   const [aiSaveStatus, setAiSaveStatus] = useState("");
+  const [whatsappSettings, setWhatsappSettings] = useState(initialWhatsappSettings);
+  const [whatsappSaveStatus, setWhatsappSaveStatus] = useState("");
+  const [whatsappQuota, setWhatsappQuota] = useState(initialWhatsappQuota);
+  const [whatsappQuotaSaveStatus, setWhatsappQuotaSaveStatus] = useState("");
   const [singleDate, setSingleDate] = useState("");
   const [singleVacancies, setSingleVacancies] = useState("20");
   const [recurringStart, setRecurringStart] = useState("");
@@ -5401,6 +6545,7 @@ function ConfigView({
     { id: "species", label: "Espécies" },
     { id: "documents", label: "Documentos Solicitados" },
     { id: "ai", label: "IA" },
+    { id: "whatsapp", label: "WhatsApp" },
   ];
 
   useEffect(() => {
@@ -5411,10 +6556,99 @@ function ConfigView({
     setConfigTab(configArea);
   }, [configArea]);
 
+  useEffect(() => {
+    if (configModal !== "municipality") return;
+    let cancelled = false;
+    fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome")
+      .then((response) => {
+        if (!response.ok) throw new Error("Estados indisponíveis");
+        return response.json();
+      })
+      .then((states) => {
+        if (!cancelled && Array.isArray(states) && states.length) {
+          setBrazilStates(states);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setBrazilStates(brazilStatesFallback);
+      });
+    return () => { cancelled = true; };
+  }, [configModal]);
+
+  useEffect(() => {
+    if (configModal !== "municipality") return;
+    if (!newMunicipality.state) {
+      setBrazilMunicipalities([]);
+      setBrazilLocationStatus("");
+      return;
+    }
+    let cancelled = false;
+    setBrazilLocationStatus("Carregando municípios...");
+    fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${encodeURIComponent(newMunicipality.state)}/municipios?orderBy=nome`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Municípios indisponíveis");
+        return response.json();
+      })
+      .then((cities) => {
+        if (!cancelled) {
+          setBrazilMunicipalities(Array.isArray(cities) ? cities : []);
+          setBrazilLocationStatus("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setBrazilMunicipalities([]);
+          setBrazilLocationStatus("Não foi possível carregar os municípios. Digite manualmente.");
+        }
+      });
+    return () => { cancelled = true; };
+  }, [configModal, newMunicipality.state]);
+
   const selectedAiProvider = aiSettings.provider || "OpenAI";
   const selectedAiProviderConfig = aiProviderOptions[selectedAiProvider] || aiProviderOptions.OpenAI;
   const selectedAiModels = selectedAiProviderConfig.models || [];
   const selectedAiModel = selectedAiModels.includes(aiSettings.model) ? aiSettings.model : selectedAiModels[0] || "";
+  const configMunicipalityScopeId = selectedMunicipalityId || currentUser?.municipalityId || "";
+
+  useEffect(() => {
+    if (configArea !== "environment" || configTab !== "whatsapp") return;
+    if (!configMunicipalityScopeId) {
+      setWhatsappSettings(initialWhatsappSettings);
+      setWhatsappSaveStatus("Selecione um município para configurar o WhatsApp.");
+      setWhatsappQuota(initialWhatsappQuota);
+      setWhatsappQuotaSaveStatus("");
+      return;
+    }
+    let cancelled = false;
+    setWhatsappSaveStatus("Carregando configuração...");
+    api.getConfig(CONFIG_KEYS.whatsapp, configMunicipalityScopeId)
+      .then((value) => {
+        if (cancelled) return;
+        setWhatsappSettings({ ...initialWhatsappSettings, ...(value || {}) });
+        setWhatsappSaveStatus("");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWhatsappSettings(initialWhatsappSettings);
+        setWhatsappSaveStatus("");
+      });
+    api.getConfig(CONFIG_KEYS.whatsappQuota, configMunicipalityScopeId)
+      .then((value) => {
+        if (cancelled) return;
+        setWhatsappQuota({ ...initialWhatsappQuota, ...(value || {}) });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setWhatsappQuota(initialWhatsappQuota);
+      });
+    return () => { cancelled = true; };
+  }, [configArea, configTab, configMunicipalityScopeId]);
+
+  function matchesScopedConfigItem(item = {}, itemId = "") {
+    if (item.id !== itemId) return false;
+    if (!configMunicipalityScopeId) return true;
+    return getItemMunicipalityId(item) === configMunicipalityScopeId;
+  }
 
   useEffect(() => {
     if (!setAiSettings || !selectedAiModel) return;
@@ -5444,7 +6678,6 @@ function ConfigView({
         apiKey: "",
         hasApiKey: Boolean(saved?.value?.hasApiKey || nextSettings.apiKey || aiSettings.hasApiKey),
       };
-      localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(publicSettings));
       setAiSettings?.(publicSettings);
       setAiSaveStatus("Chave salva com sucesso.");
     } catch (err) {
@@ -5478,19 +6711,68 @@ function ConfigView({
         billingDueDate: payload.charged ? payload.billingDueDate || "" : "",
         active: payload.active !== false,
         overrideDailyLimit: Boolean(payload.overrideDailyLimit),
+        municipalityId: payload.municipalityId || configMunicipalityScopeId,
         documents: selectedDocuments,
       },
     ]);
   }
 
+  async function saveWhatsappSettings() {
+    if (!configMunicipalityScopeId) {
+      setWhatsappSaveStatus("Selecione um município antes de salvar.");
+      return;
+    }
+    const nextSettings = {
+      ...whatsappSettings,
+      active: Boolean(whatsappSettings.active),
+      provider: whatsappSettings.provider || "cloud_api",
+      phoneNumberId: whatsappSettings.phoneNumberId || "",
+      confirmationTemplate: whatsappSettings.confirmationTemplate || "confirmacao_agenda_castracao",
+      languageCode: whatsappSettings.languageCode || "pt_BR",
+      accessToken: whatsappSettings.accessToken || "",
+    };
+    setWhatsappSaveStatus("Salvando configuração...");
+    try {
+      const saved = await api.setConfig(CONFIG_KEYS.whatsapp, nextSettings, configMunicipalityScopeId);
+      setWhatsappSettings({
+        ...nextSettings,
+        ...(saved?.value || {}),
+        accessToken: "",
+        hasAccessToken: Boolean(saved?.value?.hasAccessToken || nextSettings.accessToken || whatsappSettings.hasAccessToken),
+      });
+      setWhatsappSaveStatus("Configuração salva com sucesso.");
+    } catch (err) {
+      setWhatsappSaveStatus(`Não foi possível salvar: ${err.message}`);
+    }
+  }
+
+  async function saveWhatsappQuota() {
+    if (!configMunicipalityScopeId) {
+      setWhatsappQuotaSaveStatus("Selecione um município antes de salvar.");
+      return;
+    }
+    setWhatsappQuotaSaveStatus("Salvando...");
+    try {
+      const saved = await api.setConfig(CONFIG_KEYS.whatsappQuota, {
+        plan: Number(whatsappQuota.plan) || 0,
+        contractStart: whatsappQuota.contractStart || "",
+        contractEnd: whatsappQuota.contractEnd || "",
+      }, configMunicipalityScopeId);
+      setWhatsappQuota((current) => ({ ...current, ...(saved?.value || {}) }));
+      setWhatsappQuotaSaveStatus("Cota salva com sucesso.");
+    } catch (err) {
+      setWhatsappQuotaSaveStatus(`Não foi possível salvar: ${err.message}`);
+    }
+  }
+
   function patchRequestType(typeId, patch) {
-    setRequestTypes?.((current) => current.map((type) => (type.id === typeId ? { ...type, ...patch } : type)));
+    setRequestTypes?.((current) => current.map((type) => (matchesScopedConfigItem(type, typeId) ? { ...type, ...patch } : type)));
   }
 
   function toggleRequestDocument(typeId, document) {
     setRequestTypes?.((current) =>
       current.map((type) => {
-        if (type.id !== typeId) return type;
+        if (!matchesScopedConfigItem(type, typeId)) return type;
         const documents = type.documents || [];
         const exists = documents.some((item) => item.id === document.id);
         return {
@@ -5512,17 +6794,18 @@ function ConfigView({
       modelHint: payload.modelHint || "",
       aiCriteria: payload.aiCriteria || "",
       rejectionRules: payload.rejectionRules || "",
+      municipalityId: payload.municipalityId || configMunicipalityScopeId,
     };
     const normalizedDocument = normalizeDocumentType(nextDocument);
     if (editingDocumentId) {
       setDocumentTypes?.((current) =>
-        current.map((document) => (document.id === editingDocumentId ? { ...document, ...normalizedDocument, id: document.id } : document)),
+        current.map((document) => (matchesScopedConfigItem(document, editingDocumentId) ? { ...document, ...normalizedDocument, id: document.id } : document)),
       );
       setRequestTypes?.((current) =>
         current.map((type) => ({
           ...type,
           documents: (type.documents || []).map((document) =>
-            document.id === editingDocumentId ? { ...document, ...normalizedDocument, id: document.id } : document,
+            matchesScopedConfigItem(document, editingDocumentId) ? { ...document, ...normalizedDocument, id: document.id } : document,
           ),
         })),
       );
@@ -5532,21 +6815,21 @@ function ConfigView({
   }
 
   function patchDocumentType(documentId, patch) {
-    setDocumentTypes?.((current) => current.map((document) => (document.id === documentId ? normalizeDocumentType({ ...document, ...patch }) : document)));
+    setDocumentTypes?.((current) => current.map((document) => (matchesScopedConfigItem(document, documentId) ? normalizeDocumentType({ ...document, ...patch }) : document)));
     setRequestTypes?.((current) =>
       current.map((type) => ({
         ...type,
-        documents: (type.documents || []).map((document) => (document.id === documentId ? normalizeDocumentType({ ...document, ...patch }) : document)),
+        documents: (type.documents || []).map((document) => (matchesScopedConfigItem(document, documentId) ? normalizeDocumentType({ ...document, ...patch }) : document)),
       })),
     );
   }
 
   function deleteDocumentType(documentId) {
-    setDocumentTypes?.((current) => current.filter((document) => document.id !== documentId));
+    setDocumentTypes?.((current) => current.filter((document) => !matchesScopedConfigItem(document, documentId)));
     setRequestTypes?.((current) =>
       current.map((type) => ({
         ...type,
-        documents: (type.documents || []).filter((document) => document.id !== documentId),
+        documents: (type.documents || []).filter((document) => !matchesScopedConfigItem(document, documentId)),
       })),
     );
   }
@@ -5556,9 +6839,10 @@ function ConfigView({
       id: `especie_${Date.now()}`,
       name: payload.name || "",
       active: payload.active !== false,
+      municipalityId: payload.municipalityId || configMunicipalityScopeId,
     };
     setSpeciesOptions?.((current) => editingSpeciesId
-      ? current.map((species) => (species.id === editingSpeciesId ? { ...species, ...nextSpecies, id: species.id } : species))
+      ? current.map((species) => (matchesScopedConfigItem(species, editingSpeciesId) ? { ...species, ...nextSpecies, id: species.id } : species))
       : [...current, nextSpecies]);
   }
 
@@ -5599,6 +6883,7 @@ function ConfigView({
       weightEnd: payload.weightEnd || "",
       weightUnit: payload.weightUnit || "kg",
       active: payload.active !== false,
+      municipalityId: payload.municipalityId || configMunicipalityScopeId,
     };
     setSizeOptions?.((current) => [
       ...current,
@@ -5617,7 +6902,7 @@ function ConfigView({
     if (editingSizeId) {
       setSizeOptions?.((current) =>
         current.map((size) =>
-          size.id === editingSizeId ? { ...size, ...nextSize, description: formatSizeRange(nextSize) } : size,
+          matchesScopedConfigItem(size, editingSizeId) ? { ...size, ...nextSize, description: formatSizeRange(nextSize) } : size,
         ),
       );
       return;
@@ -5643,11 +6928,91 @@ function ConfigView({
   }
 
   function patchListItem(setter, itemId, patch) {
-    setter?.((current) => current.map((item) => (item.id === itemId ? { ...item, ...patch } : item)));
+    setter?.((current) => current.map((item) => (matchesScopedConfigItem(item, itemId) ? { ...item, ...patch } : item)));
   }
 
   function deleteListItem(setter, itemId) {
-    setter?.((current) => current.filter((item) => item.id !== itemId));
+    setter?.((current) => current.filter((item) => !matchesScopedConfigItem(item, itemId)));
+  }
+
+  function openMunicipalityModal(municipality = null) {
+    if (municipality) {
+      setEditingMunicipalityId(municipality.id);
+      setNewMunicipality({
+        name: municipality.name || "",
+        state: municipality.state || "",
+        active: municipality.active !== false,
+      });
+    } else {
+      setEditingMunicipalityId(null);
+      setNewMunicipality({ name: "", state: "", active: true });
+    }
+    setConfigModal("municipality");
+  }
+
+  async function saveMunicipality() {
+    if (!newMunicipality.name.trim()) {
+      setMunicipalitySaveStatus("Selecione ou informe o município.");
+      return;
+    }
+    if (municipalitySaving) return;
+    setMunicipalitySaving(true);
+    setMunicipalitySaveStatus(editingMunicipalityId ? "Salvando município..." : "Criando município e usuário padrão...");
+    try {
+      if (editingMunicipalityId) {
+        await patchMunicipality(editingMunicipalityId, newMunicipality);
+        setEditingMunicipalityId(null);
+        setNewMunicipality({ name: "", state: "", active: true });
+        setMunicipalitySaveStatus("");
+        setConfigModal(null);
+        return;
+      }
+      const created = await api.createMunicipality(newMunicipality);
+      const refreshed = await api.getMunicipalitiesAdmin().catch(() => null);
+      setMunicipalities?.((current) => (
+        Array.isArray(refreshed)
+          ? refreshed
+          : [created, ...current.filter((item) => item.id !== created.id)]
+      ));
+      if (created.defaultUser?.email) {
+        const defaultTeamUser = defaultMunicipalityUserToTeamUser(created.defaultUser, created.id);
+        const defaultSector = created.defaultSector
+          ? { ...created.defaultSector, municipalityId: created.defaultSector.municipalityId || created.id }
+          : null;
+        setTeams?.((current) => ({
+          ...current,
+          sectors: defaultSector
+            ? [
+              defaultSector,
+              ...(current.sectors || []).filter((sector) => !(sector.id === defaultSector.id && getItemMunicipalityId(sector) === created.id)),
+            ]
+            : current.sectors,
+          users: [
+            defaultTeamUser,
+            ...(current.users || []).filter((user) => user.email !== defaultTeamUser.email),
+          ],
+        }));
+      }
+      setNewMunicipality({ name: "", state: "", active: true });
+      setMunicipalitySaveStatus("");
+      setConfigModal(null);
+    } catch (err) {
+      console.error("Erro ao criar municipio:", err);
+      setMunicipalitySaveStatus(err.message || "Não foi possível salvar o município.");
+    } finally {
+      setMunicipalitySaving(false);
+    }
+  }
+
+  async function patchMunicipality(municipalityId, patch) {
+    try {
+      const updated = await api.updateMunicipality(municipalityId, patch);
+      setMunicipalities?.((current) => current.map((item) => (item.id === municipalityId ? updated : item)));
+      return updated;
+    } catch (err) {
+      console.error("Erro ao atualizar municipio:", err);
+      throw err;
+    }
   }
 
   function createSector() {
@@ -5656,12 +7021,14 @@ function ConfigView({
       setTeams?.((current) => ({
         ...current,
         sectors: (current.sectors || []).map((sector) =>
-          sector.id === editingSectorId ? { ...sector, name: newSectorName.trim(), active: newSectorActive } : sector,
+          matchesScopedConfigItem(sector, editingSectorId) ? { ...sector, name: newSectorName.trim(), active: newSectorActive } : sector,
         ),
         users: (current.users || []).map((u) => {
-          if (pendingSectorUserIds.includes(u.id)) return { ...u, sectorId: editingSectorId };
-          if (u.sectorId === editingSectorId) return { ...u, sectorId: "" };
-          return u;
+          if (configMunicipalityScopeId && getItemMunicipalityId(u) !== configMunicipalityScopeId) return u;
+          const nextSectorIds = pendingSectorUserIds.includes(u.id)
+            ? [...new Set([...getUserSectorIds(u), editingSectorId])]
+            : getUserSectorIds(u).filter((sectorId) => sectorId !== editingSectorId);
+          return { ...u, sectorIds: nextSectorIds, sectorId: nextSectorIds[0] || "" };
         }),
       }));
       setEditingSectorId(null);
@@ -5673,8 +7040,12 @@ function ConfigView({
     const newId = `setor_${Date.now()}`;
     setTeams?.((current) => ({
       ...current,
-      sectors: [...(current.sectors || []), { id: newId, name: newSectorName.trim(), active: newSectorActive }],
-      users: (current.users || []).map((u) => pendingSectorUserIds.includes(u.id) ? { ...u, sectorId: newId } : u),
+      sectors: [...(current.sectors || []), { id: newId, name: newSectorName.trim(), active: newSectorActive, municipalityId: configMunicipalityScopeId }],
+      users: (current.users || []).map((u) => {
+        if (!pendingSectorUserIds.includes(u.id)) return u;
+        const nextSectorIds = [...new Set([...getUserSectorIds(u), newId])];
+        return { ...u, sectorIds: nextSectorIds, sectorId: nextSectorIds[0] || "" };
+      }),
     }));
     setNewSectorName("");
     setNewSectorActive(true);
@@ -5686,7 +7057,7 @@ function ConfigView({
       setEditingSectorId(sector.id);
       setNewSectorName(sector.name || "");
       setNewSectorActive(sector.active !== false);
-      setPendingSectorUserIds((teams.users || []).filter((u) => u.sectorId === sector.id).map((u) => u.id));
+      setPendingSectorUserIds((teams.users || []).filter((u) => userBelongsToSector(u, sector.id)).map((u) => u.id));
     } else {
       setEditingSectorId(null);
       setNewSectorName("");
@@ -5699,28 +7070,53 @@ function ConfigView({
   function patchSector(sectorId, patch) {
     setTeams?.((current) => ({
       ...current,
-      sectors: (current.sectors || []).map((sector) => (sector.id === sectorId ? { ...sector, ...patch } : sector)),
+      sectors: (current.sectors || []).map((sector) => (matchesScopedConfigItem(sector, sectorId) ? { ...sector, ...patch } : sector)),
     }));
   }
 
   function deleteSector(sectorId) {
     setTeams?.((current) => ({
       ...current,
-      sectors: (current.sectors || []).filter((sector) => sector.id !== sectorId),
-      users: (current.users || []).map((user) => (user.sectorId === sectorId ? { ...user, sectorId: "" } : user)),
+      sectors: (current.sectors || []).filter((sector) => !matchesScopedConfigItem(sector, sectorId)),
+      users: (current.users || []).map((user) => {
+        if (configMunicipalityScopeId && getItemMunicipalityId(user) !== configMunicipalityScopeId) return user;
+        const nextSectorIds = getUserSectorIds(user).filter((id) => id !== sectorId);
+        return { ...user, sectorIds: nextSectorIds, sectorId: nextSectorIds[0] || "" };
+      }),
     }));
   }
 
-  function createTeamUser() {
-    if (!newTeamUser.name.trim() || !newTeamUser.email.trim()) return;
+  async function createTeamUser() {
+    if (!newTeamUser.name.trim() || !newTeamUser.email.trim()) return false;
+    const sectorIds = Array.isArray(newTeamUser.sectorIds) ? newTeamUser.sectorIds : [];
+    const municipalityId = isGlobalRole(currentUser?.role)
+      ? newTeamUser.municipalityId
+      : currentUser?.municipalityId || newTeamUser.municipalityId;
+    if (!municipalityId) return false;
+    let authUser = null;
+    try {
+      authUser = await api.upsertAuthUser({
+        name: newTeamUser.name.trim(),
+        email: newTeamUser.email.trim(),
+        password: newTeamUser.senha,
+        role: newTeamUser.role,
+        municipalityId,
+      });
+    } catch (err) {
+      setUserSaveError(err.message || "Erro ao salvar usuário. Verifique os dados e tente novamente.");
+      return false;
+    }
     if (editingTeamUserId) {
       setTeams?.((current) => ({
         ...current,
         users: (current.users || []).map((user) => user.id === editingTeamUserId ? {
           ...user,
+          id: authUser?.id || user.id,
           name: newTeamUser.name.trim(),
           email: newTeamUser.email.trim(),
-          sectorId: newTeamUser.sectorId,
+          sectorIds,
+          sectorId: sectorIds[0] || "",
+          municipalityId,
           role: newTeamUser.role,
           matricula: newTeamUser.matricula.trim(),
           cargo: newTeamUser.cargo.trim(),
@@ -5728,18 +7124,20 @@ function ConfigView({
         } : user),
       }));
       setEditingTeamUserId(null);
-      setNewTeamUser({ name: "", email: "", sectorId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true });
-      return;
+      setNewTeamUser(emptyTeamUser);
+      return true;
     }
     setTeams?.((current) => ({
       ...current,
       users: [
         ...(current.users || []),
         {
-          id: `usuario_${Date.now()}`,
+          id: authUser?.id || `usuario_${Date.now()}`,
           name: newTeamUser.name.trim(),
           email: newTeamUser.email.trim(),
-          sectorId: newTeamUser.sectorId,
+          sectorIds,
+          sectorId: sectorIds[0] || "",
+          municipalityId,
           role: newTeamUser.role,
           matricula: newTeamUser.matricula.trim(),
           cargo: newTeamUser.cargo.trim(),
@@ -5747,16 +7145,22 @@ function ConfigView({
         },
       ],
     }));
-    setNewTeamUser({ name: "", email: "", sectorId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true });
+    setNewTeamUser(emptyTeamUser);
+    return true;
   }
 
   function openTeamUserModal(user = null) {
+    const getMunState = (munId) => municipalities.find((m) => m.id === munId)?.state || "";
+    const defaultMunId = isGlobalRole(currentUser?.role)
+      ? (user?.municipalityId || selectedMunicipalityId || currentUser?.municipalityId || municipalities[0]?.id || "")
+      : (currentUser?.municipalityId || "");
     if (user) {
       setEditingTeamUserId(user.id);
       setNewTeamUser({
         name: user.name || "",
         email: user.email || "",
-        sectorId: user.sectorId || "",
+        sectorIds: getUserSectorIds(user),
+        municipalityId: defaultMunId,
         role: user.role || "Analista",
         matricula: user.matricula || "",
         cargo: user.cargo || "",
@@ -5765,8 +7169,9 @@ function ConfigView({
       });
     } else {
       setEditingTeamUserId(null);
-      setNewTeamUser({ name: "", email: "", sectorId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true });
+      setNewTeamUser({ ...emptyTeamUser, municipalityId: defaultMunId });
     }
+    setMunicipalityStateFilter(getMunState(defaultMunId));
     setUserModal(true);
   }
 
@@ -5867,30 +7272,55 @@ function ConfigView({
     setAgendaForm((current) => ({ ...current, [field]: value }));
   }
 
+  function patchAgendaSlot(index, field, value) {
+    setAgendaForm((current) => ({
+      ...current,
+      slots: (current.slots || []).map((slot, slotIndex) => (
+        slotIndex === index ? { ...slot, [field]: value } : slot
+      )),
+    }));
+  }
+
+  function addAgendaSlot() {
+    setAgendaForm((current) => ({
+      ...current,
+      slots: [...(current.slots || []), { time: "", vacancies: "" }],
+    }));
+  }
+
+  function removeAgendaSlot(index) {
+    setAgendaForm((current) => {
+      const nextSlots = (current.slots || []).filter((_, slotIndex) => slotIndex !== index);
+      return { ...current, slots: nextSlots.length ? nextSlots : [{ time: "08:00", vacancies: "10" }] };
+    });
+  }
+
   function useAgendaCurrentLocation() {
     if (!navigator.geolocation) {
       setAgendaLocationStatus("Localizacao atual indisponivel neste navegador.");
       return;
     }
 
-    setAgendaLocationStatus("Solicitando localizacao atual...");
+    setAgendaLocationStatus("Solicitando localização atual...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setAgendaForm((current) => ({
           ...current,
           latitude: position.coords.latitude.toFixed(6),
           longitude: position.coords.longitude.toFixed(6),
-          locationName: current.locationName || "Localizacao atual",
+          locationName: current.locationName || "Localização atual",
         }));
-        setAgendaLocationStatus("Localizacao atual registrada.");
+        setAgendaLocationStatus("Localização atual registrada.");
       },
-      () => setAgendaLocationStatus("Nao foi possivel obter a localizacao atual."),
+      () => setAgendaLocationStatus("Não foi possível obter a localização atual."),
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
     );
   }
 
   function openAgendaModal(rule = null) {
     if (rule) {
+      const startDate = toInputDate(rule.start);
+      const fallbackWeekday = startDate ? new Date(`${startDate}T12:00:00`).getDay() : 1;
       setEditingScheduleRuleId(rule.id);
       setAgendaForm({
         ...emptyAgendaForm,
@@ -5900,37 +7330,48 @@ function ConfigView({
         kind: rule.kind || "Agenda",
         type: rule.type || "Recorrência",
         repeatEvery: String(rule.repeatEvery || "1"),
-        weekdays: rule.weekdays || [],
-        start: toInputDate(rule.start),
+        weekdays: Array.isArray(rule.weekdays) && rule.weekdays.length ? rule.weekdays : [fallbackWeekday],
+        start: startDate,
         end: toInputDate(rule.end || rule.start),
         time: rule.time || "08:00",
         vacancies: String(rule.vacancies || "20"),
-        municipalityId: rule.municipalityId || "",
+        slots: normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies).map((slot) => ({ ...slot, vacancies: String(slot.vacancies) })),
+        municipalityId: rule.municipalityId || currentUser?.municipalityId || municipalities[0]?.id || "",
         locationName: rule.locationName || "",
+        locationAddress: rule.locationAddress || "",
         addressUrl: rule.addressUrl || "",
         latitude: rule.latitude || "",
         longitude: rule.longitude || "",
       });
     } else {
       setEditingScheduleRuleId(null);
-      setAgendaForm(emptyAgendaForm);
+      setAgendaForm({ ...emptyAgendaForm, municipalityId: currentUser?.municipalityId || municipalities[0]?.id || "" });
     }
+    setAgendaSaveStatus("");
     setConfigModal("agenda");
   }
 
   async function createScheduleFromModal(event) {
     event.preventDefault();
+    if (agendaSaving) return;
     const isRecurring = normalizeText(agendaForm.type) === "recorrencia";
-    if (!agendaForm.description.trim() || !agendaForm.start || (isRecurring && (!agendaForm.end || agendaForm.weekdays.length === 0))) {
+    if (!agendaForm.description.trim() || !agendaForm.start || !agendaForm.municipalityId || (isRecurring && (!agendaForm.end || agendaForm.weekdays.length === 0))) {
+      setAgendaSaveStatus("Preencha os dados obrigatórios da agenda antes de salvar.");
       return;
     }
 
+    setAgendaSaving(true);
+    setAgendaSaveStatus("Salvando agenda...");
     const start = new Date(`${agendaForm.start}T12:00:00`);
     const end = new Date(`${isRecurring ? agendaForm.end : agendaForm.start}T12:00:00`);
     const repeatEvery = Math.max(Number(agendaForm.repeatEvery) || 1, 1);
-    const vacancies = Math.max(Number(agendaForm.vacancies) || 0, 0);
+    const slots = normalizeScheduleSlots(agendaForm.slots, agendaForm.time, agendaForm.vacancies);
+    const vacancies = sumScheduleSlotsVacancies(slots);
+    const startTime = slots[0]?.time || agendaForm.time;
     const municipality = municipalities.find((item) => item.id === agendaForm.municipalityId);
-    const scheduleRuleId = editingScheduleRuleId || `agenda_${Date.now()}`;
+    const currentEditingRuleId = editingScheduleRuleId;
+    const scheduleRuleId = currentEditingRuleId || `agenda_${Date.now()}`;
+    const existingRule = scheduleRules.find((rule) => rule.id === scheduleRuleId);
     const nextDays = [];
 
     for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
@@ -5943,14 +7384,16 @@ function ConfigView({
           date: toScheduleDate(value),
           weekday: getWeekdayLabel(value),
           vacancies,
+          slots,
           active: agendaForm.active && !agendaForm.unavailable,
           scheduleRuleId,
           description: agendaForm.description.trim(),
-          startTime: agendaForm.time,
+          startTime,
           kind: agendaForm.kind,
           municipalityId: agendaForm.municipalityId,
           municipalityName: municipality ? `${municipality.name}/${municipality.state}` : "",
           locationName: agendaForm.locationName,
+          locationAddress: agendaForm.locationAddress,
           addressUrl: agendaForm.addressUrl,
           latitude: agendaForm.latitude,
           longitude: agendaForm.longitude,
@@ -5961,7 +7404,7 @@ function ConfigView({
     const nextRule = {
       id: scheduleRuleId,
       description: agendaForm.description.trim(),
-      createdAt: new Date().toLocaleString("pt-BR"),
+      createdAt: existingRule?.createdAt || new Date().toLocaleString("pt-BR"),
       active: agendaForm.active && !agendaForm.unavailable,
       unavailable: agendaForm.unavailable,
       type: agendaForm.type,
@@ -5970,52 +7413,61 @@ function ConfigView({
       weekdays: isRecurring ? agendaForm.weekdays : [start.getDay()],
       start: toScheduleDate(agendaForm.start),
       end: toScheduleDate(isRecurring ? agendaForm.end : agendaForm.start),
-      time: agendaForm.time,
+      time: startTime,
       vacancies,
+      slots,
       municipalityId: agendaForm.municipalityId,
       municipalityName: municipality ? `${municipality.name}/${municipality.state}` : "",
       locationName: agendaForm.locationName,
+      locationAddress: agendaForm.locationAddress,
       addressUrl: agendaForm.addressUrl,
       latitude: agendaForm.latitude,
       longitude: agendaForm.longitude,
     };
 
-    setScheduleRules?.((current) => editingScheduleRuleId
-      ? current.map((rule) => (rule.id === editingScheduleRuleId ? nextRule : rule))
-      : [nextRule, ...current]);
-    const saved = [];
-    for (const day of nextDays) {
-      try {
-        const existing = scheduleDays.find((d) => d.date === day.date);
-        if (existing?.id) {
-          const updated = await api.updateScheduleDay(existing.id, { vacancies: day.vacancies });
-          saved.push({ ...normalizeScheduleDay(updated), scheduleRuleId });
-        } else {
-          const created = await api.createScheduleDay({ ...day, scheduleRuleId });
-          saved.push({ ...normalizeScheduleDay(created), scheduleRuleId });
-        }
-      } catch (err) {
-        console.error("Erro ao salvar dia de regra:", err);
-      }
+    const nextScheduleRules = currentEditingRuleId
+      ? scheduleRules.map((rule) => (rule.id === currentEditingRuleId ? nextRule : rule))
+      : [nextRule, ...scheduleRules];
+    const scopedNextScheduleRules = nextScheduleRules.filter((rule) => getItemMunicipalityId(rule) === agendaForm.municipalityId);
+
+    let saved = [];
+    try {
+      await api.setConfig(CONFIG_KEYS.scheduleRules, scopedNextScheduleRules, agendaForm.municipalityId);
+      const createdDays = await api.bulkCreateScheduleDays({
+        municipalityId: agendaForm.municipalityId,
+        replaceRuleId: scheduleRuleId,
+        days: nextDays,
+      });
+      saved = (Array.isArray(createdDays) ? createdDays : []).map((day) => ({ ...normalizeScheduleDay(day), scheduleRuleId }));
+    } catch (err) {
+      console.error("Erro ao salvar dias da regra em lote:", err);
+      setAgendaSaveStatus(err?.message || "Não foi possível salvar a agenda.");
+      setAgendaSaving(false);
+      return;
     }
 
+    setScheduleRules?.(nextScheduleRules);
     setScheduleDays?.((current) => {
-      const keptDays = editingScheduleRuleId ? current.filter((day) => day.scheduleRuleId !== editingScheduleRuleId) : current;
+      const keptDays = currentEditingRuleId ? current.filter((day) => day.scheduleRuleId !== currentEditingRuleId) : current;
       const byDate = new Map(keptDays.map((day) => [day.date, day]));
       saved.forEach((day) => byDate.set(day.date, day));
       return Array.from(byDate.values()).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date));
     });
-    setAgendaForm(emptyAgendaForm);
-    setEditingScheduleRuleId(null);
+    setEditingScheduleRuleId(scheduleRuleId);
+    setActive?.("config");
+    setConfigTab("agenda");
     setConfigModal(null);
+    setAgendaSaving(false);
+    setAgendaSaveStatus("");
   }
 
   function formatScheduleWeekdays(weekdays) {
-    const names = ["domingo", "segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado"];
+    const names = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
     return weekdays.map((weekday) => names[weekday]).join(", ");
   }
 
   const filteredRequestTypes = filterByConfigStatus(requestTypes);
+  const filteredMunicipalities = filterByConfigStatus(municipalities);
   const filteredScheduleRules = filterByConfigStatus(scheduleRules);
   const filteredSizes = filterByConfigStatus(sizeOptions);
   const filteredSpecies = filterByConfigStatus(speciesOptions);
@@ -6024,6 +7476,7 @@ function ConfigView({
   const filteredTeamUsers = filterByConfigStatus(teams.users || []);
   const currentConfigItems = {
     requests: requestTypes,
+    municipalities,
     agenda: scheduleRules,
     sizes: sizeOptions,
     species: speciesOptions,
@@ -6032,10 +7485,18 @@ function ConfigView({
     ai: [{ id: "ai", active: Boolean(aiSettings.active) }],
     documents: documentTypes,
   }[currentConfigKey] || [];
+  const activeMunicipalities = municipalities.filter((municipality) => municipality.active !== false);
+  const selectedMunicipality = activeMunicipalities.find((municipality) => municipality.id === newTeamUser.municipalityId);
+  const activeTeamSectors = (teams.sectors || []).filter((sector) => sector.active !== false);
+  const selectedTeamSectorIds = newTeamUser.sectorIds || [];
+  const selectedTeamSectors = activeTeamSectors.filter((sector) => selectedTeamSectorIds.includes(sector.id));
+  const availableTeamSectors = activeTeamSectors.filter((sector) => !selectedTeamSectorIds.includes(sector.id));
   const configAreaTitle = {
     environment: "Configurar Ambiente",
+    municipalities: "Criar Municípios",
     users: "Criar Usuários",
     sectors: "Criar Setores",
+    permissions: "Permissões",
   }[configArea] || "Configurações";
 
   return (
@@ -6055,6 +7516,45 @@ function ConfigView({
               activeCount={currentConfigItems.filter((item) => item.active !== false).length}
               inactiveCount={currentConfigItems.filter((item) => item.active === false).length}
             />
+          </div>
+        </div>
+      )}
+
+      {configArea === "municipalities" && isGlobalRole(currentUser?.role) && (
+        <div className="panel wide">
+          <ConfigSectionHeader title="Municípios" createLabel="Cadastrar município" onCreate={() => openMunicipalityModal()}>
+            <ConfigStatusFilter
+              value={configStatusFilter}
+              onChange={setConfigStatusFilter}
+              activeCount={municipalities.filter((item) => item.active !== false).length}
+              inactiveCount={municipalities.filter((item) => item.active === false).length}
+            />
+          </ConfigSectionHeader>
+          <div className="config-editor-grid">
+            {filteredMunicipalities.length === 0 && <EmptyState title="Nenhum município cadastrado" text="Cadastre um município para liberar um ambiente próprio." />}
+            {filteredMunicipalities.map((municipality) => (
+              <article className="request-type-card config-summary-card" key={municipality.id}>
+                <div className="config-card-title">
+                  <strong>{municipality.name}</strong>
+                  <small className={municipality.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                    {municipality.active === false ? "Inativo" : "Ativo"}
+                  </small>
+                </div>
+                <div className="config-card-details">
+                  <span>{municipality.state || "UF não informada"}</span>
+                </div>
+                <ToggleSwitch
+                  label="Município ativo"
+                  checked={municipality.active !== false}
+                  onChange={(checked) => patchMunicipality(municipality.id, { active: checked })}
+                  onText="Ativo"
+                  offText="Inativo"
+                />
+                <div className="form-actions">
+                  <button className="ghost-button" type="button" onClick={() => openMunicipalityModal(municipality)}>Editar</button>
+                </div>
+              </article>
+            ))}
           </div>
         </div>
       )}
@@ -6111,7 +7611,8 @@ function ConfigView({
                 <div className="config-card-details">
                   <span>{rule.kind || "Agenda"} - {rule.type}</span>
                   <span>{rule.start} a {rule.end}</span>
-                  <span>{rule.time}h - {rule.vacancies} vagas/dia</span>
+                  <span>{normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies).map((slot) => `${slot.time}h (${slot.vacancies})`).join(" | ")}</span>
+                  <span>Total: {sumScheduleSlotsVacancies(rule.slots, rule.time, rule.vacancies)} vagas/dia</span>
                   {rule.municipalityName && <span>{rule.municipalityName}</span>}
                   {rule.locationName && <span>{rule.locationName}</span>}
                   {normalizeText(rule.type) === "recorrencia" && <span>{formatScheduleWeekdays(rule.weekdays)}</span>}
@@ -6155,7 +7656,7 @@ function ConfigView({
                 <EmptyState title="Nenhum setor cadastrado" text="Crie setores para organizar usuários e atribuições internas." />
               )}
               {filteredSectors.map((sector) => {
-                const sectorUsers = (teams.users || []).filter((u) => u.sectorId === sector.id);
+                const sectorUsers = (teams.users || []).filter((u) => userBelongsToSector(u, sector.id));
                 return (
                   <article className="request-type-card config-summary-card" key={sector.id}>
                     <div className="config-card-title">
@@ -6167,6 +7668,9 @@ function ConfigView({
                     <div className="config-card-details">
                       <span>{sectorUsers.length} usuário(s) vinculado(s)</span>
                       {sectorUsers.length > 0 && <span>{sectorUsers.map((u) => u.name).join(", ")}</span>}
+                      {sector.defaultMunicipalitySector && (
+                        <span className="default-user-note">Setor padrão</span>
+                      )}
                     </div>
                     <div className="form-actions">
                       <button className="ghost-button" type="button" onClick={() => openSectorModal(sector)}>Editar</button>
@@ -6182,7 +7686,7 @@ function ConfigView({
       {sectorModal && (
         <div className="modal-backdrop">
           <form className="workflow-modal" onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
-            <ModalHeader title={editingSectorId ? "Editar setor" : "Criar setor"} eyebrow={editingSectorId ? "Editar setor" : "Novo setor"} onClose={() => { setSectorModal(false); setEditingSectorId(null); }} />
+            <ModalHeader title={editingSectorId ? "Editar setor" : "Criar setor"} onClose={() => { setSectorModal(false); setEditingSectorId(null); }} />
             <div className="config-modal-options">
               <ConfigActiveToggle checked={newSectorActive} onChange={setNewSectorActive} />
             </div>
@@ -6202,12 +7706,93 @@ function ConfigView({
                         current.includes(u.id) ? current.filter((id) => id !== u.id) : [...current, u.id]
                       )}
                     />
-                    {u.name}{u.sectorId ? ` (setor atual: ${(teams.sectors || []).find((s) => s.id === u.sectorId)?.name || "outro"})` : ""}
+                    {u.name}{getUserSectorIds(u).length ? ` (setores atuais: ${getUserSectorNames(u, teams.sectors || [])})` : ""}
                   </label>
                 ))}
               </div>
             </label>
             <button className="primary-action" type="submit" disabled={!newSectorName.trim()}>{editingSectorId ? "Salvar" : "Criar setor"}</button>
+          </form>
+        </div>
+      )}
+
+      {configArea === "permissions" && (
+        <div className="panel wide">
+          <ConfigSectionHeader title="Grupos de permissão" createLabel="Criar grupo" onCreate={() => openGroupModal()}>
+          </ConfigSectionHeader>
+          <div className="config-editor-grid">
+            {permissionGroups.length === 0 && (
+              <EmptyState title="Nenhum grupo cadastrado" text="Crie grupos para definir o acesso de usuários às seções do sistema." />
+            )}
+            {permissionGroups.map((group) => {
+              const usersInGroup = (teams.users || []).filter((u) => u.permissionGroupId === group.id);
+              const inactive = group.active === false;
+              return (
+                <article className={"request-type-card config-summary-card" + (inactive ? " card-inactive" : "")} key={group.id}>
+                  <div className="config-card-title">
+                    <strong>{group.name}</strong>
+                    {inactive && <span className="status-badge status-inactive">Inativo</span>}
+                  </div>
+                  <div className="config-card-details">
+                    <span>{usersInGroup.length} usuário(s) vinculado(s)</span>
+                    <span>Menu: {(group.allowedMenuItems || []).map((id) => MENU_LABELS[id] || id).join(", ") || "Nenhum"}</span>
+                    <span>Config: {(group.allowedConfigItems || []).map((id) => CONFIG_ITEM_LABELS[id] || id).join(", ") || "Nenhum"}</span>
+                  </div>
+                  <div className="form-actions">
+                    <button className="ghost-button" type="button" onClick={() => openGroupModal(group)}>Editar</button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {permissionGroupModal && (
+        <div className="modal-backdrop permission-group-backdrop">
+          <form className="workflow-modal permission-group-modal" onSubmit={savePermissionGroup}>
+            <ModalHeader title={editingGroupId ? "Editar grupo" : "Criar grupo de permissão"} onClose={() => { setPermissionGroupModal(false); setEditingGroupId(null); }} />
+            <div className="config-modal-options">
+              <ConfigActiveToggle checked={newPermissionGroup.active !== false} onChange={(v) => setNewPermissionGroup((c) => ({ ...c, active: v }))} />
+            </div>
+            <Field label="Nome do grupo" value={newPermissionGroup.name} placeholder="Ex: Triagem, Veterinário..." onChange={(value) => setNewPermissionGroup((c) => ({ ...c, name: value }))} />
+            <div className="permission-section">
+              <p className="permission-section-title">Menu principal — abas visíveis</p>
+              {menu.map((item) => {
+                const active = (newPermissionGroup.allowedMenuItems || []).includes(item.id);
+                return (
+                  <div key={item.id} className="permission-toggle-row" onClick={() => setNewPermissionGroup((c) => {
+                    const list = c.allowedMenuItems || [];
+                    return { ...c, allowedMenuItems: list.includes(item.id) ? list.filter((i) => i !== item.id) : [...list, item.id] };
+                  })}>
+                    <span>{item.label}</span>
+                    <button className={active ? "toggle-switch is-on" : "toggle-switch"} type="button" role="switch" aria-checked={active} tabIndex={-1}>
+                      <span className="toggle-switch-knob" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="permission-section">
+              <p className="permission-section-title">Configurações — seções visíveis</p>
+              {configSidebarItems.filter((item) => !item.globalOnly).map((item) => {
+                const active = (newPermissionGroup.allowedConfigItems || []).includes(item.id);
+                return (
+                  <div key={item.id} className="permission-toggle-row" onClick={() => setNewPermissionGroup((c) => {
+                    const list = c.allowedConfigItems || [];
+                    return { ...c, allowedConfigItems: list.includes(item.id) ? list.filter((i) => i !== item.id) : [...list, item.id] };
+                  })}>
+                    <span>{item.label}</span>
+                    <button className={active ? "toggle-switch is-on" : "toggle-switch"} type="button" role="switch" aria-checked={active} tabIndex={-1}>
+                      <span className="toggle-switch-knob" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <button className="primary-action" type="submit" disabled={!newPermissionGroup.name.trim()}>
+              {editingGroupId ? "Salvar alterações" : "Criar grupo"}
+            </button>
           </form>
         </div>
       )}
@@ -6228,7 +7813,6 @@ function ConfigView({
                 <EmptyState title="Nenhum usuário cadastrado" text="Crie usuários internos e vincule cada um a um setor." />
               )}
               {filteredTeamUsers.map((user) => {
-                const sector = (teams.sectors || []).find((item) => item.id === user.sectorId);
                 return (
                 <article className="request-type-card config-summary-card" key={user.id}>
                   <div className="config-card-title">
@@ -6238,9 +7822,13 @@ function ConfigView({
                     </small>
                   </div>
                   <div className="config-card-details">
-                    <span>{user.email || "Email não informado"}</span>
-                    <span>{user.role || "Analista"}</span>
-                    <span>{sector?.name || "Sem setor"}</span>
+                    <span>E-mail: {user.email || "Não informado"}</span>
+                    <span>Cargo: {user.role || "Analista"}</span>
+                    <span>Município: {getMunicipalityLabel(user.municipalityId, municipalities)}</span>
+                    <span>Setores: {getUserSectorNames(user, teams.sectors || [])}</span>
+                    {user.defaultMunicipalityUser && (
+                      <span className="default-user-note">Usuário padrão</span>
+                    )}
                   </div>
                   <div className="form-actions">
                     <button className="ghost-button" type="button" onClick={() => openTeamUserModal(user)}>Editar</button>
@@ -6255,33 +7843,123 @@ function ConfigView({
 
       {userModal && (
         <div className="modal-backdrop">
-          <form className="workflow-modal" onSubmit={(e) => { e.preventDefault(); createTeamUser(); setUserModal(false); }}>
-            <ModalHeader title={editingTeamUserId ? "Editar usuário" : "Criar usuário"} eyebrow={editingTeamUserId ? "Editar usuário" : "Novo usuário"} onClose={() => { setUserModal(false); setEditingTeamUserId(null); }} />
+          <form className="workflow-modal" onSubmit={async (e) => { e.preventDefault(); setUserSaveError(""); if (await createTeamUser()) setUserModal(false); }}>
+            <ModalHeader title={editingTeamUserId ? "Editar usuário" : "Criar usuário"} onClose={() => { setUserModal(false); setEditingTeamUserId(null); setSectorPickerOpen(false); setUserSaveError(""); }} />
             <div className="config-modal-options">
               <ConfigActiveToggle checked={newTeamUser.active !== false} onChange={(active) => setNewTeamUser((c) => ({ ...c, active }))} />
             </div>
             <Field label="Nome" value={newTeamUser.name} placeholder="Nome completo" onChange={(value) => setNewTeamUser((c) => ({ ...c, name: value }))} />
             <Field label="Email" value={newTeamUser.email} placeholder="email@dominio.com" onChange={(value) => setNewTeamUser((c) => ({ ...c, email: value }))} />
+            {isGlobalRole(currentUser?.role) && (() => {
+              const munStates = [...new Set(activeMunicipalities.map((m) => m.state).filter(Boolean))].sort();
+              const filteredMuns = municipalityStateFilter
+                ? activeMunicipalities.filter((m) => m.state === municipalityStateFilter)
+                : activeMunicipalities;
+              return (
+                <div className="municipality-selects">
+                  <label className="field">
+                    <span>Estado</span>
+                    <select
+                      value={municipalityStateFilter}
+                      onChange={(e) => {
+                        setMunicipalityStateFilter(e.target.value);
+                        setNewTeamUser((c) => ({ ...c, municipalityId: "" }));
+                      }}
+                    >
+                      <option value="">Selecione o estado</option>
+                      {munStates.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field">
+                    <span>Município</span>
+                    <select
+                      value={newTeamUser.municipalityId}
+                      onChange={(e) => {
+                        const munId = e.target.value;
+                        const mun = activeMunicipalities.find((m) => String(m.id) === munId);
+                        setMunicipalityStateFilter(mun?.state || "");
+                        setNewTeamUser((c) => ({ ...c, municipalityId: munId }));
+                      }}
+                    >
+                      <option value="">Selecione o município</option>
+                      {filteredMuns.map((m) => (
+                        <option key={m.id} value={m.id}>{m.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              );
+            })()}
             <label className="field">
-              <span>Setor vinculado</span>
-              <select value={newTeamUser.sectorId} onChange={(e) => setNewTeamUser((c) => ({ ...c, sectorId: e.target.value }))}>
-                <option value="">Sem setor</option>
-                {(teams.sectors || []).filter((s) => s.active !== false).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
+              <span>Setores vinculados</span>
+              <div className="sector-input-box">
+                {selectedTeamSectors.map((sector) => (
+                  <span className="sector-tag" key={sector.id}>
+                    {sector.name}
+                    <button
+                      type="button"
+                      aria-label={`Remover ${sector.name}`}
+                      onClick={() => setNewTeamUser((current) => ({
+                        ...current,
+                        sectorIds: (current.sectorIds || []).filter((id) => id !== sector.id),
+                      }))}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))}
+                <button type="button" className="sector-add-btn" aria-label="Adicionar setor" onClick={() => setSectorPickerOpen(true)}>
+                  <Plus size={14} />
+                </button>
+              </div>
             </label>
             <Field label="N° Matrícula" value={newTeamUser.matricula} placeholder="Ex: 00123" onChange={(value) => setNewTeamUser((c) => ({ ...c, matricula: value }))} />
-            <label className="field">
-              <span>Cargo</span>
-              <select value={newTeamUser.role} onChange={(e) => setNewTeamUser((c) => ({ ...c, role: e.target.value }))}>
-                {roles.map((role) => <option key={role} value={role}>{role}</option>)}
-              </select>
-            </label>
+            <Field label="Cargo" value={newTeamUser.role} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, role: value }))} />
+            {permissionGroups.length > 0 && (
+              <label className="field">
+                <span>Grupo de permissões</span>
+                <select value={newTeamUser.permissionGroupId || ""} onChange={(e) => setNewTeamUser((c) => ({ ...c, permissionGroupId: e.target.value }))}>
+                  <option value="">Sem restrição (acesso completo)</option>
+                  {permissionGroups.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="field">
               <span>Senha de login</span>
-              <input type="password" value={newTeamUser.senha} placeholder="Senha inicial" onChange={(e) => setNewTeamUser((c) => ({ ...c, senha: e.target.value }))} />
+              <input type="password" value={newTeamUser.senha} placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"} onChange={(e) => setNewTeamUser((c) => ({ ...c, senha: e.target.value }))} />
             </label>
-            <button className="primary-action" type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim()}>{editingTeamUserId ? "Salvar" : "Criar usuário"}</button>
+            {userSaveError && <p className="form-error-msg">{userSaveError}</p>}
+            <button className="primary-action" type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
+              {editingTeamUserId ? "Salvar" : "Criar usuário"}
+            </button>
           </form>
+        </div>
+      )}
+
+      {userModal && sectorPickerOpen && (
+        <div className="modal-backdrop">
+          <div className="sector-picker-modal">
+            <ModalHeader title="Adicionar setor" onClose={() => setSectorPickerOpen(false)} />
+            <div className="sector-picker-list">
+              {availableTeamSectors.length === 0 && <small>Todos os setores ativos já estão vinculados.</small>}
+              {availableTeamSectors.map((sector) => (
+                <button
+                  key={sector.id}
+                  type="button"
+                  onClick={() => {
+                    setNewTeamUser((current) => ({ ...current, sectorIds: [...(current.sectorIds || []), sector.id] }));
+                    setSectorPickerOpen(false);
+                  }}
+                >
+                  {sector.name}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -6357,6 +8035,133 @@ function ConfigView({
         </div>
       )}
 
+      {configArea === "environment" && configTab === "whatsapp" && (
+        <div className="panel wide">
+          <PanelHeader title="WhatsApp por município" />
+          <div className="ai-settings-layout">
+            <article className="request-type-card ai-settings-card">
+              <ToggleSwitch
+                label="Notificar deferimento por WhatsApp"
+                checked={Boolean(whatsappSettings.active)}
+                onChange={(checked) => setWhatsappSettings((current) => ({ ...current, active: checked }))}
+                onText="Ativo"
+                offText="Inativo"
+              />
+              <label className="field">
+                <span>Provedor</span>
+                <select
+                  value={whatsappSettings.provider || "cloud_api"}
+                  onChange={(event) => setWhatsappSettings((current) => ({ ...current, provider: event.target.value }))}
+                >
+                  <option value="cloud_api">WhatsApp Cloud API</option>
+                  <option value="manual">Link manual / futuro</option>
+                </select>
+              </label>
+              <Field
+                label="ID do número remetente"
+                value={whatsappSettings.phoneNumberId || ""}
+                placeholder="Phone Number ID da Meta"
+                onChange={(value) => setWhatsappSettings((current) => ({ ...current, phoneNumberId: value }))}
+              />
+              <Field
+                label="Template de confirmação"
+                value={whatsappSettings.confirmationTemplate || ""}
+                placeholder="confirmacao_agenda_castracao"
+                onChange={(value) => setWhatsappSettings((current) => ({ ...current, confirmationTemplate: value }))}
+              />
+              <Field
+                label="Idioma do template"
+                value={whatsappSettings.languageCode || ""}
+                placeholder="pt_BR"
+                onChange={(value) => setWhatsappSettings((current) => ({ ...current, languageCode: value }))}
+              />
+            </article>
+            <article className="ai-rules-card">
+              <strong>Mensagem enviada ao avançar</strong>
+              <p>
+                Quando os documentos forem deferidos e o processo avançar para procedimento, o sistema usa a configuração
+                do município da solicitação para enviar a confirmação de agenda ao telefone do tutor.
+              </p>
+              <p>
+                Cada município deve informar seu próprio número remetente, token e template aprovado. Se não houver
+                configuração, o deferimento continua e o histórico registra que o WhatsApp não foi enviado.
+              </p>
+              <label className="field">
+                <span>Token permanente / chave de acesso</span>
+                <input
+                  value={whatsappSettings.accessToken || ""}
+                  type="password"
+                  placeholder={whatsappSettings.hasAccessToken ? "Token já salvo" : "Cole o token da Cloud API"}
+                  onChange={(event) => setWhatsappSettings((current) => ({ ...current, accessToken: event.target.value }))}
+                />
+              </label>
+              <button className="primary-action ai-save-key-action" type="button" onClick={saveWhatsappSettings} disabled={!configMunicipalityScopeId}>
+                Salvar WhatsApp
+              </button>
+              {whatsappSaveStatus && <p className={whatsappSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{whatsappSaveStatus}</p>}
+            </article>
+          </div>
+
+          <div className="ai-settings-layout" style={{ marginTop: 18 }}>
+            <article className="request-type-card ai-settings-card">
+              <strong style={{ display: "block", marginBottom: 10 }}>Pacote de notificações</strong>
+              <label className="field">
+                <span>Mensagens por mês</span>
+                <select
+                  value={String(whatsappQuota.plan || 0)}
+                  onChange={(e) => setWhatsappQuota((c) => ({ ...c, plan: Number(e.target.value) }))}
+                >
+                  <option value="0">Sem pacote</option>
+                  <option value="250">250 mensagens/mês</option>
+                  <option value="500">500 mensagens/mês</option>
+                  <option value="1000">1.000 mensagens/mês</option>
+                  <option value="2000">2.000 mensagens/mês</option>
+                  <option value="5000">5.000 mensagens/mês</option>
+                  <option value="10000">10.000 mensagens/mês</option>
+                </select>
+              </label>
+              <Field
+                label="Início do contrato"
+                value={whatsappQuota.contractStart || ""}
+                type="date"
+                onChange={(value) => setWhatsappQuota((c) => ({ ...c, contractStart: value }))}
+              />
+              <Field
+                label="Fim do contrato"
+                value={whatsappQuota.contractEnd || ""}
+                type="date"
+                onChange={(value) => setWhatsappQuota((c) => ({ ...c, contractEnd: value }))}
+              />
+            </article>
+            <article className="ai-rules-card">
+              {whatsappQuota.plan > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <strong>Uso neste mês</strong>
+                  <p style={{ margin: "6px 0 4px" }}>
+                    {(whatsappQuota.currentPeriodUsed || 0).toLocaleString("pt-BR")} de {Number(whatsappQuota.plan).toLocaleString("pt-BR")} usadas
+                  </p>
+                  <div className="quota-bar">
+                    <div
+                      className="quota-bar-fill"
+                      style={{
+                        width: `${Math.min(100, Math.round(((whatsappQuota.currentPeriodUsed || 0) / whatsappQuota.plan) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                  <small style={{ color: "var(--muted)" }}>
+                    {Math.max(0, whatsappQuota.plan - (whatsappQuota.currentPeriodUsed || 0)).toLocaleString("pt-BR")} restantes
+                  </small>
+                </div>
+              )}
+              <button className="primary-action ai-save-key-action" type="button" onClick={saveWhatsappQuota} disabled={!configMunicipalityScopeId}>
+                Salvar pacote
+              </button>
+              {whatsappQuotaSaveStatus && <p className={whatsappQuotaSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{whatsappQuotaSaveStatus}</p>}
+            </article>
+          </div>
+        </div>
+      )}
+
       {configArea === "environment" && configTab === "documents" && (
         <div className="panel wide">
           <ConfigSectionHeader title="Tipos de documentos" createLabel="Criar documento" onCreate={() => openDocumentModal()} />
@@ -6406,12 +8211,113 @@ function ConfigView({
         </div>
       )}
 
+      {configModal === "municipality" && (
+        <div className="modal-backdrop">
+          <form
+            className="config-modal compact"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              await saveMunicipality();
+            }}
+          >
+            <ModalHeader
+              title={editingMunicipalityId ? "Editar município" : "Cadastrar município"}
+              onClose={() => {
+                setConfigModal(null);
+                setEditingMunicipalityId(null);
+                setMunicipalitySaveStatus("");
+                setNewMunicipality({ name: "", state: "", active: true });
+              }}
+            />
+            <div className="config-modal-options">
+              <ConfigActiveToggle
+                checked={newMunicipality.active !== false}
+                onChange={(checked) => setNewMunicipality((current) => ({ ...current, active: checked }))}
+              />
+            </div>
+            <label className="field">
+              <span>Estado</span>
+              <select
+                value={newMunicipality.state}
+                onChange={(event) => {
+                  const state = event.target.value;
+                  setNewMunicipality((current) => ({
+                    ...current,
+                    state,
+                    name: state === current.state ? current.name : "",
+                  }));
+                }}
+              >
+                <option value="">Selecione o estado</option>
+                {brazilStates.map((state) => (
+                  <option key={state.id || state.sigla} value={state.sigla}>
+                    {state.sigla} - {state.nome}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {brazilLocationStatus.startsWith("Não foi possível") ? (
+              <Field
+                label="Município"
+                value={newMunicipality.name}
+                placeholder="Digite o município"
+                onChange={(value) => setNewMunicipality((current) => ({ ...current, name: value }))}
+              />
+            ) : (
+              <label className="field">
+                <span>Município</span>
+                <select
+                  value={newMunicipality.name}
+                  disabled={!newMunicipality.state || brazilLocationStatus.startsWith("Carregando")}
+                  onChange={(event) => setNewMunicipality((current) => ({ ...current, name: event.target.value }))}
+                >
+                  <option value="">
+                    {newMunicipality.state ? "Selecione o município" : "Selecione um estado primeiro"}
+                  </option>
+                  {newMunicipality.name && !brazilMunicipalities.some((city) => city.nome === newMunicipality.name) && (
+                    <option value={newMunicipality.name}>{newMunicipality.name}</option>
+                  )}
+                  {brazilMunicipalities.map((city) => (
+                    <option key={city.id || city.nome} value={city.nome}>
+                      {city.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {brazilLocationStatus && <p className="helper-text">{brazilLocationStatus}</p>}
+            {municipalitySaveStatus && (
+              <p className={municipalitySaveStatus.includes("Não") || municipalitySaveStatus.includes("Selecione") ? "form-error" : "helper-text"}>
+                {municipalitySaveStatus}
+              </p>
+            )}
+            <div className="form-actions">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => {
+                  setConfigModal(null);
+                  setEditingMunicipalityId(null);
+                  setMunicipalitySaveStatus("");
+                  setNewMunicipality({ name: "", state: "", active: true });
+                }}
+              >
+                Cancelar
+              </button>
+              <button className="primary-action" type="submit" disabled={municipalitySaving || !newMunicipality.name.trim() || !newMunicipality.state.trim()}>
+                {municipalitySaving ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {configModal === "agenda" && (
         <div className="modal-backdrop">
           <form className="config-modal" onSubmit={createScheduleFromModal} role="dialog" aria-modal="true">
             <ModalHeader
               title={editingScheduleRuleId ? "Editar agenda" : "Criar agenda"}
-              onClose={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); }}
+              onClose={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); setAgendaSaving(false); setAgendaSaveStatus(""); }}
             />
             <div className="config-modal-options">
               <ConfigActiveToggle
@@ -6480,8 +8386,20 @@ function ConfigView({
               <section className="agenda-modal-block">
                 <strong>Local</strong>
                 <div className="modal-form-grid">
+                  <label className="field">
+                    <span>Município</span>
+                    <select value={agendaForm.municipalityId} onChange={(event) => patchAgendaForm("municipalityId", event.target.value)} disabled={!isGlobalRole(currentUser?.role) && Boolean(currentUser?.municipalityId)}>
+                      <option value="">Selecione</option>
+                      {municipalities.map((municipality) => (
+                        <option key={municipality.id} value={municipality.id}>
+                          {[municipality.name, municipality.state].filter(Boolean).join("/")}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <Field label="Local de atendimento" value={agendaForm.locationName} placeholder="Ex: Centro de zoonoses" onChange={(value) => patchAgendaForm("locationName", value)} />
-                  <Field label="Link do endereco" value={agendaForm.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaForm("addressUrl", value)} />
+                  <Field label="Endereço do local" value={agendaForm.locationAddress} placeholder="Ex: Rua Araranguá, 333 - Centro" onChange={(value) => patchAgendaForm("locationAddress", value)} />
+                  <Field label="Link do endereço" value={agendaForm.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaForm("addressUrl", value)} />
                 </div>
               </section>
 
@@ -6499,22 +8417,44 @@ function ConfigView({
                       <input type="date" value={agendaForm.end} onChange={(event) => patchAgendaForm("end", event.target.value)} />
                     </label>
                   )}
-                  <label className="field">
-                    <span>Hora de início das castrações</span>
-                    <input type="time" value={agendaForm.time} onChange={(event) => patchAgendaForm("time", event.target.value)} />
-                  </label>
-                  <Field label="Número de castrações por dia" value={agendaForm.vacancies} onChange={(value) => patchAgendaForm("vacancies", value)} />
+                </div>
+                <div className="agenda-slots-field">
+                  <div className="agenda-slots-header">
+                    <div>
+                      <span>Faixas de horário</span>
+                      <small>Total diário: {sumScheduleSlotsVacancies(agendaForm.slots)} vagas</small>
+                    </div>
+                    <button className="secondary-action" type="button" onClick={addAgendaSlot}>
+                      <Plus size={16} />
+                      Adicionar faixa
+                    </button>
+                  </div>
+                  <div className="agenda-slots-list">
+                    {(agendaForm.slots || []).map((slot, index) => (
+                      <div className="agenda-slot-row" key={`${index}-${slot.time}`}>
+                        <label className="field">
+                          <span>Hora de início</span>
+                          <input type="time" value={slot.time} onChange={(event) => patchAgendaSlot(index, "time", event.target.value)} />
+                        </label>
+                        <Field label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaSlot(index, "vacancies", value)} />
+                        <button className="icon-button danger-action" type="button" onClick={() => removeAgendaSlot(index)} aria-label="Remover faixa" title="Remover faixa">
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </section>
             </div>
             <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); }}>
+              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); setAgendaSaving(false); setAgendaSaveStatus(""); }}>
                 Cancelar
               </button>
-              <button className="primary-action" type="submit">
-                Salvar
+              <button className="primary-action" type="submit" disabled={agendaSaving}>
+                {agendaSaving ? "Salvando..." : "Salvar"}
               </button>
             </div>
+            {agendaSaveStatus && <p className="form-error">{agendaSaveStatus}</p>}
           </form>
         </div>
       )}
@@ -6888,15 +8828,15 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }) {
           Solicitar troca de tutor
         </button>
         <button className="ghost-button" type="button" onClick={() => printAnimalRecordPdf(animal, tutor, history)}>
-          <Download size={16} />
-          Exportar prontuário
+          <Eye size={16} />
+          Detalhes
         </button>
       </div>
 
       {procedureOpen && (
         <div className="modal-backdrop">
           <form className="workflow-modal animal-action-modal" onSubmit={submitProcedure} role="dialog" aria-modal="true">
-            <ModalHeader title="Solicitar procedimento" eyebrow={animal.name || "Animal"} onClose={() => setProcedureOpen(false)} />
+            <ModalHeader title="Solicitar procedimento" subtitle={animal.name || undefined} onClose={() => setProcedureOpen(false)} />
             <div className="detail-grid compact-detail-grid">
               <p><span>Microchip</span>{animal.microchip || "Não informado"}</p>
               <p><span>Tutor</span>{tutor.tutor_name || tutor.name || "Não informado"}</p>
@@ -6924,7 +8864,7 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }) {
       {deathOpen && (
         <div className="modal-backdrop">
           <form className="workflow-modal animal-action-modal" onSubmit={submitDeath} role="dialog" aria-modal="true">
-            <ModalHeader title="Registrar óbito" eyebrow={animal.name || "Animal"} onClose={() => setDeathOpen(false)} />
+            <ModalHeader title="Registrar óbito" subtitle={animal.name || undefined} onClose={() => setDeathOpen(false)} />
             <div className="detail-grid compact-detail-grid">
               <p><span>Microchip</span>{animal.microchip || "Não informado"}</p>
               <p><span>Tutor</span>{tutor.tutor_name || tutor.name || "Não informado"}</p>
@@ -6943,7 +8883,7 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }) {
       {transferOpen && (
         <div className="modal-backdrop">
           <form className="workflow-modal animal-action-modal" onSubmit={submitTransfer} role="dialog" aria-modal="true">
-            <ModalHeader title="Solicitar troca de tutor" eyebrow={animal.name || "Animal"} onClose={() => setTransferOpen(false)} />
+            <ModalHeader title="Solicitar troca de tutor" subtitle={animal.name || undefined} onClose={() => setTransferOpen(false)} />
             <div className="detail-grid compact-detail-grid">
               <p><span>Microchip</span>{animal.microchip || "Não informado"}</p>
               <p><span>Tutor atual</span>{tutor.tutor_name || tutor.name || "Não informado"}</p>
@@ -6964,20 +8904,6 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }) {
       )}
 
       {formStatus && <p className={formStatus.includes("enviad") || formStatus.includes("análise") ? "sms-status confirmed" : "helper-text"}>{formStatus}</p>}
-
-      <div className="animal-history">
-        <h4>Prontuário do animal</h4>
-        {history.length === 0 && <p className="helper-text">Nenhum evento registrado para este microchip.</p>}
-        {history.slice(0, 8).map((item, index) => (
-          <article className="animal-history-item" key={`${item.source || "history"}-${item.request_id || item.id || index}`}>
-            <span>{formatDateTime(item.occurred_at) || "Sem data"}</span>
-            <strong>{animalHistoryTitle(item)}</strong>
-            {(item.protocol || item.status || item.notes) && (
-              <p>{[item.protocol ? `#${item.protocol}` : "", item.status ? statusLabels[item.status] || item.status : "", item.notes].filter(Boolean).join(" · ")}</p>
-            )}
-          </article>
-        ))}
-      </div>
     </section>
   );
 }
@@ -7045,17 +8971,6 @@ function ConfigActiveToggle({ checked, onChange }) {
   );
 }
 
-function ConfigCreateRow({ label = "Criar", onClick }) {
-  return (
-    <div className="config-create-row">
-      <button className="secondary-action" type="button" onClick={onClick}>
-        <Plus size={18} />
-        {label}
-      </button>
-    </div>
-  );
-}
-
 
 function Metric({ title, value, icon: Icon, trend }) {
   return (
@@ -7072,6 +8987,34 @@ function Metric({ title, value, icon: Icon, trend }) {
   );
 }
 
+function WhatsAppQuotaCard({ quota }) {
+  const remaining = Math.max(0, quota.plan - (quota.currentPeriodUsed || 0));
+  const pct = Math.min(100, Math.round(((quota.currentPeriodUsed || 0) / quota.plan) * 100));
+  const low = remaining / quota.plan <= 0.2;
+  const today = new Date().toISOString().slice(0, 10);
+  const expired = quota.contractEnd && today > quota.contractEnd;
+  return (
+    <article className="metric-card metric-card--quota">
+      <div className="metric-icon">
+        <MessageCircle size={20} />
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <span>WhatsApp restantes</span>
+        <strong style={low && !expired ? { color: "#ef4444" } : {}}>
+          {expired ? "Expirado" : remaining.toLocaleString("pt-BR")}
+        </strong>
+        <div className="quota-bar">
+          <div
+            className="quota-bar-fill"
+            style={{ width: `${pct}%`, background: low ? "#ef4444" : "var(--teal)" }}
+          />
+        </div>
+        <small>Plano {quota.plan.toLocaleString("pt-BR")}/mês</small>
+      </div>
+    </article>
+  );
+}
+
 function PanelHeader({ title, action, onAction, aside, actionClassName = "ghost-button" }) {
   return (
     <div className="panel-header">
@@ -7082,13 +9025,12 @@ function PanelHeader({ title, action, onAction, aside, actionClassName = "ghost-
   );
 }
 
-function ModalHeader({ title, eyebrow, subtitle, onClose, actions }) {
+function ModalHeader({ title, subtitle, onClose, actions }) {
   return (
     <div className="modal-header">
       <div className="modal-header-title">
-        {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-        <h2>{title}</h2>
-        {subtitle && <span>{subtitle}</span>}
+        {title && <h2>{title}</h2>}
+        {subtitle && <span className="modal-header-subtitle">{subtitle}</span>}
       </div>
       <div className="modal-header-actions">
         {actions}
@@ -7126,7 +9068,7 @@ function YesNoField({ label, value, onChange }) {
     <div className="yes-no-field">
       <span>{label}</span>
       <div>
-        {["Sim", "Nao"].map((option) => (
+        {["Sim", "Não"].map((option) => (
           <button
             key={option}
             type="button"
@@ -7340,7 +9282,7 @@ function validateDocumentLocally(document, file, aiSettings = initialAiSettings)
 
     resolve({
       status: "attached",
-      message: "Arquivo anexado. Aguardando validacao da IA externa.",
+      message: "Arquivo anexado. Aguardando validação da IA externa.",
       confidence: 0.6,
     });
   });
@@ -7402,9 +9344,18 @@ function matchesRequestSearch(request, query) {
 }
 
 function getRequestMicrochips(request = {}) {
+  const workflowData = request.workflowData || request.workflow_data || {};
   const values = [
     request.animalMicrochip,
     request.animal_microchip,
+    request.microchip,
+    request.microchip_number,
+    request.microchipNumber,
+    workflowData.microchip,
+    workflowData.animal_microchip,
+    workflowData.animalMicrochip,
+    workflowData.attendanceMicrochip,
+    workflowData.attendance_microchip,
     ...(request.animals || []).map((animal) => animal.microchip),
   ]
     .filter(Boolean);
@@ -7415,12 +9366,6 @@ function getRequestMicrochips(request = {}) {
     seen.add(key);
     return true;
   });
-}
-
-function MicrochipLine({ request }) {
-  const microchips = getRequestMicrochips(request);
-  if (!microchips.length) return null;
-  return <span className="microchip-line">Microchip: {microchips.join(", ")}</span>;
 }
 
 function onlyDigits(value = "") {
@@ -7437,7 +9382,7 @@ function formatCpf(value = "") {
 
 function maskCpf(value = "") {
   const digits = onlyDigits(value);
-  if (digits.length !== 11) return value || "Nao informado";
+  if (digits.length !== 11) return value || "Não informado";
   return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
 }
 
@@ -7445,6 +9390,32 @@ function formatDateTime(value = "") {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return value || new Date().toLocaleString("pt-BR");
   return date.toLocaleString("pt-BR");
+}
+
+function formatRequestCardDate(request = {}) {
+  const value = request.appointment || request.preferredSchedule || request.createdAt || request.created_at || "";
+  if (!value) return "Data não informada";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function getRequestCardMunicipality(request = {}) {
+  return displayText(
+    request.municipalityName
+    || request.municipality_name
+    || request.scheduleMunicipality
+    || request.schedule_municipality
+    || request.municipality
+    || request.city
+    || "Sem município",
+  );
 }
 
 function formatCep(value = "") {
@@ -7551,6 +9522,14 @@ const PDF_BASE_STYLES = `
   .footer { color: #64748b; font-size: 9px; display: flex; justify-content: space-between; border-top: 1px solid #e2e8f0; padding-top: 6px; margin-top: auto; }
 `;
 
+function downloadDataUrl(dataUrl, fileName = "documento.pdf") {
+  if (!dataUrl) return;
+  const anchor = window.document.createElement("a");
+  anchor.href = dataUrl;
+  anchor.download = fileName;
+  anchor.click();
+}
+
 function printHtmlViaIframe(html) {
   const iframe = document.createElement("iframe");
   iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
@@ -7574,100 +9553,93 @@ function printHtmlViaIframe(html) {
 }
 
 function printAnimalRecordPdf(animal = {}, tutor = {}, history = []) {
-  const typeLabels = {
-    ANIMAL_OBITO: "Registro de óbito",
-    TROCA_TUTOR: "Troca de tutor",
-    SOLICITACAO_OBITO: "Solicitação de óbito",
-    SOLICITACAO_TROCA_TUTOR: "Solicitação de troca de tutor",
-    SOLICITACAO_PROCEDIMENTO: "Solicitação de procedimento",
-    IMPORTACAO_SOLICITACAO: "Cadastro importado",
-    CIRURGIA_REALIZADA: "Cirurgia realizada",
-    SOLICITACAO: "Solicitação",
-  };
-  const statusLabels = {
-    EM_ANALISE: "Em análise",
-    AGUARDANDO_CIRURGIA: "Aguardando cirurgia",
-    ARQUIVADA: "Arquivada",
-  };
+  printHtmlViaIframe(buildAnimalRecordPdfHtml(animal, tutor, history));
+}
 
-  const historyRows = history.length
-    ? history.map((item) => {
-        const label = typeLabels[item.type] || item.title || item.type || "Evento";
-        const detail = [
-          item.protocol ? `#${item.protocol}` : "",
-          item.status ? (statusLabels[item.status] || item.status) : "",
+function buildAnimalRecordPdfHtml(animal = {}, tutor = {}, history = []) {
+  const sortedHistory = [...(Array.isArray(history) ? history : [])].sort((left, right) => {
+    const leftTime = new Date(left.occurred_at || left.created_at || left.createdAt || 0).getTime();
+    const rightTime = new Date(right.occurred_at || right.created_at || right.createdAt || 0).getTime();
+    return (Number.isNaN(leftTime) ? 0 : leftTime) - (Number.isNaN(rightTime) ? 0 : rightTime);
+  });
+  const timelineItems = sortedHistory.length
+    ? sortedHistory.map((item, index) => {
+        const occurredAt = item.occurred_at || item.created_at || item.createdAt || "";
+        const date = occurredAt ? formatDateTime(occurredAt) : "Sem data";
+        const details = [
+          item.protocol ? `Protocolo ${item.protocol}` : "",
+          item.status ? statusLabels[item.status] || item.status : "",
           item.notes || "",
-        ].filter(Boolean).join(" · ");
-        const date = item.occurred_at
-          ? new Date(item.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-          : "—";
+        ].filter(Boolean);
+        const structuredDetails = buildAnimalRecordTimelineDetails(item);
         return `
-          <tr>
-            <td>${escapeHtml(date)}</td>
-            <td><strong>${escapeHtml(label)}</strong>${detail ? `<br><span class="detail">${escapeHtml(detail)}</span>` : ""}</td>
-          </tr>`;
+          <article class="timeline-item">
+            <div class="timeline-marker">
+              <span>${String(index + 1).padStart(2, "0")}</span>
+            </div>
+            <div class="timeline-card">
+              <div class="timeline-date">${escapeHtml(date)}</div>
+              <h2>${escapeHtml(animalHistoryTitle(item))}</h2>
+              ${details.length ? `<p>${escapeHtml(details.join(" · "))}</p>` : `<p>Evento registrado no prontuário do animal.</p>`}
+              ${structuredDetails}
+            </div>
+          </article>`;
       }).join("")
-    : `<tr><td colspan="2" class="empty-row">Nenhum evento registrado.</td></tr>`;
-
-  const address = [tutor.address, tutor.neighborhood, tutor.city, tutor.state, tutor.cep].filter(Boolean).join(", ");
-  const html = `<!doctype html>
+    : `<div class="empty-timeline">Nenhum evento registrado para este animal.</div>`;
+  const registration = getAnimalRecordRegistrationData(animal, tutor, sortedHistory);
+  const registrationSections = renderAnimalRecordRegistrationSections(registration);
+  return `<!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
     <title>Prontuário — ${escapeHtml(animal.name || animal.microchip || "Animal")}</title>
     <style>
       ${PDF_BASE_STYLES}
-      body { display: flex; flex-direction: column; gap: 12px; }
-      table { width: 100%; border-collapse: collapse; font-size: 11px; }
-      th { background: #f0f7ff; color: #10364f; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 6px 10px; text-align: left; border-bottom: 1px solid #dbeaf3; }
-      td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-      td:first-child { white-space: nowrap; color: #64748b; font-size: 10px; width: 90px; }
-      .detail { color: #64748b; font-size: 10px; }
-      .empty-row { color: #94a3b8; font-style: italic; text-align: center; }
+      body { display: flex; flex-direction: column; gap: 12px; background: #fff; }
+      .record-subtitle { font-size: 11px; opacity: .82; display: block; margin-top: 3px; }
+      .timeline { position: relative; display: grid; gap: 8px; padding: 2px 0 0 0; }
+      .timeline::before { content: ""; position: absolute; left: 17px; top: 11px; bottom: 11px; width: 2px; background: #bae6fd; }
+      .timeline-item { display: grid; grid-template-columns: 36px 1fr; gap: 10px; position: relative; break-inside: avoid; }
+      .timeline-marker { display: flex; justify-content: center; padding-top: 6px; z-index: 1; }
+      .timeline-marker span { width: 27px; height: 27px; border-radius: 50%; background: #1479b8; color: #fff; display: grid; place-items: center; font-size: 9px; font-weight: 900; border: 3px solid #e8f7ff; }
+      .timeline-card { border: 1px solid #dbeaf3; border-radius: 10px; padding: 9px 11px; background: #f8fbfd; }
+      .timeline-date { color: #1479b8; font-size: 9px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+      .timeline-card h2 { margin: 3px 0 4px; color: #10364f; font-size: 12px; }
+      .timeline-card p { margin: 0; color: #475569; font-size: 11px; line-height: 1.45; }
+      .timeline-details { margin: 8px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+      .timeline-detail { border: 1px solid #dbeaf3; border-radius: 8px; background: #ffffff; padding: 6px 8px; break-inside: avoid; }
+      .timeline-detail span { display: block; color: #64748b; font-size: 8px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+      .timeline-detail strong { display: block; margin-top: 2px; color: #172026; font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+      .empty-timeline { border: 1px dashed #bae6fd; border-radius: 10px; padding: 18px; text-align: center; color: #64748b; background: #f8fbfd; }
+      .registration-section { break-inside: auto; page-break-inside: auto; }
+      .registration-block { display: flex; flex-direction: column; gap: 8px; break-inside: avoid; page-break-inside: avoid; }
+      .registration-block + .registration-block { margin-top: 2px; }
+      .registration-block h2 { margin: 0; color: #1479b8; font-size: 11px; }
+      .document-list { margin: 0; padding-left: 15px; color: #172026; font-size: 11px; }
+      .document-list li { margin-bottom: 3px; overflow-wrap: anywhere; }
+      .print-note { color: #64748b; font-size: 9px; text-align: right; margin-top: -4px; }
+      @media print { .print-note { display: none; } }
     </style>
   </head>
   <body>
     <header class="pdf-header">
       <div>
-        <span class="kicker">Prontuário Animal</span>
-        <h1>${escapeHtml(animal.name || "Animal não identificado")}</h1>
-        <span style="font-size:11px;opacity:.8">${[animal.species, animal.sex, animal.size].filter(Boolean).join(" · ")}</span>
+        <span class="kicker">PRONTUÁRIO MUNICIPAL</span>
+        <h1>Histórico animal</h1>
+        <span class="record-subtitle">${escapeHtml(animal.name || "Animal não identificado")} ${[animal.species, animal.sex, animal.size].filter(Boolean).length ? `· ${escapeHtml([animal.species, animal.sex, animal.size].filter(Boolean).join(" · "))}` : ""}</span>
       </div>
       <div class="header-box">
         <span>Microchip</span>
         <strong style="font-size:13px">${escapeHtml(animal.microchip || "—")}</strong>
       </div>
     </header>
+    <div class="print-note">Na prévia de impressão, escolha "Salvar como PDF" para baixar o prontuário.</div>
+
+    ${registrationSections}
 
     <section class="section">
-      <div class="section-title">Dados do animal</div>
-      <div class="data-grid four">
-        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "—")}</strong></div>
-        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "—")}</strong></div>
-        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "—")}</strong></div>
-        <div class="data-item"><span>Raça</span><strong>${escapeHtml(animal.breed || "—")}</strong></div>
-        ${animal.color ? `<div class="data-item"><span>Cor / pelagem</span><strong>${escapeHtml(animal.color)}</strong></div>` : ""}
-        ${animal.status ? `<div class="data-item"><span>Status</span><strong>${escapeHtml(animal.status)}</strong></div>` : ""}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Dados do tutor</div>
-      <div class="data-grid three">
-        <div class="data-item"><span>Nome</span><strong>${escapeHtml(tutor.tutor_name || tutor.name || "—")}</strong></div>
-        <div class="data-item"><span>CPF</span><strong>${escapeHtml(maskCpf(tutor.cpf || ""))}</strong></div>
-        <div class="data-item"><span>Telefone</span><strong>${escapeHtml(tutor.phone || "—")}</strong></div>
-        ${tutor.tutor_email || tutor.email ? `<div class="data-item"><span>Email</span><strong>${escapeHtml(tutor.tutor_email || tutor.email)}</strong></div>` : ""}
-        ${address ? `<div class="data-item" style="grid-column:1/-1"><span>Endereço</span><strong>${escapeHtml(address)}</strong></div>` : ""}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Histórico / Prontuário</div>
-      <table>
-        <thead><tr><th>Data</th><th>Evento</th></tr></thead>
-        <tbody>${historyRows}</tbody>
-      </table>
+      <div class="section-title">Árvore cronológica</div>
+      <div class="timeline">${timelineItems}</div>
     </section>
 
     <footer class="footer">
@@ -7676,187 +9648,380 @@ function printAnimalRecordPdf(animal = {}, tutor = {}, history = []) {
     </footer>
   </body>
 </html>`;
-  printHtmlViaIframe(html);
 }
 
-function generateRequestPdf(request, options = {}) {
-  const animals = request.animals || [];
-  const validationKey = request.validationKey || request.validation_key || "";
-  const signedAt = request.signedAt || request.signed_at || request.createdAt || request.created_at || new Date().toISOString();
-  const maskedCpf = maskCpf(request.cpf || "");
-  const fullAddress = [
-    [request.address, request.number].filter(Boolean).join(", "),
-    request.neighborhood,
-    request.city && request.state ? `${request.city}/${request.state}` : (request.city || request.state || ""),
-    request.cep ? `CEP ${request.cep}` : "",
-  ].filter(Boolean).join(" — ");
+function getAnimalRecordRegistrationData(animal = {}, tutor = {}, history = []) {
+  const requestEvent = [...(Array.isArray(history) ? history : [])]
+    .reverse()
+    .find((item) => item?.data?.registration || item?.source === "requests");
+  const registration = requestEvent?.data?.registration || {};
+  const workflowData = registration.workflow_data || requestEvent?.data?.workflow_data || {};
+  const registrationAnimal = {
+    name: registration.animal_name,
+    microchip: registration.animal_microchip,
+    species: registration.species,
+    size: registration.size,
+    procedure: registration.request_type,
+  };
+  const animals = Array.isArray(registration.animals) && registration.animals.length
+    ? registration.animals
+    : registrationAnimal.name || registrationAnimal.microchip
+      ? [registrationAnimal]
+      : animal?.name || animal?.microchip
+      ? [animal]
+      : [];
+  const primaryAnimal = animals.find((entry) => entry.microchip && animal.microchip && String(entry.microchip) === String(animal.microchip))
+    || animals[0]
+    || animal
+    || {};
 
-  const row = (label, value) => `
-    <div class="field">
-      <span>${label}</span>
-      <strong>${escapeHtml(String(value || "—"))}</strong>
-    </div>`;
+  return {
+    protocol: registration.protocol || requestEvent?.protocol || "",
+    requestType: registration.request_type || requestEvent?.type || primaryAnimal.procedure || "",
+    status: registration.status || requestEvent?.status || animal.status || "",
+    tutorName: registration.tutor_name || tutor.tutor_name || tutor.name || "",
+    cpf: registration.cpf || tutor.cpf || "",
+    phone: registration.phone || tutor.phone || "",
+    email: registration.tutor_email || tutor.tutor_email || tutor.email || "",
+    cadUnico: workflowData.cadUnico || workflowData.cad_unico || "",
+    cadUnicoNotApplicable: Boolean(workflowData.cadUnicoNotApplicable || workflowData.cad_unico_not_applicable),
+    isFarmer: Boolean(workflowData.isFarmer || workflowData.is_farmer),
+    address: registration.address || tutor.address || "",
+    number: registration.number || tutor.number || "",
+    neighborhood: registration.neighborhood || tutor.neighborhood || "",
+    city: registration.city || tutor.city || "",
+    state: registration.state || tutor.state || "",
+    cep: registration.cep || tutor.cep || "",
+    municipality: registration.schedule_municipality || registration.municipality || "",
+    municipalityId: registration.municipality_id || "",
+    scheduleDate: registration.schedule_date || "",
+    scheduleTime: workflowData.scheduleSlotTime || workflowData.schedule_slot_time || workflowData.scheduleTime || workflowData.schedule_time || "",
+    scheduleLocationName: registration.schedule_location_name || "",
+    scheduleAddress: registration.schedule_address || "",
+    scheduleAddressUrl: registration.schedule_address_url || "",
+    responsibleUnit: registration.responsible_unit || "",
+    veterinarian: registration.veterinarian || "",
+    notes: registration.notes || requestEvent?.notes || "",
+    signedAt: registration.signed_at || "",
+    createdAt: registration.created_at || requestEvent?.occurred_at || "",
+    updatedAt: registration.updated_at || "",
+    documents: Array.isArray(registration.documents) ? registration.documents : [],
+    animals: animals.length ? animals : [primaryAnimal],
+  };
+}
 
-  const animalBlocks = animals.map((animal, i) => {
-    const breed = animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "—");
-    return `
-    <div class="animal-block">
-      <div class="animal-block-title">Animal ${i + 1}${animal.name ? ` — ${escapeHtml(animal.name)}` : ""}</div>
-      <div class="fields-row">
-        ${row("Espécie", animal.species)}
-        ${row("Sexo", animal.sex)}
-        ${row("Porte", animal.size)}
-        ${row("Nascimento", animal.birthDate || animal.age)}
-        ${row("Raça", breed)}
-        ${row("Pelagem / cor", animal.coat)}
-        ${row("Procedimento", animal.procedure)}
-        ${animal.microchip ? row("Microchip", animal.microchip) : ""}
-        ${row("Vermifugado", animal.dewormed)}
-        ${row("Vacinas em dia", animal.vaccinated)}
-        ${row("Já teve cria", animal.hadLitter)}
-        ${row("Alimentação", animal.food)}
+function renderAnimalRecordRegistrationSections(registration = {}) {
+  const allAnimals = Array.isArray(registration.animals) && registration.animals.length ? registration.animals : [{}];
+  const tutorRows = [
+    ["Nome do tutor", registration.tutorName],
+    ["CPF", maskCpf(registration.cpf || "")],
+    ["Telefone", registration.phone],
+    ["Email", registration.email],
+    ["CadÚnico", registration.cadUnicoNotApplicable ? "Não se aplica" : registration.cadUnico],
+    ["Produtor rural", registration.isFarmer ? "Sim" : "Não"],
+  ];
+  const addressRows = [
+    ["CEP", registration.cep],
+    ["Endereço", registration.address],
+    ["Número", registration.number],
+    ["Bairro", registration.neighborhood],
+    ["Cidade", registration.city],
+    ["UF", registration.state],
+  ];
+  const scheduleRows = [
+    ["Protocolo", registration.protocol],
+    ["Procedimento", procedureLabel(registration.requestType) || registration.requestType],
+    ["Status", statusLabels[registration.status] || registration.status],
+    ["Município", registration.municipality],
+    ["Data da agenda", registration.scheduleDate],
+    ["Horário", registration.scheduleTime],
+    ["Local", registration.scheduleLocationName],
+    ["Endereço da agenda", registration.scheduleAddress],
+    ["Mapa", registration.scheduleAddressUrl],
+    ["Unidade responsável", registration.responsibleUnit],
+    ["Veterinário", registration.veterinarian],
+    ["Aceite eletrônico", registration.signedAt ? formatDateTime(registration.signedAt) : ""],
+    ["Criado em", registration.createdAt ? formatDateTime(registration.createdAt) : ""],
+    ["Atualizado em", registration.updatedAt ? formatDateTime(registration.updatedAt) : ""],
+    ["Observações", registration.notes],
+  ];
+  const documents = getUserUploadedProcessDocuments(registration.documents);
+
+  return `
+    <section class="section registration-section">
+      <div class="section-title">Dados do cadastro</div>
+      <div class="registration-block">
+        <h2>Tutor</h2>
+        ${renderAnimalRecordDataGrid(tutorRows, "three")}
       </div>
-    </div>`;
-  }).join("");
-
-  const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Solicitação ${escapeHtml(request.protocol || "")}</title>
-    <style>
-      ${PDF_BASE_STYLES}
-      body { display: flex; flex-direction: column; gap: 14px; }
-      .page { page-break-after: always; display: flex; flex-direction: column; gap: 14px; }
-      .page:last-child { page-break-after: auto; }
-
-      .block { display: flex; flex-direction: column; gap: 8px; }
-      .block-title {
-        font-size: 9px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
-        color: #10364f; border-bottom: 1.5px solid #10364f; padding-bottom: 3px;
-      }
-      .fields-row { display: flex; flex-wrap: wrap; gap: 10px 20px; }
-      .field { display: flex; flex-direction: column; gap: 1px; min-width: 100px; }
-      .field span { font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .05em; }
-      .field strong { font-size: 11px; color: #172026; }
-      .field.wide { min-width: 220px; flex: 1; }
-
-      .address-line { font-size: 11px; color: #172026; line-height: 1.5; }
-
-      .animal-block { display: flex; flex-direction: column; gap: 6px; padding: 8px 0 8px 10px; border-left: 3px solid #fb923c; }
-      .animal-block-title { font-size: 10px; font-weight: 900; color: #c2410c; }
-
-      .validation-block { background: #f0f9ff; border-left: 3px solid #38a8e8; padding: 10px 14px; display: flex; flex-direction: column; gap: 3px; }
-      .validation-block span { font-size: 8px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: .06em; }
-      .validation-block strong { font-size: 18px; letter-spacing: .1em; color: #0f172a; }
-      .validation-block p { margin: 2px 0 0; font-size: 10px; color: #64748b; }
-
-      .declaration-card { font-size: 11px; line-height: 1.7; color: #172026; display: flex; flex-direction: column; gap: 8px; }
-      .declaration-card p { margin: 0; text-align: justify; }
-
-      .acceptance-grid { display: flex; flex-wrap: wrap; gap: 10px 20px; }
-      .signature-image { width: 100%; max-height: 100px; object-fit: contain; border-top: 1px solid #dbeaf3; padding-top: 8px; margin-top: 4px; }
-    </style>
-  </head>
-  <body>
-    <section class="page">
-      <header class="pdf-header">
-        <div>
-          <span class="kicker">Requerimento municipal</span>
-          <h1>Solicitação de castração animal</h1>
+      <div class="registration-block">
+        <h2>Endereço</h2>
+        ${renderAnimalRecordDataGrid(addressRows, "three")}
+      </div>
+      <div class="registration-block">
+        <h2>Solicitação e agenda</h2>
+        ${renderAnimalRecordDataGrid(scheduleRows, "three")}
+      </div>
+      ${allAnimals.map((animal, index) => `
+        <div class="registration-block">
+          <h2>Animal ${index + 1}</h2>
+          ${renderAnimalRecordDataGrid(animalRecordAnimalRows(animal), "four")}
         </div>
-        <div class="header-box">
-          <span>Protocolo</span>
-          <strong>${escapeHtml(request.protocol || "—")}</strong>
-          <span style="margin-top:6px">Abertura</span>
-          <strong style="font-size:11px">${escapeHtml(request.createdAt ? new Date(request.createdAt).toLocaleDateString("pt-BR") : new Date().toLocaleDateString("pt-BR"))}</strong>
-        </div>
-      </header>
-
-      <div class="block">
-        <div class="block-title">Dados do tutor</div>
-        <div class="fields-row">
-          ${row("Nome completo", request.tutor)}
-          ${row("CPF", request.cpf)}
-          ${row("CadÚnico", request.cadUnicoNotApplicable ? "Não se aplica" : request.cadUnico)}
-          ${row("Celular", request.phone)}
-          ${row("Email", request.email)}
-          ${row("Agricultor(a)", request.isFarmer ? "Sim" : "Não")}
-        </div>
+      `).join("")}
+      <div class="registration-block">
+        <h2>Documentos anexados</h2>
+        ${documents.length ? `<ul class="document-list">${documents.map((document) => `<li>${escapeHtml(document.documentName || document.name || document.fileName || "Documento sem nome")} ${document.status ? `- ${escapeHtml(document.status)}` : ""}</li>`).join("")}</ul>` : renderAnimalRecordDataGrid([["Documentos", ""]], "three")}
       </div>
+    </section>`;
+}
 
-      <div class="block">
-        <div class="block-title">Endereço</div>
-        <p class="address-line">${escapeHtml(fullAddress || "—")}</p>
-      </div>
+function renderAnimalRecordDataGrid(rows = [], columns = "three") {
+  return `<div class="data-grid ${columns}">${rows.map(([label, value]) => `
+    <div class="data-item">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(formatAnimalRecordValue(value) || "—")}</strong>
+    </div>
+  `).join("")}</div>`;
+}
 
-      <div class="block">
-        <div class="block-title">Animais (${animals.length})</div>
-        ${animalBlocks || "<p style='font-size:11px;color:#64748b'>Nenhum animal informado.</p>"}
-      </div>
+function animalRecordAnimalRows(animal = {}) {
+  return [
+    ["Nome", animal.name],
+    ["Procedimento", procedureLabel(animal.procedure || "") || animal.procedure],
+    ["Espécie", animal.species],
+    ["Sexo", animal.sex],
+    ["Porte", animal.size],
+    ["Peso", animal.weight],
+    ["Nascimento / idade", animal.birthDate || animal.birth_date || animal.age],
+    ["Raça", animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || animal.breed || animal.breedDescription)],
+    ["Descrição da raça", animal.breedDescription],
+    ["Pelagem / cor", animal.coat || animal.color],
+    ["Já possui microchip?", animal.hasChip],
+    ["Microchip", animal.microchip],
+    ["Vermifugado", animal.dewormed],
+    ["Vacinas em dia", animal.vaccinated],
+    ["Já teve cria", animal.hadLitter],
+    ["Histórico de doenças", animal.illnessHistory],
+    ["Alimentação", animal.food],
+  ];
+}
 
-      <div class="block">
-        <div class="block-title">Agendamento</div>
-        <div class="fields-row">
-          ${row("Data escolhida", request.preferredSchedule || "A confirmar")}
-          ${row("Tipo de procedimento", request.type)}
-          ${row("Local", request.scheduleLocationName || "A confirmar")}
-          ${request.scheduleMunicipality ? row("Município", request.scheduleMunicipality) : ""}
-        </div>
-      </div>
+function buildAnimalRecordTimelineDetails(item = {}) {
+  const rows = flattenAnimalRecordData(item.data || {});
+  if (!rows.length) return "";
+  return `<div class="timeline-details">${rows.map(({ label, value }) => `
+    <div class="timeline-detail">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+    </div>
+  `).join("")}</div>`;
+}
 
-      <div class="validation-block">
-        <span>Chave de validação</span>
-        <strong>${escapeHtml(validationKey || "A definir")}</strong>
-        <p>Guarde junto com o CPF para consultar suas solicitações e adoções no sistema.</p>
-      </div>
+function flattenAnimalRecordData(data = {}, prefix = "") {
+  if (!data || typeof data !== "object") return [];
+  const ignoredKeys = new Set(["id", "request_id", "animal_id", "source_request_id", "registration"]);
+  const rows = [];
 
-      <footer class="footer">
-        <span>Sistema municipal de castração animal</span>
-        <span>Página 1 de 2</span>
-      </footer>
-    </section>
+  Object.entries(data).forEach(([key, value]) => {
+    if (ignoredKeys.has(key)) return;
+    if (value === undefined || value === null || value === "") return;
+    if (Array.isArray(value)) {
+      const formattedArray = formatAnimalRecordValue(value);
+      if (formattedArray) rows.push({ label: animalRecordDataLabel(key, prefix), value: formattedArray });
+      return;
+    }
+    if (typeof value === "object") {
+      rows.push(...flattenAnimalRecordData(value, animalRecordDataLabel(key, prefix)));
+      return;
+    }
+    const formatted = formatAnimalRecordValue(value);
+    if (formatted) rows.push({ label: animalRecordDataLabel(key, prefix), value: formatted });
+  });
 
-    <section class="page">
-      <header class="pdf-header">
-        <div>
-          <span class="kicker">Declaração do tutor</span>
-          <h1>Responsabilidade e autorização</h1>
-        </div>
-        <div class="header-box"><span>Protocolo</span><strong>${escapeHtml(request.protocol || "—")}</strong></div>
-      </header>
+  return rows;
+}
 
-      <div class="declaration-card">
-        <p>Eu, <strong>${escapeHtml(request.tutor || "—")}</strong>, inscrito(a) no CPF <strong>${escapeHtml(maskedCpf || "—")}</strong>, declaro que as informações prestadas neste requerimento são verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.</p>
-        <p>Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal, da necessidade de cumprir as orientações fornecidas pela equipe responsável e de manter os contatos informados disponíveis para comunicações sobre a solicitação.</p>
-        <p>Estou ciente de que a solicitação poderá passar por análise documental, validação das informações, confirmação de agenda e eventuais solicitações de complementação antes da realização do atendimento.</p>
-      </div>
+function animalRecordDataLabel(key = "", prefix = "") {
+  const labels = {
+    adoption_notes: "Observações da adoção",
+    attendance_note: "Observações do atendimento",
+    attendance_microchip: "Microchip aplicado",
+    attendanceMicrochip: "Microchip aplicado",
+    attendanceNote: "Observações do atendimento",
+    cadUnico: "CadÚnico",
+    death_cause: "Causa do óbito",
+    death_date: "Data do óbito",
+    medicines: "Medicamentos",
+    medication: "Medicamento",
+    medications: "Medicamentos",
+    medicine: "Medicamento",
+    notes: "Observações",
+    performed_procedures: "Procedimentos realizados",
+    performedProcedures: "Procedimentos realizados",
+    protocol: "Protocolo",
+    recommendations: "Indicações",
+    schedule_address: "Endereço da agenda",
+    schedule_date: "Data da agenda",
+    schedule_location_name: "Local da agenda",
+    target_tutor_cpf: "CPF do novo tutor",
+    target_tutor_name: "Novo tutor",
+    veterinarian: "Veterinário",
+    responsible_unit: "Unidade responsável",
+  };
+  const label = labels[key] || displayText(String(key).replace(/_/g, " "));
+  return prefix ? `${prefix} - ${label}` : label;
+}
 
-      <div class="block">
-        <div class="block-title">Aceite eletrônico</div>
-        <div class="acceptance-grid">
-          ${row("Aceite registrado por", request.tutor)}
-          ${row("CPF", maskedCpf)}
-          ${row("Data / hora", formatDateTime(signedAt))}
-          ${row("Método", "Li e aceito")}
-        </div>
-      </div>
+function formatAnimalRecordValue(value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "boolean") return value ? "Sim" : "Não";
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (item === undefined || item === null || item === "") return "";
+        if (typeof item === "object") {
+          return Object.entries(item)
+            .filter(([, entryValue]) => entryValue !== undefined && entryValue !== null && entryValue !== "")
+            .map(([entryKey, entryValue]) => `${animalRecordDataLabel(entryKey)}: ${formatAnimalRecordValue(entryValue)}`)
+            .join("; ");
+        }
+        return String(item);
+      })
+      .filter(Boolean)
+      .join(" | ");
+  }
+  return String(value);
+}
 
-      <footer class="footer">
-        <span>Sistema municipal de castração animal</span>
-        <span>Página 2 de 2</span>
-      </footer>
-    </section>
-  </body>
-</html>`;
+function requestAnimalFromRequest(request = {}) {
+  const animal = Array.isArray(request.animals) && request.animals.length ? request.animals[0] : {};
+  return {
+    ...animal,
+    id: animal.id || request.animalId || request.animal_id || "",
+    microchip: animal.microchip || request.animalMicrochip || request.animal_microchip || "",
+    name: animal.name || request.animalName || request.animal_name || "Animal não identificado",
+    species: animal.species || request.species || "",
+    sex: animal.sex || request.sex || "",
+    size: animal.size || request.size || "",
+    breed: animal.breed || animal.breedDescription || request.breed || "",
+    color: animal.color || animal.coat || request.color || "",
+    status: animal.status || request.status || "",
+  };
+}
 
-  if (options.returnHtml) return html;
-  printHtmlViaIframe(html);
-  return html;
+function requestTutorFromRequest(request = {}) {
+  return {
+    tutor_name: request.tutor || request.tutor_name || request.tutorName || "",
+    name: request.tutor || request.tutor_name || request.tutorName || "",
+    cpf: request.cpf || "",
+    phone: request.phone || "",
+    tutor_email: request.email || request.tutor_email || request.tutorEmail || "",
+    email: request.email || request.tutor_email || request.tutorEmail || "",
+    address: request.address || "",
+    neighborhood: request.neighborhood || "",
+    city: request.city || "",
+    state: request.state || "",
+    cep: request.cep || "",
+  };
+}
+
+function requestHistoryForAnimalRecord(request = {}) {
+  const normalized = normalizeRequest(request);
+  const events = [{
+    source: "requests",
+    type: normalized.type || normalized.request_type || "SOLICITACAO",
+    title: normalized.protocol ? `Solicitação ${normalized.protocol}` : "Solicitação vinculada",
+    status: normalized.status,
+    notes: [
+      requestProcedureLabel(normalized),
+      normalized.preferredSchedule ? `Agenda: ${normalized.preferredSchedule}` : "",
+      normalized.scheduleLocationName ? `Local: ${normalized.scheduleLocationName}` : "",
+    ].filter(Boolean).join(" · "),
+    data: {
+      registration: buildAnimalRecordRegistrationFromRequest(normalized),
+      workflow_data: normalized.workflowData || normalized.workflow_data || {},
+      performedProcedures: normalized.performedProcedures,
+      attendanceNote: normalized.attendanceNote,
+      rejectionReason: normalized.rejectionReason,
+      rejectionNote: normalized.rejectionNote,
+      scheduleTime: normalized.scheduleTime,
+      scheduleLocationName: normalized.scheduleLocationName,
+      scheduleAddress: normalized.scheduleAddress,
+      responsibleUnit: normalized.responsibleUnit,
+      veterinarian: normalized.veterinarian,
+    },
+    request_id: normalized.id,
+    protocol: normalized.protocol,
+    occurred_at: normalized.createdAt || normalized.created_at || new Date().toISOString(),
+  }];
+
+  const rawHistory = Array.isArray(normalized.rawHistory) ? normalized.rawHistory : [];
+  rawHistory.forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
+    events.push({
+      source: "request_history",
+      type: entry.status || "HISTORICO",
+      title: statusLabels[entry.status] || workflowTagLabels[entry.status] || entry.status || `Atualização ${index + 1}`,
+      status: entry.status,
+      notes: entry.notes || entry.note || "",
+      data: entry,
+      request_id: normalized.id,
+      protocol: normalized.protocol,
+      occurred_at: entry.at || entry.createdAt || entry.created_at || normalized.updatedAt || normalized.createdAt,
+    });
+  });
+
+  return events;
+}
+
+function buildAnimalRecordRegistrationFromRequest(request = {}) {
+  const workflowData = request.workflowData || request.workflow_data || {};
+  return {
+    protocol: request.protocol,
+    request_type: request.type || request.request_type,
+    status: request.status,
+    tutor_name: request.tutor || request.tutor_name || request.tutorName,
+    tutor_email: request.email || request.tutor_email || request.tutorEmail,
+    cpf: request.cpf,
+    phone: request.phone,
+    address: request.address,
+    number: request.number,
+    neighborhood: request.neighborhood,
+    city: request.city,
+    state: request.state,
+    cep: request.cep,
+    animal_name: request.animalName || request.animal_name,
+    animal_microchip: request.animalMicrochip || request.animal_microchip,
+    species: request.species,
+    size: request.size,
+    animals: Array.isArray(request.animals) ? request.animals : [],
+    municipality: request.municipalityName || request.municipality || request.scheduleMunicipality,
+    municipality_id: request.municipalityId || request.municipality_id,
+    schedule_date: request.preferredSchedule || request.schedule_date || request.appointment,
+    schedule_location_name: request.scheduleLocationName || request.schedule_location_name,
+    schedule_address: request.scheduleAddress || request.schedule_address,
+    schedule_address_url: request.scheduleAddressUrl || request.schedule_address_url,
+    schedule_municipality: request.scheduleMunicipality || request.schedule_municipality,
+    responsible_unit: request.responsibleUnit || request.responsible_unit,
+    veterinarian: request.veterinarian,
+    notes: request.notes,
+    documents: Array.isArray(request.documents) ? request.documents : [],
+    signature_data_url: request.signatureDataUrl || request.signature_data_url,
+    signed_at: request.signedAt || request.signed_at,
+    created_at: request.createdAt || request.created_at,
+    updated_at: request.updatedAt || request.updated_at,
+    workflow_data: {
+      ...workflowData,
+      cadUnico: request.cadUnico || workflowData.cadUnico || "",
+      cadUnicoNotApplicable: Boolean(request.cadUnicoNotApplicable || workflowData.cadUnicoNotApplicable),
+      isFarmer: Boolean(request.isFarmer || request.is_farmer || workflowData.isFarmer || workflowData.is_farmer),
+      scheduleTime: request.scheduleTime || request.schedule_time || workflowData.scheduleTime || workflowData.schedule_time || "",
+      scheduleSlotTime: request.scheduleSlotTime || request.schedule_slot_time || workflowData.scheduleSlotTime || workflowData.schedule_slot_time || "",
+    },
+  };
 }
 
 async function generateDocumentBundlePdf(request = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const output = await PDFDocument.create();
   try {
     const requestDataUrl = await createRequestPdfDataUrl(request);
@@ -7914,7 +10079,6 @@ async function generateDocumentBundlePdf(request = {}) {
 }
 
 async function generateFallbackBundlePdf(request = {}, error = null) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const output = await PDFDocument.create();
   await appendUnsupportedAttachmentPage(output, {
     title: "Juntada do processo",
@@ -7933,7 +10097,6 @@ async function generateFallbackBundlePdf(request = {}, error = null) {
 }
 
 async function createRequestPdfDataUrl(request = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -7953,16 +10116,26 @@ async function createRequestPdfDataUrl(request = {}) {
   const validationKey = request.validationKey || request.validation_key || "A definir";
   const animals = Array.isArray(request.animals) ? request.animals : [];
   const signedAt = request.signedAt || request.signed_at || request.createdAt || request.created_at || new Date().toISOString();
+  const scheduleAddress = [
+    request.scheduleLocationName || request.locationName,
+    request.scheduleAddress || request.schedule_address,
+    request.scheduleMunicipality || request.municipalityName || request.city,
+  ].filter(Boolean).join(" - ");
+  const scheduleMapUrl = request.scheduleAddressUrl || request.schedule_address_url || "";
+
+  const scheduleSlotTime = request.scheduleSlotTime || request.schedule_slot_time || request.scheduleTime || request.schedule_time || "";
+  const scheduleDisplay = [request.preferredSchedule || request.appointment, scheduleSlotTime].filter(Boolean).join(" – ");
 
   const page1 = pdf.addPage(pageSize);
   let y = drawRequestPdfHeader(page1, "REQUERIMENTO MUNICIPAL", "Solicitação de castração animal", request.protocol || "-", ctx);
   y = drawRequestPdfSectionTitle(page1, "Agendamento", y, ctx);
   y = drawRequestPdfInfoGrid(page1, [
-    ["DATA ESCOLHIDA", request.preferredSchedule || "-"],
-    ["TIPO", request.type || "-"],
-    ["LOCAL", request.scheduleLocationName || "A confirmar"],
-    ["ABERTURA", request.createdAt || new Date().toLocaleDateString("pt-BR")],
-  ], y, { ...ctx, columns: 4 });
+    ["DATA DA AGENDA", scheduleDisplay || "-"],
+    ["PROCEDIMENTO", requestTypeLabel(request)],
+    ["POSTO / LOCAL DE ATENDIMENTO", scheduleAddress || "A confirmar", 2],
+    ["ABERTURA", request.createdAt ? formatDateTime(request.createdAt) : new Date().toLocaleDateString("pt-BR")],
+    ["LINK DO MAPA", scheduleMapUrl || "-", 3],
+  ], y, { ...ctx, columns: 4, valueMaxChars: 118 });
   y = drawRequestPdfSectionTitle(page1, "Dados do tutor", y - 8, ctx);
   const fullAddr = [
     [request.address, request.number].filter(Boolean).join(", "),
@@ -7973,18 +10146,18 @@ async function createRequestPdfDataUrl(request = {}) {
   y = drawRequestPdfInfoGrid(page1, [
     ["NOME", request.tutor || "-"],
     ["CPF", request.cpf || "-"],
-    ["CADUNICO", request.cadUnicoNotApplicable ? "Nao se aplica" : request.cadUnico || "-"],
+    ["CADUNICO", request.cadUnicoNotApplicable ? "Não se aplica" : request.cadUnico || "-"],
     ["CELULAR", request.phone || "-"],
     ["EMAIL", request.email || "-"],
-    ["AGRICULTOR", request.isFarmer ? "Sim" : "Nao"],
     ["ENDEREÇO COMPLETO", fullAddr || "-"],
   ], y, { ...ctx, columns: 3, wideLast: true });
+  y = drawRequestPdfSectionTitle(page1, "Validação", y - 8, ctx);
+  drawRequestPdfValidationBox(page1, validationKey, y, ctx);
+  y -= 64;
   y = drawRequestPdfSectionTitle(page1, `Animais (${animals.length})`, y - 8, ctx);
   for (const [index, animal] of animals.slice(0, 2).entries()) {
     y = drawRequestPdfAnimalCard(page1, animal, index, y, ctx);
   }
-  y = drawRequestPdfSectionTitle(page1, "Validação", y - 6, ctx);
-  drawRequestPdfValidationBox(page1, validationKey, y, ctx);
   drawRequestPdfFooter(page1, "Sistema municipal", "Página 1 de 2", ctx);
 
   const page2 = pdf.addPage(pageSize);
@@ -8010,9 +10183,9 @@ function drawRequestPdfHeader(page, kicker, title, protocol, ctx) {
   page.drawRectangle({ x: margin + width * 0.56, y, width: width * 0.44, height: 70, color: colors.blue });
   page.drawText(pdfText(kicker), { x: margin + 14, y: y + 46, size: 8, font: bold, color: rgb(0.75, 0.95, 1) });
   page.drawText(pdfText(title), { x: margin + 14, y: y + 25, size: 18, font: bold, color: colors.white });
-  page.drawRectangle({ x: margin + width - 98, y: y + 14, width: 82, height: 42, color: colors.blue, borderColor: rgb(0.5, 0.75, 0.9), borderWidth: 1 });
-  page.drawText("PROTOCOLO", { x: margin + width - 75, y: y + 38, size: 7, font: bold, color: rgb(0.82, 0.96, 1) });
-  page.drawText(pdfText(protocol), { x: margin + width - 84, y: y + 20, size: 13, font: bold, color: colors.white });
+  page.drawRectangle({ x: margin + width - 126, y: y + 12, width: 110, height: 46, color: colors.blue, borderColor: rgb(0.5, 0.75, 0.9), borderWidth: 1 });
+  page.drawText("PROTOCOLO", { x: margin + width - 117, y: y + 39, size: 7, font: bold, color: rgb(0.82, 0.96, 1) });
+  page.drawText(pdfText(protocol), { x: margin + width - 117, y: y + 22, size: 13, font: bold, color: colors.white });
   return y - 20;
 }
 
@@ -8024,47 +10197,83 @@ function drawRequestPdfSectionTitle(page, title, y, ctx) {
 }
 
 function drawRequestPdfInfoGrid(page, items, y, ctx) {
-  const { font, bold, colors, rgb, margin, columns = 4, wideLast = false } = ctx;
+  const {
+    font,
+    bold,
+    colors,
+    rgb,
+    margin,
+    columns = 4,
+    wideLast = false,
+    wideIndexes = [],
+    rowHeight = 46,
+    boxHeight = 36,
+    labelSize = 7,
+    valueSize = 9,
+    valueMaxChars = 58,
+  } = ctx;
   const gap = 6;
   const width = page.getWidth() - margin * 2;
   const colWidth = (width - gap * (columns - 1)) / columns;
   let x = margin;
   let rowY = y;
-  items.forEach(([label, value], index) => {
-    const span = wideLast && index === items.length - 1 ? 3 : 1;
+  items.forEach((item, index) => {
+    const [label, value, explicitSpan] = item;
+    const span = explicitSpan
+      ? Math.min(explicitSpan, columns)
+      : wideLast && index === items.length - 1
+      ? Math.min(3, columns)
+      : wideIndexes.includes(index) ? Math.min(2, columns) : 1;
     const boxWidth = colWidth * span + gap * (span - 1);
     if (x + boxWidth > margin + width + 1) {
       x = margin;
-      rowY -= 46;
+      rowY -= rowHeight;
     }
-    page.drawRectangle({ x, y: rowY - 33, width: boxWidth, height: 36, color: rgb(0.97, 0.99, 1), borderColor: colors.line, borderWidth: 1 });
-    page.drawText(pdfText(label), { x: x + 8, y: rowY - 10, size: 7, font: bold, color: colors.muted });
-    page.drawText(pdfText(String(value || "-")).slice(0, 58), { x: x + 8, y: rowY - 24, size: 9, font, color: colors.ink });
+    page.drawRectangle({ x, y: rowY - boxHeight + 3, width: boxWidth, height: boxHeight, color: rgb(0.97, 0.99, 1), borderColor: colors.line, borderWidth: 1 });
+    const safeLabel = pdfText(label) || " ";
+    const safeValue = (pdfText(String(value || "-")).slice(0, valueMaxChars)) || " ";
+    page.drawText(safeLabel, { x: x + 8, y: rowY - 10, size: labelSize, font: bold, color: colors.muted });
+    page.drawText(safeValue, { x: x + 8, y: rowY - 24, size: valueSize, font, color: colors.ink });
     x += boxWidth + gap;
   });
-  return rowY - 48;
+  return rowY - rowHeight - 2;
 }
 
 function drawRequestPdfAnimalCard(page, animal = {}, index, y, ctx) {
   const { font, bold, colors, rgb, margin } = ctx;
   const width = page.getWidth() - margin * 2;
-  const height = 118;
-  page.drawRectangle({ x: margin, y: y - height, width, height, color: colors.orangeSoft, borderColor: rgb(0.98, 0.45, 0.14), borderWidth: 1 });
-  page.drawText(pdfText(`Animal ${index + 1} - ${animal.name || "Sem nome"}`), { x: margin + 10, y: y - 18, size: 11, font: bold, color: colors.orange });
-  drawRequestPdfInfoGrid(page, [
+  const animalFields = [
     ["ESPÉCIE", animal.species || "-"],
     ["SEXO", animal.sex || "-"],
     ["PORTE", animal.size || "-"],
-    ["NASCIMENTO", animal.birthDate || animal.age || "-"],
+    ["NASCIMENTO / IDADE", animal.birthDate || animal.age || "-"],
     ["RAÇA", animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "-")],
     ["PELAGEM", animal.coat || "-"],
     ["PROCEDIMENTO", animal.procedure || "-"],
     ["MICROCHIP", animal.microchip || "-"],
     ["VERMIFUGADO", animal.dewormed || "-"],
     ["VACINAS", animal.vaccinated || "-"],
-    ["JA TEVE CRIA", animal.hadLitter || "-"],
-    ["ALIMENTACAO", animal.food || "-"],
-  ], y - 34, { font, bold, colors, rgb, margin: margin + 10, columns: 3 });
+    ["JÁ TEVE CRIA", animal.hadLitter || "-"],
+    ["ALIMENTAÇÃO", animal.food || "-"],
+  ];
+  const columns = 3;
+  const rowHeight = 40;
+  const boxHeight = 32;
+  const fieldRows = Math.ceil(animalFields.length / columns);
+  const height = 38 + fieldRows * rowHeight + 12;
+  page.drawRectangle({ x: margin, y: y - height, width, height, color: colors.orangeSoft, borderColor: rgb(0.98, 0.45, 0.14), borderWidth: 1 });
+  page.drawText(pdfText(`Animal ${index + 1} - ${animal.name || "Sem nome"}`), { x: margin + 10, y: y - 18, size: 11, font: bold, color: colors.orange });
+  drawRequestPdfInfoGrid(page, animalFields, y - 34, {
+    font,
+    bold,
+    colors,
+    rgb,
+    margin: margin + 10,
+    columns,
+    rowHeight,
+    boxHeight,
+    valueMaxChars: 42,
+  });
   return y - height - 10;
 }
 
@@ -8083,13 +10292,39 @@ function drawRequestPdfDeclaration(page, request, y, ctx) {
   const paragraphs = [
     `Eu, ${request.tutor || "-"}, inscrito(a) no CPF ${request.cpf || "-"}, declaro que as informações prestadas neste requerimento são verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.`,
     "Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal, da necessidade de cumprir as orientações fornecidas pela equipe responsável e de manter os contatos informados disponíveis para comunicações sobre a solicitação.",
-    "Estou ciente de que a solicitação poderá passar por análise documental, validação das informações, confirmação de agenda e eventuais solicitações de complementação antes da realização do atendimento.",
+    "Estou ciente de que a solicitação poderá passar por validação das informações, confirmação de agenda e eventuais solicitações de complementação antes da realização do atendimento.",
   ];
+  const textAreaWidth = width - 28;
+  const charWidth = 5.6;
   page.drawRectangle({ x: margin, y: y - 160, width, height: 160, color: rgb(0.97, 0.99, 1), borderColor: colors.line, borderWidth: 1 });
   let textY = y - 24;
   paragraphs.forEach((paragraph) => {
-    wrapPdfText(pdfText(paragraph), 95).forEach((line) => {
-      page.drawText(line, { x: margin + 14, y: textY, size: 10, font, color: colors.ink });
+    const lines = wrapPdfText(paragraph, 95);
+    lines.forEach((line, li) => {
+      if (!line) { textY -= 14; return; }
+      const isLast = li === lines.length - 1;
+      const words = line.split(" ").filter(Boolean);
+      if (!words.length) { textY -= 14; return; }
+      if (isLast || words.length <= 1) {
+        page.drawText(line, { x: margin + 14, y: textY, size: 10, font, color: colors.ink });
+      } else {
+        try {
+          const wordsWidth = words.reduce((sum, w) => sum + font.widthOfTextAtSize(w, 10), 0);
+          const gap = (textAreaWidth - wordsWidth) / (words.length - 1);
+          let curX = margin + 14;
+          words.forEach((word) => {
+            page.drawText(word, { x: curX, y: textY, size: 10, font, color: colors.ink });
+            curX += font.widthOfTextAtSize(word, 10) + gap;
+          });
+        } catch {
+          const gap = (textAreaWidth - line.length * charWidth) / (words.length - 1);
+          let curX = margin + 14;
+          words.forEach((word) => {
+            page.drawText(word, { x: curX, y: textY, size: 10, font, color: colors.ink });
+            curX += word.length * charWidth + gap;
+          });
+        }
+      }
       textY -= 14;
     });
     textY -= 8;
@@ -8113,9 +10348,11 @@ async function drawRequestPdfSignatureImage(pdf, page, dataUrl, y, ctx) {
 
 function drawRequestPdfFooter(page, left, right, ctx) {
   const { font, colors, rgb, margin } = ctx;
+  const safeLeft = pdfText(left) || " ";
+  const safeRight = pdfText(right) || " ";
   page.drawLine({ start: { x: margin, y: 32 }, end: { x: page.getWidth() - margin, y: 32 }, thickness: 1, color: rgb(0.89, 0.93, 0.95) });
-  page.drawText(pdfText(left), { x: margin, y: 18, size: 8, font, color: colors.muted });
-  page.drawText(pdfText(right), { x: page.getWidth() - margin - 60, y: 18, size: 8, font, color: colors.muted });
+  page.drawText(safeLeft, { x: margin, y: 18, size: 8, font, color: colors.muted });
+  page.drawText(safeRight, { x: page.getWidth() - margin - 60, y: 18, size: 8, font, color: colors.muted });
 }
 
 function wrapPdfText(text, maxChars) {
@@ -8139,7 +10376,6 @@ function pdfText(value = "") {
 }
 
 async function appendPdfDataUrl(targetPdf, dataUrl) {
-  const { PDFDocument } = await import("pdf-lib");
   const sourcePdf = await PDFDocument.load(dataUrlToUint8Array(dataUrl));
   const pages = await targetPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
   pages.forEach((page) => targetPdf.addPage(page));
@@ -8202,7 +10438,7 @@ function generateReportsPdf(requests = [], filters = {}, series = {}, requestTyp
   const rows = normalizedRequests.map((request) => `
     <tr>
       <td>${escapeHtml(request.protocol || request.id || "")}</td>
-      <td>${escapeHtml(request.tutor || request.tutor_name || "Nao informado")}</td>
+      <td>${escapeHtml(request.tutor || request.tutor_name || "Não informado")}</td>
       <td>${escapeHtml(getRequestTypeName(request, requestTypes))}</td>
       <td>${escapeHtml(statusLabels[request.status] || request.status || "")}</td>
       <td>${escapeHtml(requestResultLabel(request))}</td>
@@ -8221,18 +10457,17 @@ function generateReportsPdf(requests = [], filters = {}, series = {}, requestTyp
   const typeRows = buildSummaryRows(series.typeSeries);
   const userRows = buildSummaryRows(series.userSeries);
   const feeRows = buildSummaryRows(series.feeSeries);
-  const period = [filters.start || "inicio", filters.end || "hoje"].join(" ate ");
+  const period = [filters.start || "início", filters.end || "hoje"].join(" até ");
   const filterRows = [
     ["Tipo", filters.type || "Todos"],
     ["Status", filters.status ? statusLabels[filters.status] || filters.status : "Todos"],
-    ["Usuario", filters.user || "Todos"],
+    ["Usuário", filters.user || "Todos"],
     ["Taxa", filters.fee === "charged" ? "Com taxa" : filters.fee === "free" ? "Gratuitas" : "Todas"],
-    ["Busca", filters.search || "Sem busca"],
   ].map(([label, value]) => `<tr><td>${escapeHtml(label)}</td><td>${escapeHtml(value)}</td></tr>`).join("");
   const html = `
     <html>
       <head>
-        <title>Relatorio municipal</title>
+        <title>Relatório municipal</title>
         <style>
           * { box-sizing: border-box; }
           body { margin: 0; color: #172026; font-family: Arial, sans-serif; background: #ffffff; }
@@ -8259,7 +10494,7 @@ function generateReportsPdf(requests = [], filters = {}, series = {}, requestTyp
       <body>
         <main class="page">
           <header class="header">
-            <div><span>Relatorio municipal</span><h1>Solicitacoes de castracao</h1></div>
+            <div><span>Relatório municipal</span><h1>Processos</h1></div>
             <div><span>Periodo</span><strong>${escapeHtml(period)}</strong></div>
           </header>
           <section class="summary">
@@ -8270,14 +10505,14 @@ function generateReportsPdf(requests = [], filters = {}, series = {}, requestTyp
           </section>
           <section class="tables-grid">
             <div><p class="section-title">Filtros aplicados</p><table><tbody>${filterRows}</tbody></table></div>
-            <div><p class="section-title">Status</p><table><thead><tr><th>Descricao</th><th>Qtd.</th></tr></thead><tbody>${statusRows}</tbody></table></div>
-            <div><p class="section-title">Resultado</p><table><thead><tr><th>Descricao</th><th>Qtd.</th></tr></thead><tbody>${resultRows}</tbody></table></div>
-            <div><p class="section-title">Tipos</p><table><thead><tr><th>Descricao</th><th>Qtd.</th></tr></thead><tbody>${typeRows}</tbody></table></div>
-            <div><p class="section-title">Responsaveis</p><table><thead><tr><th>Descricao</th><th>Qtd.</th></tr></thead><tbody>${userRows}</tbody></table></div>
-            <div><p class="section-title">Taxas</p><table><thead><tr><th>Descricao</th><th>Qtd.</th></tr></thead><tbody>${feeRows}</tbody></table></div>
+            <div><p class="section-title">Status</p><table><thead><tr><th>Descrição</th><th>Qtd.</th></tr></thead><tbody>${statusRows}</tbody></table></div>
+            <div><p class="section-title">Resultado</p><table><thead><tr><th>Descrição</th><th>Qtd.</th></tr></thead><tbody>${resultRows}</tbody></table></div>
+            <div><p class="section-title">Tipos</p><table><thead><tr><th>Descrição</th><th>Qtd.</th></tr></thead><tbody>${typeRows}</tbody></table></div>
+            <div><p class="section-title">Responsáveis</p><table><thead><tr><th>Descrição</th><th>Qtd.</th></tr></thead><tbody>${userRows}</tbody></table></div>
+            <div><p class="section-title">Taxas</p><table><thead><tr><th>Descrição</th><th>Qtd.</th></tr></thead><tbody>${feeRows}</tbody></table></div>
           </section>
           <table class="records">
-            <thead><tr><th>Protocolo</th><th>Tutor</th><th>Tipo</th><th>Status</th><th>Resultado</th><th>Usuario</th><th>Taxa</th></tr></thead>
+            <thead><tr><th>Protocolo</th><th>Tutor</th><th>Tipo</th><th>Status</th><th>Resultado</th><th>Usuário</th><th>Taxa</th></tr></thead>
             <tbody>${rows || '<tr><td colspan="7">Nenhum registro encontrado</td></tr>'}</tbody>
           </table>
         </main>
@@ -8286,7 +10521,7 @@ function generateReportsPdf(requests = [], filters = {}, series = {}, requestTyp
   `;
 
   const iframe = document.createElement("iframe");
-  iframe.title = "Relatorio municipal";
+  iframe.title = "Relatório municipal";
   iframe.style.position = "fixed";
   iframe.style.right = "0";
   iframe.style.bottom = "0";
@@ -8326,12 +10561,13 @@ function getCurrentScheduleMonthKey() {
 }
 
 function getScheduleMonthKey(dateText) {
-  const [, month, year] = dateText.split("/");
+  const [, month, year] = normalizeScheduleDateText(dateText).split("/");
+  if (!month || !year) return "";
   return `${month}/${year}`;
 }
 
 function parseScheduleDate(dateText) {
-  const [day, month, year] = dateText.split("/").map(Number);
+  const [day, month, year] = normalizeScheduleDateText(dateText).split("/").map(Number);
   return new Date(year, month - 1, day);
 }
 
@@ -8346,6 +10582,44 @@ function countUsedVacancies(requests, date) {
     .reduce((sum, request) => sum + countRequestAnimals(request), 0);
 }
 
+function isGlobalRole(role = "") {
+  return ["master", "suporte"].includes(normalizeText(role));
+}
+
+function getScheduleSlotUsage(requests, date, slots = []) {
+  const usage = new Map(normalizeScheduleSlots(slots).map((slot) => [slot.time, 0]));
+  let unassigned = 0;
+
+  requests
+    .map(normalizeRequest)
+    .filter((request) => (request.preferredSchedule || request.appointment || request.schedule_date) === date)
+    .forEach((request) => {
+      const count = countRequestAnimals(request);
+      const slotTime = request.scheduleSlotTime || request.scheduleTime;
+      if (slotTime && usage.has(slotTime)) {
+        usage.set(slotTime, usage.get(slotTime) + count);
+      } else {
+        unassigned += count;
+      }
+    });
+
+  normalizeScheduleSlots(slots).forEach((slot) => {
+    if (unassigned <= 0) return;
+    const used = usage.get(slot.time) || 0;
+    const assignable = Math.min(Math.max(slot.vacancies - used, 0), unassigned);
+    usage.set(slot.time, used + assignable);
+    unassigned -= assignable;
+  });
+
+  return usage;
+}
+
+function getOfferedScheduleSlot(day, requests, requiredVacancies = 1) {
+  const slots = normalizeScheduleSlots(day?.slots, day?.startTime || day?.time, day?.vacancies);
+  const usage = getScheduleSlotUsage(requests, day?.date, slots);
+  return slots.find((slot) => Math.max(slot.vacancies - (usage.get(slot.time) || 0), 0) >= requiredVacancies) || null;
+}
+
 function isPastScheduleDay(dateText) {
   const date = parseScheduleDate(dateText);
   const today = new Date();
@@ -8357,7 +10631,8 @@ function buildScheduleMonths(days) {
   const monthSet = new Set([getCurrentScheduleMonthKey()]);
 
   days.forEach((day) => {
-    monthSet.add(getScheduleMonthKey(day.date));
+    const monthKey = getScheduleMonthKey(day.date);
+    if (monthKey) monthSet.add(monthKey);
   });
 
   return Array.from(monthSet).sort((left, right) => {
@@ -8406,10 +10681,6 @@ function FormSection({ title, action, children }) {
   );
 }
 
-
-function Chip({ children }) {
-  return <span className="chip">{children}</span>;
-}
 
 function DataBarChart({ title, items = [] }) {
   const visibleItems = topItems(items.filter((item) => Number(item.value) > 0), 6);
@@ -8475,16 +10746,6 @@ function DataDonutChart({ title, items = [] }) {
   );
 }
 
-
-function ConfigTile({ icon: Icon, title, text }) {
-  return (
-    <article className="config-tile">
-      <Icon size={22} />
-      <h3>{title}</h3>
-      <p>{text}</p>
-    </article>
-  );
-}
 
 function buildMetrics(requests) {
   const normalizedRequests = requests.map(normalizeRequest);

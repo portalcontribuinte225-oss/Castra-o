@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { normalizeCpf } from "../utils.js";
+import { isGlobalUser } from "../tenant.js";
 
 const router = Router();
 
@@ -194,8 +195,8 @@ async function ensureAnimalFromLegacyRequest(client, microchip) {
   }
 
   await client.query(
-    `INSERT INTO animal_records (animal_id, request_id, record_type, title, data, occurred_at)
-     SELECT $1, $2, 'IMPORTACAO_SOLICITACAO', 'Animal vinculado por microchip', $3::jsonb, COALESCE($4, NOW())
+    `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, data, occurred_at)
+     SELECT $1, $2, $3, 'IMPORTACAO_SOLICITACAO', 'Animal vinculado por microchip', $4::jsonb, COALESCE($5, NOW())
      WHERE NOT EXISTS (
        SELECT 1 FROM animal_records
        WHERE animal_id = $1 AND request_id = $2 AND record_type = 'IMPORTACAO_SOLICITACAO'
@@ -203,6 +204,7 @@ async function ensureAnimalFromLegacyRequest(client, microchip) {
     [
       animal.id,
       request.id,
+      request.municipality_id,
       JSON.stringify({ protocol: request.protocol, microchip }),
       request.created_at,
     ],
@@ -236,7 +238,20 @@ async function isCredentialAuthorizedForAnimal(client, animalId, cpf, validation
 
 async function isUserAuthorizedForAnimal(client, user, animal) {
   if (!user) return false;
-  if (user.role === "admin") return true;
+  if (isGlobalUser(user)) return true;
+
+  const municipalityId = user.municipalityId || user.municipality_id || null;
+  if (municipalityId) {
+    const { rows } = await client.query(
+      `SELECT 1
+       FROM animal_records
+       WHERE animal_id = $1
+         AND municipality_id = $2
+       LIMIT 1`,
+      [animal.id, municipalityId],
+    );
+    if (rows[0]) return true;
+  }
 
   const { rows } = await client.query(
     `SELECT 1
@@ -278,15 +293,20 @@ async function buildAnimalHistory(client, animal) {
 
   const { rows: requests } = await client.query(
     `SELECT id, protocol, request_type, status, notes, death_date, death_cause,
-            target_tutor_name, target_tutor_cpf, created_at, updated_at
+            tutor_name, tutor_email, cpf, phone, address, neighborhood, city, state, cep,
+            animal_name, animal_microchip, species, size, animals, municipality, municipality_id,
+            target_tutor_name, target_tutor_cpf, schedule_date, schedule_location_name,
+            schedule_address, schedule_address_url, schedule_municipality,
+            responsible_unit, veterinarian, workflow_data, history, documents,
+            signature_data_url, signed_at, created_at, updated_at
      FROM requests r
-     WHERE r.animal_id = $1
+     WHERE (r.animal_id = $1
         OR regexp_replace(upper(COALESCE(r.animal_microchip, '')), '[^A-Z0-9]', '', 'g') = $2
         OR EXISTS (
           SELECT 1
           FROM jsonb_array_elements(COALESCE(r.animals, '[]'::jsonb)) elem
           WHERE regexp_replace(upper(COALESCE(elem->>'microchip', '')), '[^A-Z0-9]', '', 'g') = $2
-        )
+        ))
      ORDER BY created_at DESC`,
     [animal.id, animal.microchip],
   );
@@ -310,6 +330,48 @@ async function buildAnimalHistory(client, animal) {
     request_id: request.id,
     protocol: request.protocol,
     data: {
+      registration: {
+        protocol: request.protocol,
+        request_type: request.request_type,
+        status: request.status,
+        tutor_name: request.tutor_name,
+        tutor_email: request.tutor_email,
+        cpf: request.cpf,
+        phone: request.phone,
+        address: request.address,
+        neighborhood: request.neighborhood,
+        city: request.city,
+        state: request.state,
+        cep: request.cep,
+        animal_name: request.animal_name,
+        animal_microchip: request.animal_microchip,
+        species: request.species,
+        size: request.size,
+        animals: request.animals || [],
+        municipality: request.municipality,
+        municipality_id: request.municipality_id,
+        schedule_date: request.schedule_date,
+        schedule_location_name: request.schedule_location_name,
+        schedule_address: request.schedule_address,
+        schedule_address_url: request.schedule_address_url,
+        schedule_municipality: request.schedule_municipality,
+        responsible_unit: request.responsible_unit,
+        veterinarian: request.veterinarian,
+        notes: request.notes,
+        documents: request.documents || [],
+        signature_data_url: request.signature_data_url,
+        signed_at: request.signed_at,
+        created_at: request.created_at,
+        updated_at: request.updated_at,
+        workflow_data: request.workflow_data || {},
+      },
+      workflow_data: request.workflow_data || {},
+      history: request.history || [],
+      schedule_date: request.schedule_date,
+      schedule_location_name: request.schedule_location_name,
+      schedule_address: request.schedule_address,
+      responsible_unit: request.responsible_unit,
+      veterinarian: request.veterinarian,
       death_date: request.death_date,
       death_cause: request.death_cause,
       target_tutor_name: request.target_tutor_name,
@@ -427,12 +489,12 @@ router.post("/requests/:requestId/death", async (req, res) => {
         tutor_id, protocol, validation_key, tutor_name, tutor_email, cpf, phone,
         address, neighborhood, city, state, cep, animal_id, animal_microchip,
         animal_name, species, size, animals, request_type, notes, status,
-        death_date, death_cause, tags, workflow_data
+        death_date, death_cause, tags, workflow_data, municipality_id
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'ANIMAL_OBITO', $19, 'EM_ANALISE', $20, $21, $22::jsonb, $23::jsonb
+        'ANIMAL_OBITO', $19, 'EM_ANALISE', $20, $21, $22::jsonb, $23::jsonb, $24
       )
       RETURNING *`,
       [
@@ -459,14 +521,15 @@ router.post("/requests/:requestId/death", async (req, res) => {
         deathCause,
         JSON.stringify(["OBITO", ...(microchip ? ["MICROCHIP"] : [])]),
         JSON.stringify(workflowData),
+        source.municipality_id,
       ],
     );
 
     if (linkedAnimal?.id) {
       await client.query(
-        `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data)
-         VALUES ($1, $2, 'SOLICITACAO_OBITO', 'Solicitacao de obito aberta', $3, $4::jsonb)`,
-        [linkedAnimal.id, rows[0].id, notes, JSON.stringify({ protocol, death_date: deathDate, death_cause: deathCause })],
+        `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, notes, data)
+         VALUES ($1, $2, $3, 'SOLICITACAO_OBITO', 'Solicitacao de obito aberta', $4, $5::jsonb)`,
+        [linkedAnimal.id, rows[0].id, source.municipality_id, notes, JSON.stringify({ protocol, death_date: deathDate, death_cause: deathCause })],
       );
     }
 
@@ -523,13 +586,13 @@ router.post("/requests/:requestId/transfer", async (req, res) => {
         address, neighborhood, city, state, cep, animal_id, animal_microchip,
         animal_name, species, size, animals, request_type, notes, status,
         target_tutor_name, target_tutor_email, target_tutor_cpf, target_tutor_phone,
-        tags, workflow_data
+        tags, workflow_data, municipality_id
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
         'TROCA_TUTOR', $19, 'EM_ANALISE', $20, $21, $22, $23,
-        $24::jsonb, $25::jsonb
+        $24::jsonb, $25::jsonb, $26
       )
       RETURNING *`,
       [
@@ -558,14 +621,15 @@ router.post("/requests/:requestId/transfer", async (req, res) => {
         target.phone,
         JSON.stringify(["TROCA_TUTOR", ...(microchip ? ["MICROCHIP"] : [])]),
         JSON.stringify(workflowData),
+        source.municipality_id,
       ],
     );
 
     if (linkedAnimal?.id) {
       await client.query(
-        `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data)
-         VALUES ($1, $2, 'SOLICITACAO_TROCA_TUTOR', 'Solicitacao de troca de tutor aberta', $3, $4::jsonb)`,
-        [linkedAnimal.id, rows[0].id, notes, JSON.stringify({ protocol, target_tutor: target })],
+        `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, notes, data)
+         VALUES ($1, $2, $3, 'SOLICITACAO_TROCA_TUTOR', 'Solicitacao de troca de tutor aberta', $4, $5::jsonb)`,
+        [linkedAnimal.id, rows[0].id, source.municipality_id, notes, JSON.stringify({ protocol, target_tutor: target })],
       );
     }
 
@@ -612,17 +676,26 @@ router.post("/:id/death", optionalAuth, async (req, res) => {
       death_cause: deathCause || null,
     };
 
+    let municipalityId = req.user?.municipalityId || null;
+    if (!municipalityId) {
+      const { rows: mRows } = await client.query(
+        "SELECT municipality_id FROM requests WHERE animal_id = $1 AND municipality_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+        [animal.id],
+      );
+      municipalityId = mRows[0]?.municipality_id || null;
+    }
+
     const { rows } = await client.query(
       `INSERT INTO requests (
         tutor_id, protocol, validation_key, tutor_name, tutor_email, cpf, phone,
         address, neighborhood, city, state, cep, animal_id, animal_microchip,
         animal_name, species, size, animals, request_type, notes, status,
-        death_date, death_cause, tags, workflow_data
+        death_date, death_cause, tags, workflow_data, municipality_id
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'ANIMAL_OBITO', $19, 'EM_ANALISE', $20, $21, $22::jsonb, $23::jsonb
+        'ANIMAL_OBITO', $19, 'EM_ANALISE', $20, $21, $22::jsonb, $23::jsonb, $24
       )
       RETURNING *`,
       [
@@ -649,15 +722,17 @@ router.post("/:id/death", optionalAuth, async (req, res) => {
         deathCause || null,
         JSON.stringify(["MICROCHIP", "OBITO"]),
         JSON.stringify(workflowData),
+        municipalityId,
       ],
     );
 
     await client.query(
-      `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data, created_by)
-       VALUES ($1, $2, 'SOLICITACAO_OBITO', 'Solicitacao de obito aberta', $3, $4::jsonb, $5)`,
+      `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, notes, data, created_by)
+       VALUES ($1, $2, $3, 'SOLICITACAO_OBITO', 'Solicitacao de obito aberta', $4, $5::jsonb, $6)`,
       [
         animal.id,
         rows[0].id,
+        municipalityId,
         notes,
         JSON.stringify({ protocol, death_date: deathDate || null, death_cause: deathCause || null }),
         req.user?.id || null,
@@ -714,6 +789,14 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
       cep: pick(req.body?.target_tutor_cep, req.body?.targetTutorCep, req.body?.newTutorCep),
     };
     const workflowData = { animal_request_type: "transfer", target_tutor: target };
+    let municipalityId = req.user?.municipalityId || null;
+    if (!municipalityId) {
+      const { rows: mRows } = await client.query(
+        "SELECT municipality_id FROM requests WHERE animal_id = $1 AND municipality_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+        [animal.id],
+      );
+      municipalityId = mRows[0]?.municipality_id || null;
+    }
 
     const { rows } = await client.query(
       `INSERT INTO requests (
@@ -722,13 +805,13 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
         animal_name, species, size, animals, request_type, notes, status,
         target_tutor_name, target_tutor_email, target_tutor_cpf, target_tutor_phone,
         target_tutor_address, target_tutor_neighborhood, target_tutor_city,
-        target_tutor_state, target_tutor_cep, tags, workflow_data
+        target_tutor_state, target_tutor_cep, tags, workflow_data, municipality_id
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
         'TROCA_TUTOR', $19, 'EM_ANALISE', $20, $21, $22, $23,
-        $24, $25, $26, $27, $28, $29::jsonb, $30::jsonb
+        $24, $25, $26, $27, $28, $29::jsonb, $30::jsonb, $31
       )
       RETURNING *`,
       [
@@ -762,15 +845,17 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
         target.cep,
         JSON.stringify(["MICROCHIP", "TROCA_TUTOR"]),
         JSON.stringify(workflowData),
+        municipalityId,
       ],
     );
 
     await client.query(
-      `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data, created_by)
-       VALUES ($1, $2, 'SOLICITACAO_TROCA_TUTOR', 'Solicitacao de troca de tutor aberta', $3, $4::jsonb, $5)`,
+      `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, notes, data, created_by)
+       VALUES ($1, $2, $3, 'SOLICITACAO_TROCA_TUTOR', 'Solicitacao de troca de tutor aberta', $4, $5::jsonb, $6)`,
       [
         animal.id,
         rows[0].id,
+        municipalityId,
         notes,
         JSON.stringify({ protocol, target_tutor: target }),
         req.user?.id || null,

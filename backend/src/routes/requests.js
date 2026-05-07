@@ -3,6 +3,8 @@ import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
 import { normalizeCpf } from "../utils.js";
+import { isGlobalUser, requireMunicipality } from "../tenant.js";
+import { notifyScheduleConfirmation, whatsappHistoryNote } from "../services/whatsapp.js";
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(["EM_ANALISE", "AGUARDANDO_CIRURGIA", "ARQUIVADA"]);
@@ -122,7 +124,9 @@ router.get("/", auth, async (req, res) => {
   try {
     const query = req.user.role === "tutor"
       ? { text: "SELECT * FROM requests WHERE tutor_id = $1 ORDER BY created_at DESC", values: [req.user.id] }
-      : { text: "SELECT * FROM requests ORDER BY created_at DESC", values: [] };
+      : isGlobalUser(req.user)
+      ? { text: "SELECT * FROM requests ORDER BY created_at DESC", values: [] }
+      : { text: "SELECT * FROM requests WHERE municipality_id = $1 ORDER BY created_at DESC", values: [req.user.municipalityId] };
     const { rows } = await pool.query(query.text, query.values);
     res.json(rows);
   } catch (err) {
@@ -132,12 +136,12 @@ router.get("/", auth, async (req, res) => {
 
 router.get("/public/:validationKey", async (req, res) => {
   try {
+    const municipalityId = req.query.municipalityId || null;
+    const values = municipalityId ? [req.params.validationKey, municipalityId] : [req.params.validationKey];
+    const scope = municipalityId ? " AND municipality_id = $2" : "";
     const { rows } = await pool.query(
-      `SELECT *
-       FROM requests
-       WHERE validation_key = $1
-       ORDER BY created_at DESC`,
-      [req.params.validationKey]
+      `SELECT * FROM requests WHERE validation_key = $1${scope} ORDER BY created_at DESC`,
+      values
     );
     res.json(rows);
   } catch (err) {
@@ -147,7 +151,7 @@ router.get("/public/:validationKey", async (req, res) => {
 
 router.post("/consult", async (req, res) => {
   try {
-    const { validationKey, cpf } = req.body || {};
+    const { validationKey, cpf, municipalityId } = req.body || {};
     const cleanCpf = normalizeCpf(cpf);
     if (cleanCpf.length !== 11) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
     if (!validationKey) return res.status(400).json({ error: "Chave de consulta obrigatoria." });
@@ -160,12 +164,11 @@ router.post("/consult", async (req, res) => {
       return res.status(404).json({ error: "CPF e chave de validacao nao conferem." });
     }
 
+    const scope = municipalityId ? " AND municipality_id = $2" : "";
+    const values = municipalityId ? [cleanCpf, municipalityId] : [cleanCpf];
     const { rows } = await pool.query(
-      `SELECT *
-       FROM requests
-       WHERE regexp_replace(COALESCE(cpf, ''), '\\D', '', 'g') = $1
-       ORDER BY created_at DESC`,
-      [cleanCpf]
+      `SELECT * FROM requests WHERE regexp_replace(COALESCE(cpf, ''), '\\D', '', 'g') = $1${scope} ORDER BY created_at DESC`,
+      values
     );
     res.json(rows.map((row) => ({ ...row, validation_key: row.validation_key || validationKey.trim() })));
   } catch (err) {
@@ -176,6 +179,8 @@ router.post("/consult", async (req, res) => {
 router.post("/", optionalAuth, async (req, res) => {
   const body = req.body || {};
   const tutorId = req.user?.id || null;
+  const municipalityId = requireMunicipality(req, res);
+  if (!municipalityId) return;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -215,10 +220,12 @@ router.post("/", optionalAuth, async (req, res) => {
         animals,
         request_type,
         municipality,
+        municipality_id,
         notes,
         status,
         schedule_date,
         schedule_location_name,
+        schedule_address,
         schedule_address_url,
         schedule_municipality,
         responsible_unit,
@@ -234,9 +241,9 @@ router.post("/", optionalAuth, async (req, res) => {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        $19, $20, $21, 'EM_ANALISE', $22, $23, $24, $25,
-        $26, $27, $28, $29, $30::jsonb, $31::jsonb, $32::jsonb,
-        $33, $34
+        $19, $20, $21, $22, 'EM_ANALISE', $23, $24, $25, $26,
+        $27, $28, $29, $30, $31, $32::jsonb, $33::jsonb, $34::jsonb,
+        $35, $36
       )
       RETURNING *`,
       [
@@ -260,9 +267,11 @@ router.post("/", optionalAuth, async (req, res) => {
         JSON.stringify(animals),
         requestType,
         pick(body.municipality, body.scheduleMunicipality),
+        municipalityId,
         body.notes,
         scheduleDate,
         pick(body.schedule_location_name, body.scheduleLocationName),
+        pick(body.schedule_address, body.scheduleAddress),
         pick(body.schedule_address_url, body.scheduleAddressUrl),
         pick(body.schedule_municipality, body.scheduleMunicipality),
         pick(body.responsible_unit, body.responsibleUnit),
@@ -279,11 +288,12 @@ router.post("/", optionalAuth, async (req, res) => {
 
     if (rows[0].animal_id) {
       await client.query(
-        `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data, created_by)
-         VALUES ($1, $2, 'SOLICITACAO_PROCEDIMENTO', 'Solicitacao de procedimento aberta', $3, $4::jsonb, $5)`,
+        `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, notes, data, created_by)
+         VALUES ($1, $2, $3, 'SOLICITACAO_PROCEDIMENTO', 'Solicitacao de procedimento aberta', $4, $5::jsonb, $6)`,
         [
           rows[0].animal_id,
           rows[0].id,
+          municipalityId,
           body.notes || null,
           JSON.stringify({ protocol, request_type: requestType || null, animal_microchip: rows[0].animal_microchip || null }),
           req.user?.id || null,
@@ -321,6 +331,7 @@ router.patch("/:id", auth, async (req, res) => {
     signatureDataUrl: "signature_data_url",
     signedAt: "signed_at",
     scheduleLocationName: "schedule_location_name",
+    scheduleAddress: "schedule_address",
     scheduleAddressUrl: "schedule_address_url",
     scheduleMunicipality: "schedule_municipality",
     responsibleUnit: "responsible_unit",
@@ -342,7 +353,7 @@ router.patch("/:id", auth, async (req, res) => {
     "tutor_name", "tutor_email", "cpf", "phone", "address", "neighborhood",
     "city", "state", "cep", "animal_name", "species", "size", "animals",
     "request_type", "municipality", "notes", "status", "schedule_date",
-    "schedule_location_name", "schedule_address_url", "schedule_municipality",
+    "schedule_location_name", "schedule_address", "schedule_address_url", "schedule_municipality",
     "responsible_unit", "veterinarian", "signature_data_url", "signed_at",
     "documents", "assigned_sector", "tags", "workflow_data",
     "latitude", "longitude", "animal_id", "animal_microchip",
@@ -379,9 +390,11 @@ router.patch("/:id", auth, async (req, res) => {
   }
 
   try {
+    const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
+    const scopeValues = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
     const { rows: existingRows } = await pool.query(
-      "SELECT tags, workflow_data FROM requests WHERE id = $1",
-      [req.params.id],
+      `SELECT tags, workflow_data, municipality_id FROM requests WHERE id = $1${scope}`,
+      scopeValues,
     );
     if (!existingRows[0]) return res.status(404).json({ error: "Não encontrado" });
 
@@ -410,15 +423,48 @@ router.patch("/:id", auth, async (req, res) => {
       setParts.push(`history = history || $${values.length}::jsonb`);
     }
     values.push(req.params.id);
+    const idParam = values.length;
+    let updateScope = "";
+    if (!isGlobalUser(req.user)) {
+      values.push(req.user.municipalityId);
+      updateScope = ` AND municipality_id = $${values.length}`;
+    }
 
     const { rows } = await pool.query(
-      `UPDATE requests SET ${setParts.join(", ")}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`,
+      `UPDATE requests SET ${setParts.join(", ")}, updated_at = NOW() WHERE id = $${idParam}${updateScope} RETURNING *`,
       values
     );
+    if (!rows[0]) return res.status(404).json({ error: "NÃ£o encontrado" });
 
     const updatedTags = parseJsonArray(rows[0].tags);
     const previousTags = parseJsonArray(existingRows[0].tags);
     const isNewAttendance = updatedTags.includes("COMPARECEU") && !previousTags.includes("COMPARECEU");
+    const isNewDeferred = updatedTags.includes("DEFERIDA") && !previousTags.includes("DEFERIDA");
+
+    if (isNewDeferred && rows[0].status === "AGUARDANDO_CIRURGIA") {
+      try {
+        const notification = await notifyScheduleConfirmation(rows[0]);
+        const note = whatsappHistoryNote(notification);
+        const notificationEntry = [{ status: rows[0].status, notes: note, by: "sistema", at: new Date() }];
+        await pool.query(
+          "UPDATE requests SET history = history || $1::jsonb, updated_at = NOW() WHERE id = $2",
+          [JSON.stringify(notificationEntry), rows[0].id],
+        );
+        rows[0].history = [...parseJsonArray(rows[0].history), ...notificationEntry];
+      } catch (err) {
+        const notificationEntry = [{
+          status: rows[0].status,
+          notes: `WhatsApp: falha inesperada ao preparar confirmação. ${err.message || ""}`.trim(),
+          by: "sistema",
+          at: new Date(),
+        }];
+        await pool.query(
+          "UPDATE requests SET history = history || $1::jsonb, updated_at = NOW() WHERE id = $2",
+          [JSON.stringify(notificationEntry), rows[0].id],
+        );
+        rows[0].history = [...parseJsonArray(rows[0].history), ...notificationEntry];
+      }
+    }
 
     if (isNewAttendance) {
       const wf = parseJsonObject(rows[0].workflow_data);
@@ -441,11 +487,12 @@ router.patch("/:id", auth, async (req, res) => {
       if (animalId && performedProcedures) {
         try {
           await pool.query(
-            `INSERT INTO animal_records (animal_id, request_id, record_type, title, notes, data, occurred_at)
-             VALUES ($1, $2, 'CIRURGIA_REALIZADA', $3, $4, $5::jsonb, NOW())`,
+            `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, notes, data, occurred_at)
+             VALUES ($1, $2, $3, 'CIRURGIA_REALIZADA', $4, $5, $6::jsonb, NOW())`,
             [
               animalId,
               rows[0].id,
+              rows[0].municipality_id,
               `Cirurgia realizada — ${rows[0].protocol || rows[0].id}`,
               [performedProcedures, attendanceNote].filter(Boolean).join(" | "),
               JSON.stringify({
@@ -470,7 +517,9 @@ router.patch("/:id", auth, async (req, res) => {
 
 router.delete("/:id", auth, async (req, res) => {
   try {
-    await pool.query("DELETE FROM requests WHERE id = $1", [req.params.id]);
+    const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
+    const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
+    await pool.query(`DELETE FROM requests WHERE id = $1${scope}`, values);
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: err.message });

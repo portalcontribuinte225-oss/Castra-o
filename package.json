@@ -4,18 +4,20 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "npm run build && npm --prefix backend start",
+    "dev": "concurrently -n FRONT,BACK -c cyan,green \"vite build --watch\" \"node backend/src/server.js\"",
     "dev:vite": "vite --host 0.0.0.0 --port 5199 --strictPort",
-    "start": "npm run dev",
+    "start": "npm run build && npm --prefix backend start",
     "build": "vite build",
     "preview": "npm run build && npm --prefix backend start"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
     "lucide-react": "^0.468.0",
     "pdf-lib": "^1.17.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "vite": "^5.4.21"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
   }
 }

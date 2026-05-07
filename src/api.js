@@ -32,13 +32,14 @@ export const api = {
     localStorage.setItem("castragestao:token", data.token);
     return data.user;
   },
+  upsertAuthUser: (body) => request("PUT", "/auth/users", body),
   logout() {
     localStorage.removeItem("castragestao:token");
   },
 
   getRequests: () => request("GET", "/requests"),
   createRequest: (body) => request("POST", "/requests", body),
-  consultRequestsByCredentials: (cpf, validationKey) => request("POST", "/requests/consult", { cpf, validationKey }),
+  consultRequestsByCredentials: (cpf, validationKey, municipalityId) => request("POST", "/requests/consult", { cpf, validationKey, municipalityId }),
   patchRequest: (id, patch) => request("PATCH", `/requests/${id}`, patch),
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),
 
@@ -50,11 +51,11 @@ export const api = {
   createRequestTransferAction: (requestId, body) => request("POST", `/animals/requests/${requestId}/transfer`, body),
 
   getAdoptions: () => request("GET", "/adoptions"),
-  consultAdoptionsByCredentials: (cpf, validationKey) => request("POST", "/adoptions/consult", { cpf, validationKey }),
+  consultAdoptionsByCredentials: (cpf, validationKey, municipalityId) => request("POST", "/adoptions/consult", { cpf, validationKey, municipalityId }),
   createAdoption: (body) => request("POST", "/adoptions", body),
   updateAdoption: (id, body) => request("PATCH", `/adoptions/${id}`, body),
   deleteAdoption: (id) => request("DELETE", `/adoptions/${id}`),
-  registerInterest: (id, body) => request("POST", `/adoptions/${id}/interest`, body),
+  registerInterest: (id, body, municipalityId) => request("POST", `/adoptions/${id}/interest`, { ...body, municipalityId }),
   getInterests: (id) => request("GET", `/adoptions/${id}/interests`),
   removeInterest: (id, index) => request("DELETE", `/adoptions/${id}/interest/${index}`),
 
@@ -62,13 +63,23 @@ export const api = {
   createAccessRequest: (body) => request("POST", "/access-requests", body),
   reviewAccessRequest: (id, body) => request("PATCH", `/access-requests/${id}/review`, body),
 
-  getSchedule: () => request("GET", "/schedule"),
+  getSchedule: (municipalityId = "") => request("GET", municipalityId ? `/schedule?municipalityId=${encodeURIComponent(municipalityId)}` : "/schedule"),
   createScheduleDay: (body) => request("POST", "/schedule", body),
+  bulkCreateScheduleDays: (body) => request("POST", "/schedule/bulk", body),
   updateScheduleDay: (id, body) => request("PATCH", `/schedule/${id}`, body),
   deleteScheduleDay: (id) => request("DELETE", `/schedule/${id}`),
 
-  getConfig: (key) => request("GET", `/config/${key}`),
-  setConfig: (key, value) => request("PUT", `/config/${key}`, value),
+  getConfig: (key, municipalityId = "") => request("GET", municipalityId ? `/config/${key}?municipalityId=${encodeURIComponent(municipalityId)}` : `/config/${key}`),
+  setConfig: (key, value, municipalityId = "") => request(
+    "PUT",
+    municipalityId ? `/config/${key}?municipalityId=${encodeURIComponent(municipalityId)}` : `/config/${key}`,
+    value,
+  ),
+
+  getMunicipalities: () => request("GET", "/municipalities"),
+  getMunicipalitiesAdmin: () => request("GET", "/municipalities/admin"),
+  createMunicipality: (body) => request("POST", "/municipalities", body),
+  updateMunicipality: (id, body) => request("PATCH", `/municipalities/${id}`, body),
 
   validateDocument: (body) => request("POST", "/ai/validate", body),
 };

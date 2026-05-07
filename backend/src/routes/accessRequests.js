@@ -3,16 +3,12 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
+import { isGlobalUser } from "../tenant.js";
 
 const router = Router();
 
 const REQUESTER_TYPES = new Set(["ONG", "PROTETOR"]);
 const REQUEST_STATUSES = new Set(["PENDENTE", "APROVADO", "RECUSADO"]);
-
-const typeLabels = {
-  ONG: "ONG",
-  PROTETOR: "Protetor",
-};
 
 const roleByType = {
   ONG: "ong",
@@ -47,9 +43,12 @@ function publicAccessRequest(row = {}) {
   };
 }
 
-router.get("/", auth, async (_req, res) => {
+router.get("/", auth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM access_requests ORDER BY created_at DESC");
+    const query = isGlobalUser(req.user)
+      ? { text: "SELECT * FROM access_requests ORDER BY created_at DESC", values: [] }
+      : { text: "SELECT * FROM access_requests WHERE municipality_id = $1 ORDER BY created_at DESC", values: [req.user.municipalityId] };
+    const { rows } = await pool.query(query.text, query.values);
     res.json(rows.map(publicAccessRequest));
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -62,6 +61,7 @@ router.post("/", async (req, res) => {
   const responsibleName = String(body.responsible_name || body.responsibleName || "").trim();
   const email = normalizeEmail(body.email);
   const assignedSector = String(body.assigned_sector || body.assignedSector || sectorByType[requesterType] || "").trim();
+  const municipalityId = body.municipality_id || body.municipalityId || null;
 
   if (!REQUESTER_TYPES.has(requesterType)) return res.status(400).json({ error: "Tipo de solicitante invalido." });
   if (!responsibleName) return res.status(400).json({ error: "Nome do responsavel e obrigatorio." });
@@ -78,11 +78,12 @@ router.post("/", async (req, res) => {
         document,
         city,
         state,
+        municipality_id,
         intended_use,
         assigned_sector,
         history
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
       RETURNING *`,
       [
         requesterType,
@@ -93,6 +94,7 @@ router.post("/", async (req, res) => {
         String(body.document || "").trim(),
         String(body.city || "").trim(),
         String(body.state || "").trim(),
+        municipalityId,
         String(body.intended_use || body.intendedUse || "").trim(),
         assignedSector,
         JSON.stringify([{ status: "PENDENTE", notes: "Solicitacao enviada para credenciamento.", at: new Date() }]),
@@ -116,7 +118,9 @@ router.patch("/:id/review", auth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const { rows: existingRows } = await client.query("SELECT * FROM access_requests WHERE id = $1 FOR UPDATE", [req.params.id]);
+    const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
+    const scopeValues = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
+    const { rows: existingRows } = await client.query(`SELECT * FROM access_requests WHERE id = $1${scope} FOR UPDATE`, scopeValues);
     const accessRequest = existingRows[0];
     if (!accessRequest) {
       await client.query("ROLLBACK");
@@ -130,16 +134,17 @@ router.patch("/:id/review", auth, async (req, res) => {
       password = password || temporaryPassword();
       const hash = await bcrypt.hash(password, 10);
       const { rows: userRows } = await client.query(
-        `INSERT INTO users (name, email, password, role)
-         VALUES ($1, $2, $3, $4)
+        `INSERT INTO users (name, email, password, role, municipality_id)
+         VALUES ($1, $2, $3, $4, $5)
          ON CONFLICT (email)
-         DO UPDATE SET name = EXCLUDED.name, password = EXCLUDED.password, role = EXCLUDED.role
+         DO UPDATE SET name = EXCLUDED.name, password = EXCLUDED.password, role = EXCLUDED.role, municipality_id = EXCLUDED.municipality_id
          RETURNING id`,
         [
           accessRequest.responsible_name,
           normalizeEmail(accessRequest.email),
           hash,
           roleByType[accessRequest.requester_type] || "protetor",
+          accessRequest.municipality_id,
         ],
       );
       createdUserId = userRows[0].id;
@@ -177,5 +182,4 @@ router.patch("/:id/review", auth, async (req, res) => {
   }
 });
 
-export { typeLabels, sectorByType };
 export default router;

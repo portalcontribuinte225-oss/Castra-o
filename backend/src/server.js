@@ -12,6 +12,7 @@ import accessRequestRoutes from "./routes/accessRequests.js";
 import scheduleRoutes from "./routes/schedule.js";
 import configRoutes from "./routes/config.js";
 import aiRoutes from "./routes/ai.js";
+import municipalityRoutes from "./routes/municipalities.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -29,6 +30,7 @@ app.use("/api/access-requests", accessRequestRoutes);
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/config", configRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/municipalities", municipalityRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use(express.static(distPath));

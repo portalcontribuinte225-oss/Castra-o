@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
 import { normalizeCpf } from "../utils.js";
+import { isGlobalUser, pickMunicipalityId, requireMunicipality } from "../tenant.js";
 
 const router = Router();
 const MAX_ADOPTION_PHOTOS = 5;
@@ -50,6 +51,7 @@ function validatePhotos(photos = []) {
 router.get("/by-key/:validationKey", async (req, res) => {
   try {
     const cleanCpf = normalizeCpf(req.query.cpf);
+    const municipalityId = req.query.municipalityId || null;
     if (cleanCpf.length !== 11) {
       return res.status(400).json({ error: "CPF obrigatorio para consulta." });
     }
@@ -60,14 +62,16 @@ router.get("/by-key/:validationKey", async (req, res) => {
     );
     if (!keyRows[0]) return res.json([]);
     const cpf = keyRows[0].cpf;
+    const scope = municipalityId ? " AND municipality_id = $2" : "";
+    const values = municipalityId ? [cpf, municipalityId] : [cpf];
     const { rows } = await pool.query(
       `SELECT * FROM adoptions
        WHERE EXISTS (
          SELECT 1 FROM jsonb_array_elements(interests) AS elem
          WHERE elem->>'cpf' = $1
-       )
+       )${scope}
        ORDER BY created_at DESC`,
-      [cpf]
+      values
     );
     res.json(rows);
   } catch (err) {
@@ -77,7 +81,7 @@ router.get("/by-key/:validationKey", async (req, res) => {
 
 router.post("/consult", async (req, res) => {
   try {
-    const { validationKey, cpf } = req.body || {};
+    const { validationKey, cpf, municipalityId } = req.body || {};
     const cleanCpf = normalizeCpf(cpf);
     if (cleanCpf.length !== 11) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
     if (!validationKey) return res.status(400).json({ error: "Chave de consulta obrigatoria." });
@@ -88,14 +92,16 @@ router.post("/consult", async (req, res) => {
     );
     if (!keyRows[0]) return res.status(404).json({ error: "CPF e chave de validacao nao conferem." });
 
+    const scope = municipalityId ? " AND municipality_id = $2" : "";
+    const values = municipalityId ? [cleanCpf, municipalityId] : [cleanCpf];
     const { rows } = await pool.query(
       `SELECT * FROM adoptions
        WHERE EXISTS (
          SELECT 1 FROM jsonb_array_elements(interests) AS elem
          WHERE elem->>'cpf' = $1
-       )
+       )${scope}
        ORDER BY created_at DESC`,
-      [cleanCpf],
+      values,
     );
     res.json(rows);
   } catch (err) {
@@ -103,9 +109,23 @@ router.post("/consult", async (req, res) => {
   }
 });
 
-router.get("/", async (_req, res) => {
+router.get("/", optionalAuth, async (req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM adoptions ORDER BY created_at DESC");
+    const municipalityId = pickMunicipalityId(req);
+    const baseSelect = `
+      SELECT
+        a.*,
+        u.name AS created_by_name,
+        u.role AS created_by_role
+      FROM adoptions a
+      LEFT JOIN users u ON u.id = a.created_by
+    `;
+    const query = municipalityId
+      ? { text: `${baseSelect} WHERE a.municipality_id = $1 ORDER BY a.created_at DESC`, values: [municipalityId] }
+      : isGlobalUser(req.user)
+      ? { text: `${baseSelect} ORDER BY a.created_at DESC`, values: [] }
+      : { text: "SELECT * FROM adoptions WHERE 1=0", values: [] };
+    const { rows } = await pool.query(query.text, query.values);
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -114,6 +134,8 @@ router.get("/", async (_req, res) => {
 
 router.post("/", auth, async (req, res) => {
   const { animal_name, species, sex, age, description, health, photo_url, photos, main_photo_index } = req.body;
+  const municipalityId = requireMunicipality(req, res);
+  if (!municipalityId) return;
   try {
     const safePhotos = Array.isArray(photos) ? photos.filter(Boolean) : [];
     const photosValidation = validatePhotos(safePhotos);
@@ -122,22 +144,32 @@ router.post("/", auth, async (req, res) => {
     const safeMainPhotoIndex = Number.isInteger(main_photo_index) ? main_photo_index : 0;
     const selectedPhoto = safePhotos[safeMainPhotoIndex] || safePhotos[0] || photo_url || "";
     const { rows } = await pool.query(
-      `INSERT INTO adoptions (animal_name, species, sex, age, description, health, photo_url, photos, main_photo_index)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
-      [animal_name, species, sex, age, description, JSON.stringify(health || []), selectedPhoto, JSON.stringify(safePhotos), safeMainPhotoIndex],
+      `INSERT INTO adoptions (animal_name, species, sex, age, description, health, photo_url, photos, main_photo_index, municipality_id, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       RETURNING *`,
+      [animal_name, species, sex, age, description, JSON.stringify(health || []), selectedPhoto, JSON.stringify(safePhotos), safeMainPhotoIndex, municipalityId, req.user.id],
     );
-    res.status(201).json(rows[0]);
+    const { rows: enriched } = await pool.query(
+      `SELECT a.*, u.name AS created_by_name, u.role AS created_by_role
+       FROM adoptions a
+       LEFT JOIN users u ON u.id = a.created_by
+       WHERE a.id = $1`,
+      [rows[0].id],
+    );
+    res.status(201).json(enriched[0] || rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 router.post("/:id/interest", optionalAuth, async (req, res) => {
-  const { name, phone, visit_date, cpf } = req.body;
+  const { name, phone, visit_date, cpf, municipalityId } = req.body;
   if (!name || !phone) return res.status(400).json({ error: "Nome e telefone sao obrigatorios." });
 
   try {
-    const { rows: current } = await pool.query("SELECT interests, status FROM adoptions WHERE id=$1", [req.params.id]);
+    const scope = municipalityId ? " AND municipality_id = $2" : "";
+    const values = municipalityId ? [req.params.id, municipalityId] : [req.params.id];
+    const { rows: current } = await pool.query(`SELECT interests, status FROM adoptions WHERE id=$1${scope}`, values);
     if (!current[0]) return res.status(404).json({ error: "Animal nao encontrado." });
 
     const interests = Array.isArray(current[0].interests) ? current[0].interests : [];
@@ -150,14 +182,23 @@ router.post("/:id/interest", optionalAuth, async (req, res) => {
       "UPDATE adoptions SET interests=$1, status=$2 WHERE id=$3 RETURNING *",
       [JSON.stringify(updatedInterests), newStatus, req.params.id],
     );
-    res.json(rows[0]);
+    const { rows: enriched } = await pool.query(
+      `SELECT a.*, u.name AS created_by_name, u.role AS created_by_role
+       FROM adoptions a
+       LEFT JOIN users u ON u.id = a.created_by
+       WHERE a.id = $1`,
+      [rows[0].id],
+    );
+    res.json(enriched[0] || rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 router.get("/:id/interests", auth, async (req, res) => {
-  const { rows } = await pool.query("SELECT interests FROM adoptions WHERE id=$1", [req.params.id]);
+  const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
+  const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
+  const { rows } = await pool.query(`SELECT interests FROM adoptions WHERE id=$1${scope}`, values);
   if (!rows[0]) return res.status(404).json({ error: "Animal nao encontrado." });
   const interests = rows[0].interests;
   res.json(Array.isArray(interests) ? interests : []);
@@ -166,7 +207,9 @@ router.get("/:id/interests", auth, async (req, res) => {
 router.delete("/:id/interest/:index", auth, async (req, res) => {
   const idx = parseInt(req.params.index, 10);
   try {
-    const { rows: current } = await pool.query("SELECT interests, status FROM adoptions WHERE id=$1", [req.params.id]);
+    const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
+    const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
+    const { rows: current } = await pool.query(`SELECT interests, status FROM adoptions WHERE id=$1${scope}`, values);
     if (!current[0]) return res.status(404).json({ error: "Animal nao encontrado." });
 
     const interests = Array.isArray(current[0].interests) ? current[0].interests : [];
@@ -174,10 +217,17 @@ router.delete("/:id/interest/:index", auth, async (req, res) => {
     const newStatus = updated.length === 0 && current[0].status === "em_processo" ? "disponivel" : current[0].status;
 
     const { rows } = await pool.query(
-      "UPDATE adoptions SET interests=$1, status=$2 WHERE id=$3 RETURNING *",
-      [JSON.stringify(updated), newStatus, req.params.id],
+      `UPDATE adoptions SET interests=$1, status=$2 WHERE id=$3${isGlobalUser(req.user) ? "" : " AND municipality_id = $4"} RETURNING *`,
+      isGlobalUser(req.user) ? [JSON.stringify(updated), newStatus, req.params.id] : [JSON.stringify(updated), newStatus, req.params.id, req.user.municipalityId],
     );
-    res.json(rows[0]);
+    const { rows: enriched } = await pool.query(
+      `SELECT a.*, u.name AS created_by_name, u.role AS created_by_role
+       FROM adoptions a
+       LEFT JOIN users u ON u.id = a.created_by
+       WHERE a.id = $1`,
+      [rows[0].id],
+    );
+    res.json(enriched[0] || rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -199,11 +249,21 @@ router.patch("/:id", auth, async (req, res) => {
   const vals = fields.map(([, v]) => v);
 
   try {
+    const scope = isGlobalUser(req.user) ? "" : ` AND municipality_id = $${fields.length + 2}`;
+    const scopedVals = isGlobalUser(req.user) ? [...vals, req.params.id] : [...vals, req.params.id, req.user.municipalityId];
     const { rows } = await pool.query(
-      `UPDATE adoptions SET ${set} WHERE id=$${fields.length + 1} RETURNING *`,
-      [...vals, req.params.id],
+      `UPDATE adoptions SET ${set} WHERE id=$${fields.length + 1}${scope} RETURNING *`,
+      scopedVals,
     );
-    res.json(rows[0]);
+    if (!rows[0]) return res.status(404).json({ error: "Animal nao encontrado." });
+    const { rows: enriched } = await pool.query(
+      `SELECT a.*, u.name AS created_by_name, u.role AS created_by_role
+       FROM adoptions a
+       LEFT JOIN users u ON u.id = a.created_by
+       WHERE a.id = $1`,
+      [rows[0].id],
+    );
+    res.json(enriched[0] || rows[0]);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -211,7 +271,9 @@ router.patch("/:id", auth, async (req, res) => {
 
 router.delete("/:id", auth, async (req, res) => {
   try {
-    await pool.query("DELETE FROM adoptions WHERE id=$1", [req.params.id]);
+    const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
+    const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
+    await pool.query(`DELETE FROM adoptions WHERE id=$1${scope}`, values);
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: err.message });
