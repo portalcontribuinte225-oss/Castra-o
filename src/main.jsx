@@ -2335,6 +2335,10 @@ function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSe
   );
 }
 
+function Chip({ children }) {
+  return <span className="adoption-profile-chip">{children}</span>;
+}
+
 const GUEST_USER = { role: "guest", name: "", email: "", neighborhood: "", address: "", cpf: "", cep: "", number: "", city: "", state: "", phone: "" };
 
 function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda", initialMunicipalityId = "", onMunicipalitySelect, scheduleDays = [], municipalities = [], requestTypes = [], requests = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }) {

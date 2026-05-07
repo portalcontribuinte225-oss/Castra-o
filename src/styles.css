@@ -1850,6 +1850,17 @@ button:disabled {
   gap: 8px;
 }
 
+.adoption-profile-chip {
+  border: 1px solid #cfe5f0;
+  border-radius: 999px;
+  background: #f4f9fc;
+  color: var(--teal-dark);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1;
+  padding: 7px 10px;
+}
+
 .adoption-health-list span {
   border: 1px solid #dbeaf3;
   border-radius: 999px;
