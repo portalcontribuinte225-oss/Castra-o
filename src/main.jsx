@@ -1837,6 +1837,7 @@ function normalizeAdoptionAnimal(animal) {
     photos,
     mainPhotoIndex,
     interests: Array.isArray(animal.interests) ? animal.interests : [],
+    animalMicrochip: animal.animalMicrochip || animal.animal_microchip || "",
     createdBy: animal.createdBy || animal.created_by || "",
     createdByName: animal.createdByName || animal.created_by_name || "",
     createdByRole: animal.createdByRole || animal.created_by_role || "",
@@ -4898,12 +4899,13 @@ function AdoptionView({
   const [interestsModal, setInterestsModal] = useState(null);
   const emptyAdoptionModalForm = {
     tutor: "", cpf: "", cep: "", number: "", address: "", neighborhood: "", city: "", state: "", email: "", phone: "",
-    procedimentos: "", adopted_at: new Date().toISOString().slice(0, 10),
+    microchip: "", procedimentos: "", adopted_at: new Date().toISOString().slice(0, 10),
   };
   const [adoptionConfirmModal, setAdoptionConfirmModal] = useState(null);
   const [adoptionModalForm, setAdoptionModalForm] = useState(emptyAdoptionModalForm);
   const [adoptionModalStep, setAdoptionModalStep] = useState(0);
   const [adoptionModalCepStatus, setAdoptionModalCepStatus] = useState("");
+  const [adoptionModalError, setAdoptionModalError] = useState("");
   const [isSavingAdoption, setIsSavingAdoption] = useState(false);
   const canManageAdoptions = canManagePublicAnimalFlows(currentUser.role);
   const availableAnimals = adoptionAnimals.filter((animal) => animal.status !== "adotado");
@@ -5133,14 +5135,20 @@ function AdoptionView({
 
   function openAdoptionConfirmModal(animal) {
     setAdoptionConfirmModal(animal);
-    setAdoptionModalForm({ ...emptyAdoptionModalForm, adopted_at: new Date().toISOString().slice(0, 10) });
+    setAdoptionModalForm({
+      ...emptyAdoptionModalForm,
+      microchip: animal.animal_microchip || animal.animalMicrochip || animal.microchip || "",
+      adopted_at: new Date().toISOString().slice(0, 10),
+    });
     setAdoptionModalStep(0);
     setAdoptionModalCepStatus("");
+    setAdoptionModalError("");
   }
 
   function closeAdoptionConfirmModal() {
     if (isSavingAdoption) return;
     setAdoptionConfirmModal(null);
+    setAdoptionModalError("");
   }
 
   function updateAdoptionModalForm(field, value) {
@@ -5151,6 +5159,11 @@ function AdoptionView({
     const masks = { cpf: formatCpf, phone: formatPhone, cep: (v) => formatCep(v) };
     updateAdoptionModalForm(field, masks[field] ? masks[field](value) : value);
     if (field === "cep") lookupAdoptionCep(value);
+  }
+
+  function updateAdoptionMicrochip(value) {
+    updateAdoptionModalForm("microchip", value.toUpperCase().replace(/[^A-Z0-9]/g, ""));
+    setAdoptionModalError("");
   }
 
   async function lookupAdoptionCep(value) {
@@ -5177,11 +5190,18 @@ function AdoptionView({
 
   async function submitAdoptionConfirm() {
     if (isSavingAdoption) return;
+    if (!adoptionModalForm.microchip.trim()) {
+      setAdoptionModalError("Informe o número do microchip para registrar o animal.");
+      setAdoptionModalStep(1);
+      return;
+    }
     setIsSavingAdoption(true);
+    setAdoptionModalError("");
     try {
       const patch = {
         status: "adotado",
         adopted_at: adoptionModalForm.adopted_at ? new Date(adoptionModalForm.adopted_at + "T12:00:00").toISOString() : new Date().toISOString(),
+        animal_microchip: adoptionModalForm.microchip,
         adoption_tutor: {
           tutor: adoptionModalForm.tutor,
           cpf: adoptionModalForm.cpf,
@@ -5201,6 +5221,7 @@ function AdoptionView({
       setAdoptionConfirmModal(null);
     } catch (err) {
       console.error("Erro ao confirmar adoção:", err);
+      setAdoptionModalError(err.message || "Erro ao confirmar adoção.");
     } finally {
       setIsSavingAdoption(false);
     }
@@ -5484,6 +5505,7 @@ function AdoptionView({
             </div>
 
             <div className="adoption-confirm-body">
+              {adoptionModalError && <p className="form-error">{adoptionModalError}</p>}
               {adoptionModalStep === 0 && (
                 <div className="adoption-confirm-panel">
                   <Field label="Nome" value={adoptionModalForm.tutor} onChange={(v) => updateAdoptionModalForm("tutor", v)} placeholder="Nome do tutor ou responsável" />
@@ -5507,6 +5529,7 @@ function AdoptionView({
               {adoptionModalStep === 1 && (
                 <div className="adoption-confirm-panel">
                   <Field label="Data da adoção" value={adoptionModalForm.adopted_at} onChange={(v) => updateAdoptionModalForm("adopted_at", v)} type="date" />
+                  <Field label="Número do microchip" value={adoptionModalForm.microchip} onChange={updateAdoptionMicrochip} placeholder="Digite o microchip aplicado" />
                   <label className="field-label">
                     Procedimentos realizados
                     <textarea

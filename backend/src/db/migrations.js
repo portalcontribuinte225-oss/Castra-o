@@ -242,6 +242,10 @@ export async function runMigrations() {
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS photos JSONB DEFAULT '[]';
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS main_photo_index INT DEFAULT 0;
     ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
+    ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS animal_id UUID REFERENCES animals(id);
+    ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS animal_microchip TEXT;
+    ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS adoption_tutor JSONB DEFAULT '{}';
+    ALTER TABLE adoptions ADD COLUMN IF NOT EXISTS adoption_notes TEXT;
 
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS requester_type TEXT;
     ALTER TABLE access_requests ADD COLUMN IF NOT EXISTS organization_name TEXT;
@@ -313,6 +317,12 @@ export async function runMigrations() {
       ON schedule_days (municipality_id, date);
     CREATE INDEX IF NOT EXISTS adoptions_municipality_created_idx
       ON adoptions (municipality_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS adoptions_animal_id_idx
+      ON adoptions (animal_id)
+      WHERE animal_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS adoptions_animal_microchip_idx
+      ON adoptions (animal_microchip)
+      WHERE animal_microchip IS NOT NULL;
     CREATE INDEX IF NOT EXISTS animal_records_municipality_occurred_idx
       ON animal_records (animal_id, municipality_id, occurred_at DESC);
   `);
