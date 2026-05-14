@@ -5,14 +5,14 @@ function getToken() {
 }
 
 function headers(json = true) {
-  const h = {};
+  const h: Record<string, string> = {};
   if (json) h["Content-Type"] = "application/json";
   const token = getToken();
   if (token) h["Authorization"] = `Bearer ${token}`;
   return h;
 }
 
-async function request(method, path, body) {
+async function request(method: string, path: string, body?: unknown) {
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: headers(),
