@@ -1,14 +1,5 @@
-import { CheckCircle2 } from "lucide-react";
 import type { AnyRecord } from "../types";
 import { statusLabels } from "../domain";
-
-function sumValues(items: AnyRecord[] = []) {
-  return items.reduce((sum, item) => sum + Number(item.value || 0), 0);
-}
-
-function topItems(items: AnyRecord[] = [], limit = 6) {
-  return [...items].sort((left, right) => Number(right.value || 0) - Number(left.value || 0)).slice(0, limit);
-}
 
 export function EmptyState({ title, text, action, onAction }: AnyRecord) {
   return (
@@ -58,12 +49,12 @@ export function ConfigStatusFilter({ value, onChange, activeCount = 0, inactiveC
   );
 }
 
-export function ConfigActiveToggle({ checked, onChange }: AnyRecord) {
+export function ConfigActiveToggle({ checked, onChange, onText = "Ativo", offText = "Inativo" }: AnyRecord) {
   return (
     <label className="config-active-toggle">
       <input type="checkbox" checked={!!checked} onChange={(event) => onChange(event.target.checked)} />
       <span className="toggle-track"><span className="toggle-thumb" /></span>
-      <span>{checked ? "Ativo" : "Inativo"}</span>
+      <span>{checked ? onText : offText}</span>
     </label>
   );
 }
@@ -144,7 +135,6 @@ export function CompactChoiceField({ label, value, options, onChange, invalid = 
           const selected = value === item.value || value === item.label;
           return (
             <button key={item.value || item.label} type="button" className={selected ? "selected" : ""} onClick={() => onChange(item.value || item.label)} title={item.title || item.label}>
-              {selected && <CheckCircle2 size={14} />}
               <span>{item.label}</span>
               {item.subtitle && <small>{item.subtitle}</small>}
             </button>
@@ -173,70 +163,6 @@ export function FormSection({ title, action, children }: AnyRecord) {
         {action}
       </div>
       {children}
-    </div>
-  );
-}
-
-export function DataBarChart({ title, items = [] }: AnyRecord) {
-  const visibleItems = topItems(items.filter((item) => Number(item.value) > 0), 6);
-  const max = Math.max(...visibleItems.map((item) => Number(item.value || 0)), 1);
-  return (
-    <div className="chart-card data-chart">
-      <div className="chart-head">
-        <strong>{title}</strong>
-        <span>{sumValues(visibleItems)}</span>
-      </div>
-      <div className="data-bars">
-        {visibleItems.length === 0 && <span className="empty-chart-note">Sem dados no período</span>}
-        {visibleItems.map((item) => (
-          <div className="data-bar-row" key={item.label}>
-            <span>{item.label}</span>
-            <div className="data-bar-track">
-              <i style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} />
-            </div>
-            <strong>{item.value}</strong>
-            {item.secondary && <small>{item.secondary}</small>}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export function DataDonutChart({ title, items = [] }: AnyRecord) {
-  const colors = ["#38a8e8", "#16a34a", "#f97316", "#be185d", "#64748b", "#b7791f"];
-  const visibleItems = topItems(items.filter((item) => Number(item.value) > 0), 6);
-  const total = sumValues(visibleItems);
-  let start = 0;
-  const gradient = total
-    ? visibleItems.map((item, index) => {
-      const size = (Number(item.value || 0) / total) * 100;
-      const part = `${colors[index % colors.length]} ${start}% ${start + size}%`;
-      start += size;
-      return part;
-    }).join(", ")
-    : "#e2e8f0 0 100%";
-
-  return (
-    <div className="chart-card data-chart">
-      <div className="chart-head">
-        <strong>{title}</strong>
-        <span>{total}</span>
-      </div>
-      <div className="data-donut-wrap">
-        <div className="data-donut" style={{ background: `conic-gradient(${gradient})` }}>
-          <strong>{total}</strong>
-        </div>
-        <div className="data-donut-legend">
-          {visibleItems.length === 0 && <span className="empty-chart-note">Sem dados no período</span>}
-          {visibleItems.map((item, index) => (
-            <span key={item.label}>
-              <i style={{ background: colors[index % colors.length] }} />
-              {item.label}: {item.value}
-            </span>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

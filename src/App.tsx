@@ -1,37 +1,57 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import {
   Activity,
   BarChart3,
   Bell,
   CalendarDays,
+  Camera,
   Cat,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
+  Clock,
   ClipboardCheck,
   Download,
   Dog,
+  Edit3,
   Eye,
   FileText,
   Filter,
   HeartHandshake,
+  KeyRound,
   LayoutDashboard,
   ListChecks,
   Lock,
+  LogOut,
   MapPin,
   Menu,
+  MessageCircle,
   Navigation,
   PawPrint,
   Plus,
   ClipboardList,
   RefreshCw,
+  ScanLine,
   Search,
   Settings,
   ShieldCheck,
+  Shield,
   UploadCloud,
+  User,
   Users,
+  Building2,
+  Mail,
+  Phone,
+  Flower2,
+  Zap,
   X,
+  Home,
+  Paperclip,
+  Trash2,
+  AlertCircle,
+  ImagePlus,
+  BadgeCheck,
 } from "lucide-react";
 import "./styles.css";
 import type { AnyRecord } from "./types";
@@ -115,12 +135,14 @@ import {
   uint8ArrayToDataUrl,
 } from "./utils";
 import { AccessRequestsView, accessStatusLabel } from "./features/accessRequests";
+import { AgendaView } from "./features/agenda";
 import { DashboardView } from "./features/dashboard";
 import { ReportsView } from "./features/reports";
 const menu = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-  { id: "admin", label: "Solicitações de castração", icon: LayoutDashboard },
+  { id: "admin", label: "Solicitações", icon: LayoutDashboard },
   { id: "credenciamento", label: "Credenciamentos", icon: ClipboardList },
+  { id: "agenda", label: "Agenda", icon: CalendarDays },
   { id: "adocao", label: "Adoção", icon: HeartHandshake },
   { id: "relatorios", label: "Relatórios", icon: Activity },
   { id: "config", label: "Configurações", icon: Settings },
@@ -131,6 +153,17 @@ const configSidebarItems = [
   { id: "municipalities", label: "Criar Municípios", globalOnly: true },
   { id: "users", label: "Criar Usuários" },
   { id: "sectors", label: "Criar Setores" },
+  { id: "permissions", label: "Permissões" },
+];
+
+const permissionMenuItems = menu.map(({ id, label }) => ({ id, label }));
+
+const permissionConfigItems = [
+  { id: "environment", label: "Configurar Ambiente" },
+  { id: "municipalities", label: "Criar Municípios", globalOnly: true },
+  { id: "users", label: "Criar Usuários" },
+  { id: "sectors", label: "Criar Setores" },
+  { id: "permissions", label: "Permissões" },
 ];
 
 function scopeConfigItems(items = [], municipality: AnyRecord = {}) {
@@ -149,6 +182,13 @@ function scopeConfigItems(items = [], municipality: AnyRecord = {}) {
       }))
       : item.documents,
   }));
+}
+
+function mergeScopedConfigItems(current = [], nextItems = [], municipalityId = "") {
+  const retained = Array.isArray(current)
+    ? current.filter((item) => getItemMunicipalityId(item) !== municipalityId)
+    : [];
+  return [...retained, ...(Array.isArray(nextItems) ? nextItems : [])];
 }
 
 export default function App() {
@@ -182,6 +222,7 @@ export default function App() {
   const [aiSettings, setAiSettings] = useState(initialAiSettings);
   const [scheduleDays, setScheduleDays] = useState([]);
   const [scheduleRules, setScheduleRules] = useState([]);
+  const [permissionGroups, setPermissionGroups] = useState([]);
   const [teams, setTeams] = useState(() => normalizeTeams(initialTeams));
   const [accessRequests, setAccessRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -192,6 +233,7 @@ export default function App() {
   const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem("castragestao:globalMunicipalityFilterId") || "");
   const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
+  const [topbarWhatsappQuota, setTopbarWhatsappQuota] = useState<AnyRecord | null>(null);
   const [configMenuOpen, setConfigMenuOpen] = useState(true);
   const [tenantConfigReady, setTenantConfigReady] = useState(false);
   const [loadedConfigKeys, setLoadedConfigKeys] = useState({});
@@ -203,6 +245,9 @@ export default function App() {
 
   const selected = requests.find((request) => request.id === selectedId) || requests[0] || null;
   const metrics = useMemo(() => buildMetrics(requests), [requests]);
+  const quotaMunicipalityId = currentUser
+    ? (isGlobalRole(currentUser.role) ? globalMunicipalityFilterId : currentUser.municipalityId || "")
+    : "";
 
   useEffect(() => {
     api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
@@ -216,7 +261,7 @@ export default function App() {
         setSelectedMunicipalityId(stored);
         return;
       }
-      const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+      const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       function applyMatch(city, state) {
         if (!city) return false;
         const stateMatch = (m) => !state || !m.state || m.state.toUpperCase() === state;
@@ -324,6 +369,7 @@ export default function App() {
               })
               : []
           )));
+          setPermissionGroups(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.permissionGroups], municipality)));
         } finally {
           setTenantConfigReady(true);
         }
@@ -337,6 +383,7 @@ export default function App() {
       [CONFIG_KEYS.species, setSpeciesOptions],
       [CONFIG_KEYS.sizes, setSizeOptions],
       [CONFIG_KEYS.teams, setTeams],
+      [CONFIG_KEYS.permissionGroups, setPermissionGroups],
       [CONFIG_KEYS.scheduleRules, (rules) => setScheduleRules((Array.isArray(rules) ? rules : []).map((rule) => {
         const slots = normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies);
         return { ...rule, slots, time: slots[0]?.time || rule.time, vacancies: sumScheduleSlotsVacancies(slots, rule.time, rule.vacancies) };
@@ -358,6 +405,7 @@ export default function App() {
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
 
   useEffect(() => {
@@ -384,6 +432,41 @@ export default function App() {
     const loadMunicipalities = isGlobalRole(currentUser.role) ? api.getMunicipalitiesAdmin : api.getMunicipalities;
     loadMunicipalities().then((list) => setMunicipalities(Array.isArray(list) ? list : [])).catch(() => {});
   }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser || !selectedMunicipalityId) return;
+    api.getAdoptions(selectedMunicipalityId)
+      .then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal)))
+      .catch(console.error);
+  }, [selectedMunicipalityId, currentUser]);
+
+  useEffect(() => {
+    if (!currentUser || !quotaMunicipalityId) {
+      setTopbarWhatsappQuota(null);
+      return;
+    }
+    let activeRequest = true;
+    api.getConfig(CONFIG_KEYS.whatsappQuota, quotaMunicipalityId)
+      .then((quota) => {
+        if (!activeRequest || !quota?.plan) {
+          if (activeRequest) setTopbarWhatsappQuota(null);
+          return;
+        }
+        const period = getCurrentMonthKey();
+        const used = quota.currentPeriodStart === period ? Number(quota.currentPeriodUsed || 0) : 0;
+        setTopbarWhatsappQuota({
+          ...quota,
+          used,
+          remaining: Math.max(0, Number(quota.plan || 0) - used),
+        });
+      })
+      .catch(() => {
+        if (activeRequest) setTopbarWhatsappQuota(null);
+      });
+    return () => {
+      activeRequest = false;
+    };
+  }, [currentUser?.id, quotaMunicipalityId]);
 
   async function patchRequest(requestId, patch, historyNote = "") {
     try {
@@ -520,21 +603,24 @@ export default function App() {
 
   if (publicForm) {
     return (
-      <PublicCastrationForm
-        createRequest={createRequest}
-        onBack={() => setPublicForm(false)}
-        initialScreen={publicFormInitialScreen}
-        initialMunicipalityId={selectedMunicipalityId}
-        onMunicipalitySelect={handleMunicipalitySelect}
-        scheduleDays={scheduleDays}
-        municipalities={municipalities}
-        requestTypes={requestTypes}
-        requests={requests}
-        speciesOptions={speciesOptions}
-        sizeOptions={sizeOptions}
-        aiSettings={aiSettings}
-        onRequestCreated={registerCreatedRequest}
-      />
+      <>
+        <PublicCastrationForm
+          createRequest={createRequest}
+          onBack={() => setPublicForm(false)}
+          initialScreen={publicFormInitialScreen}
+          initialMunicipalityId={selectedMunicipalityId}
+          onMunicipalitySelect={handleMunicipalitySelect}
+          scheduleDays={scheduleDays}
+          municipalities={municipalities}
+          requestTypes={requestTypes}
+          requests={requests}
+          speciesOptions={speciesOptions}
+          sizeOptions={sizeOptions}
+          aiSettings={aiSettings}
+          onRequestCreated={registerCreatedRequest}
+        />
+        <PwaInstallPrompt />
+      </>
     );
   }
 
@@ -544,24 +630,37 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <LoginView
-        onLogin={setCurrentUser}
-        onPublicRequest={() => { setPublicFormInitialScreen("formulario"); setPublicForm(true); }}
-        onPublicConsult={() => { setPublicFormInitialScreen("consulta"); setPublicForm(true); }}
-        onAccessRequest={createAccessRequest}
-        adoptionAnimals={adoptionAnimals}
-        onInterestSent={handleInterestSent}
-        municipalities={municipalities}
-        selectedMunicipalityId={selectedMunicipalityId}
-        onMunicipalitySelect={handleMunicipalitySelect}
-      />
+      <>
+        <LoginView
+          onLogin={setCurrentUser}
+          onPublicRequest={() => { setPublicFormInitialScreen("formulario"); setPublicForm(true); }}
+          onPublicConsult={() => { setPublicFormInitialScreen("consulta"); setPublicForm(true); }}
+          onAccessRequest={createAccessRequest}
+          adoptionAnimals={adoptionAnimals}
+          onInterestSent={handleInterestSent}
+          municipalities={municipalities}
+          selectedMunicipalityId={selectedMunicipalityId}
+          onMunicipalitySelect={handleMunicipalitySelect}
+        />
+        <PwaInstallPrompt />
+      </>
     );
   }
 
-  const visibleMenu = menu;
-  const visibleConfigSidebarItems = configSidebarItems.filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role));
-  const scopedMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : "";
+  const currentTeamUser = (teams.users || []).find((user) => (
+    String(user.id || "") === String(currentUser?.id || "") ||
+    String(user.email || "").toLowerCase() === String(currentUser?.email || "").toLowerCase()
+  ));
+  const currentPermissionGroup = permissionGroups.find((group) => group.id === currentTeamUser?.permissionGroupId && group.active !== false);
+  const canUsePermissions = currentPermissionGroup && !isGlobalRole(currentUser?.role);
+  const visibleMenu = canUsePermissions
+    ? menu.filter((item) => currentPermissionGroup.allowedMenuItems?.includes(item.id))
+    : menu;
+  const visibleConfigSidebarItems = configSidebarItems
+    .filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role))
+    .filter((item) => !canUsePermissions || currentPermissionGroup.allowedConfigItems?.includes(item.id));
   const activeMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : currentUser?.municipalityId || "";
+  const scopedMunicipalityId = activeMunicipalityId;
   const scopedRequests = filterByMunicipalityScope(requests, scopedMunicipalityId);
   const scopedAdoptionAnimals = filterByMunicipalityScope(adoptionAnimals, scopedMunicipalityId);
   const scopedScheduleDays = filterByMunicipalityScope(scheduleDays, scopedMunicipalityId);
@@ -570,6 +669,7 @@ export default function App() {
   const scopedSpeciesOptions = filterByMunicipalityScope(speciesOptions, scopedMunicipalityId);
   const scopedSizeOptions = filterByMunicipalityScope(sizeOptions, scopedMunicipalityId);
   const scopedScheduleRules = filterByMunicipalityScope(scheduleRules, scopedMunicipalityId);
+  const scopedPermissionGroups = filterByMunicipalityScope(permissionGroups, scopedMunicipalityId);
   const scopedTeams = {
     sectors: filterByMunicipalityScope(teams.sectors || [], scopedMunicipalityId),
     users: filterByMunicipalityScope(teams.users || [], scopedMunicipalityId),
@@ -583,6 +683,7 @@ export default function App() {
   const ActiveView = {
     admin: AdminDashboard,
     adocao: AdoptionView,
+    agenda: AgendaView,
     credenciamento: AccessRequestsView,
     dashboard: DashboardView,
     relatorios: ReportsView,
@@ -655,12 +756,16 @@ export default function App() {
               <span>{userRoleLabel(currentUser.role)}</span>
             </div>
           </div>
-          <button className="sidebar-reset-button" type="button" onClick={() => setSidebarResetOpen(true)}>
-            Redefinir senha
-          </button>
-          <button className="logout-button" onClick={() => setCurrentUser(null)}>
-            Sair
-          </button>
+          <div className="sidebar-account-actions" aria-label="Ações da conta">
+            <button className="sidebar-reset-button" type="button" onClick={() => setSidebarResetOpen(true)}>
+              <KeyRound size={16} />
+              <span>Senha</span>
+            </button>
+            <button className="logout-button" type="button" onClick={() => setCurrentUser(null)}>
+              <LogOut size={16} />
+              <span>Sair</span>
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -695,7 +800,17 @@ export default function App() {
                 placeholder="Protocolo, CPF, tutor, microchip..."
               />
             </label>
-            <button className="icon-button" aria-label="Notificacoes">
+            {topbarWhatsappQuota && (
+              <div
+                className="topbar-whatsapp-quota"
+                title={`${topbarWhatsappQuota.remaining} de ${topbarWhatsappQuota.plan} mensagens WhatsApp restantes neste mês`}
+                aria-label={`${topbarWhatsappQuota.remaining} mensagens WhatsApp restantes neste mês`}
+              >
+                <MessageCircle size={18} />
+                <strong>{topbarWhatsappQuota.remaining}</strong>
+              </div>
+            )}
+            <button className="icon-button" aria-label="Notificações">
               <Bell size={20} />
             </button>
           </div>
@@ -728,6 +843,8 @@ export default function App() {
           setScheduleDays={setScheduleDays}
           scheduleRules={scopedScheduleRules}
           setScheduleRules={setScheduleRules}
+          permissionGroups={scopedPermissionGroups}
+          setPermissionGroups={setPermissionGroups}
           teams={scopedTeams}
           setTeams={setTeams}
           accessRequests={accessRequests}
@@ -839,6 +956,11 @@ function getMunicipalityLabel(municipalityId = "", municipalities = []) {
   return municipality ? [municipality.name, municipality.state].filter(Boolean).join("/") : "Sem município";
 }
 
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function defaultMunicipalityUserToTeamUser(user: AnyRecord = {}, municipalityId = "") {
   return {
     id: user.id || `usuario_padrao_${municipalityId}`,
@@ -883,8 +1005,8 @@ function userRoleLabel(role = "") {
     tutor: "Tutor",
     ong: "ONG",
     protetor: "Protetor",
-    servidor_publico: "Servidor publico",
-  }[role] || role || "Usuario";
+    servidor_publico: "Servidor público",
+  }[role] || role || "Usuário";
 }
 
 function canManagePublicAnimalFlows(role = "") {
@@ -933,7 +1055,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     const chip = microchip.trim();
     const hasValidCredential = cleanCpf.length === 11 && !/^0+$/.test(cleanCpf) && Boolean(key);
     if (!chip && cleanCpf.length !== 11) {
-      setStatus("Informe um CPF valido.");
+      setStatus("Informe um CPF válido.");
       setSearchOk(false);
       return;
     }
@@ -1095,6 +1217,7 @@ function PublicSchedulePicker({
   pendingReservation = null,
 }) {
   const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
+  const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
   const requiredVacancies = Math.max(Number(pendingReservation?.count) || 1, 1);
   const scheduleWithUsage = scheduleDays.filter((day) => day.active !== false).map((day) => {
     const confirmed = countUsedVacancies(requests, day.date);
@@ -1136,24 +1259,30 @@ function PublicSchedulePicker({
 
   return (
     <section className="panel public-schedule-picker">
-      <div className="calendar-month-header">
+      <div className="sched-month-selector">
         <button
           type="button"
-          onClick={() => setScheduleMonthIndex((current) => Math.max(current - 1, 0))}
-          disabled={scheduleMonthIndex === 0}
-          aria-label="Mês anterior"
+          className="sched-month-trigger"
+          onClick={() => setMonthDropdownOpen((open) => !open)}
         >
-          ‹
+          <CalendarDays size={14} />
+          <span>{formatMonthYear(activeScheduleMonth)}</span>
+          {scheduleMonths.length > 1 && <ChevronDown size={14} className={monthDropdownOpen ? "sched-chevron-open" : ""} />}
         </button>
-        <strong className="calendar-month-label">{formatMonthYear(activeScheduleMonth)}</strong>
-        <button
-          type="button"
-          onClick={() => setScheduleMonthIndex((current) => Math.min(current + 1, scheduleMonths.length - 1))}
-          disabled={scheduleMonthIndex >= scheduleMonths.length - 1}
-          aria-label="Próximo mês"
-        >
-          ›
-        </button>
+        {scheduleMonths.length > 1 && monthDropdownOpen && (
+          <div className="sched-month-dropdown">
+            {scheduleMonths.map((month, i) => (
+              <button
+                key={month}
+                type="button"
+                className={`sched-month-tab${i === scheduleMonthIndex ? " is-active" : ""}`}
+                onClick={() => { setScheduleMonthIndex(i); setMonthDropdownOpen(false); }}
+              >
+                {formatMonthYear(month)}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="calendar-weekdays" aria-hidden="true">
         {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((weekday) => <span key={weekday}>{weekday}</span>)}
@@ -1195,7 +1324,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
   const [selectedAnimal, setSelectedAnimal] = useState(null);
   const [showInterestForm, setShowInterestForm] = useState(false);
   const [interestSent, setInterestSent] = useState(false);
-  const [interestForm, setInterestForm] = useState({ name: "", phone: "", visit_date: "", cpf: "" });
+  const [interestForm, setInterestForm] = useState({ name: "", phone: "", visit_date: "" });
   const speciesFilterOptions = [...new Set(["Felino", "Canino", ...availableAnimals.map((animal) => animal.species).filter(Boolean)])];
   const sexFilterOptions = [...new Set(["Femea", "Macho", ...availableAnimals.map((animal) => animal.sex).filter(Boolean)])];
   const filteredAnimals = availableAnimals
@@ -1212,22 +1341,26 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
     })),
   ];
   const sexQuickFilters = [
-    { value: "", label: "Todos os sexos", icon: HeartHandshake },
-    ...sexFilterOptions.map((sex) => ({ value: sex, label: sex, icon: Users })),
+    { value: "", label: "Todos os sexos", icon: PawPrint },
+    ...sexFilterOptions.map((sex) => ({
+      value: sex,
+      label: sex,
+      icon: normalizeText(sex).includes("feme") ? Flower2 : Zap,
+    })),
   ];
 
   function openAnimalModal(animal, openInterestForm = false) {
     setSelectedAnimal(animal);
     setShowInterestForm(openInterestForm);
     setInterestSent(false);
-    setInterestForm({ name: "", phone: "", visit_date: "", cpf: "" });
+    setInterestForm({ name: "", phone: "", visit_date: "" });
   }
 
   function closeAnimalModal() {
     setSelectedAnimal(null);
     setShowInterestForm(false);
     setInterestSent(false);
-    setInterestForm({ name: "", phone: "", visit_date: "", cpf: "" });
+    setInterestForm({ name: "", phone: "", visit_date: "" });
   }
 
   async function submitInterest(e) {
@@ -1243,58 +1376,56 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
 
   return (
     <>
-    <div className="adoption-filter-rail" aria-label="Filtros da galeria de adoção">
-      <div className="adoption-filter-group" aria-label="Filtrar por espécie">
-        {speciesQuickFilters.map((filter) => {
-          const Icon = filter.icon;
-          return (
-            <button
-              key={`species-${filter.value || "all"}`}
-              className={adoptionFilters.species === filter.value ? "selected" : ""}
-              type="button"
-              onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}
-            >
-              <Icon size={18} />
-              <span>{filter.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="adoption-filter-group" aria-label="Filtrar por sexo">
-        {sexQuickFilters.map((filter) => {
-          const Icon = filter.icon;
-          return (
-            <button
-              key={`sex-${filter.value || "all"}`}
-              className={adoptionFilters.sex === filter.value ? "selected" : ""}
-              type="button"
-              onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}
-            >
-              <Icon size={18} />
-              <span>{filter.label}</span>
-            </button>
-          );
-        })}
-      </div>
-      {activeFilterCount > 0 && (
-        <button className="ghost-button adoption-clear-filters" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>
-          Limpar filtros
-        </button>
-      )}
-    </div>
     <section className={`${filteredAnimals.length <= 2 ? "adoption-showcase few-animals" : "adoption-showcase"} ${showViewAll ? "" : "compact-gallery"}`.trim()}>
       <div className="showcase-header adoption-showcase-header">
         <div>
           <span className="eyebrow">Adoção</span>
-          <h2>Adote um amigo para a vida toda</h2>
-          <p>Conheça os animais disponíveis e escolha quem combina com sua rotina.</p>
+          <h2>Animais disponíveis para adoção</h2>
         </div>
         <div className="adoption-header-actions">
-        {showViewAll && (
-          <button className="ghost-button" type="button" onClick={onOpenAdoption}>
-            Ver todos
-          </button>
-        )}
+          <div className="showcase-filter-pills">
+            {speciesQuickFilters.map((filter) => {
+              const Icon = filter.icon;
+              const key = (filter.value || "all").toLowerCase();
+              return (
+                <button
+                  key={`sp-${key}`}
+                  className={`showcase-pill species-${key}${adoptionFilters.species === filter.value ? " active" : ""}`}
+                  type="button"
+                  title={filter.label}
+                  onClick={() => setAdoptionFilters((c) => ({ ...c, species: filter.value }))}
+                >
+                  <Icon size={18} />
+                </button>
+              );
+            })}
+            <span className="showcase-pill-sep" />
+            {sexQuickFilters.filter((f) => f.value !== "").map((filter) => {
+              const Icon = filter.icon;
+              const key = filter.value.toLowerCase();
+              return (
+                <button
+                  key={`sx-${key}`}
+                  className={`showcase-pill sex-${key}${adoptionFilters.sex === filter.value ? " active" : ""}`}
+                  type="button"
+                  title={filter.label}
+                  onClick={() => setAdoptionFilters((c) => ({ ...c, sex: filter.value }))}
+                >
+                  <Icon size={18} />
+                </button>
+              );
+            })}
+            {activeFilterCount > 0 && (
+              <button className="showcase-pill-clear" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>
+                Limpar
+              </button>
+            )}
+          </div>
+          {showViewAll && (
+            <button className="ghost-button" type="button" onClick={onOpenAdoption}>
+              Ver todos
+            </button>
+          )}
         </div>
       </div>
 
@@ -1321,29 +1452,24 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
                 <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
                   {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={36} />}
                 </div>
-                <div className="public-animal-meta">
-                  <div className="public-animal-badges" aria-label="Status da adocao">
-                    <span className="public-interest-count">
-                      <Users size={13} />
-                      {interestCount} interessado{interestCount === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <strong>Adote {displayName}</strong>
-                  <span>{profileSummary || "Perfil em atualização"}</span>
-                  {description && <small>{description}</small>}
-                </div>
               </button>
-              <button
-                className="public-interest-cta"
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openAnimalModal(animal, true);
-                }}
-              >
-                <HeartHandshake size={16} />
-                Quero adotar
-              </button>
+              <div className="public-animal-footer">
+                <span className={interestCount > 0 ? "public-interest-count has-interest" : "public-interest-count"}>
+                  <Users size={13} />
+                  {interestCount}
+                </span>
+                <button
+                  className="public-interest-cta"
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openAnimalModal(animal, true);
+                  }}
+                >
+                  <HeartHandshake size={16} />
+                  Quero adotar
+                </button>
+              </div>
             </article>
           );
         })}
@@ -1368,46 +1494,58 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
             )}
           </div>
           <div className="adoption-profile-info">
-            <h2>{selectedAnimal.name || selectedAnimal.animal_name}</h2>
-            <div className="adoption-profile-tags">
-              {selectedAnimal.species && <Chip>{selectedAnimal.species}</Chip>}
-              {selectedAnimal.sex && <Chip>{selectedAnimal.sex}</Chip>}
-              {selectedAnimal.age && <Chip>{selectedAnimal.age}</Chip>}
+            <div className="adoption-profile-identity">
+              <h2>{selectedAnimal.name || selectedAnimal.animal_name}</h2>
+              <div className="adoption-profile-tags">
+                {selectedAnimal.species && <Chip>{selectedAnimal.species}</Chip>}
+                {selectedAnimal.sex && <Chip>{selectedAnimal.sex}</Chip>}
+                {selectedAnimal.age && <Chip>{selectedAnimal.age}</Chip>}
+              </div>
+              {(selectedAnimal.tone || selectedAnimal.description) && (
+                <p>{selectedAnimal.tone || selectedAnimal.description}</p>
+              )}
             </div>
-            <p>{selectedAnimal.tone || selectedAnimal.description}</p>
+
             {!showInterestForm && !interestSent && (
-              <button className="primary-action" type="button" onClick={() => setShowInterestForm(true)}>
+              <button className="primary-action adoption-main-cta" type="button" onClick={() => setShowInterestForm(true)}>
+                <HeartHandshake size={18} />
                 Quero adotar
               </button>
             )}
 
             {showInterestForm && !interestSent && (
               <form className="adoption-interest-form" onSubmit={submitInterest}>
-                <p className="adoption-interest-title">Preencha seus dados e entraremos em contato</p>
-                <label className="field"><span>Nome completo</span>
-                  <input value={interestForm.name} onChange={(e) => setInterestForm((f) => ({ ...f, name: e.target.value }))} placeholder="Seu nome" required />
-                </label>
-                <label className="field"><span>Telefone / WhatsApp</span>
-                  <input value={interestForm.phone} onChange={(e) => setInterestForm((f) => ({ ...f, phone: e.target.value }))} placeholder="(00) 00000-0000" required />
-                </label>
-                <label className="field"><span>CPF (opcional — vincula ao seu código de acompanhamento)</span>
-                  <input value={interestForm.cpf} onChange={(e) => setInterestForm((f) => ({ ...f, cpf: e.target.value }))} placeholder="000.000.000-00" />
-                </label>
-                <label className="field"><span>Data para visitar o pet</span>
+                <div className="interest-form-heading">
+                  <HeartHandshake size={15} />
+                  <span>Registrar interesse</span>
+                </div>
+                <div className="access-field">
+                  <User size={14} className="access-field-icon" />
+                  <input value={interestForm.name} onChange={(e) => setInterestForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nome completo" required />
+                </div>
+                <div className="access-field">
+                  <MessageCircle size={14} className="access-field-icon" />
+                  <input value={interestForm.phone} onChange={(e) => setInterestForm((f) => ({ ...f, phone: e.target.value }))} placeholder="WhatsApp (00) 00000-0000" required />
+                </div>
+                <div className="access-field">
+                  <CalendarDays size={14} className="access-field-icon" />
                   <input type="date" value={interestForm.visit_date} onChange={(e) => setInterestForm((f) => ({ ...f, visit_date: e.target.value }))} />
-                </label>
+                </div>
                 <div className="form-actions">
-                  <button className="ghost-button" type="button" onClick={() => setShowInterestForm(false)}>Voltar</button>
-                  <button className="primary-action" type="submit">Enviar interesse</button>
+                  <button className="ghost-button" type="button" onClick={() => setShowInterestForm(false)}>Cancelar</button>
+                  <button className="primary-action" type="submit">
+                    <HeartHandshake size={15} />
+                    Enviar interesse
+                  </button>
                 </div>
               </form>
             )}
 
             {interestSent && (
               <div className="adoption-interest-success">
-                <CheckCircle2 size={32} color="#15803d" />
-                <strong>Interesse enviado!</strong>
-                <p>Entraremos em contato em breve pelo WhatsApp informado.</p>
+                <CheckCircle2 size={40} />
+                <strong>Interesse registrado!</strong>
+                <p>Em breve entraremos em contato pelo WhatsApp informado.</p>
               </div>
             )}
           </div>
@@ -1591,27 +1729,35 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
 
           <div className="login-main-actions">
             <button className="login-big-action primary" onClick={onPublicRequest}>
-              <PawPrint size={28} />
-              <strong>Solicitações</strong>
-              <span>Primeiro cadastro do tutor e animal</span>
+              <div className="action-icon-wrap"><PawPrint size={22} /></div>
+              <div className="action-text">
+                <strong>Solicitações</strong>
+                <span>Primeiro cadastro do tutor e animal</span>
+              </div>
             </button>
 
             <button className="login-big-action consult" onClick={onPublicConsult}>
-              <Search size={28} />
-              <strong>Prontuário</strong>
-              <span>Consultar histórico e solicitar procedimento</span>
+              <div className="action-icon-wrap"><Search size={22} /></div>
+              <div className="action-text">
+                <strong>Prontuário</strong>
+                <span>Consultar histórico e solicitar procedimento</span>
+              </div>
             </button>
 
             <button className="login-big-action secondary login-vet-action" onClick={() => setShowVetModal(true)}>
-              <Lock size={28} />
-              <strong>User</strong>
-              <span>Acesso credenciado</span>
+              <div className="action-icon-wrap"><Lock size={20} /></div>
+              <div className="action-text">
+                <strong>Acesso restrito</strong>
+                <span>Área credenciada</span>
+              </div>
             </button>
 
             <button className="login-big-action access" onClick={() => setShowAccessModal(true)}>
-              <Users size={28} />
-              <strong>Solicitar credenciamento</strong>
-              <span>ONGs e protetores</span>
+              <div className="action-icon-wrap"><Users size={20} /></div>
+              <div className="action-text">
+                <strong>Credenciamento</strong>
+                <span>ONGs e protetores</span>
+              </div>
             </button>
           </div>
         </section>
@@ -1790,48 +1936,87 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
 
   return (
     <div className="modal-backdrop">
-      <form className="auth-modal access-request-modal" onSubmit={submit}>
-        <ModalHeader title="Solicitar credenciamento" onClose={onClose} />
+      <form className="access-modal" onSubmit={submit}>
+        <button className="access-modal-close" type="button" onClick={onClose} aria-label="Fechar"><X size={15} /></button>
+
         {sent ? (
-          <div className="public-form-success compact-success">
-            <CheckCircle2 size={42} />
-            <h2>Solicitação enviada</h2>
+          <div className="access-modal-success">
+            <CheckCircle2 size={38} strokeWidth={1.5} />
+            <h2>Solicitação enviada!</h2>
             <p>Um usuário interno vai analisar o pedido e liberar o acesso se estiver tudo certo.</p>
-            <button className="primary-action" type="button" onClick={onClose}>Fechar</button>
+            <button className="access-modal-submit" type="button" onClick={onClose}>Fechar</button>
           </div>
         ) : (
           <>
-            <div className="compact-choice-field access-type-field">
-              <span>Tipo de solicitante</span>
+            <div className="access-modal-head">
+              <div className="access-modal-head-icon"><Shield size={20} /></div>
               <div>
-                {accessRequesterTypes.map((type) => (
-                  <button
-                    key={type.id}
-                    className={form.requesterType === type.id ? "selected" : ""}
-                    type="button"
-                    onClick={() => patch("requesterType", type.id)}
-                  >
-                    <span>{type.label}</span>
-                    <small>{type.sector}</small>
-                  </button>
-                ))}
+                <h2>Solicitar credenciamento</h2>
+                <p>Acesso ao sistema para ONGs e protetores independentes</p>
               </div>
             </div>
-            <Field label="Nome da ONG ou grupo" value={form.organizationName} placeholder="Opcional para protetor independente" onChange={(value) => patch("organizationName", value)} />
-            <Field label="Responsável" value={form.responsibleName} placeholder="Nome completo" onChange={(value) => patch("responsibleName", value)} />
-            <Field label="Email" type="email" value={form.email} placeholder="email@dominio.com" onChange={(value) => patch("email", value)} />
-            <div className="form-grid two">
-              <Field label="Telefone" value={form.phone} placeholder="(00) 00000-0000" onChange={(value) => patch("phone", value)} />
-              <Field label="CPF/CNPJ ou matrícula" value={form.document} placeholder="Identificação" onChange={(value) => patch("document", value)} />
-              <Field label="Cidade" value={form.city} placeholder="Município" onChange={(value) => patch("city", value)} />
-              <Field label="UF" value={form.state} placeholder="UF" onChange={(value) => patch("state", value.toUpperCase().slice(0, 2))} />
+
+            <div className="access-type-picker">
+              {accessRequesterTypes.map((type) => (
+                <button
+                  key={type.id}
+                  type="button"
+                  className={`access-type-card${form.requesterType === type.id ? " is-selected" : ""}`}
+                  onClick={() => patch("requesterType", type.id)}
+                >
+                  <span className="access-type-icon">
+                    {type.id === "ONG" ? <Building2 size={17} /> : <HeartHandshake size={17} />}
+                  </span>
+                  <span className="access-type-label">{type.label}</span>
+                  <span className="access-type-sector">{type.sector}</span>
+                </button>
+              ))}
             </div>
-            <label className="field">
-              <span>Como pretende auxiliar</span>
-              <textarea value={form.intendedUse} placeholder="Ex: cadastrar animais para adoção, indicar vagas de castração, acompanhar animais de rua..." onChange={(event) => patch("intendedUse", event.target.value)} />
-            </label>
-            {status && <p className={status.includes("Enviando") ? "helper-text" : "form-error"}>{status}</p>}
-            <button className="primary-action" type="submit">Enviar solicitação</button>
+
+            <div className="access-form-fields">
+              <div className="access-field">
+                <Building2 size={14} className="access-field-icon" />
+                <input type="text" placeholder="Nome da ONG ou grupo (opcional para protetor)" value={form.organizationName} onChange={(e) => patch("organizationName", e.target.value)} />
+              </div>
+              <div className="access-field">
+                <User size={14} className="access-field-icon" />
+                <input type="text" placeholder="Nome completo do responsável *" value={form.responsibleName} onChange={(e) => patch("responsibleName", e.target.value)} required />
+              </div>
+              <div className="access-field">
+                <Mail size={14} className="access-field-icon" />
+                <input type="email" placeholder="Email para contato *" value={form.email} onChange={(e) => patch("email", e.target.value)} required />
+              </div>
+              <div className="access-form-row">
+                <div className="access-field">
+                  <Phone size={14} className="access-field-icon" />
+                  <input type="tel" placeholder="Telefone" value={form.phone} onChange={(e) => patch("phone", e.target.value)} />
+                </div>
+                <div className="access-field">
+                  <FileText size={14} className="access-field-icon" />
+                  <input type="text" placeholder="CPF/CNPJ ou matrícula" value={form.document} onChange={(e) => patch("document", e.target.value)} />
+                </div>
+              </div>
+              <div className="access-form-row">
+                <div className="access-field">
+                  <MapPin size={14} className="access-field-icon" />
+                  <input type="text" placeholder="Cidade" value={form.city} onChange={(e) => patch("city", e.target.value)} />
+                </div>
+                <div className="access-field">
+                  <input type="text" placeholder="UF" value={form.state} maxLength={2} onChange={(e) => patch("state", e.target.value.toUpperCase().slice(0, 2))} />
+                </div>
+              </div>
+              <div className="access-field access-field--textarea">
+                <MessageCircle size={14} className="access-field-icon" />
+                <textarea placeholder="Como pretende auxiliar? Ex: cadastrar animais para adoção, indicar vagas de castração..." value={form.intendedUse} onChange={(e) => patch("intendedUse", e.target.value)} rows={3} />
+              </div>
+            </div>
+
+            {status && <p className={`access-status${status.includes("Enviando") ? " is-sending" : " is-error"}`}>{status}</p>}
+
+            <button className="access-modal-submit" type="submit">
+              <Shield size={14} />
+              Enviar solicitação
+            </button>
           </>
         )}
       </form>
@@ -1841,25 +2026,21 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
 
 function PetWelcomeArt({ className = "" }: AnyRecord) {
   return (
-    <div className={`pet-welcome-art ${className}`.trim()} aria-hidden="true">
-      <video
-        className="pet-welcome-video"
-        autoPlay
-        muted
-        loop
-        playsInline
-        preload="metadata"
-        poster="https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=1400&q=80"
-      >
-        <source src="https://assets.mixkit.co/videos/preview/mixkit-dog-catches-a-ball-in-a-river-1494-large.mp4" type="video/mp4" />
-      </video>
-      <div className="pet-video-shade" />
-      <div className="pet-video-caption">
-        <span className="eyebrow">Castração e adoção animal</span>
-        <strong>Eles esperam por você. Adote e transforme duas vidas.</strong>
-        <p>Cada animal adotado libera espaço para outro ser salvo.<br />Conheça quem está esperando um lar.</p>
+    <section className={`public-hero ${className}`.trim()}>
+      <div className="hero-content">
+        <div className="hero-eyebrow">
+          <PawPrint size={11} />
+          <span>Sistema Municipal de Proteção Animal</span>
+        </div>
+        <h1 className="hero-title">Cuidado e proteção para quem não tem voz</h1>
+        <p className="hero-subtitle">Castração gratuita, adoção responsável e bem-estar animal - digital e acessível.</p>
+        <div className="hero-features">
+          <div className="hero-feature"><CheckCircle2 size={12} /><span>Castração gratuita</span></div>
+          <div className="hero-feature"><CheckCircle2 size={12} /><span>Adoção responsável</span></div>
+          <div className="hero-feature"><CheckCircle2 size={12} /><span>Prontuário digital</span></div>
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -2052,12 +2233,8 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
     <section className={compact ? "simple-stack consultation-results" : "content-grid"}>
       {!compact && <div className="hero-panel">
         <div>
-          <span className="eyebrow">Area do solicitante</span>
-          <h2>Olá, {currentUser.name}. Acompanhe protocolos, documentos e agendamentos em um único lugar.</h2>
-          <p>
-            O painel prioriza a próxima ação do tutor: enviar pendências, confirmar presença, solicitar reagendamento
-            ou baixar documentos.
-          </p>
+          <span className="eyebrow">Área do solicitante</span>
+          <h2>Olá, {currentUser.name}</h2>
         </div>
         <button className="primary-action" onClick={() => setActive("solicitacao")}>
           <Plus size={18} />
@@ -2066,13 +2243,13 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
       </div>}
 
       {!compact && <div className="summary-row">
-        <Metric title={compact ? "Ativas" : "Solicitacoes ativas"} value={safeRequests.filter((r) => r.status !== "ARQUIVADA").length} icon={ClipboardCheck} />
+        <Metric title={compact ? "Ativas" : "Solicitações ativas"} value={safeRequests.filter((r) => r.status !== "ARQUIVADA").length} icon={ClipboardCheck} />
         <Metric title="Próximo agendamento" value={next ? next.appointment || next.preferredSchedule : "Nenhum"} icon={CalendarDays} />
-        <Metric title={compact ? "Avisos" : "Notificacoes"} value="4" icon={Bell} />
+        <Metric title={compact ? "Avisos" : "Notificações"} value="4" icon={Bell} />
       </div>}
 
       <div className="panel wide">
-        <PanelHeader title={compact ? "Solicitacoes" : "Minhas solicitacoes"} action={compact ? "" : "Ver todas"} />
+        <PanelHeader title={compact ? "Solicitações" : "Minhas solicitações"} action={compact ? "" : "Ver todas"} />
         <div className="request-list">
           {safeRequests.length === 0 && (
             <EmptyState
@@ -2123,7 +2300,12 @@ function NewRequest({
   initialType = "",
   initialMunicipalityId = "",
 }: AnyRecord) {
-  const activeSpecies = speciesOptions.filter((item) => item.active !== false).map((item) => item.name);
+  const activeSpecies = Array.from(new Set(
+    speciesOptions
+      .filter((item) => item.active !== false)
+      .map((item) => item.name)
+      .filter(Boolean),
+  ));
   const activeSizes = sizeOptions.filter((item) => item.active !== false);
   const skipTutorStep = currentUser.role === "tutor" && currentUser.profileComplete;
   const [requestData, setRequestData] = useState({
@@ -2158,7 +2340,6 @@ function NewRequest({
       weight: "",
       age: "",
       birthDate: "",
-      procedure: "",
       coat: "",
       hasChip: "",
       microchip: "",
@@ -2169,11 +2350,12 @@ function NewRequest({
       food: "",
     },
   ]);
+  const [expandedAnimal, setExpandedAnimal] = useState(0);
   const [accepted, setAccepted] = useState(false);
   const [cepStatus, setCepStatus] = useState("");
   const [locationStatus, setLocationStatus] = useState("");
   const [documentUploads, setDocumentUploads] = useState<AnyRecord>({});
-  const [formStep, setFormStep] = useState(skipTutorStep ? 1 : 0);
+  const [formStep, setFormStep] = useState(internalSimple ? 0 : 1);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
@@ -2201,8 +2383,13 @@ function NewRequest({
     }
   }, [initialType]);
 
-  const configuredRequestTypes = requestTypes.filter((type) => type.name.trim() && type.active !== false);
+  const configuredRequestTypes = requestTypes
+    .filter((type) => type.name.trim() && type.active !== false)
+    .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
   const selectedRequestType = configuredRequestTypes.find((type) => type.name === requestData.type) || null;
+  const typeStepTutor = selectedRequestType?.stepTutor !== false;
+  const typeStepAgenda = selectedRequestType?.stepAgenda !== false;
+  const typeStepDocuments = selectedRequestType?.stepDocuments !== false;
   const selectedTypeDocuments = (selectedRequestType?.documents || [])
     .map(normalizeDocumentType)
     .filter((document) => document.active !== false);
@@ -2212,7 +2399,7 @@ function NewRequest({
     .every((document) => acceptableUploadStatuses.includes(documentUploads[document.id]?.status));
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
-  const formSteps = internalSimple
+  const formSteps = (internalSimple
     ? [
         { step: 0, label: "Tutor" },
         { step: 1, label: "Animal" },
@@ -2226,11 +2413,14 @@ function NewRequest({
         { step: 3, label: "Documentos" },
       ]
     : [
-        { step: 0, label: "Tutor" },
         { step: 1, label: "Animal" },
+        { step: 0, label: "Tutor" },
         { step: 2, label: "Agenda" },
         { step: 3, label: "Documentos" },
-      ];
+      ]).filter((item) => !(internalSimple && item.step === 3))
+    .filter((item) => !(!internalSimple && item.step === 0 && !typeStepTutor))
+    .filter((item) => !(!internalSimple && item.step === 2 && !typeStepAgenda))
+    .filter((item) => !(!internalSimple && item.step === 3 && !typeStepDocuments));
   const currentStepIndex = Math.max(formSteps.findIndex((item) => item.step === formStep), 0);
   function selectedScheduleHasCapacity() {
     if (!requestData.schedule) return false;
@@ -2240,29 +2430,32 @@ function NewRequest({
   }
 
   function addAnimal() {
-    setAnimals((current) => [
-      ...current,
-      {
-        name: "",
-        species: "",
-        sex: "",
-        breedType: "",
-        breedDescription: "",
-        size: "",
-        weight: "",
-        age: "",
-        birthDate: "",
-        procedure: "",
-        coat: "",
-        hasChip: "",
-        microchip: "",
-        dewormed: "",
-        vaccinated: "",
-        hadLitter: "",
-        illnessHistory: "",
-        food: "",
-      },
-    ]);
+    setAnimals((current) => {
+      const next = [
+        ...current,
+        {
+          name: "",
+          species: "",
+          sex: "",
+          breedType: "",
+          breedDescription: "",
+          size: "",
+          weight: "",
+          age: "",
+          birthDate: "",
+          coat: "",
+          hasChip: "",
+          microchip: "",
+          dewormed: "",
+          vaccinated: "",
+          hadLitter: "",
+          illnessHistory: "",
+          food: "",
+        },
+      ];
+      setExpandedAnimal(next.length - 1);
+      return next;
+    });
   }
 
   function detectSizeFromWeight(weight) {
@@ -2354,7 +2547,7 @@ function NewRequest({
 
     if (!requestData.tutor.trim()) issues.push("Informe o nome do tutor.");
     if (cleanCpf.length !== 11) issues.push("Informe um CPF válido.");
-    if (!internalSimple) {
+    if (!internalSimple && typeStepTutor) {
       if (cleanPhone.length < 10) issues.push("Informe um celular válido.");
       if (!skipTutorStep && !smsConfirmed) issues.push("Confirme o código SMS recebido no celular cadastrado.");
       if (!requestData.address.trim()) issues.push("Informe o endereço.");
@@ -2363,18 +2556,17 @@ function NewRequest({
       if (requestData.state.trim().length !== 2) issues.push("Informe a UF.");
     }
     if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
-    if (!requestData.schedule) issues.push("Escolha uma data disponível.");
-    else if (!selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
+    if (!internalSimple && typeStepAgenda && !requestData.schedule) issues.push("Escolha uma data disponível.");
+    else if (!internalSimple && typeStepAgenda && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
     if (configuredRequestTypes.length > 0 && !requestData.type) issues.push("Selecione o tipo de solicitação.");
     filledAnimals.forEach((animal, index) => {
       const label = filledAnimals.length > 1 ? ` do animal ${index + 1}` : " do animal";
-      if (!animal.procedure) issues.push(`Selecione o procedimento${label}.`);
       if (!animal.species) issues.push(`Selecione a espécie${label}.`);
       if (!animal.sex) issues.push(`Selecione o sexo${label}.`);
       if (!animal.size) issues.push(`Selecione o porte${label}.`);
       if (!animal.breedType) issues.push(`Informe se a raça é definida ou indefinida${label}.`);
     });
-    if (!internalSimple && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
+    if (!internalSimple && typeStepDocuments && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
 
     return issues;
   }
@@ -2406,7 +2598,6 @@ function NewRequest({
       return animals
         .flatMap((animal, index) => [
           index === 0 && configuredRequestTypes.length > 0 && !requestData.type,
-          !animal.procedure,
           !animal.species,
           !animal.sex,
           !animal.size,
@@ -2420,7 +2611,7 @@ function NewRequest({
     }
 
     if (step === 3) {
-      return [!requestData.schedule || !selectedScheduleHasCapacity(), !requiredDocsApproved, !accepted].filter(Boolean);
+      return [typeStepDocuments && !requiredDocsApproved, typeStepDocuments && !accepted].filter(Boolean);
     }
 
     return [];
@@ -2446,7 +2637,6 @@ function NewRequest({
       animalName: false,
       animalAge: false,
       type: configuredRequestTypes.length > 0 && !requestData.type,
-      procedure: !firstAnimal.procedure,
       species: !firstAnimal.species,
       sex: !firstAnimal.sex,
       size: !firstAnimal.size,
@@ -2623,7 +2813,10 @@ function NewRequest({
     const selectedScheduleSlot = selectedScheduleDay ? getOfferedScheduleSlot(selectedScheduleDay, requests, Math.max(animals.length, 1)) : null;
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
-    const { latitude, longitude } = mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" };
+    const hasGpsCoords = requestData.latitude && requestData.longitude;
+    const { latitude, longitude } = hasGpsCoords
+      ? { latitude: requestData.latitude, longitude: requestData.longitude }
+      : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
     const localPayload = {
       tutor: requestData.tutor || currentUser.name,
       neighborhood: requestData.neighborhood || "Bairro não informado",
@@ -2631,7 +2824,7 @@ function NewRequest({
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
-      type: requestData.type || animals[0]?.procedure || "Cadastro animal",
+      type: requestData.type || "Cadastro animal",
       requestTypeId: selectedRequestType?.id || "",
       fee: selectedRequestType?.fee || "",
       phone: requestData.phone || "",
@@ -2665,6 +2858,7 @@ function NewRequest({
       documents: Object.values(documentUploads).filter((upload) => upload?.documentId === "animal_photo"),
       signedAt: "",
       tags: [],
+      origin: "INTERNA",
     };
 
     try {
@@ -2681,7 +2875,10 @@ function NewRequest({
     const selectedScheduleSlot = selectedScheduleDay ? getOfferedScheduleSlot(selectedScheduleDay, requests, Math.max(animals.length, 1)) : null;
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
-    const { latitude, longitude } = mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" };
+    const hasGpsCoords = requestData.latitude && requestData.longitude;
+    const { latitude, longitude } = hasGpsCoords
+      ? { latitude: requestData.latitude, longitude: requestData.longitude }
+      : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
     const uploadedDocuments = selectedTypeDocuments
       .map((document) => documentUploads[document.id])
       .filter((upload) => upload && acceptableUploadStatuses.includes(upload.status));
@@ -2697,7 +2894,7 @@ function NewRequest({
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
-      type: requestData.type || animals[0]?.procedure || "Cadastro animal",
+      type: requestData.type || "Cadastro animal",
       requestTypeId: selectedRequestType?.id || "",
       fee: selectedRequestType?.fee || "",
       phone: requestData.phone || "",
@@ -2737,13 +2934,13 @@ function NewRequest({
       const generatedValidationKey = String(newRequest?.validationKey || newRequest?.validation_key || "").trim();
 
       if (!generatedProtocol || !generatedValidationKey) {
-        setSubmissionError("Nao foi possivel concluir: protocolo/chave de validacao nao foram gerados. Tente novamente.");
+        setSubmissionError("Não foi possível concluir: protocolo/chave de validação não foram gerados. Tente novamente.");
         return;
       }
 
       onDone?.(normalizeRequest({ ...localPayload, ...newRequest, protocol: generatedProtocol, validation_key: generatedValidationKey }));
     } catch (err) {
-      setSubmissionError(err?.message || "Falha ao enviar solicitacao. Tente novamente.");
+      setSubmissionError(err?.message || "Falha ao enviar solicitação. Tente novamente.");
     }
   }
 
@@ -2757,23 +2954,59 @@ function NewRequest({
   const progressPct = Math.round(((currentStepIndex + 1) / formSteps.length) * 100);
 
   const stepperNode = (
-    <div className="request-stepper">
-      {formSteps.map((item, index) => (
-        <div
-          key={item.step}
-          className={index === currentStepIndex ? "selected" : index < currentStepIndex ? "done" : ""}
-          onClick={() => { if (index < currentStepIndex) setFormStep(item.step); }}
-        >
-          <span>{item.label}</span>
-        </div>
-      ))}
+    <div className="nr-stepper">
+      {formSteps.map((item, index) => {
+        const isDone = index < currentStepIndex;
+        const isCurrent = index === currentStepIndex;
+        return (
+          <React.Fragment key={item.step}>
+            <button
+              type="button"
+              className={`nr-step${isCurrent ? " nr-step--current" : ""}${isDone ? " nr-step--done" : ""}`}
+              onClick={() => { if (isDone) setFormStep(item.step); }}
+              disabled={!isDone}
+              aria-current={isCurrent ? "step" : undefined}
+            >
+              <span className="nr-step-circle">
+                {isDone ? <CheckCircle2 size={13} strokeWidth={2.5} /> : <span>{index + 1}</span>}
+              </span>
+              <span className="nr-step-label">{item.label}</span>
+            </button>
+            {index < formSteps.length - 1 && <span className="nr-step-connector" aria-hidden="true" />}
+          </React.Fragment>
+        );
+      })}
     </div>
   );
 
-  function goBack() {
-    if (currentStepIndex > 0) setFormStep(formSteps[currentStepIndex - 1].step);
-    else onBack?.();
-  }
+  const inlineAnimalPhotoUpload = (
+    <div className="animal-photo-upload-card animal-photo-upload-card--inline">
+      <div>
+        <strong>Foto de registro</strong>
+        <span>{documentUploads.animal_photo?.fileName || "Opcional"}</span>
+      </div>
+      {documentUploads.animal_photo?.dataUrl && (
+        <button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)} aria-label="Ver foto de registro">
+          <img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" />
+        </button>
+      )}
+      <div className="animal-photo-actions">
+        <label className="icon-button file-button" title="Enviar foto" aria-label="Enviar foto">
+          <UploadCloud size={17} />
+          <input type="file" accept="image/*" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
+        </label>
+        <label className="icon-button file-button" title="Abrir câmera" aria-label="Abrir câmera">
+          <Camera size={17} />
+          <input type="file" accept="image/*" capture="environment" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
+        </label>
+        {documentUploads.animal_photo && (
+          <button className="icon-button danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")} title="Remover foto" aria-label="Remover foto">
+            <X size={16} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 
   const footerNode = (
     <div className="form-actions">
@@ -2802,35 +3035,44 @@ function NewRequest({
     </div>
   );
 
-  if (publicFlow) {
+  if (publicFlow || compact) {
+    const internalCompact = compact && !publicFlow;
     return (
-      <div className="nr-shell">
-        <div className="nr-topbar">
-          <button className="nr-back-btn" type="button" onClick={onBack} aria-label="Ir para o início">
-            <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
-            Início
-          </button>
-          <div className="nr-progress-wrap" title={`${progressPct}%`}>
-            <div className="nr-progress-fill" style={{ width: `${progressPct}%` }} />
-          </div>
-          {selectedMunicipalityId && municipalities.find((m) => m.id === selectedMunicipalityId) && (
-            <span className="nr-municipality-label">
-              {municipalities.find((m) => m.id === selectedMunicipalityId).name}
-            </span>
+      <div className={internalCompact ? "nr-shell nr-shell--internal" : "nr-shell"}>
+        <div className={internalCompact ? "nr-topbar nr-topbar--internal" : "nr-topbar"}>
+          {!internalCompact && (
+            <button
+              className="nr-home-btn"
+              type="button"
+              onClick={onBack}
+              aria-label="Início"
+            >
+              <Home size={18} />
+            </button>
           )}
+          <div className="nr-topbar-stepper">{stepperNode}</div>
         </div>
 
         <div className="nr-body">
 
           {submissionError && <p className="form-error">{submissionError}</p>}
           <div className="single-request-form clean-form">
-          {formStep === 0 && <FormSection title="Seus dados">
+          {formStep === 0 && <FormSection title={<><User size={14} />Seus dados</>}>
             <div className="two-column-fields">
-              <Field label="Nome" value={requestData.tutor} onChange={(value) => updateRequestField("tutor", value)} placeholder="Nome do tutor ou responsável" invalid={showInvalid("tutor")} />
-              <Field label="CPF" value={requestData.cpf} onChange={(value) => updateMaskedRequestField("cpf", value)} placeholder="000.000.000-00" invalid={showInvalid("cpf")} />
+              <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`}>
+                <User size={14} className="access-field-icon" />
+                <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+              </div>
+              <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`}>
+                <FileText size={14} className="access-field-icon" />
+                <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
+              </div>
             </div>
             <div className="cadunico-row">
-              <Field label="CadÚnico" value={requestData.cadUnico} onChange={(value) => updateRequestField("cadUnico", value)} placeholder="Número do CadÚnico" readOnly={requestData.cadUnicoNotApplicable} />
+              <div className="access-field">
+                <FileText size={14} className="access-field-icon" />
+                <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
+              </div>
               <label className="checkbox-row cadunico-checkbox">
                 <input type="checkbox" checked={requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
                 Não se aplica
@@ -2838,22 +3080,45 @@ function NewRequest({
             </div>
             <div className="form-subsection-title">Endereço</div>
             <div className="address-lookup-grid">
-              <Field label="CEP" value={requestData.cep} onChange={lookupCep} placeholder="00000-000" invalid={showInvalid("cep")} />
-              <Field label="Número" value={requestData.number} onChange={(value) => updateRequestField("number", value)} placeholder="123" invalid={showInvalid("number")} />
+              <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`}>
+                <MapPin size={14} className="access-field-icon" />
+                <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
+              </div>
+              <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`}>
+                <Navigation size={14} className="access-field-icon" />
+                <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
+              </div>
+              <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`}>
+                <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
+              </div>
             </div>
             {cepStatus && <p className="cep-status">{cepStatus}</p>}
-            <Field label="Endereço" value={requestData.address} onChange={(value) => updateRequestField("address", value)} placeholder="Rua, complemento" invalid={showInvalid("address")} />
+            <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`}>
+              <MapPin size={14} className="access-field-icon" />
+              <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
+            </div>
             <div className="address-city-grid">
-              <Field label="Bairro" value={requestData.neighborhood} onChange={(value) => updateRequestField("neighborhood", value)} placeholder="Bairro" invalid={showInvalid("neighborhood")} />
-              <Field label="Cidade" value={requestData.city} onChange={(value) => updateRequestField("city", value)} placeholder="Cidade" invalid={showInvalid("city")} />
-              <Field label="UF" value={requestData.state} onChange={(value) => updateMaskedRequestField("state", value)} placeholder="SP" invalid={showInvalid("state")} />
+              <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`}>
+                <MapPin size={14} className="access-field-icon" />
+                <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
+              </div>
+              <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`}>
+                <Building2 size={14} className="access-field-icon" />
+                <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
+              </div>
             </div>
             {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
             {locationStatus && <p className="cep-status">{locationStatus}</p>}
             <div className="form-subsection-title">Contato</div>
             <div className="two-column-fields">
-              <Field label="Email" value={requestData.email} onChange={(value) => updateRequestField("email", value)} placeholder="seuemail@exemplo.com" invalid={showInvalid("email")} />
-              <Field label="Celular" value={requestData.phone} onChange={(value) => updateMaskedRequestField("phone", value)} placeholder="WhatsApp / celular" invalid={showInvalid("phone")} />
+              <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`}>
+                <Mail size={14} className="access-field-icon" />
+                <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
+              </div>
+              <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`}>
+                <Phone size={14} className="access-field-icon" />
+                <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
+              </div>
             </div>
             {!internalSimple && !smsCode && !smsConfirmed && (
               <button className="secondary-action sms-send-btn" type="button" onClick={sendSmsCode}>Enviar código de verificação</button>
@@ -2870,68 +3135,131 @@ function NewRequest({
             {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
           </FormSection>}
 
-          {formStep === 1 && <FormSection title="Dados dos animais">
+          {formStep === 1 && <FormSection title={<><PawPrint size={14} />Dados do animal</>}>
             {configuredRequestTypes.length > 0 && (
-              <label className={showInvalid("type") ? "field invalid" : "field"}>
-                <span>Tipo de solicitação</span>
-                <select value={requestData.type} onChange={(event) => updateRequestField("type", event.target.value)}>
-                  <option value="">Selecione o tipo</option>
+              <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
+                <span className="anm-type-label">Tipo de solicitação</span>
+                <div className="anm-type-cards">
                   {configuredRequestTypes.map((type) => (
-                    <option key={type.id || type.name} value={type.name}>{type.name}</option>
+                    <button
+                      key={type.id || type.name}
+                      type="button"
+                      className={`anm-type-card${requestData.type === type.name ? " is-selected" : ""}`}
+                      onClick={() => updateRequestField("type", type.name)}
+                    >
+                      {type.name}
+                    </button>
                   ))}
-                </select>
-              </label>
-            )}
-            {animals.map((animal, index) => (
-              <div className="animal-form" key={`animal-${index}`}>
-                <div className="animal-form-header"><strong>Animal {index + 1}</strong></div>
-                <CompactChoiceField label="Procedimento" value={animal.procedure} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedure", value)} invalid={submitAttempted && !animal.procedure} />
-                <div className="animal-choice-grid two-col">
-                  <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
-                  <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
-                </div>
-                <div className="animal-choice-grid breed-weight-row">
-                  <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
-                  <div className={`weight-size-field${submitAttempted && !animal.size ? " invalid" : ""}`}>
-                    <label className="field">
-                      <span>Peso (kg)</span>
-                      <input type="number" min="0" step="0.1" placeholder="Ex: 4.5" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
-                    </label>
-                  </div>
-                </div>
-                {animal.breedType === "Definida" && (
-                  <Field label="Descreva a raça" value={animal.breedDescription} onChange={(value) => updateAnimal(index, "breedDescription", value)} placeholder="Ex: Poodle, Siamês" />
-                )}
-                <div className="two-column-fields">
-                  <Field label="Nome do animal" value={animal.name} onChange={(value) => updateAnimal(index, "name", value)} placeholder="Nome do animal" />
-                  <Field label="Cor da pelagem" value={animal.coat} onChange={(value) => updateAnimal(index, "coat", value)} placeholder="Ex: preto, caramelo" />
-                </div>
-                <div className="birth-weight-row">
-                  <Field label="Data de nascimento" value={animal.birthDate} type="date" onChange={(value) => { updateAnimal(index, "birthDate", value); if (value) updateAnimal(index, "age", ""); }} />
-                  <span className="birth-weight-or">ou</span>
-                  <Field label="Idade aproximada" value={animal.birthDate ? "" : (animal.age || "")} placeholder="Ex: 2 anos" onChange={(value) => { updateAnimal(index, "age", value); if (value) updateAnimal(index, "birthDate", ""); }} />
-                </div>
-                <div className="health-card">
-                  <strong>Saúde e cuidados</strong>
-                  <div className="health-grid">
-                    <YesNoField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
-                    <YesNoField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
-                    <YesNoField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
-                    <YesNoField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
-                    <CompactChoiceField label="Alimentação" value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
-                  </div>
                 </div>
               </div>
-            ))}
-            <div className="animal-actions-row">
-              <button className="secondary-action" type="button" onClick={addAnimal}><Plus size={18} />Adicionar animal</button>
-              {animals.length > 1 && (
-                <button className="ghost-button danger-action" type="button" onClick={() => removeAnimal(animals.length - 1)}>Remover último</button>
-              )}
-            </div>
+            )}
+
+            {animals.map((animal, index) => {
+              const isOpen = expandedAnimal === index;
+              const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
+              return (
+                <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
+                  <button
+                    type="button"
+                    className="animal-form-header animal-accordion-toggle"
+                    onClick={() => setExpandedAnimal(isOpen ? -1 : index)}
+                  >
+                    <div className="animal-accordion-title">
+                      <strong>Animal {index + 1}</strong>
+                      {!isOpen && <span className="animal-accordion-summary">{summary}</span>}
+                    </div>
+                    <ChevronRight size={15} className={`animal-accordion-chevron${isOpen ? " is-open" : ""}`} />
+                  </button>
+
+                  {isOpen && <>
+                    <div className="animal-choice-grid two-col">
+                      <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
+                      <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
+                    </div>
+                    <div className="animal-choice-grid breed-weight-row">
+                      <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
+                      <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`}>
+                        <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
+                      </div>
+                    </div>
+                    {animal.breedType === "Definida" && (
+                      <div className="access-field">
+                        <PawPrint size={14} className="access-field-icon" />
+                        <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
+                      </div>
+                    )}
+                    <div className="two-column-fields">
+                      <div className="access-field">
+                        <PawPrint size={14} className="access-field-icon" />
+                        <input type="text" placeholder="Nome do animal" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
+                      </div>
+                      <div className="access-field">
+                        <Dog size={14} className="access-field-icon" />
+                        <input type="text" placeholder="Cor da pelagem" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="birth-weight-row">
+                      <div className="access-field">
+                        <CalendarDays size={14} className="access-field-icon" />
+                        <input type="date" placeholder="Data de nascimento" value={animal.birthDate || ""} onChange={(e) => { updateAnimal(index, "birthDate", e.target.value); if (e.target.value) updateAnimal(index, "age", ""); }} />
+                      </div>
+                      <span className="birth-weight-or">ou</span>
+                      <div className="access-field">
+                        <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.birthDate ? "" : (animal.age || "")} onChange={(e) => { updateAnimal(index, "age", e.target.value); if (e.target.value) updateAnimal(index, "birthDate", ""); }} />
+                      </div>
+                    </div>
+                    {internalSimple && (
+                      <div className="internal-microchip-row">
+                        <div className="access-field">
+                          <ScanLine size={14} className="access-field-icon" />
+                          <input
+                            type="text"
+                            placeholder={animal.hasChip === "Sim" ? "Codigo do microchip" : "Microchip nao informado"}
+                            value={animal.microchip}
+                            onChange={(event) => updateAnimal(index, "microchip", event.target.value)}
+                            readOnly={animal.hasChip !== "Sim"}
+                          />
+                        </div>
+                        <label className="doc-accept-check internal-chip-check">
+                          <input
+                            type="checkbox"
+                            checked={animal.hasChip === "Sim"}
+                            onChange={(event) => {
+                              updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao");
+                              if (!event.target.checked) updateAnimal(index, "microchip", "");
+                            }}
+                          />
+                          <span className="doc-check-box" />
+                          <span>Microchipado</span>
+                        </label>
+                      </div>
+                    )}
+                    <div className="health-card">
+                      <strong>Saúde e cuidados</strong>
+                      <div className="health-grid">
+                        <YesNoField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
+                        <YesNoField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
+                        <YesNoField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
+                        <YesNoField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
+                        <CompactChoiceField label="Alimentação" value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
+                      </div>
+                    </div>
+                    {internalSimple && inlineAnimalPhotoUpload}
+                    {animals.length > 1 && (
+                      <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
+                        <X size={13} /> Remover animal {index + 1}
+                      </button>
+                    )}
+                  </>}
+                </div>
+              );
+            })}
+            <button className="anm-add-btn" type="button" onClick={addAnimal}>
+              <Plus size={15} /> Adicionar animal
+            </button>
           </FormSection>}
 
-          {formStep === 2 && <FormSection title="Agenda">
+          {formStep === 2 && <FormSection title={<><CalendarDays size={14} />Agenda</>}>
             <PublicSchedulePicker
               requests={requests}
               scheduleDays={scheduleDays}
@@ -2939,169 +3267,114 @@ function NewRequest({
               pendingReservation={{ date: requestData.schedule, count: animals.length }}
               onSelect={(date) => updateRequestField("schedule", date)}
             />
-            {requestData.schedule && (() => {
-              const day = scheduleDays.find((d) => d.date === requestData.schedule && d.active !== false);
-              if (!day) return null;
-              return (
-                <div className="schedule-confirm-card">
-                  <div className="schedule-confirm-title">
-                    <CheckCircle2 size={16} />
-                    <strong>Data selecionada</strong>
-                  </div>
-                  <div className="schedule-confirm-body">
-                    {day.locationName && <span><strong>Local:</strong> {day.locationName}</span>}
-                    {day.locationAddress && <span><strong>Endereço:</strong> {day.locationAddress}</span>}
-                    {day.addressUrl && <span><strong>Mapa:</strong> {day.addressUrl}</span>}
-                    {(day.startTime || day.time) && <span><strong>Horário:</strong> {day.startTime || day.time}</span>}
-                    {day.municipality && <span><strong>Município:</strong> {day.municipality}</span>}
-                    {day.responsibleUnit && <span><strong>Unidade:</strong> {day.responsibleUnit}</span>}
-                    {day.veterinarian && <span><strong>Responsável:</strong> {day.veterinarian}</span>}
-                  </div>
-                </div>
-              );
-            })()}
+            {internalSimple && (
+              <label className="field internal-notes-field">
+                <span>Observações internas</span>
+                <textarea
+                  value={requestData.notes}
+                  onChange={(event) => updateRequestField("notes", event.target.value)}
+                  placeholder="Registre orientações, atendimento no balcão ou ponto de atenção para a equipe."
+                />
+              </label>
+            )}
           </FormSection>}
 
-          {!internalSimple && formStep === 3 && <FormSection title="Documentos comprobatórios">
-            <div className="animal-photo-upload-card">
-              <div>
-                <strong>Foto de registro animal</strong>
-                <span>Opcional</span>
-                {documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}
-              </div>
-              {documentUploads.animal_photo?.dataUrl && (
-                <button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}>
-                  <img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" />
+          {!internalSimple && formStep === 3 && <FormSection title={<><FileText size={14} />Documentos comprobatórios</>}>
+            <label className="doc-photo-zone">
+              {documentUploads.animal_photo?.dataUrl ? (
+                <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
+              ) : (
+                <div className="doc-photo-placeholder">
+                  <ImagePlus size={28} />
+                  <span>Foto do animal</span>
+                  <small>Opcional</small>
+                </div>
+              )}
+              <input type="file" accept="image/*" onClick={(e) => { e.currentTarget.value = ""; }} onChange={(e) => handleAnimalPhotoFile(e.target.files?.[0])} />
+              {documentUploads.animal_photo && (
+                <button className="doc-photo-remove" type="button" onClick={(e) => { e.preventDefault(); removeDocumentFile("animal_photo"); }}>
+                  <Trash2 size={13} />
                 </button>
               )}
-              <div className="animal-photo-actions">
-                <label className="secondary-action file-button">
-                  {documentUploads.animal_photo ? "Trocar foto" : "Enviar foto"}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onClick={(event) => { event.currentTarget.value = ""; }}
-                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
-                  />
-                </label>
-                {documentUploads.animal_photo && (
-                  <button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>
-                    Remover
-                  </button>
-                )}
+            </label>
+
+            {!selectedRequestType && (
+              <div className="doc-empty-note">
+                <BadgeCheck size={16} />
+                <span>Nenhum documento obrigatório para este cadastro.</span>
               </div>
-            </div>
-            <div className="document-upload-list">
-              {!selectedRequestType && (
-                <EmptyState
-                  title="Nenhum documento obrigatório"
-                  text="Este cadastro seguirá sem anexos obrigatórios nesta etapa."
+            )}
+            {selectedTypeDocuments.map((document) => {
+              const upload = documentUploads[document.id];
+              return (
+                <DocumentScannerUpload
+                  key={document.id}
+                  document={document}
+                  upload={upload}
+                  aiActive={aiSettings.active}
+                  onUpload={(file) => handleDocumentFile(document, file)}
+                  onRemove={() => removeDocumentFile(document.id)}
                 />
-              )}
-              {selectedTypeDocuments.map((document) => {
-                const upload = documentUploads[document.id];
-                return (
-                  <DocumentScannerUpload
-                    key={document.id}
-                    document={document}
-                    upload={upload}
-                    aiActive={aiSettings.active}
-                    onUpload={(file) => handleDocumentFile(document, file)}
-                    onRemove={() => removeDocumentFile(document.id)}
-                  />
-                );
-              })}
-            </div>
-            <div className="declaration-accept-box">
-              <div className="declaration-text">
-                <FileText size={18} />
-                <p>
-                  O tutor declara ciência dos cuidados pré e pós-cirúrgicos, responsabilidades de acompanhamento e autorização para registro do procedimento.{" "}
-                  <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
-                </p>
-              </div>
-              <label className={showInvalid("accepted") ? "declaration-checkbox invalid" : "declaration-checkbox"}>
-                <input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />
-                <span>Li e concordo com os termos da declaração</span>
+              );
+            })}
+
+            <div className="doc-declaration">
+              <p>
+                O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.{" "}
+                <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
+              </p>
+              <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
+                <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+                <span className="doc-check-box" />
+                <span>Li e concordo com os termos</span>
               </label>
             </div>
           </FormSection>}
 
-          {internalSimple && formStep === 3 && <FormSection title="Finalização">
-            <div className="animal-photo-upload-card">
-              <div>
-                <strong>Foto de registro animal</strong>
-                <span>Opcional</span>
-                {documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}
-              </div>
-              {documentUploads.animal_photo?.dataUrl && (
-                <button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}>
-                  <img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" />
-                </button>
-              )}
-              <div className="animal-photo-actions">
-                <label className="secondary-action file-button">
-                  Enviar foto
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onClick={(event) => { event.currentTarget.value = ""; }}
-                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
-                  />
-                </label>
-                <label className="ghost-button file-button">
-                  Abrir câmera
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    onClick={(event) => { event.currentTarget.value = ""; }}
-                    onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])}
-                  />
-                </label>
-                {documentUploads.animal_photo && (
-                  <button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>
-                    Remover
-                  </button>
-                )}
-              </div>
-            </div>
-          </FormSection>}
-
           </div>
-        </div>
 
-        <div className="nr-footer">
-          <div className="nr-footer-inner">
-            <button className="secondary-action nr-back-footer-btn" type="button" onClick={goBack}>
-              <ChevronRight size={17} style={{ transform: "rotate(180deg)" }} />
-              Voltar
-            </button>
+          {submissionError && <p className="nr-bottom-error">{submissionError}</p>}
+          <div className="nr-nav-row">
+            {currentStepIndex > 0 && (
+              <button
+                className="nr-back-btn"
+                type="button"
+                onClick={() => setFormStep(formSteps[currentStepIndex - 1].step)}
+              >
+                <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
+                Voltar
+              </button>
+            )}
             {currentStepIndex < formSteps.length - 1 ? (
               <button
-                className="primary-action nr-continue-btn"
+                className="nr-topbar-continue"
                 type="button"
                 disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
                 onClick={goToNextStep}
               >
                 Continuar
-                <ChevronRight size={17} />
+                <ChevronRight size={14} />
               </button>
             ) : (
-              <button className="primary-action nr-continue-btn" type="button" disabled={!canSubmit || submitting} onClick={submit}>
-                {submitting ? "Enviando..." : "Enviar cadastro"}
+              <button
+                className="nr-topbar-continue"
+                type="button"
+                disabled={!canSubmit || submitting}
+                onClick={submit}
+              >
+                {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
               </button>
             )}
-            {submissionError && <p className="form-error nr-submit-error">{submissionError}</p>}
           </div>
         </div>
+
         {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
       </div>
     );
   }
 
   return (
-    <section className={compact ? "simple-stack" : "content-grid"}>
+    <section className="content-grid">
       <div className="panel wide">
         <div className="nr-panel-top">
           <strong className="nr-title">Novo Cadastro</strong>
@@ -3145,7 +3418,6 @@ function NewRequest({
             {animals.map((animal, index) => (
               <div className="animal-form" key={`animal-${index}`}>
                 <div className="animal-form-header"><strong>Animal {index + 1}</strong></div>
-                <SegmentedControl label="Procedimento" value={animal.procedure} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedure", value)} invalid={submitAttempted && !animal.procedure} />
                 <div className="animal-main-grid">
                   <Field label="Nome" value={animal.name} onChange={(value) => updateAnimal(index, "name", value)} placeholder="Nome do animal" />
                   <Field label="Data de nascimento" value={animal.birthDate || animal.age} onChange={(value) => { updateAnimal(index, "birthDate", value); updateAnimal(index, "age", value); }} type="date" />
@@ -3185,10 +3457,10 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     <div class="animal-card">
       <div class="animal-card-title">Animal ${index + 1}${animal.name ? ` - ${escapeHtml(animal.name)}` : ""}</div>
       <div class="data-grid three">
-        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "—")}</strong></div>
-        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "—")}</strong></div>
-        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "—")}</strong></div>
-        <div class="data-item"><span>Procedimento</span><strong>${escapeHtml(animal.procedure || "—")}</strong></div>
+        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "-")}</strong></div>
+        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "-")}</strong></div>
+        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "-")}</strong></div>
+        <div class="data-item"><span>Procedimento</span><strong>${escapeHtml(animal.procedure || "-")}</strong></div>
       </div>
     </div>
   `).join("");
@@ -3211,8 +3483,8 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     <section class="section">
       <div class="section-title">Dados do tutor</div>
       <div class="data-grid two">
-        <div class="data-item"><span>Nome</span><strong>${escapeHtml(requestData.tutor || "—")}</strong></div>
-        <div class="data-item"><span>CPF</span><strong>${escapeHtml(requestData.cpf || "—")}</strong></div>
+        <div class="data-item"><span>Nome</span><strong>${escapeHtml(requestData.tutor || "-")}</strong></div>
+        <div class="data-item"><span>CPF</span><strong>${escapeHtml(requestData.cpf || "-")}</strong></div>
       </div>
     </section>
     <section class="section">
@@ -3230,26 +3502,6 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     <footer class="footer"><span>Sistema municipal de castração animal</span><span>Gerado em ${new Date().toLocaleString("pt-BR")}</span></footer>
   </body>
 </html>`;
-}
-
-function SegmentedControl({ label, value, options, onChange, invalid = false }: AnyRecord) {
-  return (
-    <div className={invalid ? "segmented-field invalid" : "segmented-field"}>
-      <span>{label}</span>
-      <div className="segmented-control">
-        {options.map((option) => (
-          <button
-            key={option}
-            type="button"
-            className={value === option ? "selected" : ""}
-            onClick={() => onChange(option)}
-          >
-            {option}
-          </button>
-        ))}
-      </div>
-    </div>
-  );
 }
 
 function DocumentPreviewModal({ document, onClose }: AnyRecord) {
@@ -3295,15 +3547,8 @@ function AdminDashboard({
 }) {
   const [requestFilter, setRequestFilter] = useState("analysis");
   const [previewRequest, setPreviewRequest] = useState(null);
-  const [assignRequest, setAssignRequest] = useState(null);
-  const [rescheduleRequest, setRescheduleRequest] = useState(null);
-  const [rejectRequest, setRejectRequest] = useState(null);
-  const [attendanceRequest, setAttendanceRequest] = useState(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
-  const [assignment, setAssignment] = useState({ sectorId: "", userId: "" });
-  const [rejectData, setRejectData] = useState({ note: "" });
-  const [attendanceData, setAttendanceData] = useState({ microchip: "", note: "" });
 
   const visibleRequests = useMemo(
     () => (Array.isArray(requests) ? requests : [])
@@ -3315,27 +3560,52 @@ function AdminDashboard({
   const filterTabs = [
     {
       id: "inbox",
-      label: "Fila de entrada",
+      label: "Novas",
       requests: visibleRequests.filter(
-        (r) => r.status === "EM_ANALISE" && !r.tags.includes("ATRIBUIDA")
+        (r) => r.status === "EM_ANALISE" && !r.tags.includes("ATRIBUIDA"),
       ),
     },
     {
       id: "analysis",
       label: "Em análise",
       requests: visibleRequests.filter(
-        (r) => r.status === "EM_ANALISE" && r.tags.includes("ATRIBUIDA")
+        (r) => r.status === "EM_ANALISE" && r.tags.includes("ATRIBUIDA"),
       ),
     },
     {
-      id: "surgery",
-      label: "Aguardando Procedimento",
-      requests: visibleRequests.filter((r) => r.status === "AGUARDANDO_CIRURGIA"),
+      id: "scheduled",
+      label: "Agendadas",
+      requests: visibleRequests.filter(
+        (r) => r.status === "AGUARDANDO_CIRURGIA" && !r.tags.includes("REAGENDADA"),
+      ),
     },
     {
-      id: "archived",
-      label: "Arquivadas",
-      requests: visibleRequests.filter((r) => r.status === "ARQUIVADA"),
+      id: "rescheduled",
+      label: "Reagendadas",
+      requests: visibleRequests.filter(
+        (r) => r.status === "AGUARDANDO_CIRURGIA" && r.tags.includes("REAGENDADA"),
+      ),
+    },
+    {
+      id: "done",
+      label: "Concluídas",
+      requests: visibleRequests.filter(
+        (r) => r.status === "ARQUIVADA" && r.tags.includes("COMPARECEU"),
+      ),
+    },
+    {
+      id: "canceled",
+      label: "Canceladas",
+      requests: visibleRequests.filter(
+        (r) => r.status === "ARQUIVADA" && r.tags.includes("CANCELADA"),
+      ),
+    },
+    {
+      id: "rejected",
+      label: "Indeferidas",
+      requests: visibleRequests.filter(
+        (r) => r.status === "ARQUIVADA" && r.tags.includes("INDEFERIDA"),
+      ),
     },
     { id: "all", label: "Todas", requests: visibleRequests },
   ];
@@ -3347,38 +3617,9 @@ function AdminDashboard({
     .map((day) => ({ ...day, remaining: Math.max((day.vacancies || 0) - countUsedVacancies(requests, day.date), 0) }));
   const activeUsers = teams.users?.filter((user) => user.active !== false) || [];
   const activeSectors = teams.sectors?.filter((sector) => sector.active !== false) || [];
-  const assignableStatuses = ["EM_ANALISE", "AGUARDANDO_CIRURGIA"];
   const currentTeamUser = activeUsers.find((user) => user.email && currentUser.email && user.email.toLowerCase() === currentUser.email.toLowerCase())
     || activeUsers.find((user) => user.id === currentUser.id);
   const currentUserSector = activeSectors.find((sector) => getUserSectorIds(currentTeamUser).includes(sector.id));
-
-  function openAssign(request) {
-    setAssignRequest(request);
-    setAssignment({ sectorId: request.assignedSectorId || activeSectors[0]?.id || "", userId: request.assignedUserId || "" });
-  }
-
-  function confirmAssign(event) {
-    event.preventDefault();
-    if (!assignRequest) return;
-    const sector = activeSectors.find((item) => item.id === assignment.sectorId);
-    const user = activeUsers.find((item) => item.id === assignment.userId);
-    if (!sector || !user) return;
-    const patch = {
-      status: assignRequest.status,
-      assignedSectorId: sector?.id || "",
-      assignedSectorName: sector?.name || "Não informado",
-      assignedUserId: user?.id || "",
-      responsible: user?.name || sector?.name || "Equipe",
-      tags: mergeTags(assignRequest.tags, ["ATRIBUIDA"]),
-    };
-    patchRequest?.(
-      assignRequest.id,
-      patch,
-      `Atribuída para ${sector?.name || "setor"}${user ? ` / ${user.name}` : ""}`,
-    );
-    setPreviewRequest((current) => current?.id === assignRequest.id ? normalizeRequest({ ...current, ...patch }) : current);
-    setAssignRequest(null);
-  }
 
   function assumeRequest(request) {
     patchRequest?.(
@@ -3396,12 +3637,9 @@ function AdminDashboard({
   }
 
   function approveRequest(request) {
-    patchRequest?.(
-      request.id,
-      { status: "AGUARDANDO_CIRURGIA", tags: mergeTags(request.tags, ["DEFERIDA"]) },
-      `Solicitação deferida por ${currentUser.name}`,
-    );
-    setPreviewRequest(null);
+    const patch = { status: "AGUARDANDO_CIRURGIA", tags: mergeTags(request.tags, ["DEFERIDA"]) };
+    patchRequest?.(request.id, patch, `Solicitação deferida por ${currentUser.name}`);
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
   function notAttendedRequest(request) {
@@ -3413,112 +3651,53 @@ function AdminDashboard({
   }
 
   function archiveWithTag(request, tag, note) {
-    patchRequest?.(
-      request.id,
-      { status: "ARQUIVADA", tags: mergeTags(request.tags, [tag]) },
-      note,
-    );
-    setPreviewRequest(null);
+    const patch = { status: "ARQUIVADA", tags: mergeTags(request.tags, [tag]) };
+    patchRequest?.(request.id, patch, note);
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  function openAttendance(request) {
-    setAttendanceRequest(request);
-    const normalized = normalizeRequest(request);
-    setAttendanceData({
-      microchip: normalized.animalMicrochip || normalized.animals?.find((animal) => animal.microchip)?.microchip || "",
-      note: "",
-    });
-  }
-
-  function confirmAttendance(event) {
-    event.preventDefault();
-    if (!attendanceRequest) return;
-    const normalized = normalizeRequest(attendanceRequest);
-    const microchip = attendanceData.microchip.trim();
-    const note = attendanceData.note.trim();
-    const performedProcedures = getPerformedProceduresLabel(normalized);
-    const currentAnimals = Array.isArray(normalized.animals) ? normalized.animals : [];
-    const animals = microchip
-      ? currentAnimals.map((animal, index) => index === 0 ? { ...animal, hasChip: "Sim", microchip } : animal)
-      : currentAnimals;
-    patchRequest?.(
-      attendanceRequest.id,
-      {
-        status: "ARQUIVADA",
-        tags: mergeTags(attendanceRequest.tags, ["COMPARECEU"]),
-        animalMicrochip: microchip,
-        animals,
-        workflow_data: {
-          performedProcedures,
-          attendanceMicrochip: microchip,
-          attendanceNote: note,
-        },
-      },
-      `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`,
-    );
-    setAttendanceRequest(null);
-    setPreviewRequest(null);
-  }
-
-  function openReject(request) {
-    setRejectRequest(request);
-    setRejectData({ note: "" });
-  }
-
-  function confirmReject(event) {
-    event.preventDefault();
-    if (!rejectRequest) return;
-    const note = rejectData.note.trim();
-    patchRequest?.(
-      rejectRequest.id,
-      {
-        status: "ARQUIVADA",
-        tags: mergeTags(rejectRequest.tags, ["INDEFERIDA"]),
-        rejectionReason: note || "Indeferido",
-        rejectionNote: note,
-      },
-      `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`,
-    );
-    setRejectRequest(null);
-    setPreviewRequest(null);
-  }
-
-  function confirmReschedule(date) {
-    if (!rescheduleRequest) return;
+  function rescheduleFromPreview(request, date, reason = "") {
+    if (!request || !date) return;
+    const note = String(reason || "").trim();
     const patch = {
-      status: rescheduleRequest.status,
-      tags: mergeTags(rescheduleRequest.tags, ["REAGENDADA"]),
-      previousSchedule: rescheduleRequest.preferredSchedule || rescheduleRequest.appointment || "Não informado",
+      status: request.status,
+      tags: mergeTags(request.tags, ["REAGENDADA"]),
+      previousSchedule: request.preferredSchedule || request.appointment || "Não informado",
       preferredSchedule: date,
       appointment: date,
     };
-    patchRequest?.(
-      rescheduleRequest.id,
-      patch,
-      `Reagendada por ${currentUser.name}: ${rescheduleRequest.preferredSchedule || "sem data"} -> ${date}`,
-    );
-    setPreviewRequest((current) => current?.id === rescheduleRequest.id ? normalizeRequest({ ...current, ...patch }) : current);
-    setRescheduleRequest(null);
+    patchRequest?.(request.id, patch, `Reagendada por ${currentUser.name}: ${request.preferredSchedule || "sem data"} -> ${date}${note ? `. Motivo: ${note}` : ""}`);
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  function openRescheduleFromPreview(request) {
-    setRescheduleRequest(request);
+  function assignFromPreview(request, assignment: AnyRecord = {}) {
+    if (!request) return;
+    const sector = activeSectors.find((item) => item.id === assignment.sectorId);
+    const user = activeUsers.find((item) => item.id === assignment.userId);
+    if (!sector || !user) return;
+    const patch = {
+      status: request.status,
+      assignedSectorId: sector.id,
+      assignedSectorName: sector.name,
+      assignedUserId: user.id,
+      responsible: user.name || sector.name || "Equipe",
+      tags: mergeTags(request.tags, ["ATRIBUIDA"]),
+    };
+    patchRequest?.(request.id, patch, `Atribuída para ${sector.name} / ${user.name}`);
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
   function rejectRequestFromProcess(request, data: AnyRecord = {}) {
     if (!request) return;
     const note = String(data.note || "").trim();
-    patchRequest?.(
-      request.id,
-      {
-        status: "ARQUIVADA",
-        tags: mergeTags(request.tags, ["INDEFERIDA"]),
-        rejectionReason: note || "Indeferido",
-        rejectionNote: note,
-      },
-      `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`,
-    );
-    setPreviewRequest(null);
+    const patch = {
+      status: "ARQUIVADA",
+      tags: mergeTags(request.tags, ["INDEFERIDA"]),
+      rejectionReason: data.category || note || "Indeferido",
+      rejectionNote: note,
+    };
+    patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
   function confirmAttendanceFromProcess(request, data: AnyRecord = {}) {
@@ -3531,22 +3710,15 @@ function AdminDashboard({
     const animals = microchip
       ? currentAnimals.map((animal, index) => index === 0 ? { ...animal, hasChip: "Sim", microchip } : animal)
       : currentAnimals;
-    patchRequest?.(
-      request.id,
-      {
-        status: "ARQUIVADA",
-        tags: mergeTags(request.tags, ["COMPARECEU"]),
-        animalMicrochip: microchip,
-        animals,
-        workflow_data: {
-          performedProcedures,
-          attendanceMicrochip: microchip,
-          attendanceNote: note,
-        },
-      },
-      `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`,
-    );
-    setPreviewRequest(null);
+    const patch = {
+      status: "ARQUIVADA",
+      tags: mergeTags(request.tags, ["COMPARECEU"]),
+      animalMicrochip: microchip,
+      animals,
+      workflow_data: { performedProcedures, attendanceMicrochip: microchip, attendanceNote: note },
+    };
+    patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`);
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
   function openRequestPreview(request) {
@@ -3558,7 +3730,7 @@ function AdminDashboard({
     <section className="request-workspace triage-workspace">
       <div className="workspace-heading">
         <div>
-          <h2>Solicitações de castração</h2>
+          <h2>Solicitações</h2>
         </div>
         <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
           <Plus size={18} />
@@ -3566,7 +3738,7 @@ function AdminDashboard({
         </button>
       </div>
 
-      <div className="request-filter-bar">
+      <nav className="request-nav">
         <div className="request-filter-tabs">
           {filterTabs.map((tab) => (
             <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
@@ -3574,17 +3746,19 @@ function AdminDashboard({
             </button>
           ))}
         </div>
-        <button
-          className={`today-filter-toggle${todayOnly ? " selected" : ""}`}
-          type="button"
-          aria-pressed={todayOnly}
-          onClick={() => setTodayOnly((current) => !current)}
-        >
-          <CalendarDays size={16} />
-          Hoje
-          <span>{todayRequests.length}</span>
-        </button>
-      </div>
+        <div className="request-today-segment">
+          <button
+            type="button"
+            className={todayOnly ? "selected" : ""}
+            aria-pressed={todayOnly}
+            onClick={() => setTodayOnly((current) => !current)}
+          >
+            <CalendarDays size={14} />
+            Hoje
+            <span>{todayRequests.length}</span>
+          </button>
+        </div>
+      </nav>
 
       <div className="triage-card-grid">
         {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui em cards responsivos."} />}
@@ -3602,69 +3776,34 @@ function AdminDashboard({
               }
             }}
           >
-            <div className="triage-row">
-              <div className="triage-row-main">
-                <div className="triage-info-columns">
-                  <section className="triage-info-block">
-                    <span className="triage-info-title">Tutor</span>
-                    <strong>{displayText(request.tutor)}</strong>
-                    <dl>
-                      <div>
-                        <dt>Tipo</dt>
-                        <dd>{requestTypeLabel(request)}</dd>
-                      </div>
-                      <div>
-                        <dt>Data</dt>
-                        <dd>{request.preferredSchedule || request.appointment || "—"}</dd>
-                      </div>
-                    </dl>
-                  </section>
-
-                  <section className="triage-info-block">
-                    <span className="triage-info-title">Atendimento</span>
-                    <dl>
-                      <div>
-                        <dt>Responsável</dt>
-                        <dd>{displayText(request.responsible) || "Não atribuído"}</dd>
-                      </div>
-                      <div>
-                        <dt>Setor</dt>
-                        <dd>{displayText(request.assignedSectorName) || "—"}</dd>
-                      </div>
-                    </dl>
-                  </section>
-
-                  <section className="triage-info-block">
-                    <span className="triage-info-title">Animal</span>
-                    <strong>{request.animals.map((a) => displayText(a.name)).join(", ") || "Não informado"}</strong>
-                    <dl>
-                      <div>
-                        <dt>Procedimento</dt>
-                        <dd>{requestTypeLabel(request)}</dd>
-                      </div>
-                    </dl>
-                  </section>
-                </div>
-
+            <div className="tc-row">
+              <div className="tc-col tc-col--protocol">
+                <span className="tc-label">Protocolo</span>
+                <span className="tc-value tc-protocol">#{request.protocol}</span>
               </div>
-
-              <div className="triage-row-state">
-                <span className="triage-protocol">#{request.protocol}</span>
-                <div className="triage-status-stack">
-                  <StatusBadge status={request.status} className={`triage-status-badge ${triageStatusTone(request)}`} />
-                  {visibleWorkflowTags(request.tags, request).length > 0 && (
-                    <div className="workflow-tag-list">
-                      {visibleWorkflowTags(request.tags, request).map((tag) => (
-                        <span key={tag} className={`workflow-tag workflow-tag--${tag.toLowerCase()}`}>
-                          {workflowTagLabels[tag] || tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {request.status === "ARQUIVADA" && (
-                  <span className={`archived-result-badge archived-result-badge--${
+              <div className="tc-col tc-col--tutor">
+                <span className="tc-label">Tutor</span>
+                <span className="tc-value">{displayText(request.tutor)}</span>
+              </div>
+              <div className="tc-col tc-col--animal">
+                <span className="tc-label">Animal</span>
+                <span className="tc-value">{request.animals.map((a) => displayText(a.name)).join(", ") || "-"}</span>
+              </div>
+              <div className="tc-col tc-col--tipo">
+                <span className="tc-label">Tipo</span>
+                <span className="tc-value">{requestTypeLabel(request)}</span>
+              </div>
+              <div className="tc-col tc-col--responsavel">
+                <span className="tc-label">Responsável</span>
+                <span className="tc-value">{displayText(request.responsible) || "-"}</span>
+              </div>
+              <div className="tc-col tc-col--agenda">
+                <span className="tc-label">Agenda</span>
+                <span className="tc-value">{request.preferredSchedule || request.appointment || "-"}</span>
+              </div>
+	              <div className="tc-col tc-col--status">
+	                {request.status === "ARQUIVADA" ? (
+                  <span className={`tc-result-badge tc-result-badge--${
                     request.tags.includes("COMPARECEU") ? "success" :
                     request.tags.includes("INDEFERIDA") ? "rejected" :
                     request.tags.includes("CANCELADA") ? "canceled" :
@@ -3675,34 +3814,15 @@ function AdminDashboard({
                      request.tags.includes("CANCELADA") ? "Cancelada" :
                      request.tags.includes("NAO_COMPARECEU") ? "Não compareceu" : "Arquivada"}
                   </span>
-                )}
-              </div>
-
-              <div className="triage-row-actions" onClick={(event) => event.stopPropagation()}>
-                {assignableStatuses.includes(request.status) && (
-                  <>
-                    <button className="assign-corner-action" type="button" onClick={() => openAssign(request)} aria-label="Atribuir">
-                      <ClipboardList size={17} />
-                      <span>Atribuir</span>
-                    </button>
-                    <button className="assign-corner-action assume-corner-action" type="button" onClick={() => assumeRequest(request)} aria-label="Assumir">
-                      <CheckCircle2 size={17} />
-                      <span>Assumir</span>
-                    </button>
-                  </>
-                )}
-                {request.status === "AGUARDANDO_CIRURGIA" && (
-                  <button
-                    className="assign-corner-action not-attended-action"
-                    type="button"
-                    onClick={() => notAttendedRequest(request)}
-                    aria-label="Não compareceu"
-                  >
-                    <X size={17} />
-                    <span>Não compareceu</span>
-                  </button>
-                )}
-              </div>
+	                ) : (
+	                  <StatusBadge status={request.status} className={`triage-status-badge ${triageStatusTone(request)}`} />
+	                )}
+	                {request.rescheduleCount > 0 && (
+	                  <span className="prm-reschedule-badge">
+	                    {request.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${request.rescheduleCount}x`}
+	                  </span>
+	                )}
+	              </div>
             </div>
           </article>
         ))}
@@ -3714,20 +3834,29 @@ function AdminDashboard({
           requestTypes={requestTypes}
           aiSettings={aiSettings}
           scheduleDays={activeScheduleDays}
-          onAssign={openAssign}
+          sectors={activeSectors}
+          users={activeUsers}
           onClose={() => setPreviewRequest(null)}
           onApprove={approveRequest}
           onReject={rejectRequestFromProcess}
           onArchive={archiveWithTag}
           onAttendance={confirmAttendanceFromProcess}
-          onReschedule={openRescheduleFromPreview}
+          onReschedule={rescheduleFromPreview}
+          onAssign={assignFromPreview}
         />
       )}
 
       {createRequestOpen && (
         <div className="modal-backdrop">
-          <div className="config-modal request-preview-modal internal-request-modal" role="dialog" aria-modal="true">
-            <ModalHeader title="Nova solicitação" onClose={() => setCreateRequestOpen(false)} />
+          <div className="config-modal internal-request-modal" role="dialog" aria-modal="true">
+            <div className="irm-header">
+              <div className="irm-header-text">
+                <strong>Nova solicitação</strong>
+              </div>
+              <button className="irm-close-btn" type="button" aria-label="Fechar" onClick={() => setCreateRequestOpen(false)}>
+                <X size={18} />
+              </button>
+            </div>
             <NewRequest
               createRequest={createRequest}
               currentUser={currentUser}
@@ -3746,84 +3875,36 @@ function AdminDashboard({
         </div>
       )}
 
-      {assignRequest && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal" onSubmit={confirmAssign}>
-            <ModalHeader title="Atribuir setor e usuário" onClose={() => setAssignRequest(null)} />
-            <label className="field"><span>Setor</span><select value={assignment.sectorId} onChange={(event) => setAssignment((current) => ({ ...current, sectorId: event.target.value, userId: "" }))}>{activeSectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}</select></label>
-            <label className="field"><span>Usuário</span><select value={assignment.userId} onChange={(event) => setAssignment((current) => ({ ...current, userId: event.target.value }))}><option value="">Selecione um usuário</option>{activeUsers.filter((user) => !assignment.sectorId || userBelongsToSector(user, assignment.sectorId)).map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
-            <button className="primary-action" type="submit" disabled={!assignment.sectorId || !assignment.userId}>Confirmar atribuição</button>
-          </form>
-        </div>
-      )}
-
-      {rescheduleRequest && (
-        <div className="modal-backdrop">
-          <div className="workflow-modal wide-workflow-modal">
-            <ModalHeader title="Reagendar" onClose={() => setRescheduleRequest(null)} />
-            {activeScheduleDays.length === 0
-              ? <EmptyState title="Nenhuma data disponível" text="Configure datas de atendimento em Configurações › Ambiente › Agenda antes de reagendar." />
-              : <div className="reschedule-grid">{activeScheduleDays.map((day) => <button key={day.date} className={`calendar-day-button${day.remaining > 0 ? " has-vacancy" : ""}`} type="button" disabled={day.remaining <= 0} onClick={() => confirmReschedule(day.date)}><span>{day.weekday}</span><strong>{day.date}</strong><small>{day.remaining} vagas</small></button>)}</div>
-            }
-          </div>
-        </div>
-      )}
-
-      {rejectRequest && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal" onSubmit={confirmReject}>
-            <ModalHeader title="Reprovar solicitação" onClose={() => setRejectRequest(null)} />
-            <label className="field"><span>Observacao interna</span><textarea value={rejectData.note} onChange={(event) => setRejectData((current) => ({ ...current, note: event.target.value }))} /></label>
-            <button className="primary-action" type="submit">Confirmar reprovação</button>
-          </form>
-        </div>
-      )}
-
-      {attendanceRequest && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal" onSubmit={confirmAttendance}>
-            <ModalHeader title="Registrar comparecimento" onClose={() => setAttendanceRequest(null)} />
-            <label className="field">
-              <span>Código do microchip</span>
-              <input
-                value={attendanceData.microchip}
-                onChange={(event) => setAttendanceData((current) => ({ ...current, microchip: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
-                placeholder="Informe o código aplicado ou lido"
-              />
-            </label>
-            <label className="field">
-              <span>Observacao interna</span>
-              <textarea value={attendanceData.note} onChange={(event) => setAttendanceData((current) => ({ ...current, note: event.target.value }))} placeholder="Descreva detalhes, intercorrências ou procedimentos adicionais." />
-            </label>
-            <button className="primary-action" type="submit">Confirmar comparecimento</button>
-          </form>
-        </div>
-      )}
     </section>
   );
 }
 
-function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, requestTypes = [], scheduleDays = [], aiSettings = initialAiSettings }: AnyRecord) {
+function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, requestTypes = [], scheduleDays = [], sectors = [], users = [], aiSettings = initialAiSettings }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
+  const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [downloadLoadingId, setDownloadLoadingId] = useState("");
   const [bundleLoading, setBundleLoading] = useState(false);
+  const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
-  const [rejectOpen, setRejectOpen] = useState(false);
   const [docDecisions, setDocDecisions] = useState({});
-  const [historyOpen, setHistoryOpen] = useState(true);
+  const [rescheduleReason, setRescheduleReason] = useState("");
   const [attendanceData, setAttendanceData] = useState({
     microchip: normalizedRequest.animalMicrochip || normalizedRequest.animals?.find((animal) => animal.microchip)?.microchip || "",
     note: normalizedRequest.attendanceNote || "",
   });
+  const [assignData, setAssignData] = useState({
+    sectorId: normalizedRequest.assignedSectorId || sectors[0]?.id || "",
+    userId: normalizedRequest.assignedUserId || "",
+  });
   const canAnalyze = request.status === "EM_ANALISE";
   const canApprove = canAnalyze && !requestHasTag(request, "DEFERIDA");
   const canRecordAttendance = request.status === "AGUARDANDO_CIRURGIA";
-  const canReschedule = request.status === "AGUARDANDO_CIRURGIA"
-    && Boolean(request.preferredSchedule || request.appointment);
+  const canReschedule = request.status === "AGUARDANDO_CIRURGIA";
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
-  const assignmentRequiredTitle = "Atribua um setor e um usuário ao processo antes de analisar";
+  const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
+  const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
 
   const uploadedDocs = getUserUploadedProcessDocuments(request.documents);
   const requestTypeConfig = requestTypes.find(
@@ -3882,15 +3963,12 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     }));
 
   const anexos = [requerimento, ...requiredRows, ...extraDocs];
-  const hasPendingRequiredDocuments = requiredRows.some((item) => {
+  const hasPendingRequiredDocuments = !isInternal && requiredRows.some((item) => {
     const decision = docDecisions[item.id];
     if (decision === "approved") return false;
     if (decision === "rejected") return true;
     return item.status !== "Aprovado";
   });
-  const timeline = buildRequestTimeline(normalizedRequest);
-  const currentStep = timeline.find((step) => step.state === "current") || timeline[timeline.length - 1];
-  const finishedSteps = timeline.filter((step) => step.state === "done").length;
 
   const rejectionReasons = [
     "Documentação incompleta",
@@ -3905,6 +3983,13 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     ? Math.floor((Date.now() - new Date(normalizedRequest.createdAt).getTime()) / 86400000)
     : null;
   const historyEntries = normalizedRequest.rawHistory.length ? normalizedRequest.rawHistory : normalizedRequest.history;
+  const operationalEvents = buildOperationalTimeline(normalizedRequest, historyEntries);
+  const principalAnimal = normalizedRequest.animals?.[0] || {};
+  const operationalTags = buildOperationalTags(normalizedRequest, {
+    isInternal,
+    hasPendingRequiredDocuments,
+    daysWaiting,
+  });
 
   function statusClass(status) {
     if (status === "Aprovado") return "approved";
@@ -3984,13 +4069,13 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
 
   function confirmRejectInline(event) {
     event.preventDefault();
-    if (!hasProcessAssignment) return;
+    if (blockWithoutAssignment) return;
     onReject?.(request, rejectData);
   }
 
   function confirmAttendanceInline(event) {
     event.preventDefault();
-    if (!hasProcessAssignment) return;
+    if (blockWithoutAssignment) return;
     onAttendance?.(request, attendanceData);
   }
 
@@ -4020,15 +4105,15 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
                     <button
                       className={`doc-decision-btn${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
                       type="button"
-                      title={hasProcessAssignment ? "Aprovar documento" : assignmentRequiredTitle}
-                      disabled={!hasProcessAssignment}
+                      title={blockWithoutAssignment ? assignmentRequiredTitle : "Aprovar documento"}
+                      disabled={blockWithoutAssignment}
                       onClick={() => setDocDecisions((d) => ({ ...d, [anexo.id]: decision === "approved" ? undefined : "approved" }))}
                     ><CheckCircle2 size={15} /></button>
                     <button
                       className={`doc-decision-btn doc-decision-btn--reject${decision === "rejected" ? " doc-decision-btn--active-reject" : ""}`}
                       type="button"
-                      title={hasProcessAssignment ? "Recusar documento" : assignmentRequiredTitle}
-                      disabled={!hasProcessAssignment}
+                      title={blockWithoutAssignment ? assignmentRequiredTitle : "Recusar documento"}
+                      disabled={blockWithoutAssignment}
                       onClick={() => setDocDecisions((d) => ({ ...d, [anexo.id]: decision === "rejected" ? undefined : "rejected" }))}
                     ><X size={15} /></button>
                     <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
@@ -4058,204 +4143,95 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     );
   }
 
-  function renderFlowStep(step, children = null) {
-    const isCurrent = step.state === "current";
-    const isDone = step.state === "done";
-    const isBlocked = step.state === "blocked";
+  function renderInlineAssign() {
+    const sectorUsers = users.filter((u) => !assignData.sectorId || userBelongsToSector(u, assignData.sectorId));
     return (
-      <section className={`process-flow-step ${step.state}`} key={step.id}>
-        <div className="process-flow-marker">
-          <span />
-        </div>
-        <div className="process-flow-card">
-          <div className="process-flow-head">
-            <div>
-              <strong>{step.label}</strong>
-              <p>{step.description}</p>
-              {step.detail && <small>{step.detail}</small>}
-            </div>
-            <span className={`process-flow-status ${step.state}`}>
-              {isDone ? "Concluída" : isCurrent ? "Etapa atual" : isBlocked ? "Bloqueada" : "Travada"}
-            </span>
-          </div>
-          {isCurrent && children}
-        </div>
-      </section>
-    );
-  }
-
-  function renderDocumentDecision() {
-    return (
-      <form className="process-step-action" onSubmit={confirmRejectInline}>
-        {renderAttachments()}
-
-        {rejectOpen && (
-          <div className="process-reject-section">
-            <strong className="process-section-title">Indeferir solicitação</strong>
-            <label className="field">
-              <span>Motivo</span>
-              <select value={rejectData.category} onChange={(e) => setRejectData((d) => ({ ...d, category: e.target.value }))}>
-                <option value="">Selecione o motivo...</option>
-                {rejectionReasons.map((r) => <option key={r} value={r}>{r}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              <span>Observação interna</span>
-              <textarea value={rejectData.note} onChange={(e) => setRejectData((d) => ({ ...d, note: e.target.value }))} placeholder="Detalhe o motivo se necessário..." />
-            </label>
-          </div>
-        )}
-
-        <div className="analysis-actions process-action-buttons">
-          <button className="secondary-action" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>
-            <Download size={16} />
-            {bundleLoading ? "Preparando..." : "Baixar PDF"}
-          </button>
-          {canAnalyze && (
-            <button className="secondary-action" type="button" onClick={() => onAssign?.(request)}>
-              <ClipboardList size={16} />
-              Atribuir
-            </button>
-          )}
-          {canApprove && (
-            <button
-              className="primary-action"
-              type="button"
-              disabled={!hasProcessAssignment || hasPendingRequiredDocuments}
-              title={!hasProcessAssignment ? assignmentRequiredTitle : hasPendingRequiredDocuments ? "Valide todos os anexos obrigatórios para avançar" : "Avançar etapa"}
-              onClick={() => onApprove?.(request)}
-            >
-              Avançar
-            </button>
-          )}
-          {!rejectOpen && (
-            <button className="ghost-button danger-ghost-action" type="button" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Indeferir solicitação" : assignmentRequiredTitle} onClick={() => setRejectOpen(true)}>
-              Indeferir
-            </button>
-          )}
-          {rejectOpen && (
-            <>
-              <button className="ghost-button" type="button" onClick={() => setRejectOpen(false)}>
-                Cancelar
-              </button>
-              <button className="secondary-action danger-action" type="submit" disabled={!hasProcessAssignment || !rejectData.category}>
-                Confirmar indeferimento
-              </button>
-            </>
-          )}
-        </div>
-      </form>
-    );
-  }
-
-  function renderProcedureDecision() {
-    return (
-      <form className="process-step-action" onSubmit={confirmAttendanceInline}>
+      <div className="prm-inline-panel">
+        <strong className="prm-inline-panel-title"><ClipboardList size={14} /> Atribuir responsável</strong>
         <label className="field">
-          <span>Código do microchip</span>
-          <input
-            value={attendanceData.microchip}
-            onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
-            placeholder="Informe o código aplicado ou lido"
-          />
+          <span>Setor</span>
+          <select value={assignData.sectorId} onChange={(e) => setAssignData((d) => ({ ...d, sectorId: e.target.value, userId: "" }))}>
+            <option value="">Selecione o setor...</option>
+            {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
         </label>
         <label className="field">
-          <span>Observação interna</span>
-          <textarea value={attendanceData.note} onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))} />
+          <span>Usuário</span>
+          <select value={assignData.userId} onChange={(e) => setAssignData((d) => ({ ...d, userId: e.target.value }))}>
+            <option value="">Selecione o usuário...</option>
+            {sectorUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
         </label>
-        <div className="analysis-actions process-action-buttons">
-          <button className="secondary-action" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>
-            <Download size={16} />
-            {bundleLoading ? "Preparando..." : "Baixar PDF"}
-          </button>
-          {canRecordAttendance && (
-            <button className="secondary-action" type="button" onClick={() => onAssign?.(request)}>
-              <ClipboardList size={16} />
-              Atribuir
-            </button>
-          )}
-          {canReschedule && (
-            <button className="ghost-button" type="button" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Reagendar" : assignmentRequiredTitle} onClick={() => onReschedule?.(request)}>
-              Reagendar
-            </button>
-          )}
+        <div className="prm-inline-actions">
+          <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
           <button
-            className="secondary-action warning-action"
+            className="primary-action"
             type="button"
-            disabled={!hasProcessAssignment}
-            title={hasProcessAssignment ? "Registrar não comparecimento" : assignmentRequiredTitle}
-            onClick={() => onArchive?.(request, "NAO_COMPARECEU", `Não comparecimento registrado`)}
+            disabled={!assignData.sectorId || !assignData.userId}
+            onClick={() => { onAssign?.(request, assignData); setActivePanel(null); }}
           >
-            Não compareceu
-          </button>
-          <button className="secondary-action danger-action" type="button" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Cancelar cirurgia" : assignmentRequiredTitle} onClick={() => onArchive?.(request, "CANCELADA", "Cirurgia cancelada")}>
-            Cancelar
-          </button>
-          <button className="primary-action" type="submit" disabled={!hasProcessAssignment} title={hasProcessAssignment ? "Confirmar comparecimento" : assignmentRequiredTitle}>
-            Confirmar comparecimento
+            Confirmar atribuição
           </button>
         </div>
-      </form>
-    );
-  }
-
-  function renderStepAction(step) {
-    if (step.id === "documents" && canAnalyze) return renderDocumentDecision();
-    if (step.id === "scheduled" && canRecordAttendance) return renderProcedureDecision();
-    return null;
-  }
-
-  function renderProgress() {
-    return (
-      <div className="process-progress" aria-label="Andamento do processo">
-        {timeline.map((step) => (
-          <div className={`process-progress-step ${step.state}`} key={step.id}>
-            <span />
-            <strong>{step.label}</strong>
-          </div>
-        ))}
       </div>
     );
   }
 
-  function parseHistoryEntry(entry) {
-    if (entry && typeof entry === "object") {
-      return {
-        status: statusLabels[entry.status] || workflowTagLabels[entry.status] || entry.status || "Registro",
-        note: entry.notes || entry.note || "",
-        by: entry.by || "",
-        at: entry.at || entry.createdAt || "",
-      };
-    }
-    const text = String(entry || "");
-    const parts = text.split(" - ");
-    const status = parts.shift() || "Registro";
-    const at = parts.find((part) => /\d{4}-\d{2}-\d{2}T/.test(part)) || "";
-    const byPart = parts.find((part) => part.trim().startsWith("por "));
-    const note = parts.filter((part) => part !== at && part !== byPart).join(" - ");
-    return {
-      status: statusLabels[status] || workflowTagLabels[status] || displayText(status.replaceAll("_", " ").toLowerCase()),
-      note,
-      by: byPart ? byPart.replace(/^por\s+/i, "") : "",
-      at,
-    };
+  function renderInlineReschedule() {
+    return (
+      <div className="prm-inline-panel">
+        <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Reagendar</strong>
+        <label className="field">
+          <span>Motivo do reagendamento</span>
+          <textarea
+            value={rescheduleReason}
+            onChange={(event) => setRescheduleReason(event.target.value)}
+            placeholder="Motivo operacional"
+          />
+        </label>
+        {scheduleDays.length === 0
+          ? <p className="prm-muted-note">Nenhuma data disponível. Configure em Configurações â€º Agenda.</p>
+          : (
+            <div className="reschedule-grid">
+              {scheduleDays.map((day) => (
+                <button
+                  key={day.date}
+                  className={`calendar-day-button${day.remaining > 0 ? " has-vacancy" : ""}`}
+                  type="button"
+                  disabled={day.remaining <= 0}
+                  onClick={() => { onReschedule?.(request, day.date, rescheduleReason); setRescheduleReason(""); setActivePanel(null); }}
+                >
+                  <span>{day.weekday}</span>
+                  <strong>{day.date}</strong>
+                  <small>{day.remaining} vagas</small>
+                </button>
+              ))}
+            </div>
+          )
+        }
+        <div className="prm-inline-actions">
+          <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
+        </div>
+      </div>
+    );
   }
 
   function renderHistoryTree() {
     return (
-      <ol className="process-history-tree">
-        {historyEntries.map((entry, index) => {
-          const item = parseHistoryEntry(entry);
+      <ol className="process-history-tree prm-operational-timeline">
+        {operationalEvents.map((item, index) => {
           return (
             <li key={`${item.status}-${item.at}-${index}`} className="process-history-node">
               <span className="process-history-dot" />
               <div className="process-history-card">
                 <div className="process-history-card-head">
                   <strong>{item.status}</strong>
-                  {item.at && <time>{formatDateTime(item.at)}</time>}
+                  {item.at && <time>{item.synthetic ? item.at : formatDateTime(item.at)}</time>}
                 </div>
                 {item.note && <p>{displayText(item.note)}</p>}
-                {item.by && <small>{displayText(item.by)}</small>}
+                {item.by && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.by.trim()) && (
+                  <small>{displayText(item.by)}</small>
+                )}
               </div>
             </li>
           );
@@ -4266,80 +4242,267 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
 
   return (
     <div className="modal-backdrop">
-      <div className="config-modal request-preview-modal process-modal chronological-process-modal process-work-modal" role="dialog" aria-modal="true">
-        <header className="process-work-header">
-          <div>
-            <span>Processo #{request.protocol}</span>
-            <h2>{displayText(normalizedRequest.tutor)}</h2>
+      <div className="prm-modal" role="dialog" aria-modal="true">
+
+        {/* HEADER */}
+        <header className="prm-header">
+          <div className="prm-header-top">
+            <div className="prm-header-left">
+              <span className="prm-protocol">Processo #{request.protocol}</span>
+              <span className={`prm-origin-badge prm-origin-badge--${(normalizedRequest.origin || "PUBLICA").toLowerCase()}`}>
+                {normalizedRequest.origin === "INTERNA" ? "Interno" : normalizedRequest.origin === "BALCAO" ? "Balcão" : "Público"}
+              </span>
+              {normalizedRequest.rescheduleCount > 0 && (
+                <span className="prm-reschedule-badge">
+                  <RefreshCw size={10} />
+                  {normalizedRequest.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${normalizedRequest.rescheduleCount}x`}
+                </span>
+              )}
+            </div>
+            <div className="prm-header-actions">
+              <StatusBadge status={normalizedRequest.status} />
+              <button className="prm-pdf-btn" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>
+                <Download size={13} />
+                {bundleLoading ? "Preparando..." : "Baixar PDF"}
+              </button>
+              <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
+                <X size={17} />
+              </button>
+            </div>
           </div>
-          <div className="process-work-header-actions">
-            <StatusBadge status={normalizedRequest.status} />
-            <button className="icon-action process-close-action" type="button" aria-label="Fechar" onClick={onClose}>
-              <X size={18} />
-            </button>
+          <h2 className="prm-tutor-name">{displayText(normalizedRequest.tutor)}</h2>
+          <div className="prm-info-strip">
+            <span><PawPrint size={12} />{displayText(principalAnimal.name) || "Animal não informado"}</span>
+            {normalizedRequest.phone && <span><Phone size={12} />{normalizedRequest.phone}</span>}
+            {normalizedRequest.cpf && <span><FileText size={12} />{normalizedRequest.cpf}</span>}
+            {normalizedRequest.preferredSchedule && <span><CalendarDays size={12} />{normalizedRequest.preferredSchedule}</span>}
+            <span><User size={12} />{displayText(normalizedRequest.responsible) || "Não atribuído"}</span>
+            {normalizedRequest.assignedSectorName && <span><Building2 size={12} />{displayText(normalizedRequest.assignedSectorName)}</span>}
+            {daysWaiting !== null && <span className={daysWaiting > 7 ? "prm-info-urgent" : ""}>{daysWaiting}d de espera</span>}
+          </div>
+          <div className="prm-tag-strip">
+            {operationalTags.map((tag) => (
+              <span className={`prm-op-tag is-${tag.tone}`} key={tag.label}>{tag.label}</span>
+            ))}
           </div>
         </header>
 
-        <div className="process-work-body">
-          <aside className="process-history-rail">
-            <div className="process-history-section">
-              <button
-                type="button"
-                className="process-history-toggle"
-                onClick={() => setHistoryOpen((v) => !v)}
-              >
-                Histórico ({historyEntries.length} registros)
-                <span className="process-history-chevron">{historyOpen ? "▲" : "▼"}</span>
-              </button>
-              {historyOpen && (historyEntries.length > 0
-                ? renderHistoryTree()
-                : <p className="process-history-empty">Nenhum registro histórico.</p>
-              )}
+        {/* QUICK ACTIONS ZONE */}
+        <div className="prm-actions-zone">
+          {isInternal && (
+            <p className="prm-internal-notice"><AlertCircle size={13} /> Solicitação interna - documentos não obrigatórios para avançar.</p>
+          )}
+
+          {activePanel === "assign" && renderInlineAssign()}
+          {activePanel === "reschedule" && renderInlineReschedule()}
+          {activePanel === "reject" && (
+            <div className="prm-inline-panel">
+              <strong className="prm-inline-panel-title">Indeferir solicitação</strong>
+              <label className="field">
+                <span>Motivo</span>
+                <select value={rejectData.category} onChange={(e) => setRejectData((d) => ({ ...d, category: e.target.value }))}>
+                  <option value="">Selecione o motivo...</option>
+                  {rejectionReasons.map((r) => <option key={r} value={r}>{r}</option>)}
+                </select>
+              </label>
+              <label className="field">
+                <span>Observação interna</span>
+                <textarea value={rejectData.note} onChange={(e) => setRejectData((d) => ({ ...d, note: e.target.value }))} placeholder="Detalhe o motivo se necessário..." />
+              </label>
+              <div className="prm-inline-actions">
+                <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
+                <button className="secondary-action danger-action" type="button" disabled={!rejectData.category} onClick={confirmRejectInline}>Confirmar indeferimento</button>
+              </div>
             </div>
-          </aside>
+          )}
 
-          <main className="process-work-main">
-            <div className="process-overview-strip">
-              <section className="process-work-summary" aria-label="Resumo da solicitação">
-                <p><span>Telefone</span>{normalizedRequest.phone || "—"}</p>
-                <p><span>CPF</span>{normalizedRequest.cpf || "—"}</p>
-                <p><span>Agenda</span>{normalizedRequest.preferredSchedule || "Aguardando"}</p>
-                <p><span>Responsável</span>{displayText(normalizedRequest.responsible) || "Não atribuído"}</p>
-                <p><span>Setor</span>{displayText(normalizedRequest.assignedSectorName) || "—"}</p>
-                <p><span>Espera</span>{daysWaiting !== null ? `${daysWaiting} dia(s)` : "—"}</p>
-              </section>
+          <div className="prm-actions-btns">
+            {canAnalyze && (
+              <>
+                <button
+                  className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
+                  type="button"
+                  onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
+                >
+                  <ClipboardList size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
+                </button>
+                {activePanel !== "reject" && (
+                  <button
+                    className="prm-action-btn prm-action-btn--ghost-danger"
+                    type="button"
+                    disabled={blockWithoutAssignment}
+                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
+                    onClick={() => setActivePanel("reject")}
+                  >
+                    Indeferir
+                  </button>
+                )}
+                {canApprove && activePanel !== "reject" && (
+                  <button
+                    className="prm-action-btn prm-action-btn--primary"
+                    type="button"
+                    disabled={blockWithoutAssignment || hasPendingRequiredDocuments}
+                    title={blockWithoutAssignment ? assignmentRequiredTitle : hasPendingRequiredDocuments ? "Valide todos os anexos obrigatórios para avançar" : "Deferir solicitação"}
+                    onClick={() => onApprove?.(request)}
+                  >
+                    <CheckCircle2 size={15} /> Deferir
+                  </button>
+                )}
+              </>
+            )}
+            {canRecordAttendance && (
+              <>
+                <button
+                  className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
+                  type="button"
+                  onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
+                >
+                  <ClipboardList size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
+                </button>
+                {canReschedule && (
+                  <button
+                    className={`prm-action-btn prm-action-btn--ghost${activePanel === "reschedule" ? " is-active" : ""}`}
+                    type="button"
+                    disabled={blockWithoutAssignment}
+                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Reagendar"}
+                    onClick={() => setActivePanel(activePanel === "reschedule" ? null : "reschedule")}
+                  >
+                    <RefreshCw size={15} /> Reagendar
+                  </button>
+                )}
+                <button
+                  className="prm-action-btn prm-action-btn--warning"
+                  type="button"
+                  disabled={blockWithoutAssignment}
+                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Registrar não comparecimento"}
+                  onClick={() => onArchive?.(request, "NAO_COMPARECEU", "Não comparecimento registrado")}
+                >
+                  Não compareceu
+                </button>
+                <button
+                  className="prm-action-btn prm-action-btn--ghost-danger"
+                  type="button"
+                  disabled={blockWithoutAssignment}
+                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Cancelar procedimento"}
+                  onClick={() => onArchive?.(request, "CANCELADA", "Procedimento cancelado")}
+                >
+                  Cancelar
+                </button>
+                <button
+                  className="prm-action-btn prm-action-btn--primary"
+                  type="button"
+                  disabled={blockWithoutAssignment}
+                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar comparecimento"}
+                  onClick={confirmAttendanceInline}
+                >
+                  <CheckCircle2 size={15} /> Confirmar comparecimento
+                </button>
+              </>
+            )}
+            {!canAnalyze && !canRecordAttendance && (
+              <p className="prm-muted-note">Nenhuma ação pendente neste momento.</p>
+            )}
+          </div>
+        </div>
 
-              {normalizedRequest.animals.length > 0 && (
-                <section className="process-animals-summary process-work-animals">
+        {/* CONTENT */}
+        <div className="prm-content">
+          <div className="prm-content-main">
+            <div className="prm-section">
+              <p className="prm-section-label"><Clock size={13} /> Timeline operacional</p>
+              {operationalEvents.length > 0 ? renderHistoryTree() : <p className="prm-muted-note">Nenhum evento operacional registrado.</p>}
+            </div>
+            {anexos.length > 0 && (
+              <div className="prm-section">
+                <p className="prm-section-label"><FileText size={13} /> Documentos ({anexos.length})</p>
+                {renderAttachments()}
+              </div>
+            )}
+            {canRecordAttendance && activePanel !== "reschedule" && (
+              <div className="prm-section">
+                <p className="prm-section-label"><ClipboardList size={13} /> Dados do procedimento</p>
+                <label className="field">
+                  <span>Código do microchip</span>
+                  <input
+                    value={attendanceData.microchip}
+                    onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+                    placeholder="Informe o código aplicado ou lido"
+                  />
+                </label>
+                <label className="field">
+                  <span>Observação interna</span>
+                  <textarea value={attendanceData.note} onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))} />
+                </label>
+              </div>
+            )}
+            {!canAnalyze && !canRecordAttendance && anexos.length === 0 && (
+              <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
+            )}
+          </div>
+
+          <div className="prm-content-side">
+            {normalizedRequest.animals.length > 0 && (
+              <div className="prm-side-block">
+                <p className="prm-side-label"><PawPrint size={13} />Animais</p>
+                <div className="prm-animals-list">
                   {normalizedRequest.animals.map((animal, i) => (
-                    <div className="process-animal-row" key={i}>
-                      <span className="process-animal-name">{displayText(animal.name) || "Sem nome"}</span>
-                      <span className="process-animal-chip">{displayText(animal.species) || "—"}</span>
-                      <span className="process-animal-chip">{displayText(animal.sex) || "—"}</span>
-                      <span className="process-animal-chip">{displayText(animal.size) || "—"}</span>
-                      {(animal.procedure || normalizedRequest.type) && <span className="process-animal-chip process-animal-chip--proc">{displayText(animal.procedure || getRequestTypeName(normalizedRequest, requestTypes))}</span>}
-                      {animal.microchip && <span className="process-animal-chip process-animal-chip--chip">Chip: {animal.microchip}</span>}
+                    <div className="prm-animal-card" key={i}>
+                      <span className="prm-animal-name">{displayText(animal.name) || "Sem nome"}</span>
+                      <div className="prm-animal-tags">
+                        {animal.species && <span>{displayText(animal.species)}</span>}
+                        {animal.sex && <span>{displayText(animal.sex)}</span>}
+                        {animal.size && <span>{displayText(animal.size)}</span>}
+                        {(animal.breedDescription || animal.breedType) && <span>{displayText(animal.breedDescription || animal.breedType)}</span>}
+                        {(animal.birthDate || animal.age) && <span>{animal.birthDate || animal.age}</span>}
+                        {(animal.procedure || normalizedRequest.type) && (
+                          <span className="prm-tag--proc">{displayText(animal.procedure || getRequestTypeName(normalizedRequest, requestTypes))}</span>
+                        )}
+                        {animal.microchip && <span className="prm-tag--chip">Chip: {animal.microchip}</span>}
+                      </div>
                     </div>
                   ))}
-                </section>
-              )}
+                </div>
+              </div>
+            )}
 
-              {renderProgress()}
+            <div className="prm-side-block">
+              <p className="prm-side-label"><User size={13} />Tutor</p>
+              <div className="prm-side-facts">
+                <span><strong>Nome</strong>{displayText(normalizedRequest.tutor)}</span>
+                {normalizedRequest.cpf && <span><strong>CPF</strong>{normalizedRequest.cpf}</span>}
+                {normalizedRequest.phone && <span><strong>Telefone</strong>{normalizedRequest.phone}</span>}
+                {[normalizedRequest.address, normalizedRequest.neighborhood, normalizedRequest.city].filter(Boolean).length > 0 && (
+                  <span><strong>Endereço</strong>{[normalizedRequest.address, normalizedRequest.neighborhood, normalizedRequest.city].filter(Boolean).join(" - ")}</span>
+                )}
+              </div>
             </div>
 
-            <section className="process-current-panel">
-              <div className="process-current-head">
-                <div>
-                  <span>Etapa atual</span>
-                  <strong>{currentStep?.label || "Processo"}</strong>
-                </div>
-                <small>{finishedSteps}/{timeline.length} concluídas</small>
+            <div className="prm-side-block">
+              <p className="prm-side-label"><ClipboardList size={13} />Processo</p>
+              <div className="prm-side-facts">
+                <span><strong>Status</strong>{statusLabels[normalizedRequest.status] || normalizedRequest.status}</span>
+                <span><strong>Protocolo</strong>{normalizedRequest.protocol}</span>
+                {normalizedRequest.createdAt && <span><strong>Abertura</strong>{formatDateTime(normalizedRequest.createdAt)}</span>}
+                <span><strong>Setor</strong>{displayText(normalizedRequest.assignedSectorName) || "Sem setor"}</span>
+                <span><strong>Responsável</strong>{displayText(normalizedRequest.responsible) || "Não atribuído"}</span>
               </div>
-              {renderStepAction(currentStep) || (
-                <p className="process-muted-note">{currentStep?.description || "Nenhuma ação pendente neste momento."}</p>
-              )}
-            </section>
-          </main>
+            </div>
+
+            <div className="prm-side-block">
+              <p className="prm-side-label"><Paperclip size={13} />Anexos</p>
+              <div className="prm-side-facts">
+                <span><strong>Total</strong>{anexos.length}</span>
+                <span><strong>Pendentes</strong>{anexos.filter((item) => item.status === "Não enviado" || item.status === "Aguardando análise").length}</span>
+              </div>
+            </div>
+
+            <div className="prm-side-block">
+              <p className="prm-side-label"><FileText size={13} />Observações</p>
+              <div className="prm-side-facts">
+                <span>{displayText(normalizedRequest.attendanceNote || normalizedRequest.rejectionNote || normalizedRequest.notes || "Sem observações internas")}</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         {previewAttachment && (
@@ -4352,51 +4515,153 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     </div>
   );
 }
-function buildRequestTimeline(request: AnyRecord = {}) {
-  const created = request.createdAt ? formatDateTime(request.createdAt) : "Data não informada";
-  const hasDeferred = request.status === "AGUARDANDO_CIRURGIA" || requestHasTag(request, "DEFERIDA") || requestHasTag(request, "COMPARECEU");
-  const isRejected = requestHasTag(request, "INDEFERIDA");
-  const isCanceled = requestHasTag(request, "CANCELADA");
-  const attended = requestHasTag(request, "COMPARECEU");
-  const archived = request.status === "ARQUIVADA";
+function buildOperationalTimeline(request: AnyRecord = {}, historyEntries: any[] = []) {
+  const events = [];
+  if (request.createdAt) {
+    events.push({
+      status: "Solicitação criada",
+      note: `Protocolo ${request.protocol || "sem protocolo"}`,
+      by: request.tutor || "",
+      at: request.createdAt,
+    });
+  }
+  historyEntries.forEach((entry) => {
+    if (entry && typeof entry === "object") {
+      events.push({
+        status: statusLabels[entry.status] || workflowTagLabels[entry.status] || entry.status || "Registro operacional",
+        note: entry.notes || entry.note || "",
+        by: entry.by || "",
+        at: entry.at || entry.createdAt || "",
+      });
+      return;
+    }
+    const text = String(entry || "");
+    const parts = text.split(" - ");
+    const status = parts.shift() || "Registro operacional";
+    const at = parts.find((part) => /\d{4}-\d{2}-\d{2}T/.test(part)) || "";
+    const byPart = parts.find((part) => part.trim().startsWith("por "));
+    const note = parts.filter((part) => part !== at && part !== byPart).join(" - ");
+    events.push({
+      status: statusLabels[status] || workflowTagLabels[status] || displayText(status.replaceAll("_", " ").toLowerCase()),
+      note,
+      by: byPart ? byPart.replace(/^por\s+/i, "") : "",
+      at,
+    });
+  });
+  if (request.preferredSchedule) {
+    events.push({
+      status: requestHasTag(request, "REAGENDADA") ? "Reagendamento" : "Agendamento",
+      note: request.preferredSchedule,
+      by: request.responsible || "",
+      at: request.updatedAt || request.createdAt || "",
+    });
+  }
+  if (request.status === "ARQUIVADA" && !events.some((event) => String(event.status).includes("Arquiv"))) {
+    events.push({
+      status: requestHasTag(request, "COMPARECEU") ? "Procedimento executado" : requestHasTag(request, "CANCELADA") ? "Cancelamento" : requestHasTag(request, "INDEFERIDA") ? "Indeferimento" : "Conclusão",
+      note: request.attendanceNote || request.rejectionNote || "",
+      by: request.responsible || "",
+      at: request.updatedAt || "",
+    });
+  }
+  return events
+    .filter((event) => event.status || event.note)
+    .sort((left, right) => {
+      const leftTime = left.at ? new Date(left.at).getTime() : 0;
+      const rightTime = right.at ? new Date(right.at).getTime() : 0;
+      return leftTime - rightTime;
+    });
+}
 
-  return [
-    {
-      id: "received",
-      label: "Solicitação recebida",
-      description: `Protocolo ${request.protocol || "sem protocolo"}`,
-      detail: created,
-      state: "done",
-    },
-    {
-      id: "documents",
-      label: "Análise documental",
-      description: isRejected ? "Indeferida na análise." : hasDeferred || archived ? "Análise concluída." : "Aguardando conferência.",
-      detail: request.rejectionReason || "",
-      state: isRejected || hasDeferred || archived ? "done" : "current",
-    },
-    {
-      id: "approved",
-      label: "Deferimento",
-      description: isRejected ? "Não avançou para deferimento." : hasDeferred ? "Solicitação deferida." : "Aguardando decisão.",
-      detail: request.responsible ? `Responsável: ${request.responsible}` : "",
-      state: isRejected ? "blocked" : hasDeferred ? "done" : "pending",
-    },
-    {
-      id: "scheduled",
-      label: "Aguardando procedimento",
-      description: request.preferredSchedule ? `Agendado para ${request.preferredSchedule}` : "Aguardando data.",
-      detail: request.scheduleLocationName || "",
-      state: attended || isCanceled ? "done" : hasDeferred ? "current" : "pending",
-    },
-    {
-      id: "finished",
-      label: "Encerramento",
-      description: attended ? "Comparecimento confirmado." : isCanceled ? "Procedimento cancelado." : archived ? "Processo arquivado." : "Aguardando conclusão.",
-      detail: request.animalMicrochip ? `Microchip: ${request.animalMicrochip}` : request.attendanceNote || "",
-      state: archived ? "done" : "pending",
-    },
-  ];
+function PwaInstallPrompt() {
+  const [installEvent, setInstallEvent] = useState<any>(null);
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem("castragestao:pwa-dismissed") === "1");
+  const [installed, setInstalled] = useState(false);
+
+  const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "";
+  const isAndroid = /Android/i.test(userAgent);
+  const isIos = /iPhone|iPad|iPod/i.test(userAgent);
+  const isSafari = isIos && /Safari/i.test(userAgent) && !/CriOS|FxiOS|EdgiOS/i.test(userAgent);
+  const isStandalone = typeof window !== "undefined" && (
+    window.matchMedia?.("(display-mode: standalone)")?.matches ||
+    (navigator as any).standalone === true
+  );
+
+  useEffect(() => {
+    if (isStandalone) {
+      setInstalled(true);
+      return;
+    }
+
+    function handleBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallEvent(event);
+    }
+
+    function handleInstalled() {
+      setInstalled(true);
+      setInstallEvent(null);
+      localStorage.removeItem("castragestao:pwa-dismissed");
+    }
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt as EventListener);
+    window.addEventListener("appinstalled", handleInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt as EventListener);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, [isStandalone]);
+
+  async function install() {
+    if (!installEvent) return;
+    await installEvent.prompt();
+    const choice = await installEvent.userChoice.catch(() => null);
+    if (choice?.outcome === "accepted") {
+      setInstallEvent(null);
+    }
+  }
+
+  function dismiss() {
+    localStorage.setItem("castragestao:pwa-dismissed", "1");
+    setDismissed(true);
+  }
+
+  if (dismissed || installed || isStandalone) return null;
+  if (!installEvent && !isSafari) return null;
+
+  return (
+    <aside className="pwa-install-banner" role="dialog" aria-label="Instalar aplicativo">
+      <button className="pwa-dismiss-button" type="button" onClick={dismiss} aria-label="Fechar aviso de instalação">
+        <X size={16} />
+      </button>
+      <div className="pwa-install-copy">
+        <strong>{isAndroid ? "Instale o aplicativo" : "Adicione à tela inicial"}</strong>
+        {installEvent ? (
+          <span>Tenha acesso rápido e uma experiência melhor no celular.</span>
+        ) : (
+          <span>Para instalar no iPhone, toque em Compartilhar e depois em Adicionar à Tela Inicial.</span>
+        )}
+      </div>
+      {installEvent && (
+        <button className="primary-action pwa-install-action" type="button" onClick={install}>
+          Instalar aplicativo
+        </button>
+      )}
+    </aside>
+  );
+}
+
+function buildOperationalTags(request: AnyRecord = {}, context: AnyRecord = {}) {
+  const tags = [];
+  if (request.rescheduleCount > 0) tags.push({ label: request.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${request.rescheduleCount}x`, tone: "warn" });
+  if (context.daysWaiting >= 7 && request.status !== "ARQUIVADA") tags.push({ label: "Prioritário", tone: "danger" });
+  if (context.isInternal) tags.push({ label: "Interno", tone: "info" });
+  if (context.hasPendingRequiredDocuments) tags.push({ label: "Falta documento", tone: "warn" });
+  if (requestHasTag(request, "NAO_COMPARECEU")) tags.push({ label: "Não compareceu", tone: "warn" });
+  if (request.animalMicrochip || request.animals?.some((animal: AnyRecord) => animal.microchip)) tags.push({ label: "Microchipado", tone: "ok" });
+  if (requestHasTag(request, "PRIORIDADE")) tags.push({ label: "Urgente", tone: "danger" });
+  return tags;
 }
 
 function getPerformedProceduresLabel(request: AnyRecord = {}) {
@@ -4411,6 +4676,7 @@ function AdoptionView({
   setAdoptionAnimals,
   currentUser,
   speciesOptions = initialSpecies,
+  selectedMunicipalityId = "",
 }) {
   const MAX_ADOPTION_PHOTOS = 5;
   const MAX_ADOPTION_PHOTO_BYTES = 2 * 1024 * 1024;
@@ -4600,12 +4866,19 @@ function AdoptionView({
       return;
     }
 
+    const adoptionMunicipalityId = selectedMunicipalityId || currentUser?.municipalityId || currentUser?.municipality_id || "";
+    if (!adoptionMunicipalityId) {
+      setFormError("Selecione um município no topo antes de cadastrar o animal.");
+      return;
+    }
+
     const payload = {
       animal_name: animalForm.name.trim(),
       species: animalForm.species,
       sex: animalForm.sex,
       age: animalForm.age.trim(),
       description: animalForm.tone.trim(),
+      municipalityId: adoptionMunicipalityId,
       photos: animalForm.photos,
       main_photo_index: animalForm.mainPhotoIndex || 0,
       photo_url: animalForm.photos[animalForm.mainPhotoIndex || 0] || animalForm.photos[0] || "",
@@ -4744,21 +5017,22 @@ function AdoptionView({
   }
 
   return (
-    <section className="content-grid">
+    <section className="content-grid adoption-workspace">
       <div className="hero-panel adoption-hero">
         <video className="pet-welcome-video" autoPlay muted loop playsInline preload="metadata" poster="https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=1400&q=80">
           <source src="https://assets.mixkit.co/videos/preview/mixkit-dog-catches-a-ball-in-a-river-1494-large.mp4" type="video/mp4" />
         </video>
         <div className="pet-video-shade" />
-        <div>
+        <div className="adoption-hero-copy">
+          <span className="eyebrow">Adoção responsável</span>
           <h2>Adicione pets para adoção</h2>
+          <p>Gerencie animais disponíveis, interessados e confirmações de adoção em uma área mais clara e rápida de operar.</p>
+          <div className="adoption-hero-stats" aria-label="Resumo da adoção">
+            <span><strong>{availableAnimals.length}</strong> disponíveis</span>
+            <span><strong>{adoptedAnimals.length}</strong> adotados</span>
+            <span><strong>{adoptionAnimals.reduce((sum, animal) => sum + (Array.isArray(animal.interests) ? animal.interests.length : 0), 0)}</strong> interessados</span>
+          </div>
         </div>
-        {canManageAdoptions && (
-          <button className="primary-action" onClick={openAnimalForm}>
-            <Plus size={18} />
-            Cadastrar animal
-          </button>
-        )}
       </div>
 
       {canManageAdoptions && isFormOpen && (
@@ -4796,8 +5070,8 @@ function AdoptionView({
                           <img src={photo} alt={`Foto ${index + 1}`} />
                           <span>{animalForm.mainPhotoIndex === index ? "Principal" : "Usar principal"}</span>
                         </button>
-                        <button className="ghost-button danger-action" type="button" onClick={() => removeAnimalPhoto(index)}>
-                          Excluir
+                        <button className="animal-photo-remove" type="button" onClick={() => removeAnimalPhoto(index)} aria-label="Excluir foto">
+                          <X size={14} />
                         </button>
                       </div>
                     ))}
@@ -4828,7 +5102,7 @@ function AdoptionView({
                   <span>Descricao para a pagina publica</span>
                   <textarea
                     value={animalForm.tone}
-                    placeholder="Temperamento, historia, cuidados e perfil de adotante indicado"
+                    placeholder="Temperamento, história, cuidados e perfil do adotante indicado"
                     onChange={(event) => updateAnimalForm("tone", event.target.value)}
                   />
                 </label>
@@ -4853,12 +5127,7 @@ function AdoptionView({
             {statusQuickFilters.map((filter) => {
               const Icon = filter.icon;
               return (
-                <button
-                  key={filter.value}
-                  className={adoptionTab === filter.value ? "selected" : ""}
-                  type="button"
-                  onClick={() => setAdoptionTab(filter.value)}
-                >
+                <button key={filter.value} className={adoptionTab === filter.value ? "selected" : ""} type="button" title={filter.label} aria-label={filter.label} onClick={() => setAdoptionTab(filter.value)}>
                   <Icon size={18} />
                   <span>{filter.label}</span>
                 </button>
@@ -4869,12 +5138,7 @@ function AdoptionView({
             {speciesQuickFilters.map((filter) => {
               const Icon = filter.icon;
               return (
-                <button
-                  key={`internal-species-${filter.value || "all"}`}
-                  className={adoptionFilters.species === filter.value ? "selected" : ""}
-                  type="button"
-                  onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}
-                >
+                <button key={`internal-species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" title={filter.label} aria-label={filter.label} onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}>
                   <Icon size={18} />
                   <span>{filter.label}</span>
                 </button>
@@ -4885,12 +5149,7 @@ function AdoptionView({
             {sexQuickFilters.map((filter) => {
               const Icon = filter.icon;
               return (
-                <button
-                  key={`internal-sex-${filter.value || "all"}`}
-                  className={adoptionFilters.sex === filter.value ? "selected" : ""}
-                  type="button"
-                  onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}
-                >
+                <button key={`internal-sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" title={filter.label} aria-label={filter.label} onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}>
                   <Icon size={18} />
                   <span>{filter.label}</span>
                 </button>
@@ -4898,10 +5157,12 @@ function AdoptionView({
             })}
           </div>
           {activeFilterCount > 0 && (
-            <button className="ghost-button adoption-clear-filters" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>
-              Limpar filtros
-            </button>
+            <button className="ghost-button adoption-clear-filters" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>Limpar filtros</button>
           )}
+          <button className="primary-action adoption-create-action" type="button" onClick={openAnimalForm}>
+            <Plus size={18} />
+            <span>Cadastrar animal</span>
+          </button>
         </div>
       )}
 
@@ -4914,9 +5175,9 @@ function AdoptionView({
                 ? activeFilterCount > 0
                   ? "Nenhum animal encontrado com estes filtros."
                   : adoptionTab === "adopted"
-                  ? "Animais marcados como adotados ficarao aqui como historico interno."
-                  : "Cadastre o primeiro animal para testar a galeria pública."
-                : "A galeria pública ainda nao possui animais cadastrados."
+                  ? "Animais marcados como adotados ficarão aqui como histórico interno."
+                  : "Cadastre o primeiro animal para liberar a galeria pública."
+                : "A galeria pública ainda não possui animais cadastrados."
             }
           />
         )}
@@ -4926,6 +5187,9 @@ function AdoptionView({
           <article className="adoption-card" key={animal.id || animal.name}>
             <div className="adoption-card-header strong">
               <h3>{animal.name || animal.animal_name}</h3>
+              <span className={`adoption-card-status ${animal.status === "adotado" ? "is-adopted" : "is-available"}`}>
+                {animal.status === "adotado" ? "Adotado" : "Disponível"}
+              </span>
               {canManageAdoptions && (
                 <button
                   className="adoption-card-delete-top"
@@ -4940,26 +5204,26 @@ function AdoptionView({
             <div className={`animal-photo ${getAnimalGradient(animal)}`}>
               {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={animal.name} /> : <PawPrint size={44} />}
             </div>
-            <button
-              className={interestCount > 0 ? "adoption-interest-indicator has-interest interest-button" : "adoption-interest-indicator interest-button"}
-              type="button"
-              onClick={() => openInterestsModal(animal)}
-            >
-              <Users size={13} />
-              <span>{interestCount > 0 ? `${interestCount} interessado(s)` : "Sem interessados"}</span>
-            </button>
             {canManageAdoptions && (
               <div className="adoption-card-actions">
-                <button className="ghost-button" type="button" onClick={() => editAnimal(animal)}>
-                  Editar
+                <button
+                  className={interestCount > 0 ? "adoption-interest-indicator has-interest interest-button" : "adoption-interest-indicator interest-button"}
+                  type="button"
+                  onClick={() => openInterestsModal(animal)}
+                >
+                  <Users size={13} />
+                  <span>{interestCount > 0 ? `${interestCount}` : "0"}</span>
+                </button>
+                <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar">
+                  <Edit3 size={16} />
                 </button>
                 {animal.status === "adotado" ? (
-                  <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, "disponivel")}>
-                    Reativar
+                  <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, "disponivel")} title="Reativar" aria-label="Reativar">
+                    <RefreshCw size={16} />
                   </button>
                 ) : (
-                  <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)}>
-                    Marcar adotado
+                  <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Marcar adotado" aria-label="Marcar adotado">
+                    <CheckCircle2 size={16} />
                   </button>
                 )}
               </div>
@@ -4999,7 +5263,7 @@ function AdoptionView({
         <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) closeAdoptionConfirmModal(); }}>
           <div className="auth-modal adoption-confirm-modal" role="dialog" aria-modal="true">
             <ModalHeader
-              title={`Confirmar adoção — ${adoptionConfirmModal.name || adoptionConfirmModal.animal_name}`}
+              title={`Confirmar adoção - ${adoptionConfirmModal.name || adoptionConfirmModal.animal_name}`}
               onClose={closeAdoptionConfirmModal}
             />
 
@@ -5111,6 +5375,8 @@ function ConfigView({
   setScheduleDays,
   scheduleRules = [],
   setScheduleRules,
+  permissionGroups = [],
+  setPermissionGroups,
   teams = initialTeams,
   setTeams,
   setActive,
@@ -5118,7 +5384,7 @@ function ConfigView({
   configArea = "environment",
   selectedMunicipalityId = "",
 }) {
-  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false };
+  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepTutor: true, stepAgenda: true, stepDocuments: true };
   const emptyAgendaForm = {
     description: "Agenda padrão",
     active: true,
@@ -5159,7 +5425,11 @@ function ConfigView({
   const [editingSectorId, setEditingSectorId] = useState(null);
   const [sectorModal, setSectorModal] = useState(false);
   const [pendingSectorUserIds, setPendingSectorUserIds] = useState([]);
-  const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true };
+  const emptyPermissionGroup = { name: "", active: true, allowedMenuItems: ["dashboard", "admin"], allowedConfigItems: [] };
+  const [newPermissionGroup, setNewPermissionGroup] = useState<AnyRecord>(emptyPermissionGroup);
+  const [editingPermissionGroupId, setEditingPermissionGroupId] = useState(null);
+  const [permissionModal, setPermissionModal] = useState(false);
+  const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
   const [newTeamUser, setNewTeamUser] = useState(emptyTeamUser);
   const [newMunicipality, setNewMunicipality] = useState({ name: "", state: "", active: true });
   const [editingMunicipalityId, setEditingMunicipalityId] = useState(null);
@@ -5177,6 +5447,9 @@ function ConfigView({
   const [aiSaveStatus, setAiSaveStatus] = useState("");
   const [whatsappSettings, setWhatsappSettings] = useState(initialWhatsappSettings);
   const [whatsappSaveStatus, setWhatsappSaveStatus] = useState("");
+  const initialQuotaSettings = { plan: "", contractStart: "", contractEnd: "" };
+  const [quotaSettings, setQuotaSettings] = useState(initialQuotaSettings);
+  const [quotaSaveStatus, setQuotaSaveStatus] = useState("");
   const [singleDate, setSingleDate] = useState("");
   const [singleVacancies, setSingleVacancies] = useState("20");
   const [recurringStart, setRecurringStart] = useState("");
@@ -5260,21 +5533,26 @@ function ConfigView({
     if (!configMunicipalityScopeId) {
       setWhatsappSettings(initialWhatsappSettings);
       setWhatsappSaveStatus("Selecione um município para configurar o WhatsApp.");
+      setQuotaSettings(initialQuotaSettings);
+      setQuotaSaveStatus("");
       return;
     }
     let cancelled = false;
     setWhatsappSaveStatus("Carregando configuração...");
-    api.getConfig(CONFIG_KEYS.whatsapp, configMunicipalityScopeId)
-      .then((value) => {
-        if (cancelled) return;
-        setWhatsappSettings({ ...initialWhatsappSettings, ...(value || {}) });
-        setWhatsappSaveStatus("");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setWhatsappSettings(initialWhatsappSettings);
-        setWhatsappSaveStatus("");
+    Promise.all([
+      api.getConfig(CONFIG_KEYS.whatsapp, configMunicipalityScopeId).catch(() => null),
+      api.getConfig(CONFIG_KEYS.whatsappQuota, configMunicipalityScopeId).catch(() => null),
+    ]).then(([whatsapp, quota]) => {
+      if (cancelled) return;
+      setWhatsappSettings({ ...initialWhatsappSettings, ...(whatsapp || {}) });
+      setWhatsappSaveStatus("");
+      setQuotaSettings({
+        plan: String(quota?.plan ?? ""),
+        contractStart: quota?.contractStart ?? "",
+        contractEnd: quota?.contractEnd ?? "",
       });
+      setQuotaSaveStatus(quota?.plan ? `Cota atual: ${quota.currentPeriodUsed ?? 0} / ${quota.plan} usadas este mês.` : "");
+    });
     return () => { cancelled = true; };
   }, [configArea, configTab, configMunicipalityScopeId]);
 
@@ -5363,6 +5641,9 @@ function ConfigView({
       phoneNumberId: whatsappSettings.phoneNumberId || "",
       confirmationTemplate: whatsappSettings.confirmationTemplate || "confirmacao_agenda_castracao",
       languageCode: whatsappSettings.languageCode || "pt_BR",
+      templateVariables: Array.isArray(whatsappSettings.templateVariables)
+        ? whatsappSettings.templateVariables.map((variable) => String(variable || "").trim()).filter(Boolean)
+        : initialWhatsappSettings.templateVariables,
       accessToken: whatsappSettings.accessToken || "",
     };
     setWhatsappSaveStatus("Salvando configuração...");
@@ -5377,6 +5658,28 @@ function ConfigView({
       setWhatsappSaveStatus("Configuração salva com sucesso.");
     } catch (err) {
       setWhatsappSaveStatus(`Não foi possível salvar: ${err.message}`);
+    }
+  }
+
+  async function saveQuotaSettings() {
+    if (!configMunicipalityScopeId) {
+      setQuotaSaveStatus("Selecione um município antes de salvar.");
+      return;
+    }
+    if (!quotaSettings.plan || Number(quotaSettings.plan) <= 0) {
+      setQuotaSaveStatus("Informe um limite mensal válido.");
+      return;
+    }
+    setQuotaSaveStatus("Salvando...");
+    try {
+      await api.setConfig(CONFIG_KEYS.whatsappQuota, {
+        plan: Number(quotaSettings.plan),
+        contractStart: quotaSettings.contractStart || "",
+        contractEnd: quotaSettings.contractEnd || "",
+      }, configMunicipalityScopeId);
+      setQuotaSaveStatus("Cota salva com sucesso.");
+    } catch (err) {
+      setQuotaSaveStatus(`Não foi possível salvar: ${err.message}`);
     }
   }
 
@@ -5608,6 +5911,56 @@ function ConfigView({
           ],
         }));
       }
+      const createdConfigEntries = await Promise.all(CONFIG_KEYS_LIST.map(async (key) => {
+        const value = await api.getConfig(key, created.id).catch(() => null);
+        return [key, value];
+      }));
+      const createdConfigs = Object.fromEntries(createdConfigEntries);
+      const createdMunicipalityScope = Array.isArray(refreshed)
+        ? refreshed.find((municipality) => municipality.id === created.id) || created
+        : created;
+
+      setRequestTypes?.((current) => mergeScopedConfigItems(
+        current,
+        scopeConfigItems(createdConfigs[CONFIG_KEYS.requestTypes], createdMunicipalityScope),
+        created.id,
+      ));
+      setDocumentTypes?.((current) => mergeScopedConfigItems(
+        current,
+        scopeConfigItems(createdConfigs[CONFIG_KEYS.documentTypes], createdMunicipalityScope),
+        created.id,
+      ));
+      setSpeciesOptions?.((current) => mergeScopedConfigItems(
+        current,
+        scopeConfigItems(createdConfigs[CONFIG_KEYS.species], createdMunicipalityScope),
+        created.id,
+      ));
+      setSizeOptions?.((current) => mergeScopedConfigItems(
+        current,
+        scopeConfigItems(createdConfigs[CONFIG_KEYS.sizes], createdMunicipalityScope),
+        created.id,
+      ));
+      setPermissionGroups?.((current) => mergeScopedConfigItems(
+        current,
+        scopeConfigItems(createdConfigs[CONFIG_KEYS.permissionGroups], createdMunicipalityScope),
+        created.id,
+      ));
+      setScheduleRules?.((current) => {
+        const scopedRules = (Array.isArray(createdConfigs[CONFIG_KEYS.scheduleRules])
+          ? createdConfigs[CONFIG_KEYS.scheduleRules]
+          : []).map((rule) => {
+            const slots = normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies);
+            return {
+              ...rule,
+              municipalityId: rule.municipalityId || created.id,
+              municipalityName: rule.municipalityName || getMunicipalityLabel(created.id, [createdMunicipalityScope]),
+              slots,
+              time: slots[0]?.time || rule.time,
+              vacancies: sumScheduleSlotsVacancies(slots, rule.time, rule.vacancies),
+            };
+          });
+        return mergeScopedConfigItems(current, scopedRules, created.id);
+      });
       setNewMunicipality({ name: "", state: "", active: true });
       setMunicipalitySaveStatus("");
       setConfigModal(null);
@@ -5701,6 +6054,59 @@ function ConfigView({
     }));
   }
 
+  function createPermissionGroup() {
+    const name = newPermissionGroup.name?.trim();
+    if (!name) return;
+    const nextGroup = {
+      ...newPermissionGroup,
+      name,
+      active: newPermissionGroup.active !== false,
+      allowedMenuItems: Array.isArray(newPermissionGroup.allowedMenuItems) ? newPermissionGroup.allowedMenuItems : [],
+      allowedConfigItems: Array.isArray(newPermissionGroup.allowedConfigItems) ? newPermissionGroup.allowedConfigItems : [],
+      municipalityId: newPermissionGroup.municipalityId || configMunicipalityScopeId,
+    };
+    if (editingPermissionGroupId) {
+      setPermissionGroups?.((current) => current.map((group) => (
+        matchesScopedConfigItem(group, editingPermissionGroupId) ? { ...group, ...nextGroup } : group
+      )));
+      setEditingPermissionGroupId(null);
+    } else {
+      setPermissionGroups?.((current) => [...current, { ...nextGroup, id: `grupo_${Date.now()}` }]);
+    }
+    setNewPermissionGroup(emptyPermissionGroup);
+    setPermissionModal(false);
+  }
+
+  function openPermissionModal(group = null) {
+    if (group) {
+      setEditingPermissionGroupId(group.id);
+      setNewPermissionGroup({
+        ...emptyPermissionGroup,
+        ...group,
+        allowedMenuItems: Array.isArray(group.allowedMenuItems) ? group.allowedMenuItems : [],
+        allowedConfigItems: Array.isArray(group.allowedConfigItems) ? group.allowedConfigItems : [],
+      });
+    } else {
+      setEditingPermissionGroupId(null);
+      setNewPermissionGroup({ ...emptyPermissionGroup, municipalityId: configMunicipalityScopeId });
+    }
+    setPermissionModal(true);
+  }
+
+  function patchPermissionGroup(groupId, patch) {
+    setPermissionGroups?.((current) => current.map((group) => (matchesScopedConfigItem(group, groupId) ? { ...group, ...patch } : group)));
+  }
+
+  function togglePermissionList(key, value) {
+    setNewPermissionGroup((current) => {
+      const list = Array.isArray(current[key]) ? current[key] : [];
+      return {
+        ...current,
+        [key]: list.includes(value) ? list.filter((item) => item !== value) : [...list, value],
+      };
+    });
+  }
+
   async function createTeamUser() {
     if (!newTeamUser.name.trim() || !newTeamUser.email.trim()) return false;
     const sectorIds = Array.isArray(newTeamUser.sectorIds) ? newTeamUser.sectorIds : [];
@@ -5735,6 +6141,7 @@ function ConfigView({
           role: newTeamUser.role,
           matricula: newTeamUser.matricula.trim(),
           cargo: newTeamUser.cargo.trim(),
+          permissionGroupId: newTeamUser.permissionGroupId,
           active: newTeamUser.active !== false,
         } : user),
       }));
@@ -5756,6 +6163,7 @@ function ConfigView({
           role: newTeamUser.role,
           matricula: newTeamUser.matricula.trim(),
           cargo: newTeamUser.cargo.trim(),
+          permissionGroupId: newTeamUser.permissionGroupId,
           active: newTeamUser.active !== false,
         },
       ],
@@ -5781,10 +6189,12 @@ function ConfigView({
         cargo: user.cargo || "",
         senha: "",
         active: user.active !== false,
+        permissionGroupId: user.permissionGroupId || "",
       });
     } else {
       setEditingTeamUserId(null);
-      setNewTeamUser({ ...emptyTeamUser, municipalityId: defaultMunId });
+      const defaultGroup = permissionGroups.find((group) => getItemMunicipalityId(group) === defaultMunId && group.active !== false) || permissionGroups.find((group) => group.active !== false);
+      setNewTeamUser({ ...emptyTeamUser, municipalityId: defaultMunId, permissionGroupId: defaultGroup?.id || "" });
     }
     setMunicipalityStateFilter(getMunState(defaultMunId));
     setUserModal(true);
@@ -5912,22 +6322,22 @@ function ConfigView({
 
   function useAgendaCurrentLocation() {
     if (!navigator.geolocation) {
-      setAgendaLocationStatus("Localizacao atual indisponivel neste navegador.");
+      setAgendaLocationStatus("Localização atual indisponível neste navegador.");
       return;
     }
 
-    setAgendaLocationStatus("Solicitando localizacao atual...");
+    setAgendaLocationStatus("Solicitando localização atual...");
     navigator.geolocation.getCurrentPosition(
       (position) => {
         setAgendaForm((current) => ({
           ...current,
           latitude: position.coords.latitude.toFixed(6),
           longitude: position.coords.longitude.toFixed(6),
-          locationName: current.locationName || "Localizacao atual",
+          locationName: current.locationName || "Localização atual",
         }));
-        setAgendaLocationStatus("Localizacao atual registrada.");
+        setAgendaLocationStatus("Localização atual registrada.");
       },
-      () => setAgendaLocationStatus("Nao foi possivel obter a localizacao atual."),
+      () => setAgendaLocationStatus("Não foi possível obter a localização atual."),
       { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
     );
   }
@@ -6089,6 +6499,7 @@ function ConfigView({
   const filteredDocumentTypes = filterByConfigStatus(documentTypes);
   const filteredSectors = filterByConfigStatus(teams.sectors || []);
   const filteredTeamUsers = filterByConfigStatus(teams.users || []);
+  const filteredPermissionGroups = filterByConfigStatus(permissionGroups);
   const currentConfigItems = {
     requests: requestTypes,
     municipalities,
@@ -6097,6 +6508,7 @@ function ConfigView({
     species: speciesOptions,
     users: teams.users || [],
     sectors: teams.sectors || [],
+    permissions: permissionGroups,
     ai: [{ id: "ai", active: Boolean(aiSettings.active) }],
     documents: documentTypes,
   }[currentConfigKey] || [];
@@ -6111,6 +6523,7 @@ function ConfigView({
     municipalities: "Criar Municípios",
     users: "Criar Usuários",
     sectors: "Criar Setores",
+    permissions: "Permissões",
   }[configArea] || "Configurações";
 
   return (
@@ -6189,7 +6602,7 @@ function ConfigView({
                   </small>
                 </div>
                 <div className="config-card-details">
-                  <span>{type.charged ? `Taxa: ${type.billingAmount || type.fee || "—"}` : "Gratuito"}</span>
+                  <span>{type.charged ? `Taxa: ${type.billingAmount || type.fee || "-"}` : "Gratuito"}</span>
                   {type.overrideDailyLimit && <span>Sobrepõe limite diário</span>}
                   {type.charged && type.billingDescription && <span>{type.billingDescription}</span>}
                   <span>{(type.documents?.length || 0)} documento(s) vinculado(s)</span>
@@ -6217,7 +6630,7 @@ function ConfigView({
             {filteredScheduleRules.map((rule) => (
               <article className="request-type-card config-summary-card" key={rule.id}>
                 <div className="config-card-title">
-                  <strong>{rule.description}</strong>
+                  <span className="config-card-description">{rule.description}</span>
                   <small className={rule.active ? "schedule-status active" : "schedule-status inactive"}>
                     {rule.active ? "Ativo" : "Inativo"}
                   </small>
@@ -6330,6 +6743,53 @@ function ConfigView({
         </div>
       )}
 
+      {configArea === "permissions" && (
+        <div className="panel wide">
+          <ConfigSectionHeader title={configAreaTitle} createLabel="Criar grupo" onCreate={() => openPermissionModal()}>
+            <ConfigStatusFilter
+              value={configStatusFilter}
+              onChange={setConfigStatusFilter}
+              activeCount={permissionGroups.filter((item) => item.active !== false).length}
+              inactiveCount={permissionGroups.filter((item) => item.active === false).length}
+            />
+          </ConfigSectionHeader>
+          <div className="config-editor-grid">
+            {filteredPermissionGroups.length === 0 && (
+              <EmptyState title="Nenhum grupo de permissão" text="Crie grupos para controlar menus e áreas de configuração de cada usuário." />
+            )}
+            {filteredPermissionGroups.map((group) => {
+              const linkedUsers = (teams.users || []).filter((user) => user.permissionGroupId === group.id);
+              return (
+                <article className="request-type-card config-summary-card" key={group.id}>
+                  <div className="config-card-title">
+                    <strong>{group.name || "Grupo sem nome"}</strong>
+                    <small className={group.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                      {group.active === false ? "Inativo" : "Ativo"}
+                    </small>
+                  </div>
+                  <div className="config-card-details">
+                    <span>{linkedUsers.length} usuário(s) vinculado(s)</span>
+                    <span>Menus: {(group.allowedMenuItems || []).length || 0}</span>
+                    <span>Configurações: {(group.allowedConfigItems || []).length || 0}</span>
+                    {group.municipalityName && <span>{group.municipalityName}</span>}
+                  </div>
+                  <ToggleSwitch
+                    label="Grupo ativo"
+                    checked={group.active !== false}
+                    onChange={(checked) => patchPermissionGroup(group.id, { active: checked })}
+                    onText="Ativo"
+                    offText="Inativo"
+                  />
+                  <div className="form-actions">
+                    <button className="ghost-button" type="button" onClick={() => openPermissionModal(group)}>Editar</button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {configArea === "users" && (
         <div className="panel wide">
           <ConfigSectionHeader title={configAreaTitle} createLabel="Criar usuário" onCreate={() => openTeamUserModal()}>
@@ -6359,6 +6819,7 @@ function ConfigView({
                     <span>Cargo: {user.role || "Analista"}</span>
                     <span>Município: {getMunicipalityLabel(user.municipalityId, municipalities)}</span>
                     <span>Setores: {getUserSectorNames(user, teams.sectors || [])}</span>
+                    <span>Permissão: {permissionGroups.find((group) => group.id === user.permissionGroupId)?.name || "Sem grupo"}</span>
                     {user.defaultMunicipalityUser && (
                       <span className="default-user-note">Usuário padrão</span>
                     )}
@@ -6371,6 +6832,62 @@ function ConfigView({
               })}
             </div>
           </div>
+        </div>
+      )}
+
+      {permissionModal && (
+        <div className="modal-backdrop">
+          <form className="workflow-modal" onSubmit={(event) => { event.preventDefault(); createPermissionGroup(); }}>
+            <ModalHeader
+              title={editingPermissionGroupId ? "Editar grupo de permissão" : "Criar grupo de permissão"}
+              onClose={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }}
+            />
+            <div className="config-modal-options">
+              <ConfigActiveToggle
+                checked={newPermissionGroup.active !== false}
+                onChange={(active) => setNewPermissionGroup((current) => ({ ...current, active }))}
+              />
+            </div>
+            <Field
+              label="Nome do grupo"
+              value={newPermissionGroup.name}
+              placeholder="Ex: Triagem documental"
+              onChange={(value) => setNewPermissionGroup((current) => ({ ...current, name: value }))}
+            />
+            <section className="agenda-modal-block">
+              <strong>Menus liberados</strong>
+              <div className="team-user-checklist">
+                {permissionMenuItems.map((item) => (
+                  <label key={item.id} className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={(newPermissionGroup.allowedMenuItems || []).includes(item.id)}
+                      onChange={() => togglePermissionList("allowedMenuItems", item.id)}
+                    />
+                    {item.label}
+                  </label>
+                ))}
+              </div>
+            </section>
+            <section className="agenda-modal-block">
+              <strong>Áreas de configuração</strong>
+              <div className="team-user-checklist">
+                {permissionConfigItems.filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role)).map((item) => (
+                  <label key={item.id} className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={(newPermissionGroup.allowedConfigItems || []).includes(item.id)}
+                      onChange={() => togglePermissionList("allowedConfigItems", item.id)}
+                    />
+                    {item.label}
+                  </label>
+                ))}
+              </div>
+            </section>
+            <button className="primary-action" type="submit" disabled={!newPermissionGroup.name?.trim()}>
+              {editingPermissionGroupId ? "Salvar grupo" : "Criar grupo"}
+            </button>
+          </form>
         </div>
       )}
 
@@ -6451,6 +6968,21 @@ function ConfigView({
             <Field label="N° Matrícula" value={newTeamUser.matricula} placeholder="Ex: 00123" onChange={(value) => setNewTeamUser((c) => ({ ...c, matricula: value }))} />
             <Field label="Cargo" value={newTeamUser.role} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, role: value }))} />
             <label className="field">
+              <span>Grupo de permissão</span>
+              <select
+                value={newTeamUser.permissionGroupId || ""}
+                onChange={(event) => setNewTeamUser((current) => ({ ...current, permissionGroupId: event.target.value }))}
+              >
+                <option value="">Sem grupo</option>
+                {permissionGroups
+                  .filter((group) => group.active !== false)
+                  .filter((group) => !newTeamUser.municipalityId || !getItemMunicipalityId(group) || getItemMunicipalityId(group) === newTeamUser.municipalityId)
+                  .map((group) => (
+                    <option key={group.id} value={group.id}>{group.name}</option>
+                  ))}
+              </select>
+            </label>
+            <label className="field">
               <span>Senha de login</span>
               <input type="password" value={newTeamUser.senha} placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"} onChange={(e) => setNewTeamUser((c) => ({ ...c, senha: e.target.value }))} />
             </label>
@@ -6490,13 +7022,14 @@ function ConfigView({
           <PanelHeader title="IA externa para documentos" />
           <div className="ai-settings-layout">
             <article className="request-type-card ai-settings-card">
-              <ToggleSwitch
-                label="Validação por IA"
-                checked={Boolean(aiSettings.active)}
-                onChange={(checked) => setAiSettings?.((current) => ({ ...current, active: checked }))}
-                onText="Ativa"
-                offText="Inativa"
-              />
+              <div className="config-modal-options">
+                <ConfigActiveToggle
+                  checked={Boolean(aiSettings.active)}
+                  onChange={(checked) => setAiSettings?.((current) => ({ ...current, active: checked }))}
+                  onText="Ativa"
+                  offText="Inativa"
+                />
+              </div>
               <label className="field">
                 <span>Provedor</span>
                 <select
@@ -6562,13 +7095,12 @@ function ConfigView({
           <PanelHeader title="WhatsApp por município" />
           <div className="ai-settings-layout">
             <article className="request-type-card ai-settings-card">
-              <ToggleSwitch
-                label="Notificar deferimento por WhatsApp"
-                checked={Boolean(whatsappSettings.active)}
-                onChange={(checked) => setWhatsappSettings((current) => ({ ...current, active: checked }))}
-                onText="Ativo"
-                offText="Inativo"
-              />
+              <div className="config-modal-options">
+                <ConfigActiveToggle
+                  checked={Boolean(whatsappSettings.active)}
+                  onChange={(checked) => setWhatsappSettings((current) => ({ ...current, active: checked }))}
+                />
+              </div>
               <label className="field">
                 <span>Provedor</span>
                 <select
@@ -6596,6 +7128,15 @@ function ConfigView({
                 value={whatsappSettings.languageCode || ""}
                 placeholder="pt_BR"
                 onChange={(value) => setWhatsappSettings((current) => ({ ...current, languageCode: value }))}
+              />
+              <Field
+                label="Variaveis do template"
+                value={(Array.isArray(whatsappSettings.templateVariables) ? whatsappSettings.templateVariables : initialWhatsappSettings.templateVariables).join(", ")}
+                placeholder="tutor_name, protocol, schedule_date"
+                onChange={(value) => setWhatsappSettings((current) => ({
+                  ...current,
+                  templateVariables: value.split(",").map((variable) => variable.trim()).filter(Boolean),
+                }))}
               />
             </article>
             <article className="ai-rules-card">
@@ -6626,6 +7167,52 @@ function ConfigView({
         </div>
       )}
 
+      {configArea === "environment" && configTab === "whatsapp" && (
+        <div className="panel wide">
+          <PanelHeader title="Cota de envios" />
+          <div className="ai-settings-layout">
+            <article className="request-type-card ai-settings-card">
+              <Field
+                label="Limite mensal de mensagens"
+                value={quotaSettings.plan}
+                placeholder="Ex: 500"
+                onChange={(value) => setQuotaSettings((current) => ({ ...current, plan: value }))}
+              />
+              <label className="field">
+                <span>Início do contrato</span>
+                <input
+                  type="date"
+                  value={quotaSettings.contractStart}
+                  onChange={(event) => setQuotaSettings((current) => ({ ...current, contractStart: event.target.value }))}
+                />
+              </label>
+              <label className="field">
+                <span>Fim do contrato</span>
+                <input
+                  type="date"
+                  value={quotaSettings.contractEnd}
+                  onChange={(event) => setQuotaSettings((current) => ({ ...current, contractEnd: event.target.value }))}
+                />
+              </label>
+              <button className="primary-action ai-save-key-action" type="button" onClick={saveQuotaSettings} disabled={!configMunicipalityScopeId}>
+                Salvar cota
+              </button>
+              {quotaSaveStatus && <p className={quotaSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{quotaSaveStatus}</p>}
+            </article>
+            <article className="ai-rules-card">
+              <strong>Controle de envios mensais</strong>
+              <p>
+                Defina o limite máximo de mensagens WhatsApp que podem ser enviadas por mês para este município.
+                O sistema bloqueia automaticamente novos envios ao atingir o limite, sem interromper o deferimento.
+              </p>
+              <p>
+                As datas de contrato são opcionais. Se informadas, envios fora do período são bloqueados e registrados no histórico da solicitação.
+              </p>
+            </article>
+          </div>
+        </div>
+      )}
+
       {configArea === "environment" && configTab === "documents" && (
         <div className="panel wide">
           <ConfigSectionHeader title="Tipos de documentos" createLabel="Criar documento" onCreate={() => openDocumentModal()} />
@@ -6642,7 +7229,6 @@ function ConfigView({
                   </small>
                 </div>
                 <div className="config-card-details">
-                  <span>{document.required !== false ? "Obrigatório" : "Opcional"}</span>
                   {document.modelHint && <span>Descrição: {document.modelHint}</span>}
                 </div>
                 <label className="field">
@@ -6657,13 +7243,6 @@ function ConfigView({
                   <span>Regras de recusa</span>
                   <textarea value={document.rejectionRules || ""} onChange={(event) => patchDocumentType(document.id, { rejectionRules: event.target.value })} />
                 </label>
-                <ToggleSwitch
-                  label="Documento obrigatório"
-                  checked={document.required !== false}
-                  onChange={(checked) => patchDocumentType(document.id, { required: checked })}
-                  onText="Obrigatório"
-                  offText="Opcional"
-                />
                 <div className="form-actions">
                   <button className="ghost-button" type="button" onClick={() => openDocumentModal(document)}>
                     Editar
@@ -6989,6 +7568,38 @@ function ConfigView({
                 })
               }
             />
+            <div className="request-type-steps-section">
+              <span className="request-type-steps-label">Etapas do cadastro</span>
+              <div className="request-type-steps-toggles">
+                <label className="toggle-switch config-active-toggle">
+                  <input
+                    type="checkbox"
+                    checked={newRequestType.stepTutor !== false}
+                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepTutor: e.target.checked }))}
+                  />
+                  <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  <span>Dados do tutor</span>
+                </label>
+                <label className="toggle-switch config-active-toggle">
+                  <input
+                    type="checkbox"
+                    checked={newRequestType.stepAgenda !== false}
+                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepAgenda: e.target.checked }))}
+                  />
+                  <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  <span>Agenda</span>
+                </label>
+                <label className="toggle-switch config-active-toggle">
+                  <input
+                    type="checkbox"
+                    checked={newRequestType.stepDocuments !== false}
+                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepDocuments: e.target.checked }))}
+                  />
+                  <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  <span>Documentos</span>
+                </label>
+              </div>
+            </div>
             <div className="form-actions">
               <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingRequestTypeId(null); setNewRequestType(emptyRequestType); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
@@ -7055,6 +7666,12 @@ function ConfigView({
             />
             <div className="config-modal-options">
               <ConfigActiveToggle
+                checked={newDocument.required !== false}
+                onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
+                onText="Obrigatório"
+                offText="Opcional"
+              />
+              <ConfigActiveToggle
                 checked={newDocument.active !== false}
                 onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
               />
@@ -7072,11 +7689,6 @@ function ConfigView({
               <span>Regras de recusa</span>
               <textarea value={newDocument.rejectionRules} placeholder="Ex: imagem borrada, documento vencido, cidade divergente" onChange={(event) => setNewDocument((current) => ({ ...current, rejectionRules: event.target.value }))} />
             </label>
-            <ToggleSwitch
-              label=""
-              checked={newDocument.required}
-              onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
-            />
             <div className="form-actions">
               <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument({ name: "", modelHint: "", aiCriteria: "", rejectionRules: "", required: true, active: true }); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
@@ -7452,22 +8064,27 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
   const hasConfidence = showTechnicalDetails && Number.isFinite(confidence);
   const providerLabel = showTechnicalDetails ? [upload?.provider, upload?.model].filter(Boolean).join(" / ") : "";
 
+  const statusIcon = {
+    approved: <BadgeCheck size={16} className="doc-status-icon is-ok" />,
+    rejected: <AlertCircle size={16} className="doc-status-icon is-err" />,
+    checking: <RefreshCw size={14} className="doc-status-icon is-spin" />,
+    attached: <Paperclip size={15} className="doc-status-icon is-att" />,
+  }[upload?.status] || <FileText size={15} className="doc-status-icon is-empty" />;
+
   return (
-    <article className={`document-upload-card scanner-card ${upload?.status || "empty"}`}>
-      <div className="document-upload-title">
-        <strong>
-          {document.name} {document.required && <span>*</span>}
-        </strong>
-        {document.aiCriteria && <small>Critérios: {document.aiCriteria}</small>}
-        {upload?.fileName && <small>{upload.fileName}</small>}
+    <article className={`doc-row ${upload?.status || "empty"}`}>
+      <div className="doc-row-icon">{statusIcon}</div>
+      <div className="doc-row-info">
+        <strong>{document.name}{document.required && <span className="doc-required">*</span>}</strong>
+        {upload?.fileName
+          ? <small>{upload.fileName}</small>
+          : <small className="doc-row-hint">{statusLabel}</small>
+        }
+        {upload?.message && <small className="doc-row-msg">{upload.message}</small>}
       </div>
-      <div className="document-scanner-frame">
-        <FileText size={26} />
-        {upload?.status === "checking" && <span className="scanner-beam" />}
-      </div>
-      <div className="document-upload-actions">
-        <label className="file-button">
-          {upload ? "Substituir" : "Anexar"}
+      <div className="doc-row-actions">
+        <label className="doc-attach-btn" title={upload ? "Substituir arquivo" : "Anexar arquivo"}>
+          <Paperclip size={15} />
           <input
             type="file"
             accept={(document.accept || []).join(",")}
@@ -7476,16 +8093,10 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
           />
         </label>
         {upload && (
-          <button className="ghost-button danger-action" type="button" onClick={onRemove}>
-            Excluir
+          <button className="doc-remove-btn" type="button" onClick={onRemove} title="Remover">
+            <Trash2 size={14} />
           </button>
         )}
-      </div>
-      <div className={`document-ai-result ${upload?.status || "empty"}`}>
-        <span className="document-result-label">Status: {statusLabel}</span>
-        <span>{upload?.message || conclusionLabel}</span>
-        {providerLabel && <span>Motor: {providerLabel}</span>}
-        {hasConfidence && <span>Confiança: {Math.round(confidence * 100)}%</span>}
       </div>
     </article>
   );
@@ -7564,7 +8175,7 @@ function validateDocumentLocally(document: AnyRecord, file: File, aiSettings: An
 
     resolve({
       status: "attached",
-      message: "Arquivo anexado. Aguardando validacao da IA externa.",
+      message: "Arquivo anexado. Aguardando validação.",
       confidence: 0.6,
     });
   });
@@ -7691,7 +8302,7 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
         ].filter(Boolean).join(" · ");
         const date = item.occurred_at
           ? new Date(item.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-          : "—";
+          : "-";
         return `
           <tr>
             <td>${escapeHtml(date)}</td>
@@ -7705,7 +8316,7 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
 <html>
   <head>
     <meta charset="utf-8" />
-    <title>Prontuário — ${escapeHtml(animal.name || animal.microchip || "Animal")}</title>
+    <title>Prontuário - ${escapeHtml(animal.name || animal.microchip || "Animal")}</title>
     <style>
       ${PDF_BASE_STYLES}
       body { display: flex; flex-direction: column; gap: 12px; }
@@ -7726,17 +8337,17 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
       </div>
       <div class="header-box">
         <span>Microchip</span>
-        <strong style="font-size:13px">${escapeHtml(animal.microchip || "—")}</strong>
+        <strong style="font-size:13px">${escapeHtml(animal.microchip || "-")}</strong>
       </div>
     </header>
 
     <section class="section">
       <div class="section-title">Dados do animal</div>
       <div class="data-grid four">
-        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "—")}</strong></div>
-        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "—")}</strong></div>
-        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "—")}</strong></div>
-        <div class="data-item"><span>Raça</span><strong>${escapeHtml(animal.breed || "—")}</strong></div>
+        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "-")}</strong></div>
+        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "-")}</strong></div>
+        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "-")}</strong></div>
+        <div class="data-item"><span>Raça</span><strong>${escapeHtml(animal.breed || "-")}</strong></div>
         ${animal.color ? `<div class="data-item"><span>Cor / pelagem</span><strong>${escapeHtml(animal.color)}</strong></div>` : ""}
         ${animal.status ? `<div class="data-item"><span>Status</span><strong>${escapeHtml(animal.status)}</strong></div>` : ""}
       </div>
@@ -7745,9 +8356,9 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
     <section class="section">
       <div class="section-title">Dados do tutor</div>
       <div class="data-grid three">
-        <div class="data-item"><span>Nome</span><strong>${escapeHtml(tutor.tutor_name || tutor.name || "—")}</strong></div>
+        <div class="data-item"><span>Nome</span><strong>${escapeHtml(tutor.tutor_name || tutor.name || "-")}</strong></div>
         <div class="data-item"><span>CPF</span><strong>${escapeHtml(maskCpf(tutor.cpf || ""))}</strong></div>
-        <div class="data-item"><span>Telefone</span><strong>${escapeHtml(tutor.phone || "—")}</strong></div>
+        <div class="data-item"><span>Telefone</span><strong>${escapeHtml(tutor.phone || "-")}</strong></div>
         ${tutor.tutor_email || tutor.email ? `<div class="data-item"><span>Email</span><strong>${escapeHtml(tutor.tutor_email || tutor.email)}</strong></div>` : ""}
         ${address ? `<div class="data-item" style="grid-column:1/-1"><span>Endereço</span><strong>${escapeHtml(address)}</strong></div>` : ""}
       </div>
@@ -7929,8 +8540,8 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
     ["POSTO / LOCAL DE ATENDIMENTO", scheduleAddress || "A confirmar", 2],
     ["ABERTURA", request.createdAt ? formatDateTime(request.createdAt) : new Date().toLocaleDateString("pt-BR")],
     ["LINK DO MAPA", scheduleMapUrl || "-", 4],
-  ], y, { ...ctx, columns: 4, valueMaxChars: 118 });
-  y = drawRequestPdfSectionTitle(page1, "Dados do tutor", y - 8, ctx);
+  ], y, { ...ctx, columns: 4, valueMaxChars: 118, rowHeight: 42, boxHeight: 32 });
+  y = drawRequestPdfSectionTitle(page1, "Dados do tutor", y - 4, ctx);
   const fullAddr = [
     [request.address, request.number].filter(Boolean).join(", "),
     request.neighborhood,
@@ -7945,12 +8556,12 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
     ["EMAIL", request.email || "-"],
     ["AGRICULTOR", request.isFarmer ? "Sim" : "Nao"],
     ["ENDEREÇO COMPLETO", fullAddr || "-"],
-  ], y, { ...ctx, columns: 3, wideLast: true });
-  y = drawRequestPdfSectionTitle(page1, `Animais (${animals.length})`, y - 8, ctx);
+  ], y, { ...ctx, columns: 3, wideLast: true, rowHeight: 42, boxHeight: 32 });
+  y = drawRequestPdfSectionTitle(page1, `Animais (${animals.length})`, y - 4, ctx);
   for (const [index, animal] of animals.slice(0, 2).entries()) {
     y = drawRequestPdfAnimalCard(page1, animal, index, y, ctx);
   }
-  y = drawRequestPdfSectionTitle(page1, "Validação", y - 6, ctx);
+  y = drawRequestPdfSectionTitle(page1, "Validação", y - 2, ctx);
   drawRequestPdfValidationBox(page1, validationKey, y, ctx);
   drawRequestPdfFooter(page1, "Sistema municipal", "Página 1 de 2", ctx);
 
@@ -7973,14 +8584,18 @@ function drawRequestPdfHeader(page, kicker, title, protocol, ctx) {
   const { bold, colors, rgb, margin } = ctx;
   const width = page.getWidth() - margin * 2;
   const y = page.getHeight() - margin - 70;
+  const protocolText = pdfText(protocol);
+  const protocolBoxWidth = Math.max(96, Math.min(126, 28 + protocolText.length * 7.2));
+  const protocolX = margin + width - protocolBoxWidth - 16;
+  const protocolFontSize = protocolText.length > 11 ? 11 : 13;
   page.drawRectangle({ x: margin, y, width, height: 70, color: colors.blueDark });
   page.drawRectangle({ x: margin + width * 0.56, y, width: width * 0.44, height: 70, color: colors.blue });
   page.drawText(pdfText(kicker), { x: margin + 14, y: y + 46, size: 8, font: bold, color: rgb(0.75, 0.95, 1) });
   page.drawText(pdfText(title), { x: margin + 14, y: y + 25, size: 18, font: bold, color: colors.white });
-  page.drawRectangle({ x: margin + width - 98, y: y + 14, width: 82, height: 42, color: colors.blue, borderColor: rgb(0.5, 0.75, 0.9), borderWidth: 1 });
-  page.drawText("PROTOCOLO", { x: margin + width - 75, y: y + 38, size: 7, font: bold, color: rgb(0.82, 0.96, 1) });
-  page.drawText(pdfText(protocol), { x: margin + width - 84, y: y + 20, size: 13, font: bold, color: colors.white });
-  return y - 20;
+  page.drawRectangle({ x: protocolX, y: y + 14, width: protocolBoxWidth, height: 42, color: colors.blue, borderColor: rgb(0.5, 0.75, 0.9), borderWidth: 1 });
+  page.drawText("PROTOCOLO", { x: protocolX + 16, y: y + 38, size: 7, font: bold, color: rgb(0.82, 0.96, 1) });
+  page.drawText(protocolText, { x: protocolX + 12, y: y + 20, size: protocolFontSize, font: bold, color: colors.white });
+  return y - 16;
 }
 
 function drawRequestPdfSectionTitle(page, title, y, ctx) {
@@ -8049,13 +8664,13 @@ function drawRequestPdfAnimalCard(page, animal: AnyRecord = {}, index, y, ctx) {
     ["ALIMENTAÇÃO", animal.food || "-"],
   ];
   const columns = 3;
-  const rowHeight = 40;
-  const boxHeight = 32;
+  const rowHeight = 36;
+  const boxHeight = 29;
   const fieldRows = Math.ceil(animalFields.length / columns);
-  const height = 38 + fieldRows * rowHeight + 12;
+  const height = 34 + fieldRows * rowHeight + 8;
   page.drawRectangle({ x: margin, y: y - height, width, height, color: colors.orangeSoft, borderColor: rgb(0.98, 0.45, 0.14), borderWidth: 1 });
-  page.drawText(pdfText(`Animal ${index + 1} - ${animal.name || "Sem nome"}`), { x: margin + 10, y: y - 18, size: 11, font: bold, color: colors.orange });
-  drawRequestPdfInfoGrid(page, animalFields, y - 34, {
+  page.drawText(pdfText(`Animal ${index + 1} - ${animal.name || "Sem nome"}`), { x: margin + 10, y: y - 17, size: 11, font: bold, color: colors.orange });
+  drawRequestPdfInfoGrid(page, animalFields, y - 30, {
     font,
     bold,
     colors,
@@ -8066,16 +8681,16 @@ function drawRequestPdfAnimalCard(page, animal: AnyRecord = {}, index, y, ctx) {
     boxHeight,
     valueMaxChars: 42,
   });
-  return y - height - 10;
+  return y - height - 6;
 }
 
 function drawRequestPdfValidationBox(page, key, y, ctx) {
   const { font, bold, colors, margin } = ctx;
   const width = page.getWidth() - margin * 2;
-  page.drawRectangle({ x: margin, y: y - 54, width, height: 54, color: colors.blueSoft, borderColor: colors.blue, borderWidth: 1 });
-  page.drawText("CHAVE DE VALIDAÇÃO", { x: margin + 12, y: y - 16, size: 8, font: bold, color: colors.blue });
-  page.drawText(pdfText(key), { x: margin + 12, y: y - 34, size: 15, font: bold, color: colors.ink });
-  page.drawText("Guarde junto com o CPF para consultar solicitações e adoções.", { x: margin + 12, y: y - 47, size: 8, font, color: colors.muted });
+  page.drawRectangle({ x: margin, y: y - 48, width, height: 48, color: colors.blueSoft, borderColor: colors.blue, borderWidth: 1 });
+  page.drawText("CHAVE DE VALIDAÇÃO", { x: margin + 12, y: y - 14, size: 8, font: bold, color: colors.blue });
+  page.drawText(pdfText(key), { x: margin + 12, y: y - 30, size: 14, font: bold, color: colors.ink });
+  page.drawText("Guarde junto com o CPF para consultar solicitações e adoções.", { x: margin + 12, y: y - 42, size: 8, font, color: colors.muted });
 }
 
 function drawRequestPdfDeclaration(page, request, y, ctx) {

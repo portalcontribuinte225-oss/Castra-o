@@ -2,6 +2,14 @@ import { pool } from "../db/index.js";
 import { checkAndConsumeQuota } from "./whatsappQuota.js";
 
 const WHATSAPP_CONFIG_KEY = "whatsapp";
+const DEFAULT_CONFIRMATION_VARIABLES = [
+  "tutor_name",
+  "protocol",
+  "schedule_date",
+  "schedule_location_name",
+  "schedule_address",
+  "schedule_address_url",
+];
 
 function parseJsonObject(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -27,15 +35,28 @@ function getScheduleAddress(request = {}) {
   ].filter(Boolean).join(" - ");
 }
 
-function buildConfirmationVariables(request = {}) {
-  return [
-    request.tutor_name || "Tutor",
-    request.protocol || "-",
-    request.schedule_date || "data a confirmar",
-    request.schedule_location_name || "local a confirmar",
-    request.schedule_address || getScheduleAddress(request) || "endereço a confirmar",
-    request.schedule_address_url || "link indisponível",
-  ];
+function resolveConfirmationVariable(key, request = {}) {
+  const values = {
+    tutor_name: request.tutor_name || "Tutor",
+    protocol: request.protocol || "-",
+    schedule_date: request.schedule_date || "data a confirmar",
+    schedule_location_name: request.schedule_location_name || "local a confirmar",
+    schedule_address: request.schedule_address || getScheduleAddress(request) || "endereco a confirmar",
+    schedule_address_url: request.schedule_address_url || "link indisponivel",
+    animal_name: request.pet_name || request.animal_name || "animal",
+    species: request.species || request.pet_species || "especie nao informada",
+    city: request.city || request.schedule_municipality || "municipio nao informado",
+    phone: request.phone || "-",
+  };
+  return values[key] || request[key] || "-";
+}
+
+function buildConfirmationVariables(config = {}, request = {}) {
+  const configuredVariables = Array.isArray(config.templateVariables)
+    ? config.templateVariables.map((variable) => String(variable || "").trim()).filter(Boolean)
+    : [];
+  const variables = configuredVariables.length ? configuredVariables : DEFAULT_CONFIRMATION_VARIABLES;
+  return variables.map((variable) => resolveConfirmationVariable(variable, request));
 }
 
 async function getMunicipalityWhatsappConfig(municipalityId) {
@@ -56,13 +77,14 @@ function getRuntimeConfig(config = {}) {
     phoneNumberId: config.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || "",
     templateName: config.confirmationTemplate || process.env.WHATSAPP_TEMPLATE_CONFIRMATION || "confirmacao_agenda_castracao",
     languageCode: config.languageCode || process.env.WHATSAPP_TEMPLATE_LANG || "pt_BR",
+    templateVariables: Array.isArray(config.templateVariables) ? config.templateVariables : DEFAULT_CONFIRMATION_VARIABLES,
   };
 }
 
 async function sendCloudApiTemplate(config, request) {
   const to = toE164Brazil(request.phone);
   if (!to) return { status: "skipped", reason: "telefone ausente" };
-  const variables = buildConfirmationVariables(request);
+  const variables = buildConfirmationVariables(config, request);
   const body = {
     messaging_product: "whatsapp",
     recipient_type: "individual",

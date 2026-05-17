@@ -95,6 +95,14 @@ export const initialWhatsappSettings: AnyRecord = {
   accessToken: "",
   confirmationTemplate: "confirmacao_agenda_castracao",
   languageCode: "pt_BR",
+  templateVariables: [
+    "tutor_name",
+    "protocol",
+    "schedule_date",
+    "schedule_location_name",
+    "schedule_address",
+    "schedule_address_url",
+  ],
 };
 
 export const CONFIG_KEYS = {
@@ -104,7 +112,9 @@ export const CONFIG_KEYS = {
   sizes: "castragestao:sizes",
   teams: "castragestao:teams",
   scheduleRules: "castragestao:schedule-rules",
+  permissionGroups: "permission_groups",
   whatsapp: "whatsapp",
+  whatsappQuota: "whatsapp_quota",
 };
 
 export const CONFIG_KEYS_LIST = Object.values(CONFIG_KEYS);
@@ -253,11 +263,11 @@ export function displayText(value = "") {
   const text = String(value || "").trim();
   const labels: AnyRecord = {
     "Animal nao informado": "Animal não informado",
-    "Comprovante de ResidÃªncia": "Comprovante de Residência",
+    "Comprovante de Residência": "Comprovante de Residência",
     "Endereco completo": "Endereço completo",
-    "EndereÃ§o completo": "Endereço completo",
+    "Endereço completo": "Endereço completo",
     "Gestao Municipal": "Gestão Municipal",
-    "MÃ©dio": "Médio",
+    "Médio": "Médio",
     "Nao": "Não",
     "Nao compareceu": "Não compareceu",
     "Nao informado": "Não informado",
@@ -312,10 +322,17 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
       })
     : [];
 
+  const rawHistory2 = Array.isArray(request.history) ? request.history : [];
+  const rescheduleCount = rawHistory2.filter(
+    (item) => typeof item === "object" && item !== null && (item.status === "REAGENDADA" || String(item.notes || "").toLowerCase().includes("reagendad")),
+  ).length || (tags.includes("REAGENDADA") ? 1 : 0);
+
   return {
     ...request,
     status,
     tags,
+    origin: request.origin || "PUBLICA",
+    rescheduleCount,
     protocol: request.protocol || String(request.id || "").slice(0, 8).toUpperCase() || "SEM-ID",
     validationKey: request.validationKey || request.validation_key || "",
     signatureDataUrl: request.signatureDataUrl || request.signature_data_url || "",

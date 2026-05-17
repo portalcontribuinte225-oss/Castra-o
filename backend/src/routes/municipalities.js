@@ -1,36 +1,54 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
 import { MUNICIPALITY_ADMIN_ROLE, isGlobalUser } from "../tenant.js";
 import { upsertMunicipalityDefaultConfigs } from "../municipalityDefaults.js";
+import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 
 const router = Router();
 
 function slugify(value = "") {
   return String(value)
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
 }
 
-const DEFAULT_MUNICIPALITY_ADMIN_PASSWORD = process.env.DEFAULT_MUNICIPALITY_ADMIN_PASSWORD || "qwe12345";
+/**
+ * Gera uma senha segura aleatória para o admin municipal.
+ * Usa env var se definida; caso contrário gera 12 chars aleatórios.
+ * O desenvolvedor é responsável por trocar esta senha na primeira configuração.
+ */
+function generateAdminPassword() {
+  const envPassword = process.env.DEFAULT_MUNICIPALITY_ADMIN_PASSWORD;
+  if (envPassword) return envPassword;
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+  return Array.from(crypto.randomBytes(12), (b) => alphabet[b % alphabet.length]).join("");
+}
 
 function buildMunicipalityAdminEmail(slug) {
-  return `${slug}@adim.com`;
+  return `${slug}@adm.castragestao`;
 }
+
+// ── Listagem pública (só municípios ativos) ───────────────────────────────
 
 router.get("/", async (_req, res) => {
   try {
-    const { rows } = await pool.query("SELECT * FROM municipalities WHERE active = TRUE ORDER BY name ASC");
+    const { rows } = await pool.query(
+      "SELECT * FROM municipalities WHERE active = TRUE ORDER BY name ASC",
+    );
     res.json(rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Listagem completa (admin global) ─────────────────────────────────────
 
 router.get("/admin", auth, async (req, res) => {
   if (!isGlobalUser(req.user)) return res.status(403).json({ error: "Acesso restrito ao suporte." });
@@ -41,6 +59,8 @@ router.get("/admin", auth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── Criação de município ──────────────────────────────────────────────────
 
 router.post("/", auth, async (req, res) => {
   if (!isGlobalUser(req.user)) return res.status(403).json({ error: "Acesso restrito ao suporte." });
@@ -53,6 +73,7 @@ router.post("/", auth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
     const { rows } = await client.query(
       `INSERT INTO municipalities (name, state, slug, active)
        VALUES ($1, $2, $3, $4)
@@ -62,40 +83,84 @@ router.post("/", auth, async (req, res) => {
       [name, state, slug, active],
     );
     const municipality = rows[0];
+
+    // Cria o admin municipal com senha segura
     const adminEmail = buildMunicipalityAdminEmail(municipality.slug);
-    const passwordHash = await bcrypt.hash(DEFAULT_MUNICIPALITY_ADMIN_PASSWORD, 10);
+    const temporaryPassword = generateAdminPassword();
+    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+
     const adminResult = await client.query(
-      `INSERT INTO users (name, email, password, role, municipality_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO users (name, email, password, role, municipality_id, is_default_admin, created_by)
+       VALUES ($1, $2, $3, $4, $5, TRUE, $6)
        ON CONFLICT (email)
        DO UPDATE SET
-         name = EXCLUDED.name,
-         password = EXCLUDED.password,
-         role = EXCLUDED.role,
-         municipality_id = EXCLUDED.municipality_id
+         name              = EXCLUDED.name,
+         password          = EXCLUDED.password,
+         role              = EXCLUDED.role,
+         municipality_id   = EXCLUDED.municipality_id,
+         is_default_admin  = TRUE,
+         updated_at        = NOW()
        RETURNING id, name, email, role, municipality_id`,
-      [`Administrador ${municipality.name}`, adminEmail, passwordHash, MUNICIPALITY_ADMIN_ROLE, municipality.id],
+      [
+        `Administrador ${municipality.name}`,
+        adminEmail,
+        passwordHash,
+        MUNICIPALITY_ADMIN_ROLE,
+        municipality.id,
+        req.user.id,
+      ],
     );
-    const defaultConfigs = await upsertMunicipalityDefaultConfigs(client, municipality, adminResult.rows[0]);
+    const adminUser = adminResult.rows[0];
+
+    // Upserta configs padrão (setores, tipos, permissões, agenda, etc.)
+    const defaultConfigs = await upsertMunicipalityDefaultConfigs(client, municipality, adminUser);
+
+    // Registra o setor padrão na tabela relacional sectors também
+    await client.query(
+      `INSERT INTO sectors (id, municipality_id, name, active, is_default, created_by)
+       VALUES ($1, $2, $3, TRUE, TRUE, $4)
+       ON CONFLICT (id, municipality_id) DO NOTHING`,
+      [defaultConfigs.defaultSector.id, municipality.id, defaultConfigs.defaultSector.name, adminUser.id],
+    );
+
+    // Vincula o admin ao setor padrão na tabela user_sectors
+    await client.query(
+      `INSERT INTO user_sectors (user_id, sector_id, municipality_id, is_primary)
+       VALUES ($1, $2, $3, TRUE)
+       ON CONFLICT (user_id, sector_id, municipality_id) DO NOTHING`,
+      [adminUser.id, defaultConfigs.defaultSector.id, municipality.id],
+    );
+
+    await logAudit(client, {
+      ...auditCtx(req),
+      municipalityId: municipality.id,
+      action: AUDIT_ACTIONS.MUNICIPALITY_CREATE,
+      entityType: "municipality",
+      entityId: municipality.id,
+      changes: { name, state, slug, adminEmail },
+    });
+
     await client.query("COMMIT");
     res.status(201).json({
       ...municipality,
       defaultUser: {
-        ...adminResult.rows[0],
+        ...adminUser,
         sectorIds: defaultConfigs.defaultTeamUser.sectorIds,
         sectorId: defaultConfigs.defaultTeamUser.sectorId,
-        temporaryPassword: DEFAULT_MUNICIPALITY_ADMIN_PASSWORD,
+        temporaryPassword,
       },
       defaultSector: defaultConfigs.defaultSector,
       defaultScheduleRule: defaultConfigs.defaultScheduleRule,
     });
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
   }
 });
+
+// ── Atualização de município ──────────────────────────────────────────────
 
 router.patch("/:id", auth, async (req, res) => {
   if (!isGlobalUser(req.user)) return res.status(403).json({ error: "Acesso restrito ao suporte." });
@@ -114,12 +179,29 @@ router.patch("/:id", auth, async (req, res) => {
   if (!fields.length) return res.status(400).json({ error: "Nenhum campo valido." });
 
   values.push(req.params.id);
-  const { rows } = await pool.query(
-    `UPDATE municipalities SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`,
-    values,
-  );
-  if (!rows[0]) return res.status(404).json({ error: "Municipio nao encontrado." });
-  res.json(rows[0]);
+  const client = await pool.connect();
+  try {
+    const { rows } = await client.query(
+      `UPDATE municipalities SET ${fields.join(", ")}, updated_at = NOW() WHERE id = $${values.length} RETURNING *`,
+      values,
+    );
+    if (!rows[0]) return res.status(404).json({ error: "Municipio nao encontrado." });
+
+    await logAudit(client, {
+      ...auditCtx(req),
+      municipalityId: req.params.id,
+      action: AUDIT_ACTIONS.MUNICIPALITY_UPDATE,
+      entityType: "municipality",
+      entityId: req.params.id,
+      changes: req.body,
+    });
+
+    res.json(rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 export default router;

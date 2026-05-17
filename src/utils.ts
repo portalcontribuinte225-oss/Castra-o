@@ -30,7 +30,7 @@ export function formatCpf(value = "") {
 
 export function maskCpf(value = "") {
   const digits = onlyDigits(value);
-  if (digits.length !== 11) return value || "Nao informado";
+  if (digits.length !== 11) return value || "Não informado";
   return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
 }
 

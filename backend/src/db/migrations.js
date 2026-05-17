@@ -371,6 +371,79 @@ export async function runMigrations() {
 
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS schedule_rule_id TEXT DEFAULT '';
+
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS origin TEXT DEFAULT 'PUBLICA';
+  `);
+
+  /* ── Revisão Arquitetural: isolamento, auditoria e setores ─────────────── */
+  await pool.query(`
+    -- Tabela de auditoria: registra toda ação crítica com contexto completo
+    CREATE TABLE IF NOT EXISTS audit_logs (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      municipality_id UUID REFERENCES municipalities(id) ON DELETE SET NULL,
+      user_id       UUID REFERENCES users(id) ON DELETE SET NULL,
+      user_email    TEXT,
+      action        TEXT NOT NULL,
+      entity_type   TEXT,
+      entity_id     TEXT,
+      changes       JSONB DEFAULT '{}',
+      ip_address    TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    -- Tabela de setores: modelo relacional paralelo à config JSON (compatibilidade mantida)
+    -- Permite hierarquia futura e consultas SQL diretas sem desserializar JSONB
+    CREATE TABLE IF NOT EXISTS sectors (
+      id              TEXT NOT NULL,
+      municipality_id UUID REFERENCES municipalities(id) NOT NULL,
+      name            TEXT NOT NULL,
+      description     TEXT,
+      active          BOOLEAN NOT NULL DEFAULT TRUE,
+      is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+      created_by      UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      updated_at      TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (id, municipality_id)
+    );
+
+    -- Relacionamento usuário ↔ setor: suporta múltiplos setores por usuário
+    CREATE TABLE IF NOT EXISTS user_sectors (
+      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id         UUID REFERENCES users(id) ON DELETE CASCADE NOT NULL,
+      sector_id       TEXT NOT NULL,
+      municipality_id UUID REFERENCES municipalities(id) NOT NULL,
+      is_primary      BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at      TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, sector_id, municipality_id)
+    );
+
+    -- Colunas adicionais em users para auditoria e gestão de ciclo de vida
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS active        BOOLEAN     NOT NULL DEFAULT TRUE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS created_by   UUID        REFERENCES users(id) ON DELETE SET NULL;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS is_default_admin BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login   TIMESTAMPTZ;
+    ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at   TIMESTAMPTZ DEFAULT NOW();
+
+    -- Índices para performance e isolamento municipal
+    CREATE INDEX IF NOT EXISTS audit_logs_municipality_created_idx
+      ON audit_logs (municipality_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS audit_logs_user_created_idx
+      ON audit_logs (user_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS audit_logs_action_created_idx
+      ON audit_logs (action, created_at DESC);
+
+    CREATE INDEX IF NOT EXISTS sectors_municipality_active_idx
+      ON sectors (municipality_id, active);
+
+    CREATE INDEX IF NOT EXISTS user_sectors_user_idx
+      ON user_sectors (user_id);
+    CREATE INDEX IF NOT EXISTS user_sectors_sector_municipality_idx
+      ON user_sectors (sector_id, municipality_id);
+
+    CREATE INDEX IF NOT EXISTS users_municipality_active_idx
+      ON users (municipality_id, active);
+    CREATE INDEX IF NOT EXISTS users_email_lower_idx
+      ON users (lower(email));
   `);
 
   const adminEmail = process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL;

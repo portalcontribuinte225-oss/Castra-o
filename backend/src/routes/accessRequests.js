@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
 import { isGlobalUser } from "../tenant.js";
+import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 
 const router = Router();
 
@@ -134,10 +135,15 @@ router.patch("/:id/review", auth, async (req, res) => {
       password = password || temporaryPassword();
       const hash = await bcrypt.hash(password, 10);
       const { rows: userRows } = await client.query(
-        `INSERT INTO users (name, email, password, role, municipality_id)
-         VALUES ($1, $2, $3, $4, $5)
+        `INSERT INTO users (name, email, password, role, municipality_id, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (email)
-         DO UPDATE SET name = EXCLUDED.name, password = EXCLUDED.password, role = EXCLUDED.role, municipality_id = EXCLUDED.municipality_id
+         DO UPDATE SET
+           name            = EXCLUDED.name,
+           password        = EXCLUDED.password,
+           role            = EXCLUDED.role,
+           municipality_id = EXCLUDED.municipality_id,
+           updated_at      = NOW()
          RETURNING id`,
         [
           accessRequest.responsible_name,
@@ -145,6 +151,7 @@ router.patch("/:id/review", auth, async (req, res) => {
           hash,
           roleByType[accessRequest.requester_type] || "protetor",
           accessRequest.municipality_id,
+          req.user.id,
         ],
       );
       createdUserId = userRows[0].id;
@@ -171,6 +178,15 @@ router.patch("/:id/review", auth, async (req, res) => {
        RETURNING *`,
       [status, reviewNote, req.user.id, createdUserId, status === "APROVADO" ? password : "", JSON.stringify([historyEntry]), req.params.id],
     );
+
+    await logAudit(client, {
+      ...auditCtx(req),
+      municipalityId: accessRequest.municipality_id,
+      action: AUDIT_ACTIONS.ACCESS_REQUEST_REVIEW,
+      entityType: "access_request",
+      entityId: req.params.id,
+      changes: { status, reviewNote, createdUserId },
+    });
 
     await client.query("COMMIT");
     res.json(publicAccessRequest(rows[0]));

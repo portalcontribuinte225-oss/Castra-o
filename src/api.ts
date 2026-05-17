@@ -50,7 +50,7 @@ export const api = {
   createRequestDeathAction: (requestId, body) => request("POST", `/animals/requests/${requestId}/death`, body),
   createRequestTransferAction: (requestId, body) => request("POST", `/animals/requests/${requestId}/transfer`, body),
 
-  getAdoptions: () => request("GET", "/adoptions"),
+  getAdoptions: (municipalityId?: string) => request("GET", municipalityId ? `/adoptions?municipalityId=${encodeURIComponent(municipalityId)}` : "/adoptions"),
   consultAdoptionsByCredentials: (cpf, validationKey, municipalityId) => request("POST", "/adoptions/consult", { cpf, validationKey, municipalityId }),
   createAdoption: (body) => request("POST", "/adoptions", body),
   updateAdoption: (id, body) => request("PATCH", `/adoptions/${id}`, body),

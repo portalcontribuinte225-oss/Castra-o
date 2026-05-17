@@ -1,5 +1,5 @@
 import type { AnyRecord } from "./types";
-import { initialTeams, normalizeRequest, requestHasTag } from "./domain";
+import { initialTeams, normalizeRequest, requestHasTag, requestTypeLabel } from "./domain";
 
 export function sumValues(items: AnyRecord[] = []) {
   return items.reduce((total, item) => total + Number(item.value || 0), 0);
@@ -8,7 +8,7 @@ export function sumValues(items: AnyRecord[] = []) {
 export function countBy(items: AnyRecord[] = [], getKey: (item: AnyRecord) => string) {
   const totals = new Map<string, number>();
   items.forEach((item) => {
-    const key = getKey(item) || "NÃ£o informado";
+    const key = getKey(item) || "Não informado";
     totals.set(key, (totals.get(key) || 0) + 1);
   });
   return Array.from(totals, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
@@ -16,11 +16,12 @@ export function countBy(items: AnyRecord[] = [], getKey: (item: AnyRecord) => st
 
 export function getRequestTypeName(request: AnyRecord = {}, requestTypes: AnyRecord[] = []) {
   const byId = requestTypes.find((type) => type.id && type.id === request.requestTypeId);
-  return request.type || request.request_type || byId?.name || "NÃ£o informado";
+  const rawType = request.type || request.request_type || byId?.name || request.requestTypeId || "";
+  return rawType ? requestTypeLabel({ type: rawType }) : "Não informado";
 }
 
 export function getRequestUserName(request: AnyRecord = {}) {
-  return request.responsible || request.assignedUserName || request.assignedSectorName || "Sem responsÃ¡vel";
+  return request.responsible || request.assignedUserName || request.assignedSectorName || "Sem responsável";
 }
 
 export function getTeamUserName(userId = "", teams: AnyRecord = initialTeams, currentUser: AnyRecord | null = null) {
@@ -29,7 +30,7 @@ export function getTeamUserName(userId = "", teams: AnyRecord = initialTeams, cu
   const teamUser = (teams.users || []).find((user) => String(user.id) === id || String(user.email) === id);
   if (teamUser?.name) return teamUser.name;
   if (currentUser && (String(currentUser.id) === id || String(currentUser.email) === id)) return currentUser.name || currentUser.email;
-  return id;
+  return looksLikeTechnicalId(id) ? "Usuário não identificado" : id;
 }
 
 export function getRequestClosedByName(request: AnyRecord = {}, teams: AnyRecord = initialTeams, currentUser: AnyRecord | null = null) {
@@ -81,4 +82,8 @@ export function buildMetrics(requests: AnyRecord[] = []) {
     pending: normalizedRequests.filter((request) => request.status !== "ARQUIVADA").length,
     done: normalizedRequests.filter((request) => requestHasTag(request, "COMPARECEU")).length,
   };
+}
+
+function looksLikeTechnicalId(value = "") {
+  return /^[a-f0-9-]{6,}$/i.test(value);
 }

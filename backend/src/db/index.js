@@ -11,4 +11,5 @@ const useSsl = ["1", "true", "require", "required", "yes"].includes(sslMode)
 export const pool = new Pool({
   connectionString: databaseUrl,
   ssl: useSsl ? { rejectUnauthorized: false } : false,
+  options: "-c client_encoding=UTF8",
 });

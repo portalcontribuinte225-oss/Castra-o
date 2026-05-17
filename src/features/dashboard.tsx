@@ -5,252 +5,987 @@ import {
   CheckCircle2,
   ClipboardCheck,
   ClipboardList,
+  Clock,
   FileText,
-  HeartHandshake,
+  Layers3,
+  LineChart,
   MapPin,
+  Navigation,
   PawPrint,
-  Users,
-  X,
+  ShieldCheck,
+  Stethoscope,
+  XCircle,
 } from "lucide-react";
 import type { AnyRecord } from "../types";
 import {
-  initialMunicipalities,
   initialRequestTypes,
   initialTeams,
   normalizeRequest,
+  normalizeScheduleDateText,
   requestHasTag,
-  statusLabels,
+  requestTypeLabel,
 } from "../domain";
-import { DataBarChart, DataDonutChart, Metric, PanelHeader } from "../components/ui";
-import { escapeHtml, isGlobalRole } from "../utils";
-import { countBy, getRequestClosedByName, getRequestTypeName, topItems } from "../analytics";
+import { escapeHtml, normalizeText } from "../utils";
+import { countBy, getRequestClosedByName, getRequestTypeName, getRequestUserName, parseAnyDate, topItems } from "../analytics";
 
-export function DashboardView({ requests, adoptionAnimals = [], scheduleDays = [], municipalities = initialMunicipalities, requestTypes = initialRequestTypes, teams = initialTeams, currentUser = null }: AnyRecord) {
-  const [dashboardTab, setDashboardTab] = useState("geral");
-  const activeSchedules = scheduleDays.filter((day) => day.active !== false);
-  const normalizedRequests = requests.map(normalizeRequest);
-  const completedRequests = normalizedRequests.filter((request) => requestHasTag(request, "COMPARECEU"));
-  const mutiraoCount = activeSchedules.filter((day) => day.kind === "Mutirao").length;
-  const activeAdoptions = adoptionAnimals.filter((animal) => animal.status !== "adotado");
-  const adoptedAnimals = adoptionAnimals.filter((animal) => animal.status === "adotado");
-  const approvedRequests = normalizedRequests.filter((request) => requestHasTag(request, "DEFERIDA"));
-  const rejectedRequests = normalizedRequests.filter((request) => requestHasTag(request, "INDEFERIDA"));
-  const adoptionInterestCount = adoptionAnimals.reduce((total, animal) => total + (animal.interests?.length || 0), 0);
-  const adoptionSpecies = countBy(adoptionAnimals, (animal) => animal.species);
-  const adoptionByStatus = countBy(adoptionAnimals, (animal) => animal.status === "adotado" ? "Adotados" : "Disponíveis");
-  const adoptionInterestRanking = topItems(
-    adoptionAnimals
-      .map((animal) => ({ label: animal.name || animal.animal_name || "Animal sem nome", value: animal.interests?.length || 0 }))
-      .sort((a, b) => b.value - a.value),
-  );
-  const adoptionProfile = countBy(adoptionAnimals, (animal) => animal.sex || "Sem perfil");
-  const castrationByStatus = countBy(normalizedRequests, (request) => statusLabels[request.status] || request.status);
-  const castrationByType = countBy(requests, (request) => getRequestTypeName(request, requestTypes));
-  const requestsByMunicipality = topItems(countBy(normalizedRequests, (request) => {
-    const municipality = municipalities.find((item) => item.id === request.municipalityId);
-    return municipality ? [municipality.name, municipality.state].filter(Boolean).join("/") : request.municipalityName || "Sem município";
-  }), 8);
-  const castrationByNeighborhood = topItems(countBy(requests, (request) => request.neighborhood));
-  const closedRequests = normalizedRequests.filter((request) => request.status === "ARQUIVADA");
-  const closedByUser = topItems(countBy(closedRequests, (request) => getRequestClosedByName(request, teams, currentUser)));
-  const scheduleUsage = topItems(activeSchedules.map((day) => {
-    const used = requests.filter((request) => request.preferredSchedule === day.date || request.appointment === day.date).length;
-    return { label: day.date, value: used, secondary: `${Math.max(Number(day.vacancies || 0) - used, 0)} vagas` };
-  }), 6);
-  const nextSchedule = activeSchedules[0];
-  const dashboardSummary = [
-    { label: "Fila ativa", value: normalizedRequests.filter((request) => request.status !== "ARQUIVADA").length, helper: "processos em andamento" },
-    { label: "Aprovadas", value: approvedRequests.length, helper: "aptas para procedimento" },
-    { label: "Compareceram", value: completedRequests.length, helper: "procedimentos registrados" },
-  ];
-  const dashboardTabs = [
-    { id: "geral", label: "Geral", helper: "Visão executiva", value: activeSchedules.length + normalizedRequests.length + adoptionAnimals.length, icon: Activity },
-    { id: "adocao", label: "Adoção", helper: "Animais e interesse", value: activeAdoptions.length, icon: HeartHandshake },
-    { id: "castracao", label: "Castração", helper: "Fila e procedimentos", value: normalizedRequests.length, icon: ClipboardList },
-  ];
+type PeriodKey = "30" | "90" | "365" | "all";
+type DashboardTab = "gestao" | "operacao" | "processos" | "produtividade" | "territorio" | "estatisticas";
+
+const PERIOD_OPTIONS: { id: PeriodKey; label: string }[] = [
+  { id: "30", label: "30 dias" },
+  { id: "90", label: "90 dias" },
+  { id: "365", label: "12 meses" },
+  { id: "all", label: "Tudo" },
+];
+
+const DASHBOARD_TABS: { id: DashboardTab; label: string }[] = [
+  { id: "gestao", label: "Gestão" },
+  { id: "operacao", label: "Operação" },
+  { id: "processos", label: "Processos" },
+  { id: "produtividade", label: "Produtividade" },
+  { id: "territorio", label: "Território" },
+  { id: "estatisticas", label: "Estatísticas" },
+];
+
+const PROCESS_STAGES = [
+  { id: "EM_ANALISE", label: "Em análise" },
+  { id: "DEFERIDA", label: "Deferidas" },
+  { id: "AGUARDANDO_CIRURGIA", label: "Aguardando procedimento" },
+  { id: "COMPARECEU", label: "Realizadas" },
+  { id: "NAO_COMPARECEU", label: "Ausências" },
+  { id: "CANCELADA", label: "Canceladas" },
+  { id: "ARQUIVADA", label: "Arquivadas" },
+];
+
+export function DashboardView({
+  requests = [],
+  adoptionAnimals = [],
+  scheduleDays = [],
+  requestTypes = initialRequestTypes,
+  teams = initialTeams,
+  currentUser = null,
+}: AnyRecord) {
+  const [period, setPeriod] = useState<PeriodKey>("90");
+  const [activeTab, setActiveTab] = useState<DashboardTab>("gestao");
+
+  const normalizedRequests = useMemo(() => requests.map(normalizeRequest), [requests]);
+
+  const filteredRequests = useMemo(() => {
+    const periodStart = getPeriodStart(period);
+    return normalizedRequests.filter((request) => {
+      const requestDate = getOperationalDate(request);
+      return isInDashboardPeriod(requestDate, periodStart);
+    });
+  }, [normalizedRequests, period]);
+
+  const filteredAdoptions = useMemo(() => {
+    const periodStart = getPeriodStart(period);
+    return adoptionAnimals.filter((animal: AnyRecord) => {
+      const date = parseAnyDate(animal.adopted_at || animal.adoptedAt || animal.createdAt || animal.created_at);
+      return isInDashboardPeriod(date, periodStart);
+    });
+  }, [adoptionAnimals, period]);
+
+  const filteredSchedules = useMemo(() => {
+    const periodStart = getPeriodStart(period);
+    return scheduleDays.filter((day: AnyRecord) => {
+      if (day.active === false) return false;
+      const date = parseAnyDate(normalizeScheduleDateText(day.date));
+      return isInDashboardPeriod(date, periodStart);
+    });
+  }, [scheduleDays, period]);
+
+  const filteredUsers = useMemo(() => {
+    return teams.users || [];
+  }, [teams]);
+
+  const intelligence = useMemo(() => {
+    const total = filteredRequests.length;
+    const activeQueue = filteredRequests.filter((request) => request.status !== "ARQUIVADA" && !requestHasTag(request, "CANCELADA")).length;
+    const inAnalysis = filteredRequests.filter((request) => request.status === "EM_ANALISE").length;
+    const approved = filteredRequests.filter((request) => requestHasTag(request, "DEFERIDA")).length;
+    const waitingProcedure = filteredRequests.filter((request) => request.status === "AGUARDANDO_CIRURGIA").length;
+    const completed = filteredRequests.filter((request) => requestHasTag(request, "COMPARECEU")).length;
+    const absent = filteredRequests.filter((request) => requestHasTag(request, "NAO_COMPARECEU")).length;
+    const canceled = filteredRequests.filter((request) => requestHasTag(request, "CANCELADA")).length;
+    const archived = filteredRequests.filter((request) => request.status === "ARQUIVADA").length;
+    const rejected = filteredRequests.filter((request) => requestHasTag(request, "INDEFERIDA")).length;
+    const attendanceBase = completed + absent;
+    const attendanceRate = pct(completed, attendanceBase);
+    const conclusionRate = pct(completed + archived, total);
+    const approvalRate = pct(approved, approved + rejected);
+    const activeSchedules = filteredSchedules.length;
+    const mutirons = filteredSchedules.filter((day: AnyRecord) => normalizeText(day.kind).includes("mutirao")).length;
+    const totalCapacity = filteredSchedules.reduce((sum: number, day: AnyRecord) => sum + Number(day.vacancies || 0), 0);
+    const usedCapacity = filteredRequests.filter((request) => request.preferredSchedule || request.appointment).length;
+    const averageFlowDays = averageDays(filteredRequests);
+    const staleQueue = filteredRequests.filter((request) => {
+      if (request.status === "ARQUIVADA" || requestHasTag(request, "CANCELADA")) return false;
+      const createdAt = parseAnyDate(request.createdAt);
+      return createdAt ? daysSince(createdAt) >= 7 : false;
+    }).length;
+    const capacityUsage = pct(usedCapacity, totalCapacity);
+    const openRate = pct(activeQueue, total);
+
+    return {
+      total,
+      activeQueue,
+      inAnalysis,
+      approved,
+      waitingProcedure,
+      completed,
+      absent,
+      canceled,
+      archived,
+      rejected,
+      attendanceRate,
+      conclusionRate,
+      approvalRate,
+      activeSchedules,
+      mutirons,
+      totalCapacity,
+      usedCapacity,
+      averageFlowDays,
+      staleQueue,
+      capacityUsage,
+      openRate,
+    };
+  }, [filteredRequests, filteredSchedules]);
+
+  const operational = useMemo(() => {
+    const byResponsible = topItems(countBy(filteredRequests, (request) => getRequestUserName(request)), 7);
+    const bySector = topItems(countBy(filteredRequests, (request) => request.assignedSectorName || getTeamSectorName(request.assignedSectorId, teams) || "Sem setor"), 7);
+    const byCloser = topItems(countBy(filteredRequests.filter((request) => request.status === "ARQUIVADA" || requestHasTag(request, "COMPARECEU") || requestHasTag(request, "CANCELADA")), (request) => getRequestClosedByName(request, teams, currentUser)), 6);
+    const byMonth = buildMonthlySeries(filteredRequests);
+    const byStatus = PROCESS_STAGES.map((stage) => ({ label: stage.label, value: countStage(filteredRequests, stage.id) })).filter((item) => item.value > 0);
+    const bottlenecks = topItems(byStatus.filter((item) => !["Realizadas", "Arquivadas"].includes(item.label)).sort((a, b) => b.value - a.value), 5);
+    const byType = topItems(countBy(filteredRequests, (request) => getRequestTypeName(request, requestTypes)), 6);
+    return { byResponsible, bySector, byCloser, byMonth, byStatus, bottlenecks, byType };
+  }, [filteredRequests, teams, currentUser, requestTypes]);
+
+  const operationQueue = useMemo(() => {
+    const openRequests = filteredRequests.filter((request) => request.status !== "ARQUIVADA" && !requestHasTag(request, "CANCELADA"));
+    const unassigned = openRequests.filter((request) => !request.assignedUserId && !request.responsible).length;
+    const waiting3 = openRequests.filter((request) => isOlderThan(request, 3)).length;
+    const waiting7 = openRequests.filter((request) => isOlderThan(request, 7)).length;
+    const waiting15 = openRequests.filter((request) => isOlderThan(request, 15)).length;
+    return { unassigned, waiting3, waiting7, waiting15 };
+  }, [filteredRequests]);
+
+  const upcomingSchedules = useMemo(() => {
+    const today = startOfDay(new Date());
+    return filteredSchedules
+      .map((day: AnyRecord) => {
+        const date = parseAnyDate(normalizeScheduleDateText(day.date));
+        const used = filteredRequests.filter((request) => normalizeScheduleDateText(request.preferredSchedule || request.appointment) === normalizeScheduleDateText(day.date)).length;
+        return {
+          label: day.date || "Agenda",
+          value: used,
+          total: Number(day.vacancies || 0),
+          secondary: `${Math.max(Number(day.vacancies || 0) - used, 0)} vagas`,
+          date,
+        };
+      })
+      .filter((item) => item.date && item.date >= today)
+      .sort((left, right) => Number(left.date) - Number(right.date))
+      .slice(0, 5);
+  }, [filteredRequests, filteredSchedules]);
+
+  const operationSignals = useMemo(() => [
+    {
+      label: "Sem responsável",
+      value: operationQueue.unassigned,
+      detail: "processos abertos sem dono",
+      tone: operationQueue.unassigned ? "warn" : "ok",
+    },
+    {
+      label: "Fila há 3+ dias",
+      value: operationQueue.waiting3,
+      detail: "pedem acompanhamento",
+      tone: operationQueue.waiting3 ? "warn" : "ok",
+    },
+    {
+      label: "Fila há 7+ dias",
+      value: operationQueue.waiting7,
+      detail: "atraso relevante",
+      tone: operationQueue.waiting7 ? "warn" : "ok",
+    },
+    {
+      label: "Fila há 15+ dias",
+      value: operationQueue.waiting15,
+      detail: "risco operacional",
+      tone: operationQueue.waiting15 ? "warn" : "ok",
+    },
+  ], [operationQueue]);
+
+  const processSignals = useMemo(() => [
+    {
+      label: "Conclusão",
+      value: `${intelligence.conclusionRate}%`,
+      detail: `${intelligence.completed + intelligence.archived} processos encerrados`,
+      tone: intelligence.conclusionRate >= 80 ? "ok" : "info",
+    },
+    {
+      label: "Fila há 7+ dias",
+      value: operationQueue.waiting7,
+      detail: "retenção relevante",
+      tone: operationQueue.waiting7 ? "warn" : "ok",
+    },
+    {
+      label: "Canceladas",
+      value: intelligence.canceled,
+      detail: "interrupções no fluxo",
+      tone: intelligence.canceled ? "warn" : "ok",
+    },
+    {
+      label: "Ausências",
+      value: intelligence.absent,
+      detail: `${intelligence.attendanceRate}% de comparecimento`,
+      tone: intelligence.absent ? "warn" : "ok",
+    },
+  ], [intelligence, operationQueue]);
+
+  const adoption = useMemo(() => {
+    const adopted = filteredAdoptions.filter((animal: AnyRecord) => animal.status === "adotado");
+    const available = filteredAdoptions.filter((animal: AnyRecord) => animal.status !== "adotado");
+    const interests = filteredAdoptions.reduce((sum: number, animal: AnyRecord) => sum + (animal.interests?.length || 0), 0);
+    return {
+      total: filteredAdoptions.length,
+      adopted: adopted.length,
+      available: available.length,
+      interests,
+      adoptionRate: pct(adopted.length, filteredAdoptions.length),
+      averageAdoptionDays: averageAdoptionDays(adopted),
+      bySpecies: topItems(countBy(filteredAdoptions, (animal) => animal.species || "Não informado"), 6),
+      byProfile: topItems(countBy(filteredAdoptions, (animal) => animal.sex || "Não informado"), 6),
+      monthly: buildAdoptionSeries(filteredAdoptions),
+    };
+  }, [filteredAdoptions]);
+
+  const castration = useMemo(() => {
+    const castrationRequests = filteredRequests.filter((request) => normalizeText(requestTypeLabel(request)).includes("castracao"));
+    const completed = castrationRequests.filter((request) => requestHasTag(request, "COMPARECEU")).length;
+    const approved = castrationRequests.filter((request) => requestHasTag(request, "DEFERIDA")).length;
+    const waiting = castrationRequests.filter((request) => request.status === "AGUARDANDO_CIRURGIA").length;
+    const absent = castrationRequests.filter((request) => requestHasTag(request, "NAO_COMPARECEU")).length;
+    return {
+      total: castrationRequests.length,
+      completed,
+      approved,
+      waiting,
+      attendanceRate: pct(completed, completed + absent),
+      byNeighborhood: topItems(countBy(castrationRequests, (request) => request.neighborhood || "Não informado"), 6),
+      byPeriod: buildMonthlySeries(castrationRequests),
+      scheduleUsage: topItems(filteredSchedules.map((day: AnyRecord) => {
+        const used = filteredRequests.filter((request) => normalizeScheduleDateText(request.preferredSchedule || request.appointment) === normalizeScheduleDateText(day.date)).length;
+        return { label: day.date || "Agenda", value: used, secondary: `${Math.max(Number(day.vacancies || 0) - used, 0)} vagas` };
+      }), 6),
+    };
+  }, [filteredRequests, filteredSchedules]);
+
+  const territorial = useMemo(() => {
+    const deferidas = filteredRequests.filter((request) => requestHasTag(request, "DEFERIDA"));
+    const byNeighborhood = topItems(countBy(deferidas, (request) => request.neighborhood || "Não informado"), 8);
+    const neighborhoodsReached = new Set(deferidas.map((request) => request.neighborhood).filter(Boolean)).size;
+    const geocoded = deferidas.filter((request) => hasValidCoordinates(request)).length;
+    const total = deferidas.length;
+    const withoutLocation = total - geocoded;
+    const coverageRate = pct(geocoded, total);
+    return { byNeighborhood, neighborhoodsReached, geocoded, withoutLocation, coverageRate, total };
+  }, [filteredRequests]);
+
+  const decisionAnalysis = useMemo(() => {
+    const waitingProcedureRequests = filteredRequests.filter((request) => request.status === "AGUARDANDO_CIRURGIA");
+    const incompleteRegistrations = filteredRequests.filter(hasIncompleteRegistration).length;
+    const futureSchedules = filteredSchedules
+      .map((day: AnyRecord) => {
+        const date = parseAnyDate(normalizeScheduleDateText(day.date));
+        const used = filteredRequests.filter((request) => normalizeScheduleDateText(request.preferredSchedule || request.appointment) === normalizeScheduleDateText(day.date)).length;
+        const vacancies = Number(day.vacancies || 0);
+        return { date, vacancies, used };
+      })
+      .filter((day) => day.date && day.date >= startOfDay(new Date()) && day.vacancies > 0);
+    const averageScheduleCapacity = futureSchedules.length
+      ? Math.max(1, Math.round(futureSchedules.reduce((sum, day) => sum + day.vacancies, 0) / futureSchedules.length))
+      : 0;
+    const queueAgendaEquivalent = averageScheduleCapacity
+      ? Math.ceil(waitingProcedureRequests.length / averageScheduleCapacity)
+      : 0;
+    const scheduleRisk = futureSchedules.filter((day) => {
+      const usage = pct(day.used, day.vacancies);
+      return usage < 50 || usage >= 95;
+    }).length;
+    const priorityNeighborhood = getPriorityNeighborhood(filteredRequests);
+
+    return [
+      {
+        label: "Território",
+        value: priorityNeighborhood.label,
+        detail: priorityNeighborhood.value ? `${priorityNeighborhood.value} casos pedem foco` : "sem bairro crítico",
+        tone: priorityNeighborhood.value ? "warn" : "ok",
+      },
+      {
+        label: "Fila",
+        value: waitingProcedureRequests.length,
+        detail: queueAgendaEquivalent ? `${queueAgendaEquivalent} agenda(s) para absorver` : "sem capacidade futura",
+        tone: waitingProcedureRequests.length ? "warn" : "ok",
+      },
+      {
+        label: "Cadastro",
+        value: incompleteRegistrations,
+        detail: "registros incompletos",
+        tone: incompleteRegistrations ? "warn" : "ok",
+      },
+      {
+        label: "Agenda",
+        value: scheduleRisk,
+        detail: "datas com risco",
+        tone: scheduleRisk ? "info" : "ok",
+      },
+    ];
+  }, [filteredRequests, filteredSchedules]);
+
+  const users = useMemo(() => {
+    const active = filteredUsers.filter((user: AnyRecord) => user.active !== false).length;
+    const inactive = filteredUsers.filter((user: AnyRecord) => user.active === false).length;
+    const scopedSectors = (teams.sectors || []).filter((sector: AnyRecord) => {
+      if (sector.active === false) return false;
+      return true;
+    });
+    return {
+      total: filteredUsers.length,
+      active,
+      inactive,
+      sectors: scopedSectors.length,
+      byRole: topItems(countBy(filteredUsers, (user) => user.role || user.cargo || "Não informado"), 7),
+      bySector: topItems(countBy(filteredUsers, (user) => getPrimaryUserSectorName(user, teams) || "Sem setor"), 7),
+    };
+  }, [filteredUsers, teams]);
+
+  const productivity = useMemo(() => {
+    const assignedVolume = operational.byResponsible.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    const closedVolume = operational.byCloser.reduce((sum, item) => sum + Number(item.value || 0), 0);
+    const topResponsible = operational.byResponsible[0];
+    const concentrationRate = pct(Number(topResponsible?.value || 0), assignedVolume);
+    return {
+      assignedVolume,
+      closedVolume,
+      concentrationRate,
+      topResponsible: topResponsible?.label || "Sem responsável",
+    };
+  }, [operational]);
+
+  const productivitySignals = useMemo(() => [
+    {
+      label: "Usuários ativos",
+      value: users.active,
+      detail: `${users.inactive} inativos`,
+      tone: users.active ? "ok" : "warn",
+    },
+    {
+      label: "Sem responsável",
+      value: operationQueue.unassigned,
+      detail: "processos abertos sem dono",
+      tone: operationQueue.unassigned ? "warn" : "ok",
+    },
+    {
+      label: "Encerramentos",
+      value: productivity.closedVolume,
+      detail: "produção concluída",
+      tone: productivity.closedVolume ? "ok" : "info",
+    },
+    {
+      label: "Concentração de carga",
+      value: `${productivity.concentrationRate}%`,
+      detail: productivity.topResponsible,
+      tone: productivity.concentrationRate >= 70 ? "warn" : "info",
+    },
+  ], [operationQueue, productivity, users]);
+
+  const statisticsSignals = useMemo(() => [
+    {
+      label: "Comparecimento",
+      value: `${intelligence.attendanceRate}%`,
+      detail: `${intelligence.absent} ausências`,
+      tone: intelligence.attendanceRate >= 80 ? "ok" : "warn",
+    },
+    {
+      label: "Deferimento",
+      value: `${intelligence.approvalRate}%`,
+      detail: `${intelligence.approved} deferidas`,
+      tone: intelligence.approvalRate >= 80 ? "ok" : "info",
+    },
+    {
+      label: "Conclusão",
+      value: `${intelligence.conclusionRate}%`,
+      detail: `${intelligence.completed + intelligence.archived} encerrados`,
+      tone: intelligence.conclusionRate >= 80 ? "ok" : "info",
+    },
+    {
+      label: "Adoção",
+      value: `${adoption.adoptionRate}%`,
+      detail: `${adoption.adopted} adotados`,
+      tone: adoption.adoptionRate ? "info" : "warn",
+    },
+  ], [adoption, intelligence]);
+
+  const managementSignals = useMemo(() => {
+    return [
+      {
+        label: "Fila ativa",
+        value: intelligence.activeQueue,
+        detail: `${intelligence.openRate}% do volume ainda em aberto`,
+        tone: intelligence.openRate >= 50 ? "warn" : "info",
+      },
+      {
+        label: "Processos há 7+ dias",
+        value: intelligence.staleQueue,
+        detail: intelligence.staleQueue ? "pedem acompanhamento" : "sem acumulação relevante",
+        tone: intelligence.staleQueue ? "warn" : "ok",
+      },
+      {
+        label: "Uso da agenda",
+        value: `${intelligence.capacityUsage}%`,
+        detail: `${intelligence.usedCapacity}/${intelligence.totalCapacity || 0} vagas ocupadas`,
+        tone: intelligence.capacityUsage >= 80 ? "ok" : intelligence.capacityUsage ? "info" : "warn",
+      },
+      {
+        label: "Comparecimento",
+        value: `${intelligence.attendanceRate}%`,
+        detail: `${intelligence.absent} ausências registradas`,
+        tone: intelligence.attendanceRate >= 80 ? "ok" : intelligence.attendanceRate ? "warn" : "info",
+      },
+    ];
+  }, [intelligence]);
+
+  const territorialSignals = useMemo(() => [
+    {
+      label: "Sem localização",
+      value: territorial.withoutLocation,
+      detail: "deferidas sem ponto no mapa",
+      tone: territorial.withoutLocation ? "warn" : "ok",
+    },
+    {
+      label: "Cobertura do mapa",
+      value: `${territorial.coverageRate}%`,
+      detail: `${territorial.geocoded} de ${intelligence.approved} deferidas`,
+      tone: territorial.coverageRate >= 80 ? "ok" : territorial.coverageRate ? "info" : "warn",
+    },
+    {
+      label: "Aguardando procedimento",
+      value: intelligence.waitingProcedure,
+      detail: "fila pré-execução",
+      tone: intelligence.waitingProcedure ? "warn" : "ok",
+    },
+    {
+      label: "Taxa de execução",
+      value: `${pct(castration.completed, Math.max(territorial.total, 1))}%`,
+      detail: `${castration.completed} castrações realizadas`,
+      tone: pct(castration.completed, Math.max(territorial.total, 1)) >= 50 ? "ok" : "info",
+    },
+  ], [territorial, intelligence, castration]);
+
+  const kpisByTab: Record<DashboardTab, AnyRecord[]> = {
+    gestao: [
+      { label: "Solicitações", value: intelligence.total, helper: "volume no período", icon: FileText },
+      { label: "Fila ativa", value: intelligence.activeQueue, helper: "processos em andamento", icon: ClipboardList },
+      { label: "Conclusão", value: `${intelligence.conclusionRate}%`, helper: "solicitações concluídas", icon: CheckCircle2, tone: "ok" },
+      { label: "Tramitação média", value: `${intelligence.averageFlowDays}d`, helper: "tempo operacional", icon: Clock },
+      { label: "Bairros", value: territorial.neighborhoodsReached, helper: "com demanda registrada", icon: MapPin },
+      { label: "Adoção", value: `${adoption.adoptionRate}%`, helper: "taxa de adoção", icon: PawPrint, tone: "info" },
+    ],
+    operacao: [
+      { label: "Fila ativa", value: intelligence.activeQueue, helper: "processos em andamento", icon: ClipboardList },
+      { label: "Em análise", value: intelligence.inAnalysis, helper: "aguardam triagem", icon: Clock },
+      { label: "Deferidas", value: intelligence.approved, helper: `${intelligence.approvalRate}% de deferimento`, icon: ShieldCheck },
+      { label: "Aguardando procedimento", value: intelligence.waitingProcedure, helper: "fila pré-execução", icon: CalendarDays },
+      { label: "Agendas ativas", value: intelligence.activeSchedules, helper: "dias operacionais", icon: CalendarDays },
+      { label: "Capacidade", value: `${intelligence.usedCapacity}/${intelligence.totalCapacity}`, helper: "ocupação de agendas", icon: Layers3 },
+    ],
+    processos: [
+      { label: "Em análise", value: intelligence.inAnalysis, helper: "etapa inicial", icon: Clock },
+      { label: "Deferidas", value: intelligence.approved, helper: "aprovadas no fluxo", icon: ShieldCheck },
+      { label: "Arquivadas", value: intelligence.archived, helper: "processos encerrados", icon: ClipboardCheck },
+      { label: "Canceladas", value: intelligence.canceled, helper: "interrupções registradas", icon: XCircle, tone: "warn" },
+      { label: "Realizadas", value: intelligence.completed, helper: "execução confirmada", icon: CheckCircle2, tone: "ok" },
+      { label: "Ausências", value: intelligence.absent, helper: "não comparecimento", icon: Activity },
+    ],
+    produtividade: [
+      { label: "Usuários", value: users.total, helper: "cadastrados no recorte", icon: ClipboardList },
+      { label: "Ativos", value: users.active, helper: "aptos para operação", icon: ShieldCheck, tone: "ok" },
+      { label: "Inativos", value: users.inactive, helper: "fora da operação", icon: XCircle, tone: "warn" },
+      { label: "Setores", value: users.sectors, helper: "equipes estruturadas", icon: Layers3 },
+      { label: "Responsáveis", value: operational.byResponsible.length, helper: "com demanda atribuída", icon: Activity },
+      { label: "Encerramentos", value: operational.byCloser.reduce((sum, item) => sum + Number(item.value || 0), 0), helper: "produção concluída", icon: ClipboardCheck },
+    ],
+    territorio: [
+      { label: "Deferidas", value: intelligence.approved, helper: "processos aprovados", icon: ShieldCheck },
+      { label: "No mapa", value: territorial.geocoded, helper: "com localização registrada", icon: MapPin },
+      { label: "Bairros cobertos", value: territorial.neighborhoodsReached, helper: "com deferimento", icon: Layers3 },
+      { label: "Realizadas", value: castration.completed, helper: "castrações executadas", icon: Stethoscope, tone: "ok" },
+      { label: "Aguardando", value: intelligence.waitingProcedure, helper: "fila pré-procedimento", icon: CalendarDays },
+      { label: "Ausências", value: intelligence.absent, helper: "não comparecimento", icon: Activity },
+    ],
+    estatisticas: [
+      { label: "Solicitações", value: intelligence.total, helper: "base estatística", icon: FileText },
+      { label: "Comparecimento", value: `${intelligence.attendanceRate}%`, helper: `${intelligence.absent} ausências`, icon: Activity, tone: "info" },
+      { label: "Deferimento", value: `${intelligence.approvalRate}%`, helper: "taxa de aprovação", icon: ShieldCheck },
+      { label: "Conclusão", value: `${intelligence.conclusionRate}%`, helper: "taxa geral", icon: CheckCircle2, tone: "ok" },
+      { label: "Adoção", value: `${adoption.adoptionRate}%`, helper: `${adoption.adopted} adotados`, icon: PawPrint },
+      { label: "Tempo médio", value: `${intelligence.averageFlowDays}d`, helper: "tramitação", icon: Clock },
+    ],
+  };
+
+  const kpis = kpisByTab[activeTab];
 
   return (
-    <section className="map-dashboard">
-      <div className="dashboard-hero">
-        <div className="dashboard-hero-copy">
-          <span className="eyebrow">Painel operacional</span>
-          <h2>VisÃ£o geral da gestÃ£o animal</h2>
-          <p>Acompanhe agenda, fila de castraÃ§Ã£o, adoÃ§Ã£o e execuÃ§Ã£o do atendimento municipal em um painel Ãºnico.</p>
-        </div>
-        <div className="dashboard-hero-metrics" aria-label="Resumo do dashboard">
-          {dashboardSummary.map((item) => (
-            <div className="dashboard-hero-card" key={item.label}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <small>{item.helper}</small>
-            </div>
+    <section className={`opdash-root is-${activeTab}`}>
+      <nav className="opdash-nav" aria-label="Navegação do BI">
+        <div className="opdash-tabs">
+          {DASHBOARD_TABS.map((tab) => (
+            <button key={tab.id} type="button" className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>
+              {tab.label}
+            </button>
           ))}
-          <div className="dashboard-hero-card dashboard-hero-card--accent">
-            <span>PrÃ³xima agenda</span>
-            <strong>{nextSchedule?.date || "Sem data"}</strong>
-            <small>{nextSchedule?.locationName || nextSchedule?.kind || "Nenhuma agenda ativa"}</small>
+        </div>
+        <div className="opdash-toolbar">
+          <div className="opdash-segment">
+            {PERIOD_OPTIONS.map((item) => (
+              <button key={item.id} type="button" className={period === item.id ? "is-active" : ""} onClick={() => setPeriod(item.id)}>
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
+      </nav>
+
+      <div className="opdash-kpis">
+        {kpis.map((item) => <KpiCard key={item.label} item={item} />)}
       </div>
 
-      <div className="dashboard-tabs" aria-label="Visões do dashboard">
-        {dashboardTabs.map((tab) => {
-          const Icon = tab.icon;
-          return (
-          <button key={tab.id} className={dashboardTab === tab.id ? "selected" : ""} type="button" onClick={() => setDashboardTab(tab.id)}>
-            <span className="dashboard-tab-icon"><Icon size={18} /></span>
-            <span className="dashboard-tab-copy">
-              <strong>{tab.label}</strong>
-              <small>{tab.helper}</small>
-            </span>
-            <span className="dashboard-tab-count">{tab.value}</span>
-          </button>
-          );
-        })}
-      </div>
-
-      {dashboardTab === "geral" && (
-        <>
-          <div className="map-kpi-grid">
-            <Metric title="Agendas" value={activeSchedules.length} icon={CalendarDays} />
-            <Metric title="Mutirões" value={mutiraoCount} icon={MapPin} />
-            <Metric title="Realizadas" value={completedRequests.length} icon={CheckCircle2} />
-            <Metric title="Municípios" value={municipalities.length} icon={MapPin} />
-          </div>
-
-          <div className="map-dashboard-grid">
-            <div className="map-side-stack">
-              <div className="panel">
-                <PanelHeader title="Agenda" />
-                <DonutChart
-                  segments={[
-                    { label: "Agenda", value: Math.max(activeSchedules.length - mutiraoCount, 0), color: "var(--teal)" },
-                    { label: "Mutirão", value: mutiraoCount, color: "#f97316" },
-                  ]}
-                />
+      {activeTab === "gestao" && (
+        <div className="opdash-management-layout">
+          <div className="opdash-management-main">
+            <Panel title="Pulso gerencial" meta="leitura executiva do período">
+              <div className="opdash-two-col opdash-two-col--management">
+                <Trend title="Volume operacional por período" items={operational.byMonth} />
+                <Funnel items={operational.byStatus} total={intelligence.total} />
               </div>
-              <div className="panel">
-                <PanelHeader title="Execução" />
-                <DonutChart
-                  segments={[
-                    { label: "Realizadas", value: completedRequests.length, color: "#16a34a" },
-                    { label: "Pendentes", value: Math.max(requests.length - completedRequests.length, 0), color: "#94a3b8" },
-                  ]}
-                />
+            </Panel>
+            <div className="opdash-management-support">
+              <Panel className="opdash-panel--fill" title="Demanda por tipo" meta="serviços mais solicitados">
+                <Ranking title="Tipos de solicitação" items={operational.byType} />
+              </Panel>
+              <div className="opdash-management-territory-stack">
+                <Panel className="opdash-panel--fill" title="Cobertura territorial" meta="onde a demanda se concentra">
+                  <Ranking title="Bairros com maior demanda" items={territorial.byNeighborhood} />
+                </Panel>
+                <Panel className="opdash-panel--protection" title="Proteção animal" meta="adoção no período">
+                  <div className="opdash-mini-kpis opdash-mini-kpis--protection">
+                    <MiniMetric label="Disponíveis" value={adoption.available} />
+                    <MiniMetric label="Adotados" value={adoption.adopted} />
+                    <MiniMetric label="Interesses" value={adoption.interests} />
+                    <MiniMetric label="Taxa" value={`${adoption.adoptionRate}%`} />
+                  </div>
+                </Panel>
               </div>
             </div>
-
-            <div className="panel map-panel">
-              <PanelHeader title="Mapa de castrações e microchipados" />
-              <GoogleDashboardMap
-                completedRequests={completedRequests}
-              />
-            </div>
           </div>
-          {isGlobalRole(currentUser?.role) && (
-            <div className="panel wide">
-              <PanelHeader title="Registros por município" />
-              <DataBarChart title="Municípios com mais solicitações" items={requestsByMunicipality} />
-            </div>
-          )}
-        </>
+          <div className="opdash-management-side">
+            <Panel className="opdash-panel--priority" title="Prioridades agora" meta="pontos que merecem decisão">
+              <DecisionList items={decisionAnalysis} />
+              <SignalList items={managementSignals} />
+              <Ranking title="Gargalos principais" items={operational.bottlenecks} compact />
+            </Panel>
+          </div>
+        </div>
       )}
 
-      {dashboardTab === "adocao" && (
-        <>
-          <div className="map-kpi-grid">
-            <Metric title="Disponíveis" value={activeAdoptions.length} icon={HeartHandshake} />
-            <Metric title="Adotados" value={adoptedAnimals.length} icon={CheckCircle2} />
-            <Metric title="Interessados" value={adoptionInterestCount} icon={Users} />
-            <Metric title="Total" value={adoptionAnimals.length} icon={PawPrint} />
-          </div>
-          <div className="panel wide">
-            <PanelHeader title="Painel de adoção" />
-            <div className="charts-grid">
-              <DataBarChart title="Ranking real de interesses" items={adoptionInterestRanking} />
-              <DataBarChart title="Perfil dos animais" items={adoptionProfile} />
-              <DataBarChart title="Espécies em adoção" items={adoptionSpecies} />
-              <DataDonutChart title="Status dos animais" items={adoptionByStatus} />
+      {activeTab === "operacao" && (
+        <div className="opdash-operation-layout">
+          <div className="opdash-operation-main">
+            <Panel title="Fila operacional" meta="o que exige ação agora">
+              <div className="opdash-two-col opdash-two-col--operation">
+                <SignalList items={operationSignals} />
+                <Funnel items={operational.byStatus} total={intelligence.total} />
+              </div>
+            </Panel>
+            <div className="opdash-operation-support">
+              <Panel className="opdash-panel--fill" title="Carga da equipe" meta="distribuição do trabalho">
+                <Ranking title="Atendimentos por responsável" items={operational.byResponsible} />
+              </Panel>
+              <Panel className="opdash-panel--fill" title="Processos por setor" meta="onde a fila está concentrada">
+                <Ranking title="Setores" items={operational.bySector} />
+              </Panel>
             </div>
           </div>
-        </>
+          <div className="opdash-operation-side">
+            <Panel title="Agenda operacional" meta="próximos dias e vagas">
+              <ScheduleList items={upcomingSchedules} />
+              <ProgressLine label="Capacidade ocupada" value={intelligence.usedCapacity} total={Math.max(intelligence.totalCapacity, 1)} />
+            </Panel>
+            <Panel className="opdash-panel--castration" title="Execução de castração" meta="resultado no período">
+              <div className="opdash-mini-kpis opdash-mini-kpis--compact">
+                <MiniMetric label="Realizadas" value={castration.completed} />
+                <MiniMetric label="Deferidas" value={castration.approved} />
+                <MiniMetric label="Aguardando" value={castration.waiting} />
+                <MiniMetric label="Comparecimento" value={`${castration.attendanceRate}%`} />
+              </div>
+              <Ranking title="Execução por bairro" items={castration.byNeighborhood} />
+            </Panel>
+          </div>
+        </div>
       )}
 
-      {dashboardTab === "castracao" && (
-        <>
-          <div className="map-kpi-grid">
-            <Metric title="Solicitações" value={requests.length} icon={FileText} />
-            <Metric title="Aprovadas" value={approvedRequests.length} icon={CheckCircle2} />
-            <Metric title="Reprovadas" value={rejectedRequests.length} icon={X} />
-            <Metric title="Realizadas" value={completedRequests.length} icon={ClipboardCheck} />
+      {activeTab === "processos" && (
+        <div className="opdash-process-layout">
+          <div className="opdash-process-main">
+            <Panel title="Fluxo processual" meta="tramitação, retenção e saídas">
+              <Funnel items={operational.byStatus} total={intelligence.total} />
+            </Panel>
+            <div className="opdash-process-support">
+              <Panel className="opdash-panel--fill" title="Gargalos principais" meta="onde o fluxo concentra retenção">
+                <Ranking title="Etapas críticas" items={operational.bottlenecks} />
+              </Panel>
+              <Panel className="opdash-panel--fill" title="Encerramentos" meta="saídas do fluxo">
+                <div className="opdash-mini-kpis">
+                  <MiniMetric label="Realizadas" value={intelligence.completed} />
+                  <MiniMetric label="Arquivadas" value={intelligence.archived} />
+                  <MiniMetric label="Canceladas" value={intelligence.canceled} />
+                  <MiniMetric label="Ausências" value={intelligence.absent} />
+                </div>
+              </Panel>
+            </div>
           </div>
-          <div className="charts-grid">
-            <DataDonutChart title="Distribuição por status" items={castrationByStatus} />
-            <DataBarChart title="Tipos de solicitação" items={castrationByType} />
-            <DataBarChart title="Processos encerrados por usuário" items={closedByUser} />
-            <DataBarChart title="Solicitações por bairro" items={castrationByNeighborhood} />
-            <DataBarChart title="Ocupação da agenda" items={scheduleUsage} />
+          <div className="opdash-process-side">
+            <Panel title="Saúde do processo" meta="qualidade e envelhecimento">
+              <SignalList items={processSignals} />
+            </Panel>
+            <Panel title="Tempo de tramitação" meta="leitura do período">
+              <div className="opdash-mini-kpis opdash-mini-kpis--two">
+                <MiniMetric label="Média" value={`${intelligence.averageFlowDays}d`} />
+                <MiniMetric label="Fila ativa" value={intelligence.activeQueue} />
+              </div>
+              <ProgressLine label="Conclusão geral" value={intelligence.completed + intelligence.archived} total={Math.max(intelligence.total, 1)} />
+            </Panel>
           </div>
-        </>
+        </div>
+      )}
+
+      {activeTab === "produtividade" && (
+        <div className="opdash-productivity-layout">
+          <div className="opdash-productivity-main">
+            <Panel title="Carga e entrega" meta="demanda atribuída versus produção concluída">
+              <div className="opdash-two-col">
+                <Ranking title="Carga por responsável" items={operational.byResponsible} />
+                <Ranking title="Encerramentos por responsável" items={operational.byCloser} />
+              </div>
+            </Panel>
+            <div className="opdash-productivity-support">
+              <Panel className="opdash-panel--fill" title="Processos por setor" meta="distribuição da demanda">
+                <Ranking title="Setores com maior demanda" items={operational.bySector} />
+              </Panel>
+              <Panel className="opdash-panel--fill" title="Estrutura da equipe" meta="distribuição interna">
+                <Ranking title="Usuários por setor" items={users.bySector} />
+                <Ranking title="Usuários por cargo" items={users.byRole} compact />
+              </Panel>
+            </div>
+          </div>
+          <div className="opdash-productivity-side">
+            <Panel title="Saúde da equipe" meta="capacidade e equilíbrio">
+              <SignalList items={productivitySignals} />
+            </Panel>
+            <Panel title="Resumo de produção" meta="leitura do período">
+              <div className="opdash-mini-kpis opdash-mini-kpis--two">
+                <MiniMetric label="Atribuídos" value={productivity.assignedVolume} />
+                <MiniMetric label="Encerrados" value={productivity.closedVolume} />
+              </div>
+              <ProgressLine label="Conclusão geral" value={intelligence.completed + intelligence.archived} total={Math.max(intelligence.total, 1)} />
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "territorio" && (
+        <div className="opdash-territory-layout">
+          <div className="opdash-territory-main">
+            <Panel className="opdash-panel--map" title="Mapa de processos deferidos" meta={`${territorial.geocoded} processos com localização`}>
+              <GoogleDashboardMap requests={filteredRequests} />
+            </Panel>
+          </div>
+          <div className="opdash-territory-side">
+            <Panel title="Saúde territorial" meta="cobertura e execução">
+              <SignalList items={territorialSignals} />
+            </Panel>
+            <Panel title="Distribuição por bairro" meta="demanda deferida vs. execução">
+              <Ranking title="Deferidos" items={territorial.byNeighborhood} />
+              <Ranking title="Realizadas" items={castration.byNeighborhood} compact />
+            </Panel>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "estatisticas" && (
+        <div className="opdash-statistics-layout">
+          <div className="opdash-statistics-main">
+            <Panel title="Evolução estatística" meta="volume, castração e adoção">
+              <div className="opdash-statistics-trends">
+                <Trend title="Volume operacional por período" items={operational.byMonth} />
+                <Trend title="Evolução mensal de castrações" items={castration.byPeriod} />
+                <Trend title="Evolução mensal de adoções" items={adoption.monthly} />
+              </div>
+            </Panel>
+            <div className="opdash-statistics-support">
+              <Panel className="opdash-panel--fill" title="Perfil da demanda" meta="tipo e território">
+                <Ranking title="Tipos de solicitação" items={operational.byType} />
+                <Ranking title="Solicitações por bairro" items={territorial.byNeighborhood} compact />
+              </Panel>
+              <Panel className="opdash-panel--fill" title="Perfil animal" meta="espécies e adoção">
+                <Ranking title="Espécies" items={adoption.bySpecies} />
+                <Ranking title="Perfil" items={adoption.byProfile} compact />
+              </Panel>
+            </div>
+          </div>
+          <div className="opdash-statistics-side">
+            <Panel title="Taxas do período" meta="eficiência operacional">
+              <SignalList items={statisticsSignals} />
+            </Panel>
+            <Panel title="Resumo estatístico" meta="leitura consolidada">
+              <div className="opdash-mini-kpis opdash-mini-kpis--two">
+                <MiniMetric label="Solicitações" value={intelligence.total} />
+                <MiniMetric label="Tempo médio" value={`${intelligence.averageFlowDays}d`} />
+              </div>
+              <ProgressLine label="Conclusão geral" value={intelligence.completed + intelligence.archived} total={Math.max(intelligence.total, 1)} />
+            </Panel>
+          </div>
+        </div>
       )}
     </section>
   );
 }
 
-function GoogleDashboardMap({ completedRequests = [] }: AnyRecord) {
+function KpiCard({ item }: { item: AnyRecord }) {
+  const Icon = item.icon;
+  return (
+    <article className={`opdash-kpi ${item.tone ? `is-${item.tone}` : ""}`}>
+      <span className="opdash-kpi-icon">{Icon && <Icon size={17} />}</span>
+      <strong>{item.value}</strong>
+      <span>{item.label}</span>
+      <small>{item.helper}</small>
+    </article>
+  );
+}
+
+function Panel({ title, meta, className = "", children }: AnyRecord) {
+  return (
+    <section className={`opdash-panel ${className}`}>
+      <div className="opdash-panel-head">
+        <div>
+          <strong>{title}</strong>
+          {meta && <span>{meta}</span>}
+        </div>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Ranking({ title, items = [], compact = false }: AnyRecord) {
+  const max = Math.max(...items.map((item: AnyRecord) => Number(item.value || 0)), 1);
+  return (
+    <div className={`opdash-ranking ${compact ? "is-compact" : ""}`}>
+      <h3>{title}</h3>
+      {!items.length && <p className="opdash-empty">Sem dados no período.</p>}
+      {items.map((item: AnyRecord) => (
+        <div className="opdash-rank-row" key={item.label}>
+          <div>
+            <span>{item.label}</span>
+            {item.secondary && <small>{item.secondary}</small>}
+          </div>
+          <div className="opdash-rank-track"><i style={{ width: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} /></div>
+          <strong>{item.value}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Trend({ title, items = [] }: AnyRecord) {
+  const max = Math.max(...items.map((item: AnyRecord) => Number(item.value || 0)), 1);
+  return (
+    <div className="opdash-trend">
+      <h3><LineChart size={15} /> {title}</h3>
+      <div className="opdash-trend-bars">
+        {items.map((item: AnyRecord) => (
+          <div key={item.label} title={`${item.label}: ${item.value}`}>
+            <i style={{ height: `${Math.max(8, (Number(item.value || 0) / max) * 100)}%` }} />
+            <span>{item.label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Funnel({ items = [], total = 0 }: AnyRecord) {
+  const max = Math.max(...items.map((item: AnyRecord) => Number(item.value || 0)), total, 1);
+  return (
+    <div className="opdash-funnel">
+      {items.map((item: AnyRecord) => (
+        <div className="opdash-funnel-row" key={item.label}>
+          <span>{item.label}</span>
+          <div><i style={{ width: `${Math.max(6, (Number(item.value || 0) / max) * 100)}%` }} /></div>
+          <strong>{item.value}</strong>
+        </div>
+      ))}
+      {!items.length && <p className="opdash-empty">Sem dados processuais.</p>}
+    </div>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: any }) {
+  return (
+    <div className="opdash-mini">
+      <strong>{value}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function ProgressLine({ label, value, total }: { label: string; value: number; total: number }) {
+  const percentage = Math.min(100, Math.round((value / total) * 100));
+  return (
+    <div className="opdash-progress">
+      <div><span>{label}</span><strong>{percentage}%</strong></div>
+      <i><b style={{ width: `${percentage}%` }} /></i>
+    </div>
+  );
+}
+
+function SignalList({ items = [] }: AnyRecord) {
+  return (
+    <div className="opdash-signals">
+      {items.map((item: AnyRecord) => (
+        <div className={`opdash-signal is-${item.tone || "info"}`} key={item.label}>
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+          <small>{item.detail}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DecisionList({ items = [] }: AnyRecord) {
+  return (
+    <div className="opdash-decisions">
+      {items.map((item: AnyRecord) => (
+        <div className={`opdash-decision is-${item.tone || "info"}`} key={item.label}>
+          <span>{item.label}</span>
+          <strong>{item.value}</strong>
+          <small>{item.detail}</small>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScheduleList({ items = [] }: AnyRecord) {
+  return (
+    <div className="opdash-schedule-list">
+      {!items.length && <p className="opdash-empty">Sem agendas futuras no período.</p>}
+      {items.map((item: AnyRecord) => (
+        <div className="opdash-schedule-row" key={item.label}>
+          <div>
+            <span>{item.label}</span>
+            <small>{item.secondary}</small>
+          </div>
+          <strong>{item.value}/{item.total}</strong>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function GoogleDashboardMap({ requests = [] }: AnyRecord) {
   const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-  const mapRef = useRef(null);
-  const mapInstanceRef = useRef(null);
-  const markersRef = useRef([]);
-  const [status, setStatus] = useState(apiKey ? "Carregando Google Maps..." : "Configure a chave do Google Maps para visualizar o dashboard.");
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
+  const [status, setStatus] = useState(apiKey ? "Carregando Google Maps..." : "Configure a chave do Google Maps para visualizar o mapa.");
+  const [locating, setLocating] = useState(false);
+  const [satellite, setSatellite] = useState(false);
+
+  function toggleSatellite() {
+    const map = mapInstanceRef.current;
+    const google = window.google;
+    if (!map || !google?.maps) return;
+    const next = !satellite;
+    map.setMapTypeId(next ? google.maps.MapTypeId.HYBRID : google.maps.MapTypeId.ROADMAP);
+    setSatellite(next);
+  }
+
+  function locateUser() {
+    const map = mapInstanceRef.current;
+    const google = window.google;
+    if (!map || !google?.maps || !navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if (userMarkerRef.current) userMarkerRef.current.setMap(null);
+        userMarkerRef.current = new google.maps.Marker({
+          map,
+          position,
+          title: "Sua localização",
+          zIndex: 999,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: "#ef4444",
+            fillOpacity: 1,
+            strokeColor: "#ffffff",
+            strokeWeight: 3,
+            scale: 10,
+          },
+        });
+        map.panTo(position);
+        map.setZoom(14);
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 10000 },
+    );
+  }
 
   const points = useMemo(() => {
-    return completedRequests
-      .filter((request) => {
-        const lat = Number(request.latitude);
-        const lng = Number(request.longitude);
-        return Number.isFinite(lat) && Number.isFinite(lng) &&
-          lat >= -33.75 && lat <= 5.27 &&
-          lng >= -73.99 && lng <= -29.35;
-      })
-      .map((request) => {
-        const hasMicrochip = request.animals?.some((a) => a.microchip);
-        const castrated = true;
-        const type = hasMicrochip ? "both" : "castrated";
-        return {
-          lat: Number(request.latitude),
-          lng: Number(request.longitude),
-          type,
-          label: type === "both" ? "Castrado e microchipado" : "Castrado",
-          title: request.tutor || "Castração realizada",
-          detail: request.scheduleLocationName || request.neighborhood || request.address || "Local informado",
-          color: type === "both" ? "#7c3aed" : "#16a34a",
-        };
-      });
-  }, [completedRequests]);
+    return requests
+      .filter((request: AnyRecord) => requestHasTag(request, "DEFERIDA") && hasValidCoordinates(request))
+      .map((request: AnyRecord) => ({
+        lat: Number(request.latitude),
+        lng: Number(request.longitude),
+        tutor: request.tutor || "Tutor não informado",
+        microchip: request.animalMicrochip || request.animals?.[0]?.microchip || "",
+      }));
+  }, [requests]);
 
   useEffect(() => {
     if (!apiKey || !mapRef.current) return;
-
     let active = true;
-    window.gm_authFailure = () => {
-      setStatus("Google Maps recusou a chave configurada. Verifique restrições, faturamento e Maps JavaScript API.");
-    };
-
+    window.gm_authFailure = () => setStatus("Google Maps recusou a chave configurada.");
     loadGoogleMapsApi(apiKey)
       .then((google) => {
         if (!active) return;
         mapInstanceRef.current = new google.maps.Map(mapRef.current, {
-          center: { lat: -27.2423, lng: -50.2189 },
-          zoom: 6,
-          mapTypeControl: true,
+          center: { lat: -15.78, lng: -47.93 },
+          zoom: 5,
+          mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: true,
         });
-        setStatus(points.length ? "" : "Nenhum ponto com coordenadas para exibir.");
+        setStatus(points.length ? "" : "Nenhum processo deferido com localização registrada.");
       })
       .catch(() => setStatus("Não foi possível carregar o Google Maps."));
-
     return () => {
       active = false;
       if (window.gm_authFailure) window.gm_authFailure = undefined;
@@ -261,78 +996,85 @@ function GoogleDashboardMap({ completedRequests = [] }: AnyRecord) {
     const google = window.google;
     const map = mapInstanceRef.current;
     if (!google?.maps || !map) return;
-
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current = [];
-
     if (!points.length) {
-      setStatus("Nenhum ponto com coordenadas para exibir.");
+      setStatus("Nenhum processo deferido com localização registrada.");
       return;
     }
-
+    const bounds = new google.maps.LatLngBounds();
     const infoWindow = new google.maps.InfoWindow();
-
-    points.forEach((point) => {
+    points.forEach((point: AnyRecord) => {
       const position = { lat: point.lat, lng: point.lng };
       const marker = new google.maps.Marker({
         map,
         position,
-        title: point.title,
+        title: point.tutor,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          fillColor: point.color,
+          fillColor: "#2563eb",
           fillOpacity: 1,
           strokeColor: "#ffffff",
           strokeWeight: 2,
-          scale: 9,
+          scale: 8,
         },
       });
       marker.addListener("click", () => {
-        infoWindow.setContent(`<strong>${escapeHtml(point.title)}</strong><br>${escapeHtml(point.detail)}`);
+        const microchipLine = point.microchip ? `Microchip: ${escapeHtml(point.microchip)}` : "Sem microchip";
+        infoWindow.setContent(`<strong>${escapeHtml(point.tutor)}</strong><br>${microchipLine}`);
         infoWindow.open({ anchor: marker, map });
       });
+      bounds.extend(position);
       markersRef.current.push(marker);
     });
-
+    if (points.length > 1) map.fitBounds(bounds, 44);
+    else map.setCenter({ lat: points[0].lat, lng: points[0].lng });
     setStatus("");
   }, [points]);
 
-  if (!apiKey) {
-    return (
-      <div className="google-map-fallback">
-        <p>{status}</p>
-      </div>
-    );
-  }
+  if (!apiKey) return <div className="opdash-map-fallback">{status}</div>;
 
   return (
-    <div className="google-dashboard-map">
-      <div className="google-map-canvas dashboard" ref={mapRef} />
-      {status && <p className="helper-text">{status}</p>}
-      <div className="map-legend">
-        <span><i className="legend-dot completed" /> Castrado</span>
-        <span><i className="legend-dot microchipped" /> Castrado e microchipado</span>
+    <div className="opdash-map">
+      <div ref={mapRef} />
+      {status && <p>{status}</p>}
+      <div className="opdash-map-controls">
+        <button
+          type="button"
+          className={`opdash-map-satellite ${satellite ? "is-active" : ""}`}
+          onClick={toggleSatellite}
+          title={satellite ? "Voltar para mapa" : "Ver satélite"}
+        >
+          {satellite ? "Mapa" : "Satélite"}
+        </button>
+        <button
+          type="button"
+          className={`opdash-map-locate ${locating ? "is-locating" : ""}`}
+          onClick={locateUser}
+          disabled={locating}
+          title="Ir para minha localização"
+        >
+          <Navigation size={16} />
+        </button>
       </div>
     </div>
   );
 }
 
-function loadGoogleMapsApi(apiKey) {
+function loadGoogleMapsApi(apiKey: string) {
   if (window.google?.maps?.Map) return Promise.resolve(window.google);
-
   const scriptId = "google-maps-js-api";
   const existing = document.getElementById(scriptId);
   if (existing) {
-    return new Promise((resolve, reject) => {
+    return new Promise<any>((resolve, reject) => {
       existing.addEventListener("load", () => resolve(window.google), { once: true });
       existing.addEventListener("error", reject, { once: true });
     });
   }
-
-  return new Promise((resolve, reject) => {
+  return new Promise<any>((resolve, reject) => {
     const script = document.createElement("script");
     script.id = scriptId;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&callback=console.debug&libraries=maps,marker&v=beta`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=maps,marker&v=beta`;
     script.async = true;
     script.defer = true;
     script.onload = () => resolve(window.google);
@@ -341,29 +1083,127 @@ function loadGoogleMapsApi(apiKey) {
   });
 }
 
-function DonutChart({ segments }: AnyRecord) {
-  const total = segments.reduce((sum, segment) => sum + Number(segment.value || 0), 0) || 1;
-  let start = 0;
-  const gradient = segments.map((segment) => {
-    const size = (Number(segment.value || 0) / total) * 100;
-    const part = `${segment.color} ${start}% ${start + size}%`;
-    start += size;
-    return part;
-  }).join(", ");
+function getPeriodStart(period: PeriodKey) {
+  if (period === "all") return null;
+  const date = new Date();
+  date.setDate(date.getDate() - Number(period));
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
 
-  return (
-    <div className="map-donut-wrap">
-      <div className="map-donut" style={{ background: `conic-gradient(${gradient})` }}>
-        <strong>{total}</strong>
-      </div>
-      <div className="map-donut-legend">
-        {segments.map((segment) => (
-          <span key={segment.label}>
-            <i style={{ background: segment.color }} />
-            {segment.label}: {segment.value}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
+function getOperationalDate(request: AnyRecord) {
+  return parseAnyDate(request.createdAt || request.created_at || request.preferredSchedule || request.appointment);
+}
+
+function isInDashboardPeriod(date: Date | null, periodStart: Date | null) {
+  if (!periodStart) return true;
+  if (!date) return false;
+  return date >= periodStart;
+}
+
+function averageDays(requests: AnyRecord[]) {
+  const values = requests.map((request) => {
+    const start = parseAnyDate(request.createdAt);
+    const end = parseAnyDate(request.updatedAt || request.signedAt) || new Date();
+    if (!start || !end || end < start) return null;
+    return Math.round((end.getTime() - start.getTime()) / 86400000);
+  }).filter((value): value is number => Number.isFinite(value));
+  if (!values.length) return 0;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function daysSince(date: Date) {
+  return Math.floor((Date.now() - date.getTime()) / 86400000);
+}
+
+function isOlderThan(request: AnyRecord, days: number) {
+  const createdAt = parseAnyDate(request.createdAt || request.created_at);
+  return createdAt ? daysSince(createdAt) >= days : false;
+}
+
+function startOfDay(date: Date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+function averageAdoptionDays(animals: AnyRecord[]) {
+  const values = animals.map((animal) => {
+    const start = parseAnyDate(animal.createdAt || animal.created_at);
+    const end = parseAnyDate(animal.adopted_at || animal.adoptedAt || animal.updatedAt || animal.updated_at);
+    if (!start || !end || end < start) return null;
+    return Math.round((end.getTime() - start.getTime()) / 86400000);
+  }).filter((value): value is number => Number.isFinite(value));
+  if (!values.length) return 0;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function pct(value: number, total: number) {
+  if (!total) return 0;
+  return Math.round((value / total) * 100);
+}
+
+function countStage(requests: AnyRecord[], stage: string) {
+  if (stage === "COMPARECEU") return requests.filter((request) => requestHasTag(request, "COMPARECEU")).length;
+  if (stage === "NAO_COMPARECEU") return requests.filter((request) => requestHasTag(request, "NAO_COMPARECEU")).length;
+  if (stage === "CANCELADA") return requests.filter((request) => requestHasTag(request, "CANCELADA")).length;
+  if (stage === "DEFERIDA") return requests.filter((request) => requestHasTag(request, "DEFERIDA")).length;
+  return requests.filter((request) => request.status === stage).length;
+}
+
+function buildMonthlySeries(requests: AnyRecord[]) {
+  const months = new Map<string, number>();
+  requests.forEach((request) => {
+    const date = getOperationalDate(request);
+    if (!date) return;
+    const key = `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getFullYear()).slice(-2)}`;
+    months.set(key, (months.get(key) || 0) + 1);
+  });
+  return Array.from(months, ([label, value]) => ({ label, value })).slice(-8);
+}
+
+function buildAdoptionSeries(animals: AnyRecord[]) {
+  const months = new Map<string, number>();
+  animals.forEach((animal) => {
+    const date = parseAnyDate(animal.adopted_at || animal.adoptedAt || animal.createdAt || animal.created_at);
+    if (!date) return;
+    const key = `${String(date.getMonth() + 1).padStart(2, "0")}/${String(date.getFullYear()).slice(-2)}`;
+    months.set(key, (months.get(key) || 0) + 1);
+  });
+  return Array.from(months, ([label, value]) => ({ label, value })).slice(-8);
+}
+
+function getTeamSectorName(id = "", teams: AnyRecord = initialTeams) {
+  return (teams.sectors || []).find((sector: AnyRecord) => sector.id === id)?.name || "";
+}
+
+function getPrimaryUserSectorName(user: AnyRecord = {}, teams: AnyRecord = initialTeams) {
+  const sectorIds = Array.isArray(user.sectorIds) ? user.sectorIds : [user.sectorId].filter(Boolean);
+  return sectorIds.map((id: string) => getTeamSectorName(id, teams)).filter(Boolean)[0] || "";
+}
+
+function hasValidCoordinates(request: AnyRecord) {
+  const lat = Number(request.latitude);
+  const lng = Number(request.longitude);
+  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -33.75 && lat <= 5.27 && lng >= -73.99 && lng <= -29.35;
+}
+
+function hasIncompleteRegistration(request: AnyRecord = {}) {
+  return !request.phone || !request.cpf || !request.address || !request.neighborhood || !request.cep || !hasValidCoordinates(request);
+}
+
+function getPriorityNeighborhood(requests: AnyRecord[]) {
+  const scores = new Map<string, number>();
+  requests.forEach((request) => {
+    const neighborhood = request.neighborhood || "Não informado";
+    if (neighborhood === "Não informado") return;
+    let score = 0;
+    if (request.status !== "ARQUIVADA" && !requestHasTag(request, "CANCELADA")) score += 2;
+    if (request.status === "AGUARDANDO_CIRURGIA") score += 3;
+    if (requestHasTag(request, "NAO_COMPARECEU")) score += 2;
+    if (requestHasTag(request, "COMPARECEU")) score -= 1;
+    if (score > 0) scores.set(neighborhood, (scores.get(neighborhood) || 0) + score);
+  });
+  const [label = "Sem prioridade", value = 0] = Array.from(scores.entries()).sort((left, right) => right[1] - left[1])[0] || [];
+  return { label, value };
 }

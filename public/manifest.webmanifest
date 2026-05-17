@@ -1,16 +1,20 @@
 {
+  "id": "/",
   "name": "CastraGestao Animal",
   "short_name": "CastraGestao",
   "description": "Gestao de solicitacoes de castracao animal, agenda, adocao e relatorios.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#f8fafc",
   "theme_color": "#0f766e",
   "orientation": "portrait-primary",
+  "categories": ["government", "utilities"],
   "icons": [
     {
       "src": "/pwa-icon.svg",
-      "sizes": "192x192",
+      "sizes": "192x192 512x512",
       "type": "image/svg+xml",
       "purpose": "any maskable"
     }

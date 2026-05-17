@@ -2,12 +2,46 @@ export const DEFAULT_MUNICIPALITY_SECTOR_ID = "setor_gestao_municipal";
 export const DEFAULT_MUNICIPALITY_SECTOR_NAME = "Gestão Municipal";
 export const DEFAULT_PERMISSION_GROUP_ID = "grupo_acesso_total";
 
+/**
+ * Grupo de permissão padrão — acesso total ao município.
+ * Aplicado ao admin_municipal criado automaticamente.
+ * Não inclui "municipalities" (gestão de outros municípios, restrito a globais).
+ */
 export function buildDefaultPermissionGroup() {
   return {
     id: DEFAULT_PERMISSION_GROUP_ID,
     name: "Acesso total",
-    allowedMenuItems: ["dashboard", "admin", "credenciamento", "adocao", "relatorios", "config"],
+    active: true,
+    allowedMenuItems: ["dashboard", "admin", "credenciamento", "agenda", "adocao", "relatorios", "config"],
     allowedConfigItems: ["environment", "users", "sectors", "permissions"],
+  };
+}
+
+/**
+ * Grupo de permissão operacional — analistas e servidores.
+ * Pode visualizar e processar solicitações mas não acessa configuração estrutural.
+ */
+export function buildOperationalPermissionGroup() {
+  return {
+    id: "grupo_operacional",
+    name: "Operacional",
+    active: true,
+    allowedMenuItems: ["dashboard", "admin", "agenda", "adocao"],
+    allowedConfigItems: [],
+  };
+}
+
+/**
+ * Grupo de permissão para credenciados (ONG / protetor).
+ * Acesso restrito ao painel de solicitações e agenda.
+ */
+export function buildCredenciatedPermissionGroup() {
+  return {
+    id: "grupo_credenciado",
+    name: "Credenciado",
+    active: true,
+    allowedMenuItems: ["dashboard", "admin"],
+    allowedConfigItems: [],
   };
 }
 
@@ -42,6 +76,8 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
   const municipalityName = [municipality.name, municipality.state].filter(Boolean).join("/");
   const defaultSector = buildDefaultSector();
   const defaultPermissionGroup = buildDefaultPermissionGroup();
+  const operationalGroup = buildOperationalPermissionGroup();
+  const credenciatedGroup = buildCredenciatedPermissionGroup();
   const defaultTeamUser = buildDefaultTeamUser(defaultUser, municipalityId);
   const currentYear = new Date().getFullYear();
 
@@ -95,7 +131,8 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
       sectors: [defaultSector],
       users: [defaultTeamUser],
     },
-    "permission_groups": [defaultPermissionGroup],
+    // Três grupos de permissão de partida — admin pode personalizar depois
+    "permission_groups": [defaultPermissionGroup, operationalGroup, credenciatedGroup],
     "castragestao:schedule-rules": [
       {
         id: `agenda_padrao_${municipalityId || Date.now()}`,

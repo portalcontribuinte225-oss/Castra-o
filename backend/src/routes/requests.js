@@ -236,14 +236,15 @@ router.post("/", optionalAuth, async (req, res) => {
         tags,
         workflow_data,
         latitude,
-        longitude
+        longitude,
+        origin
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
         $19, $20, $21, $22, 'EM_ANALISE', $23, $24, $25, $26,
         $27, $28, $29, $30, $31, $32::jsonb, $33::jsonb, $34::jsonb,
-        $35, $36
+        $35, $36, $37
       )
       RETURNING *`,
       [
@@ -283,6 +284,7 @@ router.post("/", optionalAuth, async (req, res) => {
         JSON.stringify(parseJsonObject(body.workflow_data || body.workflowData)),
         pick(body.latitude, body.lat) || null,
         pick(body.longitude, body.lng) || null,
+        pick(body.origin, req.user ? "INTERNA" : "PUBLICA") || "PUBLICA",
       ]
     );
 
@@ -360,7 +362,7 @@ router.patch("/:id", auth, async (req, res) => {
     "target_tutor_name", "target_tutor_email", "target_tutor_cpf",
     "target_tutor_phone", "target_tutor_address", "target_tutor_neighborhood",
     "target_tutor_city", "target_tutor_state", "target_tutor_cep",
-    "death_date", "death_cause",
+    "death_date", "death_cause", "origin",
   ];
   const ignoredKeys = new Set(["history_note", "historyNote"]);
   const workflowPatch = {};
@@ -434,7 +436,7 @@ router.patch("/:id", auth, async (req, res) => {
       `UPDATE requests SET ${setParts.join(", ")}, updated_at = NOW() WHERE id = $${idParam}${updateScope} RETURNING *`,
       values
     );
-    if (!rows[0]) return res.status(404).json({ error: "NÃ£o encontrado" });
+    if (!rows[0]) return res.status(404).json({ error: "Não encontrado" });
 
     const updatedTags = parseJsonArray(rows[0].tags);
     const previousTags = parseJsonArray(existingRows[0].tags);
