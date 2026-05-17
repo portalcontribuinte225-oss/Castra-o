@@ -3670,7 +3670,7 @@ function AdminDashboard({
 
   function approveRequest(request) {
     const patch = { status: "AGUARDANDO_CIRURGIA", tags: mergeTags(request.tags, ["DEFERIDA"]) };
-    patchRequest?.(request.id, patch, `Solicitação deferida por ${currentUser.name}`);
+    patchRequest?.(request.id, patch, `Agenda confirmada por ${currentUser.name}`);
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
@@ -3922,6 +3922,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
   const [docDecisions, setDocDecisions] = useState({});
   const [rescheduleReason, setRescheduleReason] = useState("");
+  const [selectedRescheduleDate, setSelectedRescheduleDate] = useState("");
   const [attendanceData, setAttendanceData] = useState({
     microchip: normalizedRequest.animalMicrochip || normalizedRequest.animals?.find((animal) => animal.microchip)?.microchip || "",
     note: normalizedRequest.attendanceNote || "",
@@ -4210,6 +4211,20 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   }
 
   function renderInlineReschedule() {
+    function cancelReschedule() {
+      setSelectedRescheduleDate("");
+      setRescheduleReason("");
+      setActivePanel(null);
+    }
+
+    function confirmReschedule() {
+      if (!selectedRescheduleDate) return;
+      onReschedule?.(request, selectedRescheduleDate, rescheduleReason);
+      setSelectedRescheduleDate("");
+      setRescheduleReason("");
+      setActivePanel(null);
+    }
+
     return (
       <div className="prm-inline-panel">
         <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Reagendar</strong>
@@ -4228,10 +4243,11 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
               {scheduleDays.map((day) => (
                 <button
                   key={day.date}
-                  className={`calendar-day-button${day.remaining > 0 ? " has-vacancy" : ""}`}
+                  className={`calendar-day-button${day.remaining > 0 ? " has-vacancy" : ""}${selectedRescheduleDate === day.date ? " selected" : ""}`}
                   type="button"
                   disabled={day.remaining <= 0}
-                  onClick={() => { onReschedule?.(request, day.date, rescheduleReason); setRescheduleReason(""); setActivePanel(null); }}
+                  aria-pressed={selectedRescheduleDate === day.date}
+                  onClick={() => setSelectedRescheduleDate(day.date)}
                 >
                   <span>{day.weekday}</span>
                   <strong>{day.date}</strong>
@@ -4242,7 +4258,10 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
           )
         }
         <div className="prm-inline-actions">
-          <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
+          <button className="ghost-button" type="button" onClick={cancelReschedule}>Cancelar</button>
+          <button className="primary-action" type="button" disabled={!selectedRescheduleDate} onClick={confirmReschedule}>
+            Confirmar reagendamento
+          </button>
         </div>
       </div>
     );
@@ -4373,11 +4392,11 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
                   <button
                     className="prm-action-btn prm-action-btn--primary"
                     type="button"
-                    disabled={blockWithoutAssignment || hasPendingRequiredDocuments}
-                    title={blockWithoutAssignment ? assignmentRequiredTitle : hasPendingRequiredDocuments ? "Valide todos os anexos obrigatórios para avançar" : "Deferir solicitação"}
+                    disabled={blockWithoutAssignment}
+                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar agenda"}
                     onClick={() => onApprove?.(request)}
                   >
-                    <CheckCircle2 size={15} /> Deferir
+                    <CheckCircle2 size={15} /> Confirmar Agenda
                   </button>
                 )}
               </>
@@ -8424,7 +8443,7 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
   };
   const statusLabels = {
     EM_ANALISE: "Em análise",
-    AGUARDANDO_CIRURGIA: "Aguardando Procedimento",
+    AGUARDANDO_CIRURGIA: "Agenda Confirmada",
     ARQUIVADA: "Arquivada",
   };
 

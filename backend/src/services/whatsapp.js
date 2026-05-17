@@ -140,8 +140,9 @@ export async function notifyScheduleConfirmation(request = {}) {
   return sendCloudApiTemplate(config, request);
 }
 
-export function whatsappHistoryNote(result = {}) {
-  if (result.status === "sent") return `WhatsApp: confirmação de agenda enviada${result.providerMessageId ? ` (${result.providerMessageId})` : ""}.`;
-  if (result.status === "failed") return `WhatsApp: falha ao enviar confirmação de agenda. ${result.reason || ""}`.trim();
-  return `WhatsApp: confirmação de agenda não enviada. ${result.reason || "Configuração ausente."}`;
+export function whatsappHistoryNote(result = {}, context = "confirmation") {
+  const label = context === "reschedule" ? "reagendamento" : "confirmacao de agenda";
+  if (result.status === "sent") return `WhatsApp: ${label} enviado${result.providerMessageId ? ` (${result.providerMessageId})` : ""}.`;
+  if (result.status === "failed") return `WhatsApp: falha ao enviar ${label}. ${result.reason || ""}`.trim();
+  return `WhatsApp: ${label} nao enviado. ${result.reason || "Configuracao ausente."}`;
 }

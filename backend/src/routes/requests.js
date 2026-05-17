@@ -395,7 +395,7 @@ router.patch("/:id", auth, async (req, res) => {
     const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
     const scopeValues = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
     const { rows: existingRows } = await pool.query(
-      `SELECT tags, workflow_data, municipality_id FROM requests WHERE id = $1${scope}`,
+      `SELECT status, schedule_date, tags, workflow_data, municipality_id FROM requests WHERE id = $1${scope}`,
       scopeValues,
     );
     if (!existingRows[0]) return res.status(404).json({ error: "Não encontrado" });
@@ -442,11 +442,25 @@ router.patch("/:id", auth, async (req, res) => {
     const previousTags = parseJsonArray(existingRows[0].tags);
     const isNewAttendance = updatedTags.includes("COMPARECEU") && !previousTags.includes("COMPARECEU");
     const isNewDeferred = updatedTags.includes("DEFERIDA") && !previousTags.includes("DEFERIDA");
+    const scheduleDateWasPatched =
+      body.schedule_date !== undefined ||
+      body.preferredSchedule !== undefined ||
+      body.appointment !== undefined;
+    const scheduleDateChanged =
+      scheduleDateWasPatched &&
+      String(rows[0].schedule_date || "") !== String(existingRows[0].schedule_date || "");
+    const isScheduleConfirmation =
+      rows[0].status === "AGUARDANDO_CIRURGIA" &&
+      (isNewDeferred || existingRows[0].status !== "AGUARDANDO_CIRURGIA");
+    const isScheduleRescheduleConfirmation =
+      rows[0].status === "AGUARDANDO_CIRURGIA" &&
+      existingRows[0].status === "AGUARDANDO_CIRURGIA" &&
+      scheduleDateChanged;
 
-    if (isNewDeferred && rows[0].status === "AGUARDANDO_CIRURGIA") {
+    if (isScheduleConfirmation || isScheduleRescheduleConfirmation) {
       try {
         const notification = await notifyScheduleConfirmation(rows[0]);
-        const note = whatsappHistoryNote(notification);
+        const note = whatsappHistoryNote(notification, isScheduleRescheduleConfirmation ? "reschedule" : "confirmation");
         const notificationEntry = [{ status: rows[0].status, notes: note, by: "sistema", at: new Date() }];
         await pool.query(
           "UPDATE requests SET history = history || $1::jsonb, updated_at = NOW() WHERE id = $2",

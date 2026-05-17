@@ -8,7 +8,7 @@ export const statuses = [
 
 export const statusLabels: AnyRecord = {
   EM_ANALISE: "Em análise",
-  AGUARDANDO_CIRURGIA: "Aguardando Procedimento",
+  AGUARDANDO_CIRURGIA: "Agenda Confirmada",
   ARQUIVADA: "Arquivada",
 };
 
