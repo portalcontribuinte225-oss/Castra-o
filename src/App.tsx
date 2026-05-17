@@ -1062,7 +1062,7 @@ function canManagePublicAnimalFlows(role = "") {
 
 const ADOPTION_STATUS_LABEL = { disponivel: "Disponível", em_processo: "Em processo", adotado: "Adotado" };
 
-function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, municipalityId }: AnyRecord) {
+function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, municipalityId, onBack, municipalityName = "" }: AnyRecord) {
   const [microchip, setMicrochip] = useState("");
   const [cpf, setCpf] = useState(formatCpf(currentUser?.cpf || ""));
   const [validationKey, setValidationKey] = useState("");
@@ -1139,15 +1139,12 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   return (
     <div className="consultation-stack">
       <form className="validation-key-card consultation-card" onSubmit={consult}>
-        <div className="consultation-card-header">
-          <div className="consultation-title-row">
-          <div className="metric-icon">
-            <ShieldCheck size={20} />
-          </div>
-          <div>
-          <h2>Consultar prontuário</h2>
-          <p>Digite o microchip para abrir o prontuário. CPF e chave continuam disponíveis para consulta do tutor.</p>
-          </div>
+        <div className="consultation-card-topline">
+          <div className="consultation-card-location">
+            <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
+              <Home size={18} />
+            </button>
+            <span>{municipalityName || "Sistema municipal"}</span>
           </div>
           <div className="consultation-inline-metrics">
             <span>
@@ -1162,23 +1159,34 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
             </span>
           </div>
         </div>
+        <div className="consultation-card-header">
+          <div className="consultation-title-row">
+            <div className="metric-icon">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <h2>Prontuário animal</h2>
+              <p>Use o microchip para abrir o prontuário completo ou CPF e chave para localizar solicitações do tutor.</p>
+            </div>
+          </div>
+        </div>
         <div className="consultation-search-row">
-        <label className="field">
-          <span>Microchip</span>
-          <input value={microchip} onChange={(event) => setMicrochip(event.target.value.toUpperCase())} placeholder="Digite o microchip" />
-        </label>
-        <label className="field">
-          <span>CPF</span>
-          <input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} placeholder="000.000.000-00" />
-        </label>
-        <label className="field">
-          <span>Chave de validação</span>
-          <input value={validationKey} onChange={(event) => setValidationKey(event.target.value.toUpperCase())} placeholder="Cole ou digite sua chave" />
-        </label>
-        <button className="primary-action consultation-submit" type="submit" disabled={isConsulting}>
-          <Search size={18} />
-          {isConsulting ? "Consultando" : "Consultar"}
-        </button>
+          <label className="field">
+            <span>Microchip</span>
+            <input value={microchip} onChange={(event) => setMicrochip(event.target.value.toUpperCase())} placeholder="Digite o microchip" />
+          </label>
+          <label className="field">
+            <span>CPF</span>
+            <input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} placeholder="000.000.000-00" />
+          </label>
+          <label className="field">
+            <span>Chave de validação</span>
+            <input value={validationKey} onChange={(event) => setValidationKey(event.target.value.toUpperCase())} placeholder="Cole ou digite sua chave" />
+          </label>
+          <button className="primary-action consultation-submit" type="submit" disabled={isConsulting}>
+            <Search size={18} />
+            {isConsulting ? "Consultando" : "Consultar"}
+          </button>
         </div>
         {status && <p className={searchOk ? "sms-status confirmed" : "helper-text"}>{status}</p>}
       </form>
@@ -1411,7 +1419,6 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
     <section className={`${filteredAnimals.length <= 2 ? "adoption-showcase few-animals" : "adoption-showcase"} ${showViewAll ? "" : "compact-gallery"}`.trim()}>
       <div className="showcase-header adoption-showcase-header">
         <div>
-          <span className="eyebrow">Adoção</span>
           <h2>Animais disponíveis para adoção</h2>
         </div>
         <div className="adoption-header-actions">
@@ -2184,9 +2191,8 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
 
   const simpleHeader = (
     <header className="public-form-header">
-      <button className="public-back-button" type="button" onClick={onBack}>
-        <ChevronRight size={16} style={{ transform: "rotate(180deg)" }} />
-        Início
+      <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
+        <Home size={18} />
       </button>
       <MunicipalitySelectorChip
         municipalities={municipalities}
@@ -2218,11 +2224,18 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
   }
 
   if (screen === "consulta") {
+    const selectedMunicipality = municipalities.find((m) => m.id === selectedMunicipalityId);
     return (
-      <main className="public-form-page">
-        {simpleHeader}
-        <section className="tutor-screen">
-          <ValidationKeyConsultation fallbackRequests={requests} currentUser={GUEST_USER} onRequestCreated={onRequestCreated} municipalityId={selectedMunicipalityId || undefined} />
+      <main className="public-form-page public-form-page--consultation">
+        <section className="tutor-screen tutor-screen--full">
+          <ValidationKeyConsultation
+            fallbackRequests={requests}
+            currentUser={GUEST_USER}
+            onRequestCreated={onRequestCreated}
+            municipalityId={selectedMunicipalityId || undefined}
+            onBack={onBack}
+            municipalityName={selectedMunicipality?.name || "Sistema municipal"}
+          />
         </section>
       </main>
     );
@@ -2260,6 +2273,9 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
 function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf = "", validationKey = "", onRequestCreated }: AnyRecord) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
   const next = safeRequests.find((request) => request.status !== "ARQUIVADA" && requestHasTag(request, "DEFERIDA") && (request.appointment || request.preferredSchedule));
+  const [detailsRequest, setDetailsRequest] = useState(null);
+  const detailsAnimal = detailsRequest?.animals?.[0] || {};
+  const detailsAnimalHistory = detailsRequest ? buildPublicAnimalHistory(detailsRequest, detailsAnimal) : [];
 
   return (
     <section className={compact ? "simple-stack consultation-results" : "content-grid"}>
@@ -2293,13 +2309,16 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
           )}
           {safeRequests.slice(0, compact ? safeRequests.length : 4).map((request) => (
             <article className="request-card" key={request.id}>
-              <div>
+              <div className="request-card-main">
                 <strong>#{request.protocol}</strong>
-                <span>{request.animals.map((animal) => animal.name).join(", ")} - {requestTypeLabel(request)}</span>
+                <span>{request.animals.map((animal) => animal.name).join(", ") || "Animal não informado"}</span>
+                <small>{requestTypeLabel(request)}</small>
               </div>
-              <StatusBadge status={request.status} />
-              <span>{request.appointment || request.createdAt}</span>
-              <button className="ghost-button">
+              <div className="request-card-status">
+                <StatusBadge status={request.status} />
+                <span className="request-card-date">{request.appointment || request.preferredSchedule || request.createdAt}</span>
+              </div>
+              <button className="ghost-button" type="button" onClick={() => setDetailsRequest(request)}>
                 Detalhes
                 <ChevronRight size={16} />
               </button>
@@ -2307,8 +2326,62 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
           ))}
         </div>
       </div>
+      {detailsRequest && (
+        <div className="modal-backdrop">
+          <div className="public-request-details-modal" role="dialog" aria-modal="true">
+            <ModalHeader title={`Solicitação #${detailsRequest.protocol}`} subtitle={detailsRequest.tutor || currentUser?.name || ""} onClose={() => setDetailsRequest(null)} />
+            <div className="public-request-detail-hero">
+              <div>
+                <span>Animal</span>
+                <strong>{detailsRequest.animals.map((animal) => animal.name).join(", ") || "Animal não informado"}</strong>
+                <small>{requestTypeLabel(detailsRequest)}</small>
+              </div>
+              <StatusBadge status={detailsRequest.status} />
+            </div>
+            <div className="public-request-detail-grid">
+              <InfoTile label="Agenda" value={detailsRequest.appointment || detailsRequest.preferredSchedule || "Sem agenda"} />
+              <InfoTile label="Tutor" value={detailsRequest.tutor || currentUser?.name || "Não informado"} />
+              <InfoTile label="CPF" value={maskCpf(detailsRequest.cpf || cpf)} />
+              <InfoTile label="Telefone" value={detailsRequest.phone || "Não informado"} />
+              <InfoTile label="Endereço" value={[detailsRequest.address, detailsRequest.neighborhood, detailsRequest.city, detailsRequest.state].filter(Boolean).join(", ") || "Não informado"} />
+              <InfoTile label="Aberta em" value={detailsRequest.createdAt ? formatDateTime(detailsRequest.createdAt) : "Não informado"} />
+            </div>
+            <div className="public-request-detail-history">
+              <strong>Histórico do animal</strong>
+              {detailsAnimalHistory.map((item) => (
+                <p key={item.label}>
+                  <span>{item.label}</span>
+                  {item.value}
+                </p>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
+}
+
+function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {}) {
+  const performed = request.performedProcedures || request.workflow_data?.performedProcedures || request.workflowData?.performedProcedures || "";
+  const procedureStatus = requestHasTag(request, "COMPARECEU")
+    ? performed || animal.procedure || requestTypeLabel(request)
+    : animal.procedure || requestTypeLabel(request);
+  return [
+    { label: "Espécie", value: displayText(animal.species || "Não informado") },
+    { label: "Sexo", value: displayText(animal.sex || "Não informado") },
+    { label: "Porte", value: displayText(animal.size || "Não informado") },
+    { label: "Raça", value: displayText(animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "Não informado")) },
+    { label: "Nascimento / idade", value: animal.birthDate || animal.age || "Não informado" },
+    { label: "Peso", value: animal.weight ? `${animal.weight} kg` : "Não informado" },
+    { label: "Microchip", value: animal.microchip || request.animalMicrochip || "Não informado" },
+    { label: requestHasTag(request, "COMPARECEU") ? "Procedimento realizado" : "Procedimento solicitado", value: displayText(procedureStatus || "Não informado") },
+    { label: "Vermifugado", value: displayText(animal.dewormed || "Não informado") },
+    { label: "Vacinas em dia", value: displayText(animal.vaccinated || "Não informado") },
+    { label: "Já teve cria", value: displayText(animal.hadLitter || "Não informado") },
+    { label: "Histórico de doenças", value: displayText(animal.illnessHistory || "Não informado") },
+    { label: "Alimentação", value: displayText(animal.food || "Não informado") },
+  ].filter((item) => item.value);
 }
 
 function NewRequest({
@@ -7973,17 +8046,26 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
     ["CIRURGIA_REALIZADA", "SOLICITACAO_PROCEDIMENTO"].includes(item.type)
   ));
   const historyMunicipalities = [...new Set(history.map(getAnimalHistoryMunicipality).filter(Boolean))];
+  const animalSummary = [animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização";
+  const AnimalIcon = String(animal.species || "").toLowerCase().includes("gat") ? Cat : Dog;
+  const tutorName = tutor.tutor_name || tutor.name || "Não informado";
+  const tutorContact = [tutor.phone, tutor.tutor_email].filter(Boolean).join(" · ") || "Não informado";
 
   return (
     <section className="animal-record-panel">
       <div className="animal-record-header">
         <div className="animal-record-identity">
-          <span className="eyebrow">Prontuário global por microchip</span>
-          <h3>{animal.name || "Animal sem nome"}</h3>
-          <p>{[animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização"}</p>
-          <div className="animal-record-meta">
-            <span><ScanLine size={14} /> {animal.microchip || "Microchip não informado"}</span>
-            {historyMunicipalities.length > 0 && <span><MapPin size={14} /> {historyMunicipalities.join(", ")}</span>}
+          <div className="animal-record-avatar" aria-hidden="true">
+            <AnimalIcon size={28} />
+          </div>
+          <div>
+            <span className="eyebrow">Prontuário global por microchip</span>
+            <h3>{animal.name || "Animal sem nome"}</h3>
+            <p>{animalSummary}</p>
+            <div className="animal-record-meta">
+              <span><ScanLine size={14} /> {animal.microchip || "Microchip não informado"}</span>
+              {historyMunicipalities.length > 0 && <span><MapPin size={14} /> {historyMunicipalities.join(", ")}</span>}
+            </div>
           </div>
         </div>
         <div className="animal-record-header-tools">
@@ -7995,16 +8077,38 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
         </div>
       </div>
 
+      <div className="animal-record-summary">
+        <div className="animal-record-summary-card">
+          <span><User size={14} /> Tutor atual</span>
+          <strong>{tutorName}</strong>
+          <small>{maskCpf(tutor.cpf || cpf)}</small>
+        </div>
+        <div className="animal-record-summary-card">
+          <span><Phone size={14} /> Contato</span>
+          <strong>{tutorContact}</strong>
+          <small>{[tutor.address, tutor.neighborhood, tutor.city, tutor.state].filter(Boolean).join(", ") || "Endereço não informado"}</small>
+        </div>
+        <div className="animal-record-summary-card">
+          <span><Clock size={14} /> Situação</span>
+          <strong>{latestHistoryItem ? animalHistoryTitle(latestHistoryItem) : "Sem eventos"}</strong>
+          <small>{latestHistoryItem?.occurred_at ? formatDateTime(latestHistoryItem.occurred_at) : "Sem data registrada"}</small>
+        </div>
+      </div>
+
       <div className="animal-record-grid">
-        <InfoTile label="Tutor atual" value={tutor.tutor_name || tutor.name || "Não informado"} />
-        <InfoTile label="CPF do tutor" value={maskCpf(tutor.cpf || cpf)} />
-        <InfoTile label="Contato" value={[tutor.phone, tutor.tutor_email].filter(Boolean).join(" · ") || "Não informado"} />
-        <InfoTile label="Último evento" value={latestHistoryItem ? animalHistoryTitle(latestHistoryItem) : "Sem eventos"} />
+        <InfoTile label="Microchip" value={animal.microchip || "Não informado"} />
+        <InfoTile label="Espécie / sexo / porte" value={animalSummary} />
         <InfoTile label="Próxima agenda" value={nextScheduledHistoryItem ? getAnimalHistorySchedule(nextScheduledHistoryItem) : "Sem agenda"} />
         <InfoTile label="Último procedimento" value={latestProcedureItem ? animalHistoryTitle(latestProcedureItem) : "Não informado"} />
+        <InfoTile label="Municípios" value={historyMunicipalities.join(", ") || "Não informado"} />
+        <InfoTile label="Eventos" value={`${history.length} registro(s)`} />
       </div>
 
       <div className="animal-record-actions">
+        <div>
+          <strong>Ações do prontuário</strong>
+          <span>Abra novas solicitações vinculadas ao microchip.</span>
+        </div>
         <button className="primary-action" type="button" onClick={() => { setProcedureOpen((value) => !value); setDeathOpen(false); setTransferOpen(false); }}>
           <ClipboardCheck size={17} />
           Solicitar procedimento

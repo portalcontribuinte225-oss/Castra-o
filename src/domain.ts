@@ -269,6 +269,8 @@ export function displayText(value = "") {
     "Nao informado": "Não informado",
     "Nao se aplica": "Não se aplica",
     "Tutor nao informado": "Tutor não informado",
+    animal_rua: "Animal de rua",
+    ninhada: "Ninhada",
     castracao: "Castração",
   };
   return labels[text] || text;
@@ -278,6 +280,8 @@ export function requestTypeLabel(request: AnyRecord = {}) {
   const labels: AnyRecord = {
     ANIMAL_OBITO: "Óbito do animal",
     TROCA_TUTOR: "Troca de tutor",
+    animal_rua: "Animal de rua",
+    ninhada: "Ninhada",
     Microchipagem: "Microchipagem",
     Ambos: "Castração e microchipagem",
     Castracao: "Castração",

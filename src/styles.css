@@ -394,15 +394,35 @@ button:disabled {
   overflow: hidden;
   display: grid;
   grid-template-columns: 1fr;
-  min-height: 0;
-  background: linear-gradient(110deg, #091828 0%, #0c2f45 55%, #083d45 100%);
+  min-height: clamp(128px, 11vw, 168px);
+  background:
+    radial-gradient(circle at 84% 50%, rgba(255, 255, 255, 0.14), transparent 26%),
+    linear-gradient(100deg, #071522 0%, #08283a 52%, #0a4650 100%);
   box-shadow:
     0 16px 50px rgba(9, 24, 40, 0.18),
     0 0 0 1px rgba(255, 255, 255, 0.04);
 }
 
+.public-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: url("https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&crop=focalpoint&fp-x=0.48&fp-y=0.46&w=1800&h=360&q=86") center / cover no-repeat;
+  opacity: 0.78;
+}
+
+.public-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(100deg, rgba(6, 20, 34, 0.78) 0%, rgba(7, 31, 47, 0.56) 38%, rgba(8, 61, 69, 0.18) 70%, rgba(8, 61, 69, 0.04) 100%),
+    linear-gradient(0deg, rgba(6, 20, 34, 0.1), rgba(6, 20, 34, 0));
+  pointer-events: none;
+}
+
 .hero-content {
-  padding: clamp(10px, 1.2vw, 16px) clamp(20px, 3vw, 40px);
+  padding: clamp(20px, 2.2vw, 32px) clamp(24px, 3.2vw, 46px);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1042,6 +1062,13 @@ button:disabled {
   overflow: hidden;
 }
 
+.public-form-page--consultation {
+  background:
+    radial-gradient(circle at 16% 8%, rgba(15, 159, 154, 0.18), transparent 34%),
+    radial-gradient(circle at 86% 7%, rgba(37, 99, 235, 0.16), transparent 38%),
+    linear-gradient(180deg, #f7fdff 0%, #ffffff 52%, #ffffff 100%);
+}
+
 .public-form-header {
   flex-shrink: 0;
   display: flex;
@@ -1053,13 +1080,29 @@ button:disabled {
 }
 
 .public-back-button {
-  min-height: 40px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  background: #f8fbfd;
-  color: var(--ink);
-  padding: 0 14px;
-  font-weight: 600;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfe0ea;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f3447;
+  padding: 0 16px;
+  font-weight: 800;
+  box-shadow: 0 10px 26px rgba(15, 52, 71, 0.06);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.public-back-button:hover {
+  transform: translateY(-1px);
+  border-color: #38a8e8;
+  background: #f8fcff;
+  box-shadow: 0 16px 34px rgba(15, 52, 71, 0.1);
+}
+
+.public-back-button svg {
+  color: #0f8c89;
 }
 .public-form-header div {
   display: flex;
@@ -1343,112 +1386,6 @@ button:disabled {
   margin: 0;
 }
 
-.consultation-stack,
-.validation-key-card {
-  display: grid;
-  gap: 14px;
-}
-
-.consultation-stack {
-  width: min(965px, 100%);
-  margin: 0 auto;
-  align-content: start;
-}
-
-.tutor-screen > .consultation-stack {
-  align-self: start;
-  margin-top: clamp(6px, 3vh, 30px);
-}
-
-.validation-key-card {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #ffffff;
-  padding: 16px;
-}
-
-.consultation-card {
-  gap: 18px;
-  padding: 18px;
-  border-color: #cfe0e8;
-  box-shadow: 0 18px 45px rgba(15, 47, 44, 0.08);
-}
-
-.consultation-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.consultation-title-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-}
-
-.consultation-card-header h2 {
-  margin: 2px 0 0;
-  font-size: 1.35rem;
-  letter-spacing: 0;
-}
-
-.consultation-card-header p {
-  display: none;
-}
-
-.consultation-inline-metrics {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.consultation-inline-metrics span {
-  min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  border: 1px solid #dbeaf3;
-  border-radius: var(--radius);
-  background: #f8fbfd;
-  color: var(--muted);
-  font-size: 0.82rem;
-  white-space: nowrap;
-}
-
-.consultation-inline-metrics svg {
-  color: var(--teal-dark);
-}
-
-.consultation-inline-metrics strong {
-  color: var(--ink);
-  font-size: 0.95rem;
-}
-
-.consultation-search-row {
-  display: grid;
-  grid-template-columns: minmax(170px, 1fr) minmax(170px, 0.9fr) minmax(210px, 1.1fr) auto;
-  gap: 12px;
-  align-items: end;
-}
-
-.consultation-search-row .field span {
-  font-size: 0.82rem;
-}
-
-.consultation-search-row input {
-  min-height: 48px;
-}
-
-.consultation-submit {
-  min-height: 48px;
-  min-width: 146px;
-}
-
 .consultation-adoptions {
   display: flex;
   flex-direction: column;
@@ -1496,37 +1433,6 @@ button:disabled {
 .consult-adoption-info strong { font-size: 14px; }
 .consult-adoption-info span { font-size: 12px; color: var(--muted); }
 
-.animal-record-panel {
-  display: grid;
-  gap: 14px;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: #fff;
-  padding: 16px;
-}
-
-.animal-record-header,
-.animal-record-actions {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.animal-record-identity {
-  min-width: 0;
-}
-
-.animal-record-header h3 {
-  margin: 2px 0 4px;
-  font-size: 1.35rem;
-}
-
-.animal-record-header p {
-  margin: 0;
-  color: var(--muted);
-}
-
 .animal-status-chip {
   border-radius: 999px;
   background: #dcfce7;
@@ -1535,46 +1441,6 @@ button:disabled {
   font-weight: 600;
   padding: 5px 10px;
   text-transform: uppercase;
-}
-
-.animal-record-meta,
-.animal-record-header-tools,
-.animal-record-secondary-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.animal-record-meta {
-  flex-wrap: wrap;
-  margin-top: 10px;
-}
-
-.animal-record-meta span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 30px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: #f8fafc;
-  color: var(--muted);
-  padding: 4px 10px;
-  font-size: 0.82rem;
-}
-
-.animal-record-header-tools {
-  flex-shrink: 0;
-}
-
-.animal-export-action {
-  min-height: 36px;
-}
-
-.animal-record-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
 }
 
 .info-tile {
@@ -1773,45 +1639,6 @@ button:disabled {
   width: min(760px, 100%);
   max-height: calc(100vh - 118px);
   overflow: auto;
-}
-
-.consultation-results {
-  width: min(965px, 100%);
-  place-items: stretch;
-  align-content: start;
-}
-
-.consultation-results > .summary-row,
-.consultation-results > .panel.wide {
-  width: 100%;
-}
-
-.consultation-results > .summary-row {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.consultation-results .metric-card {
-  min-height: 96px;
-  padding: 14px;
-}
-
-.consultation-results .panel.wide {
-  max-height: none;
-}
-
-.consultation-results .panel-header {
-  margin-top: 0;
-}
-
-.consultation-results .empty-state {
-  min-height: 120px;
-  border-style: solid;
-  background: #fbfdff;
-}
-
-.consultation-results .empty-state p,
-.consultation-results .empty-state .secondary-action {
-  display: none;
 }
 
 .simple-form-header p {
@@ -10670,39 +10497,12 @@ main {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .consultation-search-row {
-    grid-template-columns: 1fr;
-  }
-
-  .animal-record-header,
-  .animal-record-actions {
-    flex-direction: column;
-  }
-
-  .animal-record-grid,
   .animal-action-form {
     grid-template-columns: 1fr;
   }
 
   .animal-form-notes {
     grid-column: auto;
-  }
-
-  .consultation-card-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .consultation-inline-metrics {
-    justify-content: stretch;
-  }
-
-  .consultation-inline-metrics span {
-    flex: 1 1 160px;
-  }
-
-  .consultation-submit {
-    width: 100%;
   }
 
   .schedule-rule-row,
@@ -10836,10 +10636,6 @@ main {
   .admin-calendar-grid,
   .request-type-grid,
   .ai-config-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .consultation-results > .summary-row {
     grid-template-columns: 1fr;
   }
 
@@ -16272,9 +16068,6 @@ body * {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
-  .consultation-card {
-    padding: 16px;
-  }
 }
 
 @media (max-width: 720px) {
@@ -16283,9 +16076,6 @@ body * {
   }
 
   .login-card-topbar,
-  .consultation-title-row,
-  .animal-record-header,
-  .animal-record-actions,
   .selected-schedule-note,
   .fee-note {
     align-items: stretch;
@@ -16300,25 +16090,6 @@ body * {
 
   .login-big-action {
     min-height: 78px;
-  }
-
-  .animal-record-header-tools,
-  .animal-record-secondary-actions {
-    width: 100%;
-  }
-
-  .animal-record-header-tools {
-    justify-content: space-between;
-  }
-
-  .animal-record-actions,
-  .animal-record-secondary-actions {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .animal-record-grid {
-    grid-template-columns: 1fr;
   }
 
   .animal-history-topline {
@@ -16412,6 +16183,631 @@ body * {
   }
 
   .calendar-availability {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Prontuario modernizado */
+.consultation-stack {
+  display: grid;
+  width: min(1220px, calc(100vw - 40px));
+  gap: 22px;
+  margin: 0 auto;
+  align-content: start;
+}
+
+.tutor-screen > .consultation-stack {
+  margin-top: 26px;
+}
+
+.tutor-screen--full {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  padding: 8px 20px 42px;
+  background: transparent;
+}
+
+.tutor-screen--full > .consultation-stack {
+  margin-top: 0;
+}
+
+.consultation-card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  position: sticky;
+  top: 8px;
+  z-index: 8;
+  overflow: hidden;
+  border: 0;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(15, 159, 154, 0.11), transparent 28%),
+    radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.1), transparent 32%),
+    rgba(255, 255, 255, 0.92);
+  padding: 18px 28px 24px;
+  box-shadow: 0 24px 70px rgba(15, 52, 71, 0.12);
+}
+
+.consultation-card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.consultation-card-topline span {
+  color: #0f3447;
+  font-weight: 900;
+}
+
+.consultation-card-location {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.consultation-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 6px;
+  background: linear-gradient(90deg, #0f9f9a, #2563eb);
+}
+
+.consultation-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 0;
+}
+
+.consultation-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.consultation-title-row .metric-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  background: #0f3447;
+  color: #b8f3ff;
+  box-shadow: 0 18px 34px rgba(15, 52, 71, 0.22);
+}
+
+.consultation-card-header .eyebrow {
+  color: #0f8c89;
+}
+
+.consultation-card-header h2 {
+  margin: 3px 0 4px;
+  color: #0f8c89;
+  font-size: clamp(1.65rem, 2.4vw, 2.25rem);
+  line-height: 1.02;
+}
+
+.consultation-card-header p {
+  display: block;
+  max-width: min(780px, 100%);
+  margin: 0;
+  color: #637889;
+  line-height: 1.45;
+  font-size: 0.98rem;
+}
+
+.consultation-inline-metrics {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.consultation-inline-metrics span {
+  min-height: 46px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid rgba(15, 52, 71, 0.1);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #5b7080;
+  font-weight: 700;
+  box-shadow: 0 10px 24px rgba(15, 52, 71, 0.06);
+}
+
+.consultation-inline-metrics strong {
+  color: #0f3447;
+}
+
+.consultation-search-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(180px, 0.9fr) minmax(180px, 0.9fr) minmax(260px, 1.15fr) auto;
+  align-items: end;
+  margin-top: 10px;
+  padding: 14px;
+  border: 1px solid rgba(15, 52, 71, 0.08);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.consultation-search-row .field span {
+  color: #38566a;
+  font-weight: 800;
+}
+
+.consultation-search-row input {
+  min-height: 48px;
+  border-color: #d5e6ef;
+  border-radius: 14px;
+  background: #ffffff;
+  font-weight: 600;
+}
+
+.consultation-submit {
+  min-height: 48px;
+  min-width: 146px;
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(37, 99, 235, 0.18);
+}
+
+.consultation-results .panel.wide {
+  border: 0;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 0% 12%, rgba(15, 159, 154, 0.08), transparent 30%),
+    radial-gradient(circle at 100% 0%, rgba(37, 99, 235, 0.08), transparent 34%),
+    rgba(255, 255, 255, 0.94);
+  padding: 0;
+  box-shadow: 0 18px 46px rgba(15, 52, 71, 0.08);
+  width: 100%;
+}
+
+.consultation-results .panel-header {
+  padding: 24px 28px 10px;
+}
+
+.consultation-results .panel-header h3,
+.consultation-results .panel-header h2 {
+  color: #07172a;
+  font-size: 1.22rem;
+}
+
+.consultation-results .request-list {
+  display: grid;
+  gap: 12px;
+  padding: 14px 28px 28px;
+}
+
+.consultation-results .request-card {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(210px, auto) auto;
+  align-items: center;
+  gap: 18px;
+  border: 1px solid rgba(15, 52, 71, 0.08);
+  border-radius: 20px;
+  background: linear-gradient(135deg, #ffffff 0%, #f8fcff 100%);
+  padding: 18px;
+  box-shadow: 0 12px 28px rgba(15, 52, 71, 0.06);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.consultation-results .empty-state {
+  border: 1px solid #dbeaf3;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(15, 159, 154, 0.08), transparent 28%),
+    #fbfdff;
+  min-height: 150px;
+  box-shadow: 0 12px 28px rgba(15, 52, 71, 0.05);
+}
+
+.consultation-results .request-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.28);
+  box-shadow: 0 18px 36px rgba(15, 52, 71, 0.1);
+}
+
+.consultation-results .request-card-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.consultation-results .request-card-main strong {
+  color: #075985;
+  font-size: 0.98rem;
+}
+
+.consultation-results .request-card-main span {
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 1.06rem;
+}
+
+.consultation-results .request-card-main small {
+  color: #64748b;
+  font-size: 0.78rem;
+}
+
+.consultation-results .request-card-status {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+
+.consultation-results .request-card-date {
+  color: #0f3447;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.consultation-results .request-card .ghost-button {
+  border-radius: 14px;
+  font-weight: 800;
+}
+
+.public-request-details-modal {
+  width: min(760px, 94vw);
+  max-height: 88vh;
+  overflow: auto;
+  border-radius: 24px;
+  background: #ffffff;
+  padding: 18px;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.28);
+}
+
+.public-request-detail-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-radius: 18px;
+  background: #0f3447;
+  color: #ffffff;
+  padding: 18px;
+}
+
+.public-request-detail-hero span,
+.public-request-detail-hero small {
+  color: #b8dceb;
+}
+
+.public-request-detail-hero strong {
+  display: block;
+  margin: 3px 0;
+  font-size: 1.25rem;
+}
+
+.public-request-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.public-request-detail-history {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid #dbeaf3;
+  border-radius: 18px;
+  background: #f8fbfd;
+  padding: 14px;
+}
+
+.public-request-detail-history > strong {
+  color: #0f3447;
+}
+
+.public-request-detail-history p {
+  margin: 0;
+  color: #5b7080;
+}
+
+.public-request-detail-history p span {
+  display: block;
+  color: #0f3447;
+  font-weight: 800;
+}
+
+.animal-record-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid #dbeaf3;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbfd 100%);
+  padding: 18px;
+  box-shadow: 0 16px 42px rgba(15, 47, 68, 0.08);
+}
+
+.animal-record-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  border: 1px solid #d9e8f2;
+  border-radius: 12px;
+  background: #0f3447;
+  color: #ffffff;
+  padding: 18px;
+}
+
+.animal-record-identity {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.animal-record-avatar {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #9ee7ff;
+}
+
+.animal-record-header .eyebrow {
+  color: #9ee7ff;
+}
+
+.animal-record-header h3 {
+  margin: 4px 0;
+  color: #ffffff;
+  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  line-height: 1.05;
+}
+
+.animal-record-header p {
+  color: #cce3ef;
+}
+
+.animal-record-meta span {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8f7fc;
+}
+
+.animal-record-meta,
+.animal-record-header-tools,
+.animal-record-secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.animal-record-meta {
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.animal-record-header-tools {
+  flex-shrink: 0;
+  align-items: flex-start;
+}
+
+.animal-export-action {
+  min-height: 36px;
+}
+
+.animal-record-header-tools .ghost-button {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.animal-record-summary {
+  display: grid;
+  grid-template-columns: 1.05fr 1.35fr 1fr;
+  gap: 12px;
+}
+
+.animal-record-summary-card,
+.animal-record-grid .info-tile {
+  border: 1px solid #dbeaf3;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 47, 68, 0.05);
+}
+
+.animal-record-summary-card {
+  min-width: 0;
+  padding: 14px;
+}
+
+.animal-record-summary-card span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #5d7280;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.animal-record-summary-card strong {
+  display: block;
+  margin-top: 8px;
+  color: #0f3447;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.animal-record-summary-card small {
+  display: block;
+  margin-top: 4px;
+  color: #6b7f8d;
+  overflow-wrap: anywhere;
+}
+
+.animal-record-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.animal-record-grid .info-tile {
+  padding: 12px;
+}
+
+.animal-record-grid .info-tile span {
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.animal-record-grid .info-tile strong {
+  margin-top: 6px;
+  color: #14384a;
+  font-size: 0.9rem;
+}
+
+.animal-record-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid #dbeaf3;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.animal-record-actions > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.animal-record-actions > div:first-child strong {
+  color: #12384c;
+  font-size: 0.92rem;
+}
+
+.animal-record-actions > div:first-child span {
+  color: #6b7f8d;
+  font-size: 0.8rem;
+}
+
+.animal-history {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #dbeaf3;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 14px;
+}
+
+.animal-history-heading h4 {
+  margin: 0;
+  color: #12384c;
+}
+
+.animal-history-heading p {
+  margin: 2px 0 0;
+  color: #6b7f8d;
+}
+
+.animal-history-item {
+  border: 1px solid #e1edf4;
+  border-radius: 10px;
+  background: #fbfdff;
+  padding: 12px;
+}
+
+.animal-history-content strong {
+  color: #12384c;
+}
+
+@media (max-width: 1080px) {
+  .consultation-search-row,
+  .consultation-results .request-card {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .consultation-submit,
+  .consultation-results .request-card .ghost-button {
+    width: 100%;
+  }
+
+  .animal-record-summary,
+  .animal-record-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .consultation-stack {
+    width: min(100%, calc(100vw - 24px));
+  }
+
+  .tutor-screen--full {
+    padding-bottom: 28px;
+  }
+
+  .consultation-card-header {
+    flex-direction: column;
+  }
+
+  .consultation-card-topline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .consultation-inline-metrics,
+  .consultation-inline-metrics span {
+    width: 100%;
+  }
+
+  .consultation-search-row,
+  .consultation-results .request-card {
+    grid-template-columns: 1fr;
+  }
+
+  .consultation-results .request-card-status {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .public-request-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-request-detail-hero {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .animal-record-panel {
+    padding: 12px;
+  }
+
+  .animal-record-header,
+  .animal-record-actions {
+    padding: 14px;
+  }
+
+  .animal-record-identity {
+    flex-direction: column;
+  }
+
+  .animal-record-summary,
+  .animal-record-grid {
     grid-template-columns: 1fr;
   }
 }
