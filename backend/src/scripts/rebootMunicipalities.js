@@ -13,11 +13,13 @@ async function reboot() {
     await client.query("DELETE FROM request_validation_keys");
     await client.query("DELETE FROM request_protocol_counters");
     await client.query("DELETE FROM animal_tutors");
-    await client.query("DELETE FROM animals");
     await client.query("DELETE FROM adoptions");
+    await client.query("DELETE FROM animals");
     await client.query("DELETE FROM access_requests");
     await client.query("DELETE FROM schedule_days");
     await client.query("DELETE FROM config");
+    await client.query("DELETE FROM user_sectors");
+    await client.query("DELETE FROM sectors");
     await client.query(`
       DELETE FROM users
       WHERE municipality_id IS NOT NULL

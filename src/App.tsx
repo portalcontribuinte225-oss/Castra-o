@@ -191,6 +191,18 @@ function mergeScopedConfigItems(current = [], nextItems = [], municipalityId = "
   return [...retained, ...(Array.isArray(nextItems) ? nextItems : [])];
 }
 
+function dedupeMunicipalityItems(items = []) {
+  const seen = new Set();
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    const municipalityId = getItemMunicipalityId(item);
+    const identity = item.id || item.email || item.name || "";
+    const key = `${municipalityId}:${identity}`;
+    if (!identity || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export default function App() {
   const [currentUser, setCurrentUserRaw] = useState(() => {
     try {
@@ -351,8 +363,8 @@ export default function App() {
           setSpeciesOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.species], municipality)));
           setSizeOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.sizes], municipality)));
           setTeams({
-            sectors: configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.sectors, municipality)),
-            users: configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.users, municipality)),
+            sectors: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.sectors, municipality))),
+            users: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.users, municipality))),
           });
           setScheduleRules(configEntries.flatMap(({ municipality, values }) => (
             Array.isArray(values[CONFIG_KEYS.scheduleRules])
@@ -945,10 +957,14 @@ function userBelongsToSector(user: AnyRecord = {}, sectorId = "") {
 }
 
 function getUserSectorNames(user: AnyRecord = {}, sectors = []) {
+  const userMunicipalityId = getItemMunicipalityId(user);
   const names = getUserSectorIds(user)
-    .map((sectorId) => sectors.find((sector) => sector.id === sectorId)?.name)
+    .map((sectorId) => sectors.find((sector) => (
+      sector.id === sectorId
+      && (!userMunicipalityId || getItemMunicipalityId(sector) === userMunicipalityId)
+    ))?.name)
     .filter(Boolean);
-  return names.length ? names.join(", ") : "Sem setor";
+  return names.length ? [...new Set(names)].join(", ") : "Sem setor";
 }
 
 function getMunicipalityLabel(municipalityId = "", municipalities = []) {
@@ -5423,6 +5439,7 @@ function ConfigView({
   const [newSectorName, setNewSectorName] = useState("");
   const [newSectorActive, setNewSectorActive] = useState(true);
   const [editingSectorId, setEditingSectorId] = useState(null);
+  const [editingSectorMunicipalityId, setEditingSectorMunicipalityId] = useState("");
   const [sectorModal, setSectorModal] = useState(false);
   const [pendingSectorUserIds, setPendingSectorUserIds] = useState([]);
   const emptyPermissionGroup = { name: "", active: true, allowedMenuItems: ["dashboard", "admin"], allowedConfigItems: [] };
@@ -5985,14 +6002,17 @@ function ConfigView({
 
   function createSector() {
     if (!newSectorName.trim()) return;
+    const sectorMunicipalityId = editingSectorMunicipalityId || configMunicipalityScopeId;
     if (editingSectorId) {
       setTeams?.((current) => ({
         ...current,
         sectors: (current.sectors || []).map((sector) =>
-          matchesScopedConfigItem(sector, editingSectorId) ? { ...sector, name: newSectorName.trim(), active: newSectorActive } : sector,
+          sector.id === editingSectorId && getItemMunicipalityId(sector) === sectorMunicipalityId
+            ? { ...sector, name: newSectorName.trim(), active: newSectorActive }
+            : sector,
         ),
         users: (current.users || []).map((u) => {
-          if (configMunicipalityScopeId && getItemMunicipalityId(u) !== configMunicipalityScopeId) return u;
+          if (sectorMunicipalityId && getItemMunicipalityId(u) !== sectorMunicipalityId) return u;
           const nextSectorIds = pendingSectorUserIds.includes(u.id)
             ? [...new Set([...getUserSectorIds(u), editingSectorId])]
             : getUserSectorIds(u).filter((sectorId) => sectorId !== editingSectorId);
@@ -6000,6 +6020,7 @@ function ConfigView({
         }),
       }));
       setEditingSectorId(null);
+      setEditingSectorMunicipalityId("");
       setNewSectorName("");
       setNewSectorActive(true);
       setPendingSectorUserIds([]);
@@ -6010,6 +6031,7 @@ function ConfigView({
       ...current,
       sectors: [...(current.sectors || []), { id: newId, name: newSectorName.trim(), active: newSectorActive, municipalityId: configMunicipalityScopeId }],
       users: (current.users || []).map((u) => {
+        if (configMunicipalityScopeId && getItemMunicipalityId(u) !== configMunicipalityScopeId) return u;
         if (!pendingSectorUserIds.includes(u.id)) return u;
         const nextSectorIds = [...new Set([...getUserSectorIds(u), newId])];
         return { ...u, sectorIds: nextSectorIds, sectorId: nextSectorIds[0] || "" };
@@ -6022,12 +6044,17 @@ function ConfigView({
 
   function openSectorModal(sector = null) {
     if (sector) {
+      const municipalityId = getItemMunicipalityId(sector) || configMunicipalityScopeId;
       setEditingSectorId(sector.id);
+      setEditingSectorMunicipalityId(municipalityId);
       setNewSectorName(sector.name || "");
       setNewSectorActive(sector.active !== false);
-      setPendingSectorUserIds((teams.users || []).filter((u) => userBelongsToSector(u, sector.id)).map((u) => u.id));
+      setPendingSectorUserIds((teams.users || [])
+        .filter((u) => getItemMunicipalityId(u) === municipalityId && userBelongsToSector(u, sector.id))
+        .map((u) => u.id));
     } else {
       setEditingSectorId(null);
+      setEditingSectorMunicipalityId(configMunicipalityScopeId);
       setNewSectorName("");
       setNewSectorActive(true);
       setPendingSectorUserIds([]);
@@ -6497,8 +6524,8 @@ function ConfigView({
   const filteredSizes = filterByConfigStatus(sizeOptions);
   const filteredSpecies = filterByConfigStatus(speciesOptions);
   const filteredDocumentTypes = filterByConfigStatus(documentTypes);
-  const filteredSectors = filterByConfigStatus(teams.sectors || []);
-  const filteredTeamUsers = filterByConfigStatus(teams.users || []);
+  const filteredSectors = filterByConfigStatus(dedupeMunicipalityItems(teams.sectors || []));
+  const filteredTeamUsers = filterByConfigStatus(dedupeMunicipalityItems(teams.users || []));
   const filteredPermissionGroups = filterByConfigStatus(permissionGroups);
   const currentConfigItems = {
     requests: requestTypes,
@@ -6514,10 +6541,18 @@ function ConfigView({
   }[currentConfigKey] || [];
   const activeMunicipalities = municipalities.filter((municipality) => municipality.active !== false);
   const selectedMunicipality = activeMunicipalities.find((municipality) => municipality.id === newTeamUser.municipalityId);
-  const activeTeamSectors = (teams.sectors || []).filter((sector) => sector.active !== false);
+  const activeTeamSectors = dedupeMunicipalityItems(teams.sectors || []).filter((sector) =>
+    sector.active !== false
+    && (!newTeamUser.municipalityId || getItemMunicipalityId(sector) === newTeamUser.municipalityId)
+  );
   const selectedTeamSectorIds = newTeamUser.sectorIds || [];
   const selectedTeamSectors = activeTeamSectors.filter((sector) => selectedTeamSectorIds.includes(sector.id));
   const availableTeamSectors = activeTeamSectors.filter((sector) => !selectedTeamSectorIds.includes(sector.id));
+  const sectorModalMunicipalityId = editingSectorMunicipalityId || configMunicipalityScopeId;
+  const sectorModalUsers = dedupeMunicipalityItems(teams.users || []).filter((user) =>
+    user.active !== false
+    && (!sectorModalMunicipalityId || getItemMunicipalityId(user) === sectorModalMunicipalityId)
+  );
   const configAreaTitle = {
     environment: "Configurar Ambiente",
     municipalities: "Criar Municípios",
@@ -6683,9 +6718,12 @@ function ConfigView({
                 <EmptyState title="Nenhum setor cadastrado" text="Crie setores para organizar usuários e atribuições internas." />
               )}
               {filteredSectors.map((sector) => {
-                const sectorUsers = (teams.users || []).filter((u) => userBelongsToSector(u, sector.id));
+                const sectorMunicipalityId = getItemMunicipalityId(sector);
+                const sectorUsers = dedupeMunicipalityItems(teams.users || []).filter((u) =>
+                  getItemMunicipalityId(u) === sectorMunicipalityId && userBelongsToSector(u, sector.id)
+                );
                 return (
-                  <article className="request-type-card config-summary-card" key={sector.id}>
+                  <article className="request-type-card config-summary-card" key={`${sectorMunicipalityId}:${sector.id}`}>
                     <div className="config-card-title">
                       <strong>{sector.name || "Setor sem nome"}</strong>
                       <small className={sector.active === false ? "schedule-status inactive" : "schedule-status active"}>
@@ -6713,7 +6751,7 @@ function ConfigView({
       {sectorModal && (
         <div className="modal-backdrop">
           <form className="workflow-modal" onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
-            <ModalHeader title={editingSectorId ? "Editar setor" : "Criar setor"} onClose={() => { setSectorModal(false); setEditingSectorId(null); }} />
+            <ModalHeader title={editingSectorId ? "Editar setor" : "Criar setor"} onClose={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }} />
             <div className="config-modal-options">
               <ConfigActiveToggle checked={newSectorActive} onChange={setNewSectorActive} />
             </div>
@@ -6721,11 +6759,11 @@ function ConfigView({
             <label className="field">
               <span>Vincular usuários</span>
               <div className="team-user-checklist">
-                {(teams.users || []).filter((u) => u.active !== false).length === 0 && (
+                {sectorModalUsers.length === 0 && (
                   <span className="helper-text">Nenhum usuário cadastrado ainda.</span>
                 )}
-                {(teams.users || []).filter((u) => u.active !== false).map((u) => (
-                  <label key={u.id} className="checkbox-row">
+                {sectorModalUsers.map((u) => (
+                  <label key={`${getItemMunicipalityId(u)}:${u.id}`} className="checkbox-row">
                     <input
                       type="checkbox"
                       checked={pendingSectorUserIds.includes(u.id)}
@@ -6807,7 +6845,7 @@ function ConfigView({
               )}
               {filteredTeamUsers.map((user) => {
                 return (
-                <article className="request-type-card config-summary-card" key={user.id}>
+                <article className="request-type-card config-summary-card" key={`${getItemMunicipalityId(user)}:${user.id}`}>
                   <div className="config-card-title">
                     <strong>{user.name || "Usuário sem nome"}</strong>
                     <small className={user.active === false ? "schedule-status inactive" : "schedule-status active"}>
@@ -6913,7 +6951,7 @@ function ConfigView({
                       value={municipalityStateFilter}
                       onChange={(e) => {
                         setMunicipalityStateFilter(e.target.value);
-                        setNewTeamUser((c) => ({ ...c, municipalityId: "" }));
+                        setNewTeamUser((c) => ({ ...c, municipalityId: "", sectorIds: [], permissionGroupId: "" }));
                       }}
                     >
                       <option value="">Selecione o estado</option>
@@ -6929,8 +6967,16 @@ function ConfigView({
                       onChange={(e) => {
                         const munId = e.target.value;
                         const mun = activeMunicipalities.find((m) => String(m.id) === munId);
+                        const defaultGroup = permissionGroups.find((group) =>
+                          getItemMunicipalityId(group) === munId && group.active !== false
+                        );
                         setMunicipalityStateFilter(mun?.state || "");
-                        setNewTeamUser((c) => ({ ...c, municipalityId: munId }));
+                        setNewTeamUser((c) => ({
+                          ...c,
+                          municipalityId: munId,
+                          sectorIds: [],
+                          permissionGroupId: defaultGroup?.id || "",
+                        }));
                       }}
                     >
                       <option value="">Selecione o município</option>
@@ -6946,7 +6992,7 @@ function ConfigView({
               <span>Setores vinculados</span>
               <div className="sector-input-box">
                 {selectedTeamSectors.map((sector) => (
-                  <span className="sector-tag" key={sector.id}>
+                  <span className="sector-tag" key={`${getItemMunicipalityId(sector)}:${sector.id}`}>
                     {sector.name}
                     <button
                       type="button"
@@ -7002,7 +7048,7 @@ function ConfigView({
               {availableTeamSectors.length === 0 && <small>Todos os setores ativos já estão vinculados.</small>}
               {availableTeamSectors.map((sector) => (
                 <button
-                  key={sector.id}
+                  key={`${getItemMunicipalityId(sector)}:${sector.id}`}
                   type="button"
                   onClick={() => {
                     setNewTeamUser((current) => ({ ...current, sectorIds: [...(current.sectorIds || []), sector.id] }));
