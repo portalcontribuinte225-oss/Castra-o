@@ -16754,19 +16754,64 @@ body * {
 @media (max-width: 720px) {
   .consultation-stack {
     width: min(100%, calc(100vw - 24px));
+    gap: 14px;
   }
 
   .tutor-screen--full {
-    padding-bottom: 28px;
+    padding: 6px 12px 28px;
+  }
+
+  .consultation-card {
+    top: 6px;
+    gap: 12px;
+    border-radius: 22px;
+    padding: 14px;
+    box-shadow: 0 18px 48px rgba(15, 52, 71, 0.12);
   }
 
   .consultation-card-header {
     flex-direction: column;
+    gap: 12px;
   }
 
   .consultation-card-topline {
     align-items: stretch;
     flex-direction: column;
+    gap: 10px;
+    margin-bottom: 0;
+  }
+
+  .consultation-card-location {
+    justify-content: space-between;
+  }
+
+  .consultation-card-location > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .consultation-title-row {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .consultation-title-row .metric-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 15px;
+  }
+
+  .consultation-card-header h2 {
+    font-size: clamp(1.55rem, 8vw, 2rem);
+    line-height: 1.05;
+  }
+
+  .consultation-card-header p {
+    max-width: none;
+    font-size: 0.9rem;
+    line-height: 1.35;
   }
 
   .consultation-inline-metrics,
@@ -16774,14 +16819,86 @@ body * {
     width: 100%;
   }
 
+  .consultation-inline-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .consultation-inline-metrics span {
+    min-height: 42px;
+    justify-content: center;
+    border-radius: 14px;
+    padding: 0 8px;
+    font-size: 0.86rem;
+  }
+
   .consultation-search-row,
   .consultation-results .request-card {
     grid-template-columns: 1fr;
   }
 
+  .consultation-search-row {
+    gap: 10px;
+    margin-top: 4px;
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .consultation-search-row input,
+  .consultation-submit {
+    min-height: 46px;
+  }
+
+  .consultation-submit {
+    width: 100%;
+  }
+
+  .consultation-results .panel.wide {
+    border-radius: 22px;
+  }
+
+  .consultation-results .panel-header {
+    padding: 18px 16px 8px;
+  }
+
+  .consultation-results .request-list {
+    gap: 10px;
+    padding: 10px 12px 18px;
+  }
+
+  .consultation-results .request-card {
+    align-items: stretch;
+    gap: 12px;
+    border-radius: 18px;
+    padding: 14px;
+  }
+
+  .consultation-results .request-card-main {
+    gap: 4px;
+  }
+
   .consultation-results .request-card-status {
     justify-content: space-between;
     width: 100%;
+    gap: 10px;
+  }
+
+  .consultation-results .request-card-date {
+    font-size: 0.95rem;
+  }
+
+  .consultation-results .request-card .ghost-button {
+    min-height: 46px;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .public-request-details-modal {
+    width: min(100%, calc(100vw - 20px));
+    max-height: calc(100dvh - 20px);
+    border-radius: 20px;
+    padding: 12px;
   }
 
   .public-request-detail-grid {
@@ -16808,6 +16925,418 @@ body * {
 
   .animal-record-summary,
   .animal-record-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .public-form-page--consultation {
+    min-height: 100dvh;
+  }
+
+  .consultation-stack {
+    width: 100%;
+    gap: 12px;
+  }
+
+  .tutor-screen--full {
+    padding: 0 10px 22px;
+  }
+
+  .consultation-card {
+    top: 0;
+    border-radius: 0 0 22px 22px;
+    margin: 0 -10px;
+    padding: 12px 12px 14px;
+  }
+
+  .consultation-card::before {
+    height: 4px;
+  }
+
+  .consultation-card-location {
+    gap: 8px;
+  }
+
+  .consultation-card-location .nr-home-btn {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+  }
+
+  .consultation-card-header h2 {
+    font-size: 1.55rem;
+  }
+
+  .consultation-title-row .metric-icon {
+    display: none;
+  }
+
+  .consultation-inline-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .consultation-search-row {
+    padding: 10px;
+  }
+
+  .consultation-results .panel.wide {
+    border-radius: 20px;
+    margin-top: 0;
+  }
+
+  .consultation-results .empty-state {
+    min-height: 138px;
+    padding: 18px 12px;
+    text-align: center;
+  }
+
+  .consultation-results .request-card-status {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .consultation-results .request-card-date {
+    white-space: normal;
+  }
+
+  .public-request-details-modal {
+    width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .public-request-detail-hero {
+    border-radius: 16px;
+    padding: 14px;
+  }
+
+  .public-request-detail-history {
+    padding: 12px;
+  }
+}
+
+/* Solicitação pública: leitura e ergonomia em smartphones */
+@media (max-width: 720px) {
+  .login-wide-banner {
+    order: -4;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) {
+    background:
+      radial-gradient(circle at 12% 0%, rgba(15, 159, 154, 0.12), transparent 30%),
+      linear-gradient(180deg, #f7fdff 0%, #ffffff 46%, #f8fbfd 100%);
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-shell {
+    background: transparent;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 18;
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px 8px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(207, 229, 240, 0.9);
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-home-btn {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-topbar-stepper {
+    order: initial;
+    grid-column: 2;
+    min-width: 0;
+    overflow-x: auto;
+    padding: 2px 0 4px;
+    scrollbar-width: none;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-topbar-stepper::-webkit-scrollbar {
+    display: none;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-stepper {
+    width: max-content;
+    min-width: 100%;
+    gap: 8px;
+    align-items: stretch;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-step {
+    flex: 0 0 86px;
+    min-height: 48px;
+    padding: 4px 6px;
+    border-radius: 14px;
+    background: rgba(241, 245, 249, 0.7);
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-step--current {
+    background: #e8f8ff;
+    box-shadow: inset 0 0 0 1px rgba(56, 168, 232, 0.28);
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-step--done {
+    background: #f0fdf4;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-step-circle {
+    width: 24px;
+    height: 24px;
+    font-size: 0.72rem;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-step-label {
+    display: block;
+    max-width: 76px;
+    color: inherit;
+    font-size: 0.62rem;
+    line-height: 1.12;
+    letter-spacing: 0.02em;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-step-connector {
+    display: none;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-body {
+    padding: 14px 12px 12px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form {
+    gap: 12px;
+    max-width: none;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .form-section {
+    gap: 12px;
+    border-color: rgba(207, 229, 240, 0.9);
+    border-radius: 20px;
+    background:
+      radial-gradient(circle at 0% 0%, rgba(15, 159, 154, 0.05), transparent 30%),
+      #ffffff;
+    padding: 12px;
+    padding-top: 0;
+    box-shadow: 0 14px 34px rgba(15, 52, 71, 0.08);
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .form-section-header {
+    min-height: 50px;
+    margin: 0 -12px 2px;
+    padding: 12px 14px;
+    border-radius: 20px 20px 0 0;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .form-section-header h3 {
+    font-size: 0.94rem;
+    line-height: 1.2;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .access-field input,
+  .public-form-page:not(.public-form-page--consultation) .access-field textarea,
+  .public-form-page:not(.public-form-page--consultation) .field input,
+  .public-form-page:not(.public-form-page--consultation) .field select {
+    min-height: 48px;
+    border-radius: 14px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .access-field input {
+    padding-left: 38px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .access-field-icon {
+    left: 13px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .two-column-fields,
+  .public-form-page:not(.public-form-page--consultation) .cadunico-row,
+  .public-form-page:not(.public-form-page--consultation) .address-lookup-grid,
+  .public-form-page:not(.public-form-page--consultation) .address-city-grid,
+  .public-form-page:not(.public-form-page--consultation) .phone-validation-row,
+  .public-form-page:not(.public-form-page--consultation) .sms-verify-row,
+  .public-form-page:not(.public-form-page--consultation) .animal-choice-grid,
+  .public-form-page:not(.public-form-page--consultation) .animal-choice-grid.two-col,
+  .public-form-page:not(.public-form-page--consultation) .animal-choice-grid.breed-weight-row,
+  .public-form-page:not(.public-form-page--consultation) .birth-weight-row,
+  .public-form-page:not(.public-form-page--consultation) .health-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .sms-verify-row {
+    display: grid;
+    gap: 8px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .sms-verify-row .ghost-button,
+  .public-form-page:not(.public-form-page--consultation) .sms-send-btn {
+    width: 100%;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .cadunico-checkbox,
+  .public-form-page:not(.public-form-page--consultation) .doc-accept-check {
+    min-height: 44px;
+    align-items: center;
+    white-space: normal;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .anm-type-picker,
+  .public-form-page:not(.public-form-page--consultation) .health-card,
+  .public-form-page:not(.public-form-page--consultation) .doc-declaration {
+    border-radius: 16px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .anm-type-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .anm-type-card {
+    width: 100%;
+    min-height: 48px;
+    padding: 10px 14px;
+    white-space: normal;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form {
+    border-radius: 18px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .animal-form-header {
+    min-height: 52px;
+    padding: 12px 14px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .compact-choice-field > div,
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .yes-no-field > div,
+  .public-form-page:not(.public-form-page--consultation) .compact-choice-field:has(button:nth-child(3)) > div {
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .compact-choice-field button,
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .yes-no-field button {
+    min-height: 44px;
+    padding: 8px 10px;
+    border-radius: 12px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .birth-weight-or {
+    display: block;
+    margin: -4px 0;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .calendar-availability {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .calendar-weekdays {
+    display: none;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .calendar-day-button {
+    min-height: 74px;
+    border-radius: 14px;
+    padding: 10px 8px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .calendar-day-button strong {
+    font-size: 1rem;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .calendar-day-button small {
+    font-size: 0.68rem;
+    line-height: 1.15;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .doc-photo-zone {
+    min-height: 154px;
+    border-radius: 18px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .doc-row {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 16px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .doc-row-info small {
+    white-space: normal;
+    overflow: visible;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .doc-row-actions {
+    grid-column: 1 / -1;
+    justify-content: stretch;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .doc-attach-btn,
+  .public-form-page:not(.public-form-page--consultation) .doc-remove-btn {
+    width: 100%;
+    height: 42px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .doc-declaration p {
+    padding: 12px;
+    font-size: 0.84rem;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-bottom-error {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid #fecaca;
+    border-radius: 14px;
+    background: #fff1f2;
+    text-align: left;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-nav-row {
+    position: sticky;
+    bottom: 0;
+    z-index: 16;
+    max-width: none;
+    margin: 14px -12px -12px;
+    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(207, 229, 240, 0.9);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-back-btn,
+  .public-form-page:not(.public-form-page--consultation) .nr-topbar-continue {
+    width: 100%;
+    min-height: 48px;
+    justify-content: center;
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .public-form-page:not(.public-form-page--consultation) .nr-step {
+    flex-basis: 78px;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .nr-step-label {
+    max-width: 68px;
+    font-size: 0.58rem;
+  }
+
+  .public-form-page:not(.public-form-page--consultation) .calendar-availability {
     grid-template-columns: 1fr;
   }
 }
