@@ -97,11 +97,7 @@ export const initialWhatsappSettings: AnyRecord = {
   languageCode: "pt_BR",
   templateVariables: [
     "tutor_name",
-    "protocol",
     "schedule_date",
-    "schedule_location_name",
-    "schedule_address",
-    "schedule_address_url",
   ],
 };
 

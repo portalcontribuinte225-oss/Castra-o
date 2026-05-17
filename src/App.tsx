@@ -164,6 +164,7 @@ const permissionConfigItems = [
   { id: "users", label: "Criar Usuários" },
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
+  { id: "whatsapp_settings", label: "Aba WhatsApp" },
 ];
 
 function scopeConfigItems(items = [], municipality: AnyRecord = {}) {
@@ -189,6 +190,21 @@ function mergeScopedConfigItems(current = [], nextItems = [], municipalityId = "
     ? current.filter((item) => getItemMunicipalityId(item) !== municipalityId)
     : [];
   return [...retained, ...(Array.isArray(nextItems) ? nextItems : [])];
+}
+
+function scopeTenantConfigValue(value, municipalityId = "") {
+  if (!municipalityId || value === undefined || value === null) return value;
+  if (Array.isArray(value)) {
+    return value.map((item) => ({ ...item, municipalityId: getItemMunicipalityId(item) || municipalityId }));
+  }
+  if (value && typeof value === "object" && Array.isArray(value.sectors) && Array.isArray(value.users)) {
+    return {
+      ...value,
+      sectors: value.sectors.map((sector) => ({ ...sector, municipalityId: getItemMunicipalityId(sector) || municipalityId })),
+      users: value.users.map((user) => ({ ...user, municipalityId: getItemMunicipalityId(user) || municipalityId })),
+    };
+  }
+  return value;
 }
 
 function dedupeMunicipalityItems(items = []) {
@@ -404,7 +420,7 @@ export default function App() {
     Promise.allSettled(configLoaders.map(([key, setter]) =>
       api.getConfig(key).then((value) => {
         if (value !== undefined && value !== null) {
-          setter(value);
+          setter(scopeTenantConfigValue(value, currentUser?.municipalityId || ""));
           setLoadedConfigKeys((current) => ({ ...current, [key]: true }));
         }
       }),
@@ -5473,6 +5489,14 @@ function ConfigView({
   const [recurringEnd, setRecurringEnd] = useState("");
   const [recurringVacancies, setRecurringVacancies] = useState("20");
   const [recurringWeekdays, setRecurringWeekdays] = useState([]);
+  const configCurrentTeamUser = (teams.users || []).find((user) => (
+    String(user.id || "") === String(currentUser?.id || "")
+    || String(user.email || "").toLowerCase() === String(currentUser?.email || "").toLowerCase()
+  ));
+  const configCurrentPermissionGroup = permissionGroups.find((group) =>
+    group.id === configCurrentTeamUser?.permissionGroupId && group.active !== false
+  );
+  const canUseConfigPermissions = configCurrentPermissionGroup && !isGlobalRole(currentUser?.role);
   const environmentTabs = [
     { id: "agenda", label: "Agenda" },
     { id: "requests", label: "Tipo de Solicitação" },
@@ -5481,7 +5505,7 @@ function ConfigView({
     { id: "documents", label: "Documentos Solicitados" },
     { id: "ai", label: "IA" },
     { id: "whatsapp", label: "WhatsApp" },
-  ];
+  ].filter((tab) => tab.id !== "whatsapp" || !canUseConfigPermissions || configCurrentPermissionGroup.allowedConfigItems?.includes("whatsapp_settings"));
 
   useEffect(() => {
     if (configArea === "environment") {
@@ -7176,9 +7200,9 @@ function ConfigView({
                 onChange={(value) => setWhatsappSettings((current) => ({ ...current, languageCode: value }))}
               />
               <Field
-                label="Variaveis do template"
+                label="Variáveis do template"
                 value={(Array.isArray(whatsappSettings.templateVariables) ? whatsappSettings.templateVariables : initialWhatsappSettings.templateVariables).join(", ")}
-                placeholder="tutor_name, protocol, schedule_date"
+                placeholder="tutor_name, schedule_date"
                 onChange={(value) => setWhatsappSettings((current) => ({
                   ...current,
                   templateVariables: value.split(",").map((variable) => variable.trim()).filter(Boolean),
@@ -7921,38 +7945,61 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
     }
   }
 
+  const latestHistoryItem = history[0] || null;
+  const nextScheduledHistoryItem = history.find((item) => (
+    item.status === "AGUARDANDO_CIRURGIA"
+    && getAnimalHistorySchedule(item)
+  ));
+  const latestProcedureItem = history.find((item) => (
+    ["CIRURGIA_REALIZADA", "SOLICITACAO_PROCEDIMENTO"].includes(item.type)
+  ));
+  const historyMunicipalities = [...new Set(history.map(getAnimalHistoryMunicipality).filter(Boolean))];
+
   return (
     <section className="animal-record-panel">
       <div className="animal-record-header">
-        <div>
-          <span className="eyebrow">Animal encontrado</span>
+        <div className="animal-record-identity">
+          <span className="eyebrow">Prontuário global por microchip</span>
           <h3>{animal.name || "Animal sem nome"}</h3>
           <p>{[animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização"}</p>
+          <div className="animal-record-meta">
+            <span><ScanLine size={14} /> {animal.microchip || "Microchip não informado"}</span>
+            {historyMunicipalities.length > 0 && <span><MapPin size={14} /> {historyMunicipalities.join(", ")}</span>}
+          </div>
         </div>
-        <span className="animal-status-chip">{animal.status || "ativo"}</span>
+        <div className="animal-record-header-tools">
+          <span className="animal-status-chip">{animal.status || "ativo"}</span>
+          <button className="ghost-button animal-export-action" type="button" onClick={() => printAnimalRecordPdf(animal, tutor, history)}>
+            <Download size={16} />
+            Exportar
+          </button>
+        </div>
       </div>
 
       <div className="animal-record-grid">
-        <InfoTile label="Microchip" value={animal.microchip || "Não informado"} />
         <InfoTile label="Tutor atual" value={tutor.tutor_name || tutor.name || "Não informado"} />
         <InfoTile label="CPF do tutor" value={maskCpf(tutor.cpf || cpf)} />
         <InfoTile label="Contato" value={[tutor.phone, tutor.tutor_email].filter(Boolean).join(" · ") || "Não informado"} />
+        <InfoTile label="Último evento" value={latestHistoryItem ? animalHistoryTitle(latestHistoryItem) : "Sem eventos"} />
+        <InfoTile label="Próxima agenda" value={nextScheduledHistoryItem ? getAnimalHistorySchedule(nextScheduledHistoryItem) : "Sem agenda"} />
+        <InfoTile label="Último procedimento" value={latestProcedureItem ? animalHistoryTitle(latestProcedureItem) : "Não informado"} />
       </div>
 
       <div className="animal-record-actions">
         <button className="primary-action" type="button" onClick={() => { setProcedureOpen((value) => !value); setDeathOpen(false); setTransferOpen(false); }}>
+          <ClipboardCheck size={17} />
           Solicitar procedimento
         </button>
-        <button className="secondary-action" type="button" onClick={() => { setDeathOpen((value) => !value); setProcedureOpen(false); setTransferOpen(false); }}>
-          Registrar óbito
-        </button>
-        <button className="secondary-action" type="button" onClick={() => { setTransferOpen((value) => !value); setProcedureOpen(false); setDeathOpen(false); }}>
-          Solicitar troca de tutor
-        </button>
-        <button className="ghost-button" type="button" onClick={() => printAnimalRecordPdf(animal, tutor, history)}>
-          <Download size={16} />
-          Exportar prontuário
-        </button>
+        <div className="animal-record-secondary-actions">
+          <button className="secondary-action" type="button" onClick={() => { setTransferOpen((value) => !value); setProcedureOpen(false); setDeathOpen(false); }}>
+            <RefreshCw size={16} />
+            Troca de tutor
+          </button>
+          <button className="secondary-action danger-soft" type="button" onClick={() => { setDeathOpen((value) => !value); setProcedureOpen(false); setTransferOpen(false); }}>
+            <AlertCircle size={16} />
+            Registrar óbito
+          </button>
+        </div>
       </div>
 
       {procedureOpen && (
@@ -8028,15 +8075,28 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
       {formStatus && <p className={formStatus.includes("enviad") || formStatus.includes("análise") ? "sms-status confirmed" : "helper-text"}>{formStatus}</p>}
 
       <div className="animal-history">
-        <h4>Prontuário do animal</h4>
+        <div className="animal-history-heading">
+          <div>
+            <h4>Histórico do animal</h4>
+            <p>{history.length} evento(s) registrado(s) para este microchip</p>
+          </div>
+        </div>
         {history.length === 0 && <p className="helper-text">Nenhum evento registrado para este microchip.</p>}
         {history.slice(0, 8).map((item, index) => (
-          <article className="animal-history-item" key={`${item.source || "history"}-${item.request_id || item.id || index}`}>
-            <span>{formatDateTime(item.occurred_at) || "Sem data"}</span>
+          <article className={`animal-history-item ${animalHistoryTone(item)}`} key={`${item.source || "history"}-${item.request_id || item.id || index}`}>
+            <div className="animal-history-marker">
+              {animalHistoryIcon(item)}
+            </div>
+            <div className="animal-history-content">
+            <div className="animal-history-topline">
+              <span>{formatDateTime(item.occurred_at) || "Sem data"}</span>
+              {getAnimalHistoryMunicipality(item) && <em>{getAnimalHistoryMunicipality(item)}</em>}
+            </div>
             <strong>{animalHistoryTitle(item)}</strong>
             {(item.protocol || item.status || item.notes) && (
               <p>{[item.protocol ? `#${item.protocol}` : "", item.status ? statusLabels[item.status] || item.status : "", item.notes].filter(Boolean).join(" · ")}</p>
             )}
+            </div>
           </article>
         ))}
       </div>
@@ -8057,6 +8117,36 @@ function animalHistoryTitle(item: AnyRecord = {}) {
     SOLICITACAO: "Solicitação",
   };
   return labels[item.type] || item.title || item.type || "Evento";
+}
+
+function getAnimalHistoryRegistration(item: AnyRecord = {}) {
+  return item.data?.registration || {};
+}
+
+function getAnimalHistoryMunicipality(item: AnyRecord = {}) {
+  const registration = getAnimalHistoryRegistration(item);
+  return registration.municipality || registration.schedule_municipality || "";
+}
+
+function getAnimalHistorySchedule(item: AnyRecord = {}) {
+  const registration = getAnimalHistoryRegistration(item);
+  return registration.schedule_date || "";
+}
+
+function animalHistoryTone(item: AnyRecord = {}) {
+  if (["ANIMAL_OBITO", "SOLICITACAO_OBITO"].includes(item.type)) return "danger";
+  if (["TROCA_TUTOR", "SOLICITACAO_TROCA_TUTOR"].includes(item.type)) return "transfer";
+  if (item.type === "CIRURGIA_REALIZADA") return "success";
+  if (item.status === "AGUARDANDO_CIRURGIA") return "scheduled";
+  return "neutral";
+}
+
+function animalHistoryIcon(item: AnyRecord = {}) {
+  if (["ANIMAL_OBITO", "SOLICITACAO_OBITO"].includes(item.type)) return <AlertCircle size={15} />;
+  if (["TROCA_TUTOR", "SOLICITACAO_TROCA_TUTOR"].includes(item.type)) return <RefreshCw size={15} />;
+  if (item.type === "CIRURGIA_REALIZADA") return <CheckCircle2 size={15} />;
+  if (item.status === "AGUARDANDO_CIRURGIA") return <CalendarDays size={15} />;
+  return <ClipboardList size={15} />;
 }
 
 

@@ -30,7 +30,7 @@ function validatePermissionGroups(value) {
     "dashboard", "admin", "credenciamento", "agenda", "adocao", "relatorios", "config",
   ]);
   const VALID_CONFIG_ITEMS = new Set([
-    "environment", "users", "sectors", "permissions", "municipalities",
+    "environment", "users", "sectors", "permissions", "municipalities", "whatsapp_settings",
   ]);
   for (const group of value) {
     if (!group || typeof group !== "object") return "Cada grupo deve ser um objeto";

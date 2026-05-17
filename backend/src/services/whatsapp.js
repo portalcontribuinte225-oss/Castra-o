@@ -4,11 +4,7 @@ import { checkAndConsumeQuota } from "./whatsappQuota.js";
 const WHATSAPP_CONFIG_KEY = "whatsapp";
 const DEFAULT_CONFIRMATION_VARIABLES = [
   "tutor_name",
-  "protocol",
   "schedule_date",
-  "schedule_location_name",
-  "schedule_address",
-  "schedule_address_url",
 ];
 
 function parseJsonObject(value) {

@@ -13,7 +13,7 @@ export function buildDefaultPermissionGroup() {
     name: "Acesso total",
     active: true,
     allowedMenuItems: ["dashboard", "admin", "credenciamento", "agenda", "adocao", "relatorios", "config"],
-    allowedConfigItems: ["environment", "users", "sectors", "permissions"],
+    allowedConfigItems: ["environment", "users", "sectors", "permissions", "whatsapp_settings"],
   };
 }
 
@@ -86,7 +86,7 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
       {
         id: "comprovante_residencia",
         name: "Comprovante de Residência",
-        required: true,
+        required: false,
         active: true,
         accept: ["image/jpeg", "image/png", "application/pdf"],
         maxSizeMb: 5,
@@ -97,8 +97,8 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
     ],
     "castragestao:request-types": [
       {
-        id: "castracao",
-        name: "Castração",
+        id: "ninhada",
+        name: "Ninhada",
         fee: "Gratuito",
         charged: false,
         billingDescription: "",
@@ -110,7 +110,28 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
           {
             id: "comprovante_residencia",
             name: "Comprovante de Residência",
-            required: true,
+            required: false,
+            active: true,
+            accept: ["image/jpeg", "image/png", "application/pdf"],
+            maxSizeMb: 5,
+          },
+        ],
+      },
+      {
+        id: "animal_rua",
+        name: "Animal de Rua",
+        fee: "Gratuito",
+        charged: false,
+        billingDescription: "",
+        billingAmount: "",
+        billingDueDate: "",
+        active: true,
+        overrideDailyLimit: false,
+        documents: [
+          {
+            id: "comprovante_residencia",
+            name: "Comprovante de Residência",
+            required: false,
             active: true,
             accept: ["image/jpeg", "image/png", "application/pdf"],
             maxSizeMb: 5,
