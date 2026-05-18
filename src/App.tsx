@@ -3283,9 +3283,6 @@ function NewRequest({
                     </div>
                     <div className="animal-choice-grid breed-weight-row">
                       <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
-                      <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`}>
-                        <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
-                      </div>
                     </div>
                     {animal.breedType === "Definida" && (
                       <div className="access-field">
@@ -3303,14 +3300,12 @@ function NewRequest({
                         <input type="text" placeholder="Cor da pelagem" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
                       </div>
                     </div>
-                    <div className="birth-weight-row">
+                    <div className="two-column-fields">
                       <div className="access-field">
-                        <CalendarDays size={14} className="access-field-icon" />
-                        <input type="date" placeholder="Data de nascimento" value={animal.birthDate || ""} onChange={(e) => { updateAnimal(index, "birthDate", e.target.value); if (e.target.value) updateAnimal(index, "age", ""); }} />
+                        <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
                       </div>
-                      <span className="birth-weight-or">ou</span>
-                      <div className="access-field">
-                        <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.birthDate ? "" : (animal.age || "")} onChange={(e) => { updateAnimal(index, "age", e.target.value); if (e.target.value) updateAnimal(index, "birthDate", ""); }} />
+                      <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`}>
+                        <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
                       </div>
                     </div>
                     {internalSimple && (
