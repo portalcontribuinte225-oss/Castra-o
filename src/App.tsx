@@ -4361,9 +4361,6 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
           <div className="prm-header-top">
             <div className="prm-header-left">
               <span className="prm-protocol">Processo #{request.protocol}</span>
-              <span className={`prm-origin-badge prm-origin-badge--${(normalizedRequest.origin || "PUBLICA").toLowerCase()}`}>
-                {normalizedRequest.origin === "INTERNA" ? "Interno" : normalizedRequest.origin === "BALCAO" ? "Balcão" : "Público"}
-              </span>
               {normalizedRequest.rescheduleCount > 0 && (
                 <span className="prm-reschedule-badge">
                   <RefreshCw size={10} />

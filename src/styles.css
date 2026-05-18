@@ -5954,10 +5954,10 @@ main {
 }
 
 .prm-protocol {
-  font-size: 0.7rem;
+  font-size: 1rem;
   font-weight: 700;
   color: #7dd3fc;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
