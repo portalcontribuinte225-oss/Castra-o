@@ -7,14 +7,9 @@ import { isGlobalUser, requireMunicipality } from "../tenant.js";
 import { notifyScheduleConfirmation, whatsappHistoryNote } from "../services/whatsapp.js";
 
 const router = Router();
-const ALLOWED_REQUEST_STATUSES = new Set(["EM_ANALISE", "AGUARDANDO_CIRURGIA", "ARQUIVADA"]);
+const ALLOWED_REQUEST_STATUSES = new Set(["NOVA", "AGENDADA", "REALIZADA", "CANCELADA"]);
 const ALLOWED_REQUEST_TAGS = new Set([
   "ATRIBUIDA",
-  "DEFERIDA",
-  "INDEFERIDA",
-  "COMPARECEU",
-  "NAO_COMPARECEU",
-  "CANCELADA",
   "REAGENDADA",
   "PRIORIDADE",
   "RETORNO_TUTOR",
@@ -242,7 +237,7 @@ router.post("/", optionalAuth, async (req, res) => {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        $19, $20, $21, $22, 'EM_ANALISE', $23, $24, $25, $26,
+        $19, $20, $21, $22, 'NOVA', $23, $24, $25, $26,
         $27, $28, $29, $30, $31, $32::jsonb, $33::jsonb, $34::jsonb,
         $35, $36, $37
       )
@@ -438,10 +433,6 @@ router.patch("/:id", auth, async (req, res) => {
     );
     if (!rows[0]) return res.status(404).json({ error: "Não encontrado" });
 
-    const updatedTags = parseJsonArray(rows[0].tags);
-    const previousTags = parseJsonArray(existingRows[0].tags);
-    const isNewAttendance = updatedTags.includes("COMPARECEU") && !previousTags.includes("COMPARECEU");
-    const isNewDeferred = updatedTags.includes("DEFERIDA") && !previousTags.includes("DEFERIDA");
     const scheduleDateWasPatched =
       body.schedule_date !== undefined ||
       body.preferredSchedule !== undefined ||
@@ -450,12 +441,13 @@ router.patch("/:id", auth, async (req, res) => {
       scheduleDateWasPatched &&
       String(rows[0].schedule_date || "") !== String(existingRows[0].schedule_date || "");
     const isScheduleConfirmation =
-      rows[0].status === "AGUARDANDO_CIRURGIA" &&
-      (isNewDeferred || existingRows[0].status !== "AGUARDANDO_CIRURGIA");
+      rows[0].status === "AGENDADA" &&
+      existingRows[0].status !== "AGENDADA";
     const isScheduleRescheduleConfirmation =
-      rows[0].status === "AGUARDANDO_CIRURGIA" &&
-      existingRows[0].status === "AGUARDANDO_CIRURGIA" &&
+      rows[0].status === "AGENDADA" &&
+      existingRows[0].status === "AGENDADA" &&
       scheduleDateChanged;
+    const isNewAttendance = rows[0].status === "REALIZADA" && existingRows[0].status !== "REALIZADA";
 
     if (isScheduleConfirmation || isScheduleRescheduleConfirmation) {
       try {

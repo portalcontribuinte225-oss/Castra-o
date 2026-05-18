@@ -494,7 +494,7 @@ router.post("/requests/:requestId/death", async (req, res) => {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'ANIMAL_OBITO', $19, 'EM_ANALISE', $20, $21, $22::jsonb, $23::jsonb, $24
+        'ANIMAL_OBITO', $19, 'NOVA', $20, $21, $22::jsonb, $23::jsonb, $24
       )
       RETURNING *`,
       [
@@ -591,7 +591,7 @@ router.post("/requests/:requestId/transfer", async (req, res) => {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'TROCA_TUTOR', $19, 'EM_ANALISE', $20, $21, $22, $23,
+        'TROCA_TUTOR', $19, 'NOVA', $20, $21, $22, $23,
         $24::jsonb, $25::jsonb, $26
       )
       RETURNING *`,
@@ -695,7 +695,7 @@ router.post("/:id/death", optionalAuth, async (req, res) => {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'ANIMAL_OBITO', $19, 'EM_ANALISE', $20, $21, $22::jsonb, $23::jsonb, $24
+        'ANIMAL_OBITO', $19, 'NOVA', $20, $21, $22::jsonb, $23::jsonb, $24
       )
       RETURNING *`,
       [
@@ -810,7 +810,7 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
         $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'TROCA_TUTOR', $19, 'EM_ANALISE', $20, $21, $22, $23,
+        'TROCA_TUTOR', $19, 'NOVA', $20, $21, $22, $23,
         $24, $25, $26, $27, $28, $29::jsonb, $30::jsonb, $31
       )
       RETURNING *`,

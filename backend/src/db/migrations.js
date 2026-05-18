@@ -41,7 +41,7 @@ export async function runMigrations() {
       species TEXT,
       size TEXT,
       animals JSONB DEFAULT '[]',
-      status TEXT NOT NULL DEFAULT 'EM_ANALISE',
+      status TEXT NOT NULL DEFAULT 'NOVA',
       request_type TEXT,
       municipality TEXT,
       municipality_id UUID REFERENCES municipalities(id),
@@ -226,7 +226,7 @@ export async function runMigrations() {
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_cep TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS death_date TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS death_cause TEXT;
-    ALTER TABLE requests ALTER COLUMN status SET DEFAULT 'EM_ANALISE';
+    ALTER TABLE requests ALTER COLUMN status SET DEFAULT 'NOVA';
 
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS location_name TEXT;
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS location_address TEXT;
@@ -328,51 +328,43 @@ export async function runMigrations() {
   `);
 
   await pool.query(`
-    ALTER TABLE requests DROP CONSTRAINT IF EXISTS requests_status_check;
-
-    UPDATE requests
-    SET
-      status = CASE
-        WHEN status IN ('INDEFERIDA', 'CANCELADA', 'REALIZADA') THEN 'ARQUIVADA'
-        WHEN status IN ('DEFERIDA', 'AGENDADA', 'REAGENDADA', 'AGUARDANDO_CIRURGIA') THEN 'AGUARDANDO_CIRURGIA'
-        WHEN status IN ('AGUARDANDO_TRIAGEM', 'AGUARDANDO_ATRIBUIR', 'SUBMETIDA', 'TRIAGEM', 'PENDENCIA_DOCUMENTAL', 'EM_ANALISE') THEN 'EM_ANALISE'
-        WHEN status = 'ARQUIVADA' THEN 'ARQUIVADA'
-        ELSE 'EM_ANALISE'
-      END,
-      tags = (
-        SELECT COALESCE(jsonb_agg(DISTINCT tag), '[]'::jsonb)
-        FROM jsonb_array_elements_text(
-          COALESCE(tags, '[]'::jsonb) ||
-          CASE status
-            WHEN 'DEFERIDA' THEN '["DEFERIDA"]'::jsonb
-            WHEN 'AGENDADA' THEN '["DEFERIDA"]'::jsonb
-            WHEN 'INDEFERIDA' THEN '["INDEFERIDA"]'::jsonb
-            WHEN 'REALIZADA' THEN '["DEFERIDA", "COMPARECEU"]'::jsonb
-            WHEN 'CANCELADA' THEN '["CANCELADA"]'::jsonb
-            WHEN 'REAGENDADA' THEN '["DEFERIDA", "REAGENDADA"]'::jsonb
-            ELSE '[]'::jsonb
-          END
-        ) AS tag
-      )
-    WHERE status NOT IN ('EM_ANALISE', 'AGUARDANDO_CIRURGIA', 'ARQUIVADA')
-       OR status = 'AGUARDANDO_TRIAGEM';
-
-    UPDATE requests
-    SET status = 'AGUARDANDO_CIRURGIA'
-    WHERE status = 'EM_ANALISE'
-      AND COALESCE(tags, '[]'::jsonb) ? 'DEFERIDA'
-      AND NOT (COALESCE(tags, '[]'::jsonb) ? 'INDEFERIDA')
-      AND NOT (COALESCE(tags, '[]'::jsonb) ? 'COMPARECEU')
-      AND NOT (COALESCE(tags, '[]'::jsonb) ? 'CANCELADA');
-
-    ALTER TABLE requests
-      ADD CONSTRAINT requests_status_check
-      CHECK (status IN ('EM_ANALISE', 'AGUARDANDO_CIRURGIA', 'ARQUIVADA'));
-
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT TRUE;
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS schedule_rule_id TEXT DEFAULT '';
 
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS origin TEXT DEFAULT 'PUBLICA';
+  `);
+
+  /* ── Refatoração de status: EM_ANALISE/AGUARDANDO_CIRURGIA/ARQUIVADA → NOVA/AGENDADA/REALIZADA/CANCELADA ── */
+  await pool.query(`
+    ALTER TABLE requests DROP CONSTRAINT IF EXISTS requests_status_check;
+
+    -- Migra registros que ainda usam os status antigos
+    UPDATE requests
+    SET status = CASE
+      WHEN status = 'EM_ANALISE' THEN 'NOVA'
+      WHEN status = 'AGUARDANDO_CIRURGIA' THEN 'AGENDADA'
+      WHEN status = 'ARQUIVADA' AND (
+        COALESCE(tags, '[]'::jsonb) ? 'COMPARECEU'
+      ) THEN 'REALIZADA'
+      WHEN status = 'ARQUIVADA' THEN 'CANCELADA'
+      ELSE status
+    END
+    WHERE status IN ('EM_ANALISE', 'AGUARDANDO_CIRURGIA', 'ARQUIVADA');
+
+    -- Remove tags que agora são representadas como status
+    UPDATE requests
+    SET tags = (
+      SELECT COALESCE(jsonb_agg(tag), '[]'::jsonb)
+      FROM jsonb_array_elements_text(COALESCE(tags, '[]'::jsonb)) AS tag
+      WHERE tag NOT IN ('DEFERIDA', 'INDEFERIDA', 'COMPARECEU', 'NAO_COMPARECEU', 'CANCELADA')
+    )
+    WHERE COALESCE(tags, '[]'::jsonb) ?| ARRAY['DEFERIDA','INDEFERIDA','COMPARECEU','NAO_COMPARECEU','CANCELADA'];
+
+    ALTER TABLE requests ALTER COLUMN status SET DEFAULT 'NOVA';
+
+    ALTER TABLE requests
+      ADD CONSTRAINT requests_status_check
+      CHECK (status IN ('NOVA', 'AGENDADA', 'REALIZADA', 'CANCELADA'));
   `);
 
   /* ── Revisão Arquitetural: isolamento, auditoria e setores ─────────────── */
