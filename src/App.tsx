@@ -4530,10 +4530,6 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
         {/* CONTENT */}
         <div className="prm-content">
           <div className="prm-content-main">
-            <div className="prm-section">
-              <p className="prm-section-label"><Clock size={13} /> Timeline operacional</p>
-              {operationalEvents.length > 0 ? renderHistoryTree() : <p className="prm-muted-note">Nenhum evento operacional registrado.</p>}
-            </div>
             {anexos.length > 0 && (
               <div className="prm-section">
                 <p className="prm-section-label"><FileText size={13} /> Documentos ({anexos.length})</p>
@@ -4560,6 +4556,10 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
             {!canAnalyze && !canRecordAttendance && anexos.length === 0 && (
               <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
             )}
+            <div className="prm-section prm-section--timeline">
+              <p className="prm-section-label"><Clock size={13} /> Timeline operacional</p>
+              {operationalEvents.length > 0 ? renderHistoryTree() : <p className="prm-muted-note">Nenhum evento operacional registrado.</p>}
+            </div>
           </div>
 
           <div className="prm-content-side">
