@@ -2438,6 +2438,7 @@ function NewRequest({
     {
       name: "",
       species: "",
+      procedureType: "",
       sex: "",
       breedType: "",
       breedDescription: "",
@@ -2541,6 +2542,7 @@ function NewRequest({
         {
           name: "",
           species: "",
+          procedureType: "",
           sex: "",
           breedType: "",
           breedDescription: "",
@@ -3279,10 +3281,11 @@ function NewRequest({
                   {isOpen && <>
                     <div className="animal-choice-grid two-col">
                       <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
-                      <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
+                      <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
                     </div>
-                    <div className="animal-choice-grid breed-weight-row">
+                    <div className="animal-choice-grid two-col">
                       <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
+                      <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
                     </div>
                     {animal.breedType === "Definida" && (
                       <div className="access-field">
