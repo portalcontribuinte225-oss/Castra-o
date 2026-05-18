@@ -2424,7 +2424,7 @@ function NewRequest({
     city: currentUser.city || "",
     state: currentUser.state || "",
     cadUnico: currentUser.cadUnico || "",
-    cadUnicoNotApplicable: Boolean(currentUser.cadUnicoNotApplicable),
+    cadUnicoNotApplicable: currentUser.cadUnico ? false : Boolean(currentUser.cadUnicoNotApplicable ?? true),
     isFarmer: Boolean(currentUser.isFarmer || currentUser.is_farmer),
     latitude: "",
     longitude: "",
@@ -2596,8 +2596,8 @@ function NewRequest({
   function toggleCadUnicoNotApplicable(checked) {
     setRequestData((current) => ({
       ...current,
-      cadUnicoNotApplicable: checked,
-      cadUnico: checked ? "" : current.cadUnico,
+      cadUnicoNotApplicable: !checked,
+      cadUnico: !checked ? "" : current.cadUnico,
     }));
   }
 
@@ -3181,8 +3181,8 @@ function NewRequest({
                 <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
               </div>
               <label className="checkbox-row cadunico-checkbox">
-                <input type="checkbox" checked={requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
-                Não se aplica
+                <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
+                Se aplica
               </label>
             </div>
             <div className="form-subsection-title">Endereço</div>
@@ -3490,7 +3490,7 @@ function NewRequest({
             <Field label="CPF" value={requestData.cpf} onChange={(value) => updateMaskedRequestField("cpf", value)} placeholder="000.000.000-00" invalid={showInvalid("cpf")} />
             <div className="cadunico-row">
               <Field label="CadÚnico" value={requestData.cadUnico} onChange={(value) => updateRequestField("cadUnico", value)} placeholder="Número do CadÚnico" readOnly={requestData.cadUnicoNotApplicable} />
-              <label className="checkbox-row cadunico-checkbox"><input type="checkbox" checked={requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />Não se aplica</label>
+              <label className="checkbox-row cadunico-checkbox"><input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />Se aplica</label>
             </div>
             <div className="form-subsection-title">Endereço</div>
             <div className="address-lookup-grid">
@@ -4520,12 +4520,6 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
         {/* CONTENT */}
         <div className="prm-content">
           <div className="prm-content-main">
-            {anexos.length > 0 && (
-              <div className="prm-section">
-                <p className="prm-section-label"><FileText size={13} /> Documentos ({anexos.length})</p>
-                {renderAttachments()}
-              </div>
-            )}
             {canRecordAttendance && activePanel !== "reschedule" && (
               <div className="prm-section">
                 <p className="prm-section-label"><ClipboardList size={13} /> Dados do procedimento</p>
@@ -4541,6 +4535,12 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
                   <span>Observação interna</span>
                   <textarea value={attendanceData.note} onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))} />
                 </label>
+              </div>
+            )}
+            {anexos.length > 0 && (
+              <div className="prm-section">
+                <p className="prm-section-label"><FileText size={13} /> Documentos ({anexos.length})</p>
+                {renderAttachments()}
               </div>
             )}
             {!canAnalyze && !canRecordAttendance && anexos.length === 0 && (
