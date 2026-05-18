@@ -15763,6 +15763,23 @@ body * {
   padding: 14px 16px;
   margin-bottom: 12px;
 }
+.prm-inline-panel .reschedule-grid {
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.prm-inline-panel .reschedule-grid .calendar-day-button {
+  min-height: 58px;
+  padding: 6px 4px;
+}
+.prm-inline-panel .reschedule-grid .calendar-day-button strong {
+  font-size: 0.88rem;
+}
+.prm-inline-panel .reschedule-grid .calendar-day-button span,
+.prm-inline-panel .reschedule-grid .calendar-day-button small {
+  font-size: 0.62rem;
+}
 .prm-inline-panel-title {
   display: flex;
   align-items: center;
