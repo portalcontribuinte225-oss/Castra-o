@@ -4375,7 +4375,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
               <StatusBadge status={normalizedRequest.status} />
               <button className="prm-pdf-btn" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>
                 <Download size={13} />
-                {bundleLoading ? "Preparando..." : "Baixar PDF"}
+                {bundleLoading ? "Preparando..." : "Baixar Prontuário"}
               </button>
               <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
                 <X size={17} />
@@ -4383,15 +4383,6 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
             </div>
           </div>
           <h2 className="prm-tutor-name">{displayText(normalizedRequest.tutor)}</h2>
-          <div className="prm-info-strip">
-            <span><PawPrint size={12} />{displayText(principalAnimal.name) || "Animal não informado"}</span>
-            {normalizedRequest.phone && <span><Phone size={12} />{normalizedRequest.phone}</span>}
-            {normalizedRequest.cpf && <span><FileText size={12} />{normalizedRequest.cpf}</span>}
-            {normalizedRequest.preferredSchedule && <span><CalendarDays size={12} />{normalizedRequest.preferredSchedule}</span>}
-            <span><User size={12} />{displayText(normalizedRequest.responsible) || "Não atribuído"}</span>
-            {normalizedRequest.assignedSectorName && <span><Building2 size={12} />{displayText(normalizedRequest.assignedSectorName)}</span>}
-            {daysWaiting !== null && <span className={daysWaiting > 7 ? "prm-info-urgent" : ""}>{daysWaiting}d de espera</span>}
-          </div>
           <div className="prm-tag-strip">
             {operationalTags.map((tag) => (
               <span className={`prm-op-tag is-${tag.tone}`} key={tag.label}>{tag.label}</span>
