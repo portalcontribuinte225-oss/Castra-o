@@ -1076,8 +1076,8 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   const hasSearched = resultRequests !== null;
   const visibleRequests = hasSearched ? resultRequests : fallbackRequests;
   const normalizedVisibleRequests = (Array.isArray(visibleRequests) ? visibleRequests : []).map(normalizeRequest);
-  const activeRequestsCount = normalizedVisibleRequests.filter((request) => request.status !== "ARQUIVADA").length;
-  const nextRequest = normalizedVisibleRequests.find((request) => request.status !== "ARQUIVADA" && requestHasTag(request, "DEFERIDA") && (request.appointment || request.preferredSchedule));
+  const activeRequestsCount = normalizedVisibleRequests.filter((request) => request.status === "NOVA" || request.status === "AGENDADA").length;
+  const nextRequest = normalizedVisibleRequests.find((request) => request.status === "AGENDADA" && (request.appointment || request.preferredSchedule));
   const nextAppointment = nextRequest ? nextRequest.appointment || nextRequest.preferredSchedule : "Nenhum";
 
   async function consult(event) {
@@ -2272,7 +2272,7 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
 
 function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf = "", validationKey = "", onRequestCreated }: AnyRecord) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
-  const next = safeRequests.find((request) => request.status !== "ARQUIVADA" && requestHasTag(request, "DEFERIDA") && (request.appointment || request.preferredSchedule));
+  const next = safeRequests.find((request) => request.status === "AGENDADA" && (request.appointment || request.preferredSchedule));
   const [detailsRequest, setDetailsRequest] = useState(null);
   const detailsAnimal = detailsRequest?.animals?.[0] || {};
   const detailsAnimalHistory = detailsRequest ? buildPublicAnimalHistory(detailsRequest, detailsAnimal) : [];
@@ -2291,7 +2291,7 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
       </div>}
 
       {!compact && <div className="summary-row">
-        <Metric title={compact ? "Ativas" : "Solicitações ativas"} value={safeRequests.filter((r) => r.status !== "ARQUIVADA").length} icon={ClipboardCheck} />
+        <Metric title={compact ? "Ativas" : "Solicitações ativas"} value={safeRequests.filter((r) => r.status === "NOVA" || r.status === "AGENDADA").length} icon={ClipboardCheck} />
         <Metric title="Próximo agendamento" value={next ? next.appointment || next.preferredSchedule : "Nenhum"} icon={CalendarDays} />
         <Metric title={compact ? "Avisos" : "Notificações"} value="4" icon={Bell} />
       </div>}
@@ -2364,7 +2364,7 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
 
 function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {}) {
   const performed = request.performedProcedures || request.workflow_data?.performedProcedures || request.workflowData?.performedProcedures || "";
-  const procedureStatus = requestHasTag(request, "COMPARECEU")
+  const procedureStatus = request.status === "REALIZADA"
     ? performed || animal.procedure || requestTypeLabel(request)
     : animal.procedure || requestTypeLabel(request);
   return [
@@ -2375,7 +2375,7 @@ function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {
     { label: "Nascimento / idade", value: animal.birthDate || animal.age || "Não informado" },
     { label: "Peso", value: animal.weight ? `${animal.weight} kg` : "Não informado" },
     { label: "Microchip", value: animal.microchip || request.animalMicrochip || "Não informado" },
-    { label: requestHasTag(request, "COMPARECEU") ? "Procedimento realizado" : "Procedimento solicitado", value: displayText(procedureStatus || "Não informado") },
+    { label: request.status === "REALIZADA" ? "Procedimento realizado" : "Procedimento solicitado", value: displayText(procedureStatus || "Não informado") },
     { label: "Vermifugado", value: displayText(animal.dewormed || "Não informado") },
     { label: "Vacinas em dia", value: displayText(animal.vaccinated || "Não informado") },
     { label: "Já teve cria", value: displayText(animal.hadLitter || "Não informado") },
@@ -3665,49 +3665,42 @@ function AdminDashboard({
       id: "inbox",
       label: "Novas",
       requests: visibleRequests.filter(
-        (r) => r.status === "EM_ANALISE" && !r.tags.includes("ATRIBUIDA"),
+        (r) => r.status === "NOVA" && !r.tags.includes("ATRIBUIDA"),
       ),
     },
     {
       id: "analysis",
       label: "Em análise",
       requests: visibleRequests.filter(
-        (r) => r.status === "EM_ANALISE" && r.tags.includes("ATRIBUIDA"),
+        (r) => r.status === "NOVA" && r.tags.includes("ATRIBUIDA"),
       ),
     },
     {
       id: "scheduled",
       label: "Agendadas",
       requests: visibleRequests.filter(
-        (r) => r.status === "AGUARDANDO_CIRURGIA" && !r.tags.includes("REAGENDADA"),
+        (r) => r.status === "AGENDADA" && !r.tags.includes("REAGENDADA"),
       ),
     },
     {
       id: "rescheduled",
       label: "Reagendadas",
       requests: visibleRequests.filter(
-        (r) => r.status === "AGUARDANDO_CIRURGIA" && r.tags.includes("REAGENDADA"),
+        (r) => r.status === "AGENDADA" && r.tags.includes("REAGENDADA"),
       ),
     },
     {
       id: "done",
-      label: "Concluídas",
+      label: "Realizadas",
       requests: visibleRequests.filter(
-        (r) => r.status === "ARQUIVADA" && r.tags.includes("COMPARECEU"),
+        (r) => r.status === "REALIZADA",
       ),
     },
     {
       id: "canceled",
       label: "Canceladas",
       requests: visibleRequests.filter(
-        (r) => r.status === "ARQUIVADA" && r.tags.includes("CANCELADA"),
-      ),
-    },
-    {
-      id: "rejected",
-      label: "Indeferidas",
-      requests: visibleRequests.filter(
-        (r) => r.status === "ARQUIVADA" && r.tags.includes("INDEFERIDA"),
+        (r) => r.status === "CANCELADA",
       ),
     },
     { id: "all", label: "Todas", requests: visibleRequests },
@@ -3740,7 +3733,7 @@ function AdminDashboard({
   }
 
   function approveRequest(request) {
-    const patch = { status: "AGUARDANDO_CIRURGIA", tags: mergeTags(request.tags, ["DEFERIDA"]) };
+    const patch = { status: "AGENDADA" };
     patchRequest?.(request.id, patch, `Agenda confirmada por ${currentUser.name}`);
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
@@ -3748,13 +3741,16 @@ function AdminDashboard({
   function notAttendedRequest(request) {
     patchRequest?.(
       request.id,
-      { status: "ARQUIVADA", tags: mergeTags(request.tags, ["NAO_COMPARECEU"]) },
+      { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Não compareceu" } },
       `Não comparecimento registrado por ${currentUser.name}`,
     );
   }
 
   function archiveWithTag(request, tag, note) {
-    const patch = { status: "ARQUIVADA", tags: mergeTags(request.tags, [tag]) };
+    const cancelReason = tag === "NAO_COMPARECEU" ? "Não compareceu" : tag === "CANCELADA" ? "Cancelado" : "";
+    const patch = cancelReason
+      ? { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason } }
+      : { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: tag } };
     patchRequest?.(request.id, patch, note);
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
@@ -3794,10 +3790,10 @@ function AdminDashboard({
     if (!request) return;
     const note = String(data.note || "").trim();
     const patch = {
-      status: "ARQUIVADA",
-      tags: mergeTags(request.tags, ["INDEFERIDA"]),
+      status: "CANCELADA",
       rejectionReason: data.category || note || "Indeferido",
       rejectionNote: note,
+      workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Indeferido" },
     };
     patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
@@ -3814,8 +3810,7 @@ function AdminDashboard({
       ? currentAnimals.map((animal, index) => index === 0 ? { ...animal, hasChip: "Sim", microchip } : animal)
       : currentAnimals;
     const patch = {
-      status: "ARQUIVADA",
-      tags: mergeTags(request.tags, ["COMPARECEU"]),
+      status: "REALIZADA",
       animalMicrochip: microchip,
       animals,
       workflow_data: { performedProcedures, attendanceMicrochip: microchip, attendanceNote: note },
@@ -3905,17 +3900,12 @@ function AdminDashboard({
                 <span className="tc-value">{request.preferredSchedule || request.appointment || "-"}</span>
               </div>
 	              <div className="tc-col tc-col--status">
-	                {request.status === "ARQUIVADA" ? (
+	                {(request.status === "REALIZADA" || request.status === "CANCELADA") ? (
                   <span className={`tc-result-badge tc-result-badge--${
-                    request.tags.includes("COMPARECEU") ? "success" :
-                    request.tags.includes("INDEFERIDA") ? "rejected" :
-                    request.tags.includes("CANCELADA") ? "canceled" :
-                    request.tags.includes("NAO_COMPARECEU") ? "absent" : "default"
+                    request.status === "REALIZADA" ? "success" :
+                    "canceled"
                   }`}>
-                    {request.tags.includes("COMPARECEU") ? "Compareceu" :
-                     request.tags.includes("INDEFERIDA") ? "Indeferida" :
-                     request.tags.includes("CANCELADA") ? "Cancelada" :
-                     request.tags.includes("NAO_COMPARECEU") ? "Não compareceu" : "Arquivada"}
+                    {request.status === "REALIZADA" ? "Realizada" : "Cancelada"}
                   </span>
 	                ) : (
 	                  <StatusBadge status={request.status} className={`triage-status-badge ${triageStatusTone(request)}`} />
@@ -4002,10 +3992,10 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     sectorId: normalizedRequest.assignedSectorId || sectors[0]?.id || "",
     userId: normalizedRequest.assignedUserId || "",
   });
-  const canAnalyze = request.status === "EM_ANALISE";
-  const canApprove = canAnalyze && !requestHasTag(request, "DEFERIDA");
-  const canRecordAttendance = request.status === "AGUARDANDO_CIRURGIA";
-  const canReschedule = request.status === "AGUARDANDO_CIRURGIA";
+  const canAnalyze = request.status === "NOVA";
+  const canApprove = canAnalyze;
+  const canRecordAttendance = request.status === "AGENDADA";
+  const canReschedule = request.status === "AGENDADA";
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
   const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
   const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
@@ -4678,10 +4668,11 @@ function buildOperationalTimeline(request: AnyRecord = {}, historyEntries: any[]
       at: request.updatedAt || request.createdAt || "",
     });
   }
-  if (request.status === "ARQUIVADA" && !events.some((event) => String(event.status).includes("Arquiv"))) {
+  if ((request.status === "REALIZADA" || request.status === "CANCELADA") && !events.some((event) => ["Procedimento executado", "Cancelamento", "Indeferimento", "Conclusão"].includes(event.status))) {
+    const cancelReason = request.workflow_data?.cancelReason || request.workflowData?.cancelReason || "";
     events.push({
-      status: requestHasTag(request, "COMPARECEU") ? "Procedimento executado" : requestHasTag(request, "CANCELADA") ? "Cancelamento" : requestHasTag(request, "INDEFERIDA") ? "Indeferimento" : "Conclusão",
-      note: request.attendanceNote || request.rejectionNote || "",
+      status: request.status === "REALIZADA" ? "Procedimento executado" : cancelReason === "Indeferido" ? "Indeferimento" : "Cancelamento",
+      note: request.attendanceNote || request.rejectionNote || cancelReason || "",
       by: request.responsible || "",
       at: request.updatedAt || "",
     });
@@ -4777,10 +4768,9 @@ function PwaInstallPrompt() {
 function buildOperationalTags(request: AnyRecord = {}, context: AnyRecord = {}) {
   const tags = [];
   if (request.rescheduleCount > 0) tags.push({ label: request.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${request.rescheduleCount}x`, tone: "warn" });
-  if (context.daysWaiting >= 7 && request.status !== "ARQUIVADA") tags.push({ label: "Prioritário", tone: "danger" });
+  if (context.daysWaiting >= 7 && request.status !== "REALIZADA" && request.status !== "CANCELADA") tags.push({ label: "Prioritário", tone: "danger" });
   if (context.isInternal) tags.push({ label: "Interno", tone: "info" });
   if (context.hasPendingRequiredDocuments) tags.push({ label: "Falta documento", tone: "warn" });
-  if (requestHasTag(request, "NAO_COMPARECEU")) tags.push({ label: "Não compareceu", tone: "warn" });
   if (request.animalMicrochip || request.animals?.some((animal: AnyRecord) => animal.microchip)) tags.push({ label: "Microchipado", tone: "ok" });
   if (requestHasTag(request, "PRIORIDADE")) tags.push({ label: "Urgente", tone: "danger" });
   return tags;
@@ -8037,7 +8027,7 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
 
   const latestHistoryItem = history[0] || null;
   const nextScheduledHistoryItem = history.find((item) => (
-    item.status === "AGUARDANDO_CIRURGIA"
+    (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA")
     && getAnimalHistorySchedule(item)
   ));
   const latestProcedureItem = history.find((item) => (
@@ -8258,7 +8248,7 @@ function animalHistoryTone(item: AnyRecord = {}) {
   if (["ANIMAL_OBITO", "SOLICITACAO_OBITO"].includes(item.type)) return "danger";
   if (["TROCA_TUTOR", "SOLICITACAO_TROCA_TUTOR"].includes(item.type)) return "transfer";
   if (item.type === "CIRURGIA_REALIZADA") return "success";
-  if (item.status === "AGUARDANDO_CIRURGIA") return "scheduled";
+  if (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA") return "scheduled";
   return "neutral";
 }
 
@@ -8266,7 +8256,7 @@ function animalHistoryIcon(item: AnyRecord = {}) {
   if (["ANIMAL_OBITO", "SOLICITACAO_OBITO"].includes(item.type)) return <AlertCircle size={15} />;
   if (["TROCA_TUTOR", "SOLICITACAO_TROCA_TUTOR"].includes(item.type)) return <RefreshCw size={15} />;
   if (item.type === "CIRURGIA_REALIZADA") return <CheckCircle2 size={15} />;
-  if (item.status === "AGUARDANDO_CIRURGIA") return <CalendarDays size={15} />;
+  if (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA") return <CalendarDays size={15} />;
   return <ClipboardList size={15} />;
 }
 
@@ -8544,8 +8534,13 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
     SOLICITACAO: "Solicitação",
   };
   const statusLabels = {
+    NOVA: "Nova",
+    AGENDADA: "Agendada",
+    REALIZADA: "Realizada",
+    CANCELADA: "Cancelada",
+    // Legacy
     EM_ANALISE: "Em análise",
-    AGUARDANDO_CIRURGIA: "Agenda Confirmada",
+    AGUARDANDO_CIRURGIA: "Agendada",
     ARQUIVADA: "Arquivada",
   };
 

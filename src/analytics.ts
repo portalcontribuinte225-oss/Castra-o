@@ -39,7 +39,7 @@ export function getRequestClosedByName(request: AnyRecord = {}, teams: AnyRecord
     if (!item || typeof item === "string") return false;
     const status = String(item.status || "");
     const notes = String(item.notes || "");
-    return status === "ARQUIVADA" || /comparec|cancel|indefer/i.test(notes);
+    return status === "REALIZADA" || status === "CANCELADA" || status === "ARQUIVADA" || /comparec|cancel|indefer/i.test(notes);
   });
   const byFromEntry = getTeamUserName(closingEntry?.by, teams, currentUser);
   if (byFromEntry) return byFromEntry;
@@ -79,8 +79,8 @@ export function buildMetrics(requests: AnyRecord[] = []) {
   const normalizedRequests = requests.map(normalizeRequest);
   return {
     total: normalizedRequests.length,
-    pending: normalizedRequests.filter((request) => request.status !== "ARQUIVADA").length,
-    done: normalizedRequests.filter((request) => requestHasTag(request, "COMPARECEU")).length,
+    pending: normalizedRequests.filter((request) => request.status === "NOVA" || request.status === "AGENDADA").length,
+    done: normalizedRequests.filter((request) => request.status === "REALIZADA").length,
   };
 }
 

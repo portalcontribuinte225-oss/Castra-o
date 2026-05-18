@@ -97,13 +97,10 @@ function occupancyLevel(pct: number): "low" | "mid" | "high" | "full" {
 
 function AgendaStatusBadge({ request }: { request: AnyRecord }) {
   const label = requestResultLabel(request);
-  const tone = requestHasTag(request, "COMPARECEU") ? "success"
-    : requestHasTag(request, "CANCELADA") ? "danger"
-    : requestHasTag(request, "INDEFERIDA") ? "danger"
-    : requestHasTag(request, "NAO_COMPARECEU") ? "warning"
+  const tone = request.status === "REALIZADA" ? "success"
+    : request.status === "CANCELADA" ? "danger"
     : requestHasTag(request, "REAGENDADA") ? "info"
-    : requestHasTag(request, "DEFERIDA") ? "success"
-    : request.status === "AGUARDANDO_CIRURGIA" ? "pending"
+    : request.status === "AGENDADA" ? "pending"
     : "neutral";
   return <span className={`ag-badge ag-badge--${tone}`}>{label}</span>;
 }
@@ -131,11 +128,10 @@ export function AgendaView({
         (r.type || r.requestTypeId || "").toLowerCase().includes(filterType.toLowerCase())
       );
     }
-    if (filterStatus === "cancelada") list = list.filter((r) => requestHasTag(r, "CANCELADA"));
-    else if (filterStatus === "deferida") list = list.filter((r) => requestHasTag(r, "DEFERIDA"));
-    else if (filterStatus === "compareceu") list = list.filter((r) => requestHasTag(r, "COMPARECEU"));
-    else if (filterStatus === "faltou") list = list.filter((r) => requestHasTag(r, "NAO_COMPARECEU"));
-    else if (filterStatus === "analise") list = list.filter((r) => r.status === "EM_ANALISE");
+    if (filterStatus === "cancelada") list = list.filter((r) => r.status === "CANCELADA");
+    else if (filterStatus === "agendada") list = list.filter((r) => r.status === "AGENDADA");
+    else if (filterStatus === "realizada") list = list.filter((r) => r.status === "REALIZADA");
+    else if (filterStatus === "analise") list = list.filter((r) => r.status === "NOVA");
     if (search) {
       const key = search.toLowerCase();
       list = list.filter((r) =>
@@ -227,8 +223,8 @@ export function AgendaView({
       const d = strToDate(requestDateStr(r));
       return d && d >= weekStart && d <= weekEnd;
     }).length;
-    const canceladas = filtered.filter((r) => requestHasTag(r, "CANCELADA")).length;
-    const compareceram = filtered.filter((r) => requestHasTag(r, "COMPARECEU")).length;
+    const canceladas = filtered.filter((r) => r.status === "CANCELADA").length;
+    const compareceram = filtered.filter((r) => r.status === "REALIZADA").length;
     return { todayReqs, weekReqs, canceladas, compareceram };
   }, [filtered, requestsByDate]);
 
@@ -320,10 +316,9 @@ export function AgendaView({
               <span>Status operacional</span>
               <select className="ag-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
                 <option value="">Todos os status</option>
-                <option value="analise">Em análise</option>
-                <option value="deferida">Deferida</option>
-                <option value="compareceu">Compareceu</option>
-                <option value="faltou">Faltou</option>
+                <option value="analise">Nova</option>
+                <option value="agendada">Agendada</option>
+                <option value="realizada">Realizada</option>
                 <option value="cancelada">Cancelada</option>
               </select>
             </label>

@@ -48,13 +48,10 @@ const DASHBOARD_TABS: { id: DashboardTab; label: string }[] = [
 ];
 
 const PROCESS_STAGES = [
-  { id: "EM_ANALISE", label: "Em análise" },
-  { id: "DEFERIDA", label: "Deferidas" },
-  { id: "AGUARDANDO_CIRURGIA", label: "Aguardando procedimento" },
-  { id: "COMPARECEU", label: "Realizadas" },
-  { id: "NAO_COMPARECEU", label: "Ausências" },
+  { id: "NOVA", label: "Novas" },
+  { id: "AGENDADA", label: "Agendadas" },
+  { id: "REALIZADA", label: "Realizadas" },
   { id: "CANCELADA", label: "Canceladas" },
-  { id: "ARQUIVADA", label: "Arquivadas" },
 ];
 
 export function DashboardView({
@@ -101,26 +98,29 @@ export function DashboardView({
 
   const intelligence = useMemo(() => {
     const total = filteredRequests.length;
-    const activeQueue = filteredRequests.filter((request) => request.status !== "ARQUIVADA" && !requestHasTag(request, "CANCELADA")).length;
-    const inAnalysis = filteredRequests.filter((request) => request.status === "EM_ANALISE").length;
-    const approved = filteredRequests.filter((request) => requestHasTag(request, "DEFERIDA")).length;
-    const waitingProcedure = filteredRequests.filter((request) => request.status === "AGUARDANDO_CIRURGIA").length;
-    const completed = filteredRequests.filter((request) => requestHasTag(request, "COMPARECEU")).length;
-    const absent = filteredRequests.filter((request) => requestHasTag(request, "NAO_COMPARECEU")).length;
-    const canceled = filteredRequests.filter((request) => requestHasTag(request, "CANCELADA")).length;
-    const archived = filteredRequests.filter((request) => request.status === "ARQUIVADA").length;
-    const rejected = filteredRequests.filter((request) => requestHasTag(request, "INDEFERIDA")).length;
-    const attendanceBase = completed + absent;
+    const activeQueue = filteredRequests.filter((request) => request.status === "NOVA" || request.status === "AGENDADA").length;
+    const inAnalysis = filteredRequests.filter((request) => request.status === "NOVA").length;
+    const approved = filteredRequests.filter((request) => request.status === "AGENDADA").length;
+    const waitingProcedure = filteredRequests.filter((request) => request.status === "AGENDADA").length;
+    const completed = filteredRequests.filter((request) => request.status === "REALIZADA").length;
+    const absent = 0;
+    const canceled = filteredRequests.filter((request) => request.status === "CANCELADA").length;
+    const archived = filteredRequests.filter((request) => request.status === "REALIZADA" || request.status === "CANCELADA").length;
+    const rejected = filteredRequests.filter((request) => {
+      const cancelReason = (request.workflow_data || request.workflowData || {}).cancelReason || "";
+      return request.status === "CANCELADA" && cancelReason === "Indeferido";
+    }).length;
+    const attendanceBase = completed + canceled;
     const attendanceRate = pct(completed, attendanceBase);
-    const conclusionRate = pct(completed + archived, total);
-    const approvalRate = pct(approved, approved + rejected);
+    const conclusionRate = pct(completed + canceled, total);
+    const approvalRate = pct(approved, total);
     const activeSchedules = filteredSchedules.length;
     const mutirons = filteredSchedules.filter((day: AnyRecord) => normalizeText(day.kind).includes("mutirao")).length;
     const totalCapacity = filteredSchedules.reduce((sum: number, day: AnyRecord) => sum + Number(day.vacancies || 0), 0);
     const usedCapacity = filteredRequests.filter((request) => request.preferredSchedule || request.appointment).length;
     const averageFlowDays = averageDays(filteredRequests);
     const staleQueue = filteredRequests.filter((request) => {
-      if (request.status === "ARQUIVADA" || requestHasTag(request, "CANCELADA")) return false;
+      if (request.status === "REALIZADA" || request.status === "CANCELADA") return false;
       const createdAt = parseAnyDate(request.createdAt);
       return createdAt ? daysSince(createdAt) >= 7 : false;
     }).length;
@@ -155,7 +155,7 @@ export function DashboardView({
   const operational = useMemo(() => {
     const byResponsible = topItems(countBy(filteredRequests, (request) => getRequestUserName(request)), 7);
     const bySector = topItems(countBy(filteredRequests, (request) => request.assignedSectorName || getTeamSectorName(request.assignedSectorId, teams) || "Sem setor"), 7);
-    const byCloser = topItems(countBy(filteredRequests.filter((request) => request.status === "ARQUIVADA" || requestHasTag(request, "COMPARECEU") || requestHasTag(request, "CANCELADA")), (request) => getRequestClosedByName(request, teams, currentUser)), 6);
+    const byCloser = topItems(countBy(filteredRequests.filter((request) => request.status === "REALIZADA" || request.status === "CANCELADA"), (request) => getRequestClosedByName(request, teams, currentUser)), 6);
     const byMonth = buildMonthlySeries(filteredRequests);
     const byStatus = PROCESS_STAGES.map((stage) => ({ label: stage.label, value: countStage(filteredRequests, stage.id) })).filter((item) => item.value > 0);
     const bottlenecks = topItems(byStatus.filter((item) => !["Realizadas", "Arquivadas"].includes(item.label)).sort((a, b) => b.value - a.value), 5);
@@ -164,7 +164,7 @@ export function DashboardView({
   }, [filteredRequests, teams, currentUser, requestTypes]);
 
   const operationQueue = useMemo(() => {
-    const openRequests = filteredRequests.filter((request) => request.status !== "ARQUIVADA" && !requestHasTag(request, "CANCELADA"));
+    const openRequests = filteredRequests.filter((request) => request.status === "NOVA" || request.status === "AGENDADA");
     const unassigned = openRequests.filter((request) => !request.assignedUserId && !request.responsible).length;
     const waiting3 = openRequests.filter((request) => isOlderThan(request, 3)).length;
     const waiting7 = openRequests.filter((request) => isOlderThan(request, 7)).length;
@@ -222,7 +222,7 @@ export function DashboardView({
     {
       label: "Conclusão",
       value: `${intelligence.conclusionRate}%`,
-      detail: `${intelligence.completed + intelligence.archived} processos encerrados`,
+      detail: `${intelligence.archived} processos encerrados`,
       tone: intelligence.conclusionRate >= 80 ? "ok" : "info",
     },
     {
@@ -264,10 +264,10 @@ export function DashboardView({
 
   const castration = useMemo(() => {
     const castrationRequests = filteredRequests.filter((request) => normalizeText(requestTypeLabel(request)).includes("castracao"));
-    const completed = castrationRequests.filter((request) => requestHasTag(request, "COMPARECEU")).length;
-    const approved = castrationRequests.filter((request) => requestHasTag(request, "DEFERIDA")).length;
-    const waiting = castrationRequests.filter((request) => request.status === "AGUARDANDO_CIRURGIA").length;
-    const absent = castrationRequests.filter((request) => requestHasTag(request, "NAO_COMPARECEU")).length;
+    const completed = castrationRequests.filter((request) => request.status === "REALIZADA").length;
+    const approved = castrationRequests.filter((request) => request.status === "AGENDADA").length;
+    const waiting = castrationRequests.filter((request) => request.status === "AGENDADA").length;
+    const absent = 0;
     return {
       total: castrationRequests.length,
       completed,
@@ -284,18 +284,18 @@ export function DashboardView({
   }, [filteredRequests, filteredSchedules]);
 
   const territorial = useMemo(() => {
-    const deferidas = filteredRequests.filter((request) => requestHasTag(request, "DEFERIDA"));
-    const byNeighborhood = topItems(countBy(deferidas, (request) => request.neighborhood || "Não informado"), 8);
-    const neighborhoodsReached = new Set(deferidas.map((request) => request.neighborhood).filter(Boolean)).size;
-    const geocoded = deferidas.filter((request) => hasValidCoordinates(request)).length;
-    const total = deferidas.length;
+    const realizadas = filteredRequests.filter((request) => request.status === "REALIZADA");
+    const byNeighborhood = topItems(countBy(realizadas, (request) => request.neighborhood || "Não informado"), 8);
+    const neighborhoodsReached = new Set(realizadas.map((request) => request.neighborhood).filter(Boolean)).size;
+    const geocoded = realizadas.filter((request) => hasValidCoordinates(request)).length;
+    const total = realizadas.length;
     const withoutLocation = total - geocoded;
     const coverageRate = pct(geocoded, total);
     return { byNeighborhood, neighborhoodsReached, geocoded, withoutLocation, coverageRate, total };
   }, [filteredRequests]);
 
   const decisionAnalysis = useMemo(() => {
-    const waitingProcedureRequests = filteredRequests.filter((request) => request.status === "AGUARDANDO_CIRURGIA");
+    const waitingProcedureRequests = filteredRequests.filter((request) => request.status === "AGENDADA");
     const incompleteRegistrations = filteredRequests.filter(hasIncompleteRegistration).length;
     const futureSchedules = filteredSchedules
       .map((day: AnyRecord) => {
@@ -410,15 +410,15 @@ export function DashboardView({
       tone: intelligence.attendanceRate >= 80 ? "ok" : "warn",
     },
     {
-      label: "Deferimento",
+      label: "Agendamento",
       value: `${intelligence.approvalRate}%`,
-      detail: `${intelligence.approved} deferidas`,
+      detail: `${intelligence.approved} agendadas`,
       tone: intelligence.approvalRate >= 80 ? "ok" : "info",
     },
     {
       label: "Conclusão",
       value: `${intelligence.conclusionRate}%`,
-      detail: `${intelligence.completed + intelligence.archived} encerrados`,
+      detail: `${intelligence.archived} encerrados`,
       tone: intelligence.conclusionRate >= 80 ? "ok" : "info",
     },
     {
@@ -462,13 +462,13 @@ export function DashboardView({
     {
       label: "Sem localização",
       value: territorial.withoutLocation,
-      detail: "deferidas sem ponto no mapa",
+      detail: "realizadas sem ponto no mapa",
       tone: territorial.withoutLocation ? "warn" : "ok",
     },
     {
       label: "Cobertura do mapa",
       value: `${territorial.coverageRate}%`,
-      detail: `${territorial.geocoded} de ${intelligence.approved} deferidas`,
+      detail: `${territorial.geocoded} de ${intelligence.completed} realizadas`,
       tone: territorial.coverageRate >= 80 ? "ok" : territorial.coverageRate ? "info" : "warn",
     },
     {
@@ -497,15 +497,15 @@ export function DashboardView({
     operacao: [
       { label: "Fila ativa", value: intelligence.activeQueue, helper: "processos em andamento", icon: ClipboardList },
       { label: "Em análise", value: intelligence.inAnalysis, helper: "aguardam triagem", icon: Clock },
-      { label: "Deferidas", value: intelligence.approved, helper: `${intelligence.approvalRate}% de deferimento`, icon: ShieldCheck },
+      { label: "Agendadas", value: intelligence.approved, helper: `${intelligence.approvalRate}% do total`, icon: ShieldCheck },
       { label: "Aguardando procedimento", value: intelligence.waitingProcedure, helper: "fila pré-execução", icon: CalendarDays },
       { label: "Agendas ativas", value: intelligence.activeSchedules, helper: "dias operacionais", icon: CalendarDays },
       { label: "Capacidade", value: `${intelligence.usedCapacity}/${intelligence.totalCapacity}`, helper: "ocupação de agendas", icon: Layers3 },
     ],
     processos: [
       { label: "Em análise", value: intelligence.inAnalysis, helper: "etapa inicial", icon: Clock },
-      { label: "Deferidas", value: intelligence.approved, helper: "aprovadas no fluxo", icon: ShieldCheck },
-      { label: "Arquivadas", value: intelligence.archived, helper: "processos encerrados", icon: ClipboardCheck },
+      { label: "Agendadas", value: intelligence.approved, helper: "aprovadas no fluxo", icon: ShieldCheck },
+      { label: "Encerradas", value: intelligence.archived, helper: "processos encerrados", icon: ClipboardCheck },
       { label: "Canceladas", value: intelligence.canceled, helper: "interrupções registradas", icon: XCircle, tone: "warn" },
       { label: "Realizadas", value: intelligence.completed, helper: "execução confirmada", icon: CheckCircle2, tone: "ok" },
       { label: "Ausências", value: intelligence.absent, helper: "não comparecimento", icon: Activity },
@@ -519,7 +519,7 @@ export function DashboardView({
       { label: "Encerramentos", value: operational.byCloser.reduce((sum, item) => sum + Number(item.value || 0), 0), helper: "produção concluída", icon: ClipboardCheck },
     ],
     territorio: [
-      { label: "Deferidas", value: intelligence.approved, helper: "processos aprovados", icon: ShieldCheck },
+      { label: "Realizadas", value: intelligence.completed, helper: "processos realizados", icon: ShieldCheck },
       { label: "No mapa", value: territorial.geocoded, helper: "com localização registrada", icon: MapPin },
       { label: "Bairros cobertos", value: territorial.neighborhoodsReached, helper: "com deferimento", icon: Layers3 },
       { label: "Realizadas", value: castration.completed, helper: "castrações executadas", icon: Stethoscope, tone: "ok" },
@@ -666,7 +666,7 @@ export function DashboardView({
                 <MiniMetric label="Média" value={`${intelligence.averageFlowDays}d`} />
                 <MiniMetric label="Fila ativa" value={intelligence.activeQueue} />
               </div>
-              <ProgressLine label="Conclusão geral" value={intelligence.completed + intelligence.archived} total={Math.max(intelligence.total, 1)} />
+              <ProgressLine label="Conclusão geral" value={intelligence.archived} total={Math.max(intelligence.total, 1)} />
             </Panel>
           </div>
         </div>
@@ -700,7 +700,7 @@ export function DashboardView({
                 <MiniMetric label="Atribuídos" value={productivity.assignedVolume} />
                 <MiniMetric label="Encerrados" value={productivity.closedVolume} />
               </div>
-              <ProgressLine label="Conclusão geral" value={intelligence.completed + intelligence.archived} total={Math.max(intelligence.total, 1)} />
+              <ProgressLine label="Conclusão geral" value={intelligence.archived} total={Math.max(intelligence.total, 1)} />
             </Panel>
           </div>
         </div>
@@ -709,7 +709,7 @@ export function DashboardView({
       {activeTab === "territorio" && (
         <div className="opdash-territory-layout">
           <div className="opdash-territory-main">
-            <Panel className="opdash-panel--map" title="Mapa de processos deferidos" meta={`${territorial.geocoded} processos com localização`}>
+            <Panel className="opdash-panel--map" title="Mapa de processos realizados" meta={`${territorial.geocoded} processos com localização`}>
               <GoogleDashboardMap requests={filteredRequests} />
             </Panel>
           </div>
@@ -718,7 +718,7 @@ export function DashboardView({
               <SignalList items={territorialSignals} />
             </Panel>
             <Panel title="Distribuição por bairro" meta="demanda deferida vs. execução">
-              <Ranking title="Deferidos" items={territorial.byNeighborhood} />
+              <Ranking title="Realizados" items={territorial.byNeighborhood} />
               <Ranking title="Realizadas" items={castration.byNeighborhood} compact />
             </Panel>
           </div>
@@ -755,7 +755,7 @@ export function DashboardView({
                 <MiniMetric label="Solicitações" value={intelligence.total} />
                 <MiniMetric label="Tempo médio" value={`${intelligence.averageFlowDays}d`} />
               </div>
-              <ProgressLine label="Conclusão geral" value={intelligence.completed + intelligence.archived} total={Math.max(intelligence.total, 1)} />
+              <ProgressLine label="Conclusão geral" value={intelligence.archived} total={Math.max(intelligence.total, 1)} />
             </Panel>
           </div>
         </div>
@@ -960,7 +960,7 @@ function GoogleDashboardMap({ requests = [] }: AnyRecord) {
 
   const points = useMemo(() => {
     return requests
-      .filter((request: AnyRecord) => requestHasTag(request, "DEFERIDA") && hasValidCoordinates(request))
+      .filter((request: AnyRecord) => request.status === "REALIZADA" && hasValidCoordinates(request))
       .map((request: AnyRecord) => ({
         lat: Number(request.latitude),
         lng: Number(request.longitude),
@@ -983,7 +983,7 @@ function GoogleDashboardMap({ requests = [] }: AnyRecord) {
           streetViewControl: false,
           fullscreenControl: true,
         });
-        setStatus(points.length ? "" : "Nenhum processo deferido com localização registrada.");
+        setStatus(points.length ? "" : "Nenhum processo realizado com localização registrada.");
       })
       .catch(() => setStatus("Não foi possível carregar o Google Maps."));
     return () => {
@@ -999,7 +999,7 @@ function GoogleDashboardMap({ requests = [] }: AnyRecord) {
     markersRef.current.forEach((marker) => marker.setMap(null));
     markersRef.current = [];
     if (!points.length) {
-      setStatus("Nenhum processo deferido com localização registrada.");
+      setStatus("Nenhum processo realizado com localização registrada.");
       return;
     }
     const bounds = new google.maps.LatLngBounds();
@@ -1144,10 +1144,6 @@ function pct(value: number, total: number) {
 }
 
 function countStage(requests: AnyRecord[], stage: string) {
-  if (stage === "COMPARECEU") return requests.filter((request) => requestHasTag(request, "COMPARECEU")).length;
-  if (stage === "NAO_COMPARECEU") return requests.filter((request) => requestHasTag(request, "NAO_COMPARECEU")).length;
-  if (stage === "CANCELADA") return requests.filter((request) => requestHasTag(request, "CANCELADA")).length;
-  if (stage === "DEFERIDA") return requests.filter((request) => requestHasTag(request, "DEFERIDA")).length;
   return requests.filter((request) => request.status === stage).length;
 }
 
@@ -1198,10 +1194,9 @@ function getPriorityNeighborhood(requests: AnyRecord[]) {
     const neighborhood = request.neighborhood || "Não informado";
     if (neighborhood === "Não informado") return;
     let score = 0;
-    if (request.status !== "ARQUIVADA" && !requestHasTag(request, "CANCELADA")) score += 2;
-    if (request.status === "AGUARDANDO_CIRURGIA") score += 3;
-    if (requestHasTag(request, "NAO_COMPARECEU")) score += 2;
-    if (requestHasTag(request, "COMPARECEU")) score -= 1;
+    if (request.status === "NOVA" || request.status === "AGENDADA") score += 2;
+    if (request.status === "AGENDADA") score += 3;
+    if (request.status === "REALIZADA") score -= 1;
     if (score > 0) scores.set(neighborhood, (scores.get(neighborhood) || 0) + score);
   });
   const [label = "Sem prioridade", value = 0] = Array.from(scores.entries()).sort((left, right) => right[1] - left[1])[0] || [];

@@ -25,9 +25,8 @@ const operationalStatusOptions = [
   { id: "analysis", label: "Em análise" },
   { id: "scheduled", label: "Agendadas" },
   { id: "rescheduled", label: "Reagendadas" },
-  { id: "done", label: "Concluídas" },
+  { id: "done", label: "Realizadas" },
   { id: "canceled", label: "Canceladas" },
-  { id: "rejected", label: "Indeferidas" },
 ];
 
 export function ReportsView({ requests = [], metrics, requestTypes = initialRequestTypes, teams = initialTeams }: AnyRecord) {
@@ -208,11 +207,10 @@ export function ReportsView({ requests = [], metrics, requestTypes = initialRequ
 }
 
 function getOperationalStatusId(request: AnyRecord = {}) {
-  if (request.status === "EM_ANALISE") return requestHasTag(request, "ATRIBUIDA") ? "analysis" : "inbox";
-  if (request.status === "AGUARDANDO_CIRURGIA") return requestHasTag(request, "REAGENDADA") ? "rescheduled" : "scheduled";
-  if (request.status === "ARQUIVADA" && requestHasTag(request, "COMPARECEU")) return "done";
-  if (request.status === "ARQUIVADA" && requestHasTag(request, "CANCELADA")) return "canceled";
-  if (request.status === "ARQUIVADA" && requestHasTag(request, "INDEFERIDA")) return "rejected";
+  if (request.status === "NOVA") return requestHasTag(request, "ATRIBUIDA") ? "analysis" : "inbox";
+  if (request.status === "AGENDADA") return requestHasTag(request, "REAGENDADA") ? "rescheduled" : "scheduled";
+  if (request.status === "REALIZADA") return "done";
+  if (request.status === "CANCELADA") return "canceled";
   return "";
 }
 
@@ -291,8 +289,8 @@ function generateReportsPdf(requests = [], filters: AnyRecord = {}, series: AnyR
           </header>
           <section class="summary">
             <div class="card"><span>Total</span><strong>${normalizedRequests.length}</strong></div>
-            <div class="card"><span>Fila ativa</span><strong>${normalizedRequests.filter((request) => request.status !== "ARQUIVADA").length}</strong></div>
-            <div class="card"><span>Compareceu</span><strong>${normalizedRequests.filter((request) => requestHasTag(request, "COMPARECEU")).length}</strong></div>
+            <div class="card"><span>Fila ativa</span><strong>${normalizedRequests.filter((request) => request.status === "NOVA" || request.status === "AGENDADA").length}</strong></div>
+            <div class="card"><span>Realizadas</span><strong>${normalizedRequests.filter((request) => request.status === "REALIZADA").length}</strong></div>
             <div class="card"><span>Emitido em</span><strong>${new Date().toLocaleDateString("pt-BR")}</strong></div>
           </section>
           <section class="tables-grid">

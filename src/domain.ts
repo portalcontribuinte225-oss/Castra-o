@@ -1,24 +1,21 @@
 import type { AnyRecord } from "./types";
 
 export const statuses = [
-  "EM_ANALISE",
-  "AGUARDANDO_CIRURGIA",
-  "ARQUIVADA",
+  "NOVA",
+  "AGENDADA",
+  "REALIZADA",
+  "CANCELADA",
 ];
 
 export const statusLabels: AnyRecord = {
-  EM_ANALISE: "Em análise",
-  AGUARDANDO_CIRURGIA: "Agenda Confirmada",
-  ARQUIVADA: "Arquivada",
+  NOVA: "Nova",
+  AGENDADA: "Agendada",
+  REALIZADA: "Realizada",
+  CANCELADA: "Cancelada",
 };
 
 export const workflowTagLabels: AnyRecord = {
   REAGENDADA: "Reagendada",
-  DEFERIDA: "Deferida",
-  INDEFERIDA: "Indeferida",
-  COMPARECEU: "Compareceu",
-  NAO_COMPARECEU: "Não compareceu",
-  CANCELADA: "Cancelada",
   ATRIBUIDA: "Atribuída",
   PRIORIDADE: "Prioridade",
   RETORNO_TUTOR: "Retorno tutor",
@@ -209,22 +206,19 @@ export function formatSizeRange(size: AnyRecord = {}) {
   return size.description || "";
 }
 
-export function normalizeRequestStatus(status = "EM_ANALISE") {
-  if (["EM_ANALISE", "AGUARDANDO_CIRURGIA", "ARQUIVADA"].includes(status)) return status;
-  if (["AGUARDANDO_TRIAGEM", "TRIAGEM", "SUBMETIDA", "AGUARDANDO_ATRIBUIR", "PENDENCIA_DOCUMENTAL"].includes(status)) return "EM_ANALISE";
-  if (["INDEFERIDA", "CANCELADA", "REALIZADA"].includes(status)) return "ARQUIVADA";
-  if (["DEFERIDA", "AGENDADA", "REAGENDADA"].includes(status)) return "AGUARDANDO_CIRURGIA";
-  return "EM_ANALISE";
+export function normalizeRequestStatus(status = "NOVA") {
+  if (["NOVA", "AGENDADA", "REALIZADA", "CANCELADA"].includes(status)) return status;
+  // Legacy status mapping
+  if (["EM_ANALISE", "AGUARDANDO_TRIAGEM", "TRIAGEM", "SUBMETIDA", "AGUARDANDO_ATRIBUIR", "PENDENCIA_DOCUMENTAL"].includes(status)) return "NOVA";
+  if (["AGUARDANDO_CIRURGIA", "DEFERIDA", "AGENDADA", "REAGENDADA"].includes(status)) return "AGENDADA";
+  if (["REALIZADA", "CIRURGIA_REALIZADA"].includes(status)) return "REALIZADA";
+  if (["INDEFERIDA", "CANCELADA", "ARQUIVADA"].includes(status)) return "CANCELADA";
+  return "NOVA";
 }
 
 export function tagsFromLegacyStatus(status = "") {
   const map: AnyRecord = {
-    DEFERIDA: ["DEFERIDA"],
-    AGENDADA: ["DEFERIDA"],
-    INDEFERIDA: ["INDEFERIDA"],
-    REALIZADA: ["DEFERIDA", "COMPARECEU"],
-    CANCELADA: ["CANCELADA"],
-    REAGENDADA: ["DEFERIDA", "REAGENDADA"],
+    REAGENDADA: ["REAGENDADA"],
   };
   return map[status] || [];
 }
@@ -234,24 +228,24 @@ export function requestHasTag(request: AnyRecord, tag: string) {
 }
 
 export function requestResultTag(request: AnyRecord = {}) {
-  const resultOrder = ["COMPARECEU", "NAO_COMPARECEU", "INDEFERIDA", "CANCELADA", "DEFERIDA"];
-  return resultOrder.find((item) => requestHasTag(request, item)) || "";
+  return "";
 }
 
-export function visibleWorkflowTags(tags: string[] = [], request: AnyRecord = {}) {
-  const resultTag = request.status === "ARQUIVADA" ? requestResultTag(request) : "";
-  return tags.filter((tag) => !hiddenWorkflowTags.has(tag) && tag !== resultTag);
+export function visibleWorkflowTags(tags: string[] = [], _request: AnyRecord = {}) {
+  return tags.filter((tag) => !hiddenWorkflowTags.has(tag));
 }
 
 export function requestResultLabel(request: AnyRecord = {}) {
-  const tag = requestResultTag(request);
-  return tag ? workflowTagLabels[tag] : statusLabels[request.status] || request.status || "Sem status";
+  const cancelReason = request.workflow_data?.cancelReason || request.workflowData?.cancelReason || "";
+  if (request.status === "CANCELADA" && cancelReason) return cancelReason;
+  return statusLabels[request.status] || request.status || "Sem status";
 }
 
 export function triageStatusTone(request: AnyRecord = {}) {
-  if (request.status === "EM_ANALISE") return requestHasTag(request, "ATRIBUIDA") ? "triage-status--analysis" : "triage-status--inbox";
-  if (request.status === "AGUARDANDO_CIRURGIA") return "triage-status--surgery";
-  if (request.status === "ARQUIVADA") return "triage-status--archived";
+  if (request.status === "NOVA") return requestHasTag(request, "ATRIBUIDA") ? "triage-status--analysis" : "triage-status--inbox";
+  if (request.status === "AGENDADA") return "triage-status--surgery";
+  if (request.status === "REALIZADA") return "triage-status--archived";
+  if (request.status === "CANCELADA") return "triage-status--archived";
   return "";
 }
 
@@ -294,10 +288,13 @@ export function requestTypeLabel(request: AnyRecord = {}) {
 
 export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
   const workflowData = request.workflowData || request.workflow_data || {};
-  const rawStatus = request.status || "EM_ANALISE";
+  const rawStatus = request.status || "NOVA";
   const status = normalizeRequestStatus(rawStatus);
   const rawTags = Array.isArray(request.tags) ? request.tags : [];
-  const tags = [...new Set([...rawTags, ...tagsFromLegacyStatus(rawStatus)].filter(Boolean))];
+  // Strip flow-control tags that are now represented as status
+  const flowControlTags = new Set(["DEFERIDA", "INDEFERIDA", "COMPARECEU", "NAO_COMPARECEU", "CANCELADA"]);
+  const filteredRawTags = rawTags.filter((tag) => !flowControlTags.has(tag));
+  const tags = [...new Set([...filteredRawTags, ...tagsFromLegacyStatus(rawStatus)].filter(Boolean))];
   const animals = Array.isArray(request.animals) && request.animals.length
     ? request.animals
     : [
