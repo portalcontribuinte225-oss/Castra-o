@@ -3648,7 +3648,7 @@ function AdminDashboard({
   teams = initialTeams,
   globalSearch = "",
 }) {
-  const [requestFilter, setRequestFilter] = useState("analysis");
+  const [requestFilter, setRequestFilter] = useState("inbox");
   const [previewRequest, setPreviewRequest] = useState(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);

@@ -15794,8 +15794,7 @@ body * {
 
 .internal-request-modal .internal-microchip-row {
   grid-template-columns: minmax(0, 1fr) auto;
-  padding: 9px 14px;
-  border-top: 1px solid #f1f5f9;
+  padding: 10px 14px;
 }
 
 .internal-request-modal .internal-microchip-row .access-field {
