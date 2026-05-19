@@ -109,6 +109,7 @@ export const WHATSAPP_TEMPLATE_VARS = [
   { key: "species", label: "Espécie" },
   { key: "city", label: "Município" },
   { key: "phone", label: "Telefone" },
+  { key: "validation_key", label: "Chave digital" },
 ];
 
 export const CONFIG_KEYS = {

@@ -45,6 +45,7 @@ function resolveConfirmationVariable(key, request = {}) {
     species: request.species || request.pet_species || "especie nao informada",
     city: request.city || request.schedule_municipality || "municipio nao informado",
     phone: request.phone || "-",
+    validation_key: request.validation_key || "-",
   };
   return values[key] || request[key] || "-";
 }
