@@ -4237,35 +4237,40 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     );
   }
 
-  function renderInlineAssign() {
+  function renderAssignModal() {
     const sectorUsers = users.filter((u) => !assignData.sectorId || userBelongsToSector(u, assignData.sectorId));
     return (
-      <div className="prm-inline-panel">
-        <strong className="prm-inline-panel-title"><ClipboardList size={14} /> Atribuir responsável</strong>
-        <label className="field">
-          <span>Setor</span>
-          <select value={assignData.sectorId} onChange={(e) => setAssignData((d) => ({ ...d, sectorId: e.target.value, userId: "" }))}>
-            <option value="">Selecione o setor...</option>
-            {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </label>
-        <label className="field">
-          <span>Usuário</span>
-          <select value={assignData.userId} onChange={(e) => setAssignData((d) => ({ ...d, userId: e.target.value }))}>
-            <option value="">Selecione o usuário...</option>
-            {sectorUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-          </select>
-        </label>
-        <div className="prm-inline-actions">
-          <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
-          <button
-            className="primary-action"
-            type="button"
-            disabled={!assignData.sectorId || !assignData.userId}
-            onClick={() => { onAssign?.(request, assignData); setActivePanel(null); }}
-          >
-            Confirmar atribuição
-          </button>
+      <div className="assign-modal-overlay" onClick={() => setActivePanel(null)}>
+        <div className="assign-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="assign-modal-header">
+            <strong><ClipboardList size={15} /> Atribuir responsável</strong>
+            <button className="assign-modal-close" type="button" onClick={() => setActivePanel(null)} aria-label="Fechar"><X size={16} /></button>
+          </div>
+          <label className="field">
+            <span>Setor</span>
+            <select value={assignData.sectorId} onChange={(e) => setAssignData((d) => ({ ...d, sectorId: e.target.value, userId: "" }))}>
+              <option value="">Selecione o setor...</option>
+              {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Usuário</span>
+            <select value={assignData.userId} onChange={(e) => setAssignData((d) => ({ ...d, userId: e.target.value }))}>
+              <option value="">Selecione o usuário...</option>
+              {sectorUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </label>
+          <div className="assign-modal-actions">
+            <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
+            <button
+              className="primary-action"
+              type="button"
+              disabled={!assignData.sectorId || !assignData.userId}
+              onClick={() => { onAssign?.(request, assignData); setActivePanel(null); }}
+            >
+              Confirmar
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -4354,6 +4359,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
 
   return (
     <div className="modal-backdrop">
+      {activePanel === "assign" && renderAssignModal()}
       <div className="prm-modal" role="dialog" aria-modal="true">
 
         {/* HEADER */}
@@ -4393,7 +4399,6 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
             <p className="prm-internal-notice"><AlertCircle size={13} /> Solicitação interna - documentos não obrigatórios para avançar.</p>
           )}
 
-          {activePanel === "assign" && renderInlineAssign()}
           {activePanel === "reschedule" && renderInlineReschedule()}
           {activePanel === "reject" && (
             <div className="prm-inline-panel">
