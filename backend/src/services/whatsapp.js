@@ -98,7 +98,7 @@ async function sendCloudApiTemplate(config, request) {
     },
   };
 
-  const response = await fetch(`https://graph.facebook.com/v20.0/${config.phoneNumberId}/messages`, {
+  const response = await fetch(`https://graph.facebook.com/v21.0/${config.phoneNumberId}/messages`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${config.accessToken}`,
@@ -108,6 +108,7 @@ async function sendCloudApiTemplate(config, request) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
+    console.error("[WhatsApp] Falha na API:", JSON.stringify({ status: response.status, error: payload?.error }));
     return {
       status: "failed",
       reason: payload?.error?.message || response.statusText,
