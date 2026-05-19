@@ -5807,9 +5807,14 @@ function ConfigView({
       setWhatsappSaveStatus("Selecione um município antes de salvar.");
       return;
     }
+    const hasCredentials = Boolean(
+      (whatsappSettings.accessToken || whatsappSettings.hasAccessToken) &&
+      whatsappSettings.phoneNumberId
+    );
     const nextSettings = {
       ...whatsappSettings,
-      active: Boolean(whatsappSettings.active),
+      // Ativa automaticamente quando credenciais estão preenchidas; só salva false se explicitamente desativado pelo toggle
+      active: hasCredentials ? (whatsappSettings.active !== false) : false,
       provider: whatsappSettings.provider || "cloud_api",
       phoneNumberId: whatsappSettings.phoneNumberId || "",
       confirmationTemplate: whatsappSettings.confirmationTemplate || "confirmacao_agenda_castracao",

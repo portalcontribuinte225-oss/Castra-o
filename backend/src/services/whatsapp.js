@@ -125,15 +125,20 @@ async function sendCloudApiTemplate(config, request) {
 export async function notifyScheduleConfirmation(request = {}) {
   const rawConfig = await getMunicipalityWhatsappConfig(request.municipality_id);
   const config = getRuntimeConfig(rawConfig);
-  if (!config.active) {
-    return { status: "skipped", reason: "WhatsApp não configurado para o município" };
+
+  // Bloqueio explícito: só respeita active===false quando foi salvo intencionalmente
+  if (rawConfig.active === false) {
+    return { status: "skipped", reason: "WhatsApp desativado para o município" };
   }
+
   if (config.provider !== "cloud_api") {
     return { status: "skipped", reason: `Provedor ${config.provider} ainda não implementado` };
   }
   if (!config.accessToken || !config.phoneNumberId || !config.templateName) {
     return { status: "skipped", reason: "Credenciais ou template do WhatsApp incompletos" };
   }
+
+  // Quota valida o contrato e o limite mensal — se aprovada, ativa automaticamente
   const quota = await checkAndConsumeQuota(request.municipality_id);
   if (!quota.allowed) {
     return { status: "skipped", reason: quota.reason };
