@@ -55,7 +55,7 @@ function buildConfirmationVariables(config = {}, request = {}) {
   return variables.map((variable) => resolveConfirmationVariable(variable, request));
 }
 
-async function getMunicipalityWhatsappConfig(municipalityId) {
+export async function getMunicipalityWhatsappConfig(municipalityId) {
   if (!municipalityId) return {};
   const { rows } = await pool.query(
     "SELECT value FROM config WHERE key=$1 AND municipality_id=$2",
@@ -64,7 +64,7 @@ async function getMunicipalityWhatsappConfig(municipalityId) {
   return parseJsonObject(rows[0]?.value);
 }
 
-function getRuntimeConfig(config = {}) {
+export function getRuntimeConfig(config = {}) {
   return {
     active: Boolean(config.active),
     provider: config.provider || "cloud_api",
@@ -77,7 +77,7 @@ function getRuntimeConfig(config = {}) {
   };
 }
 
-async function sendCloudApiTemplate(config, request) {
+export async function sendCloudApiTemplate(config, request) {
   const to = toE164Brazil(request.phone);
   if (!to) return { status: "skipped", reason: "telefone ausente" };
   const variables = buildConfirmationVariables(config, request);

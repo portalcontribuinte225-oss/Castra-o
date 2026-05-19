@@ -98,6 +98,18 @@ export const initialWhatsappSettings: AnyRecord = {
   ],
 };
 
+export const WHATSAPP_TEMPLATE_VARS = [
+  { key: "tutor_name", label: "Nome do tutor" },
+  { key: "schedule_date", label: "Data agendamento" },
+  { key: "protocol", label: "Protocolo" },
+  { key: "schedule_location_name", label: "Local" },
+  { key: "schedule_address", label: "Endereço" },
+  { key: "animal_name", label: "Nome do animal" },
+  { key: "species", label: "Espécie" },
+  { key: "city", label: "Município" },
+  { key: "phone", label: "Telefone" },
+];
+
 export const CONFIG_KEYS = {
   requestTypes: "castragestao:request-types",
   documentTypes: "castragestao:document-types",

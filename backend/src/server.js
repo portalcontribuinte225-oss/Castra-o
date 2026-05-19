@@ -14,6 +14,7 @@ import configRoutes from "./routes/config.js";
 import aiRoutes from "./routes/ai.js";
 import municipalityRoutes from "./routes/municipalities.js";
 import auditRoutes from "./routes/audit.js";
+import whatsappRoutes from "./routes/whatsapp.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -34,6 +35,7 @@ app.use("/api/config", configRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/municipalities", municipalityRoutes);
 app.use("/api/audit", auditRoutes);
+app.use("/api/whatsapp", whatsappRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use(express.static(distPath));

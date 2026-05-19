@@ -82,4 +82,8 @@ export const api = {
   updateMunicipality: (id, body) => request("PATCH", `/municipalities/${id}`, body),
 
   validateDocument: (body) => request("POST", "/ai/validate", body),
+
+  getWhatsappQuotaStatus: (municipalityId: string) => request("GET", `/whatsapp/quota-status?municipalityId=${encodeURIComponent(municipalityId)}`),
+  resetWhatsappQuota: (municipalityId: string) => request("POST", "/whatsapp/reset-quota", { municipalityId }),
+  sendWhatsappTest: (municipalityId: string, phone: string) => request("POST", "/whatsapp/test", { municipalityId, phone }),
 };
