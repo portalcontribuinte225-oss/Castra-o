@@ -9310,6 +9310,10 @@ main {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px 20px;
 }
 
 .whatsapp-section-header {
