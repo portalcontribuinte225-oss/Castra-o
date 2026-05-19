@@ -7396,7 +7396,7 @@ function ConfigView({
             )}
 
             <div className="whatsapp-settings-grid">
-              <article className="request-type-card ai-settings-card">
+              <article className="whatsapp-card">
                 <div className="config-modal-options">
                   <ConfigActiveToggle
                     checked={Boolean(whatsappSettings.active)}
@@ -7469,8 +7469,7 @@ function ConfigView({
                 </button>
                 {whatsappSaveStatus && <p className={whatsappSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{whatsappSaveStatus}</p>}
 
-                <div className="whatsapp-section-divider" />
-                <p className="whatsapp-section-title">Envio de teste</p>
+                <div className="whatsapp-section-heading"><span>Envio de teste</span></div>
                 <div className="whatsapp-test-row">
                   <Field
                     label="Número"
@@ -7492,7 +7491,7 @@ function ConfigView({
                 )}
               </article>
 
-              <article className="request-type-card ai-settings-card">
+              <article className="whatsapp-card">
                 <Field
                   label="Limite mensal de mensagens"
                   value={quotaSettings.plan}
@@ -7524,19 +7523,18 @@ function ConfigView({
                   </p>
                 )}
 
-                <div className="whatsapp-section-divider" />
-                <p className="whatsapp-section-title">Ações</p>
+                <div className="whatsapp-section-heading"><span>Ações</span></div>
                 {confirmEndContract ? (
                   <div className="whatsapp-confirm-block">
                     <p>Encerrar contrato hoje ({new Date().toLocaleDateString("pt-BR")})?</p>
                     <div className="whatsapp-confirm-actions">
-                      <button className="primary-action whatsapp-action-danger" type="button" onClick={endContractToday}>Confirmar</button>
+                      <button className="whatsapp-btn-danger-solid" type="button" onClick={endContractToday}>Confirmar encerramento</button>
                       <button className="btn-secondary" type="button" onClick={() => setConfirmEndContract(false)}>Cancelar</button>
                     </div>
                   </div>
                 ) : (
                   <button
-                    className="btn-secondary whatsapp-action-btn"
+                    className="whatsapp-btn-danger"
                     type="button"
                     onClick={() => setConfirmEndContract(true)}
                     disabled={!quotaSettings.plan || !configMunicipalityScopeId}
@@ -7545,7 +7543,7 @@ function ConfigView({
                   </button>
                 )}
                 <button
-                  className="btn-secondary whatsapp-action-btn"
+                  className="whatsapp-btn-warning"
                   type="button"
                   onClick={resetQuotaUsed}
                   disabled={!whatsappQuotaLive?.plan || !configMunicipalityScopeId}
@@ -7553,8 +7551,7 @@ function ConfigView({
                   Zerar cota do mês
                 </button>
 
-                <div className="ai-rules-card" style={{ marginTop: 4 }}>
-                  <p>Quando os documentos forem deferidos e o processo avançar para agendado, o sistema envia a confirmação de agenda ao tutor via WhatsApp.</p>
+                <div className="whatsapp-info-note">
                   <p>Encerrar o contrato bloqueia novos envios imediatamente. Zerar a cota reinicia a contagem deste mês.</p>
                 </div>
               </article>
