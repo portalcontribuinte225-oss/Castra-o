@@ -89,7 +89,7 @@ router.get("/:key", optionalAuth, async (req, res) => {
 
   try {
     const { rows } = await pool.query(query.text, query.values);
-    if (!rows[0]) return res.status(404).json({ error: "Configuração não encontrada" });
+    if (!rows[0]) return res.json(null);
     res.json(publicConfigValue(key, rows[0].value));
   } catch (err) {
     res.status(500).json({ error: err.message });
