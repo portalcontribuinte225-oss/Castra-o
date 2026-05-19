@@ -500,8 +500,10 @@ export default function App() {
     try {
       const updated = await api.patchRequest(requestId, historyNote ? { ...patch, history_note: historyNote } : patch);
       setRequests((current) => current.map((r) => (r.id === updated.id ? normalizeRequest(updated) : r)));
+      return updated;
     } catch (err) {
       console.error("Erro ao atualizar solicitação:", err);
+      throw err;
     }
   }
 
@@ -3634,6 +3636,20 @@ function DocumentPreviewModal({ document, onClose }: AnyRecord) {
   );
 }
 
+function ToastContainer({ toasts, onDismiss }: AnyRecord) {
+  if (!toasts.length) return null;
+  return (
+    <div className="toast-container" role="region" aria-live="polite">
+      {toasts.map((toast: AnyRecord) => (
+        <div key={toast.id} className={`toast toast--${toast.type}`} onClick={() => onDismiss(toast.id)}>
+          <span className="toast-msg">{toast.message}</span>
+          <button className="toast-close" type="button" aria-label="Fechar" onClick={(e) => { e.stopPropagation(); onDismiss(toast.id); }}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function AdminDashboard({
   requests,
   setSelectedId,
@@ -3652,6 +3668,21 @@ function AdminDashboard({
   const [previewRequest, setPreviewRequest] = useState(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
+  const [toasts, setToasts] = useState<AnyRecord[]>([]);
+
+  function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
+    const id = Date.now() + Math.random();
+    setToasts((current) => [...current, { id, message, type }]);
+    setTimeout(() => setToasts((current) => current.filter((t) => t.id !== id)), type === "error" ? 6000 : 4000);
+  }
+
+  function checkWhatsappToast(updated: AnyRecord) {
+    const history: AnyRecord[] = Array.isArray(updated?.history) ? updated.history : [];
+    const last = [...history].reverse().find((h) => String(h.notes || "").includes("WhatsApp:"));
+    if (!last) return;
+    if (String(last.notes).includes("enviado")) showToast(`WhatsApp enviado com sucesso`, "success");
+    else if (String(last.notes).includes("falha")) showToast(`WhatsApp: falha no envio. Verifique as configurações.`, "error");
+  }
 
   const visibleRequests = useMemo(
     () => (Array.isArray(requests) ? requests : [])
@@ -3717,45 +3748,55 @@ function AdminDashboard({
     || activeUsers.find((user) => user.id === currentUser.id);
   const currentUserSector = activeSectors.find((sector) => getUserSectorIds(currentTeamUser).includes(sector.id));
 
-  function assumeRequest(request) {
-    patchRequest?.(
-      request.id,
-      {
-        status: request.status,
-        assignedSectorId: currentUserSector?.id || request.assignedSectorId || "",
-        assignedSectorName: currentUserSector?.name || request.assignedSectorName || "Sem setor",
-        assignedUserId: currentTeamUser?.id || currentUser.id || "",
-        responsible: currentTeamUser?.name || currentUser.name || "Usuário atual",
-        tags: mergeTags(request.tags, ["ATRIBUIDA"]),
-      },
-      `Assumida por ${currentTeamUser?.name || currentUser.name || "usuário atual"}`,
-    );
+  async function assumeRequest(request) {
+    try {
+      await patchRequest?.(
+        request.id,
+        {
+          status: request.status,
+          assignedSectorId: currentUserSector?.id || request.assignedSectorId || "",
+          assignedSectorName: currentUserSector?.name || request.assignedSectorName || "Sem setor",
+          assignedUserId: currentTeamUser?.id || currentUser.id || "",
+          responsible: currentTeamUser?.name || currentUser.name || "Usuário atual",
+          tags: mergeTags(request.tags, ["ATRIBUIDA"]),
+        },
+        `Assumida por ${currentTeamUser?.name || currentUser.name || "usuário atual"}`,
+      );
+      showToast("Processo assumido com sucesso", "success");
+    } catch { showToast("Erro ao assumir processo", "error"); }
   }
 
-  function approveRequest(request) {
+  async function approveRequest(request) {
     const patch = { status: "AGENDADA" };
-    patchRequest?.(request.id, patch, `Agenda confirmada por ${currentUser.name}`);
+    try {
+      const updated = await patchRequest?.(request.id, patch, `Agenda confirmada por ${currentUser.name}`);
+      showToast("Agenda confirmada com sucesso", "success");
+      checkWhatsappToast(updated);
+    } catch { showToast("Erro ao confirmar agenda", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  function notAttendedRequest(request) {
-    patchRequest?.(
-      request.id,
-      { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Não compareceu" } },
-      `Não comparecimento registrado por ${currentUser.name}`,
-    );
+  async function notAttendedRequest(request) {
+    const patch = { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Não compareceu" } };
+    try {
+      await patchRequest?.(request.id, patch, `Não comparecimento registrado por ${currentUser.name}`);
+      showToast("Não comparecimento registrado", "info");
+    } catch { showToast("Erro ao registrar não comparecimento", "error"); }
   }
 
-  function archiveWithTag(request, tag, note) {
+  async function archiveWithTag(request, tag, note) {
     const cancelReason = tag === "NAO_COMPARECEU" ? "Não compareceu" : tag === "CANCELADA" ? "Cancelado" : "";
     const patch = cancelReason
       ? { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason } }
       : { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: tag } };
-    patchRequest?.(request.id, patch, note);
+    try {
+      await patchRequest?.(request.id, patch, note);
+      showToast("Processo cancelado", "info");
+    } catch { showToast("Erro ao cancelar processo", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  function rescheduleFromPreview(request, date, reason = "") {
+  async function rescheduleFromPreview(request, date, reason = "") {
     if (!request || !date) return;
     const note = String(reason || "").trim();
     const patch = {
@@ -3765,11 +3806,15 @@ function AdminDashboard({
       preferredSchedule: date,
       appointment: date,
     };
-    patchRequest?.(request.id, patch, `Reagendada por ${currentUser.name}: ${request.preferredSchedule || "sem data"} -> ${date}${note ? `. Motivo: ${note}` : ""}`);
+    try {
+      const updated = await patchRequest?.(request.id, patch, `Reagendada por ${currentUser.name}: ${request.preferredSchedule || "sem data"} -> ${date}${note ? `. Motivo: ${note}` : ""}`);
+      showToast(`Processo reagendado para ${date}`, "success");
+      checkWhatsappToast(updated);
+    } catch { showToast("Erro ao reagendar processo", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  function assignFromPreview(request, assignment: AnyRecord = {}) {
+  async function assignFromPreview(request, assignment: AnyRecord = {}) {
     if (!request) return;
     const sector = activeSectors.find((item) => item.id === assignment.sectorId);
     const user = activeUsers.find((item) => item.id === assignment.userId);
@@ -3782,11 +3827,14 @@ function AdminDashboard({
       responsible: user.name || sector.name || "Equipe",
       tags: mergeTags(request.tags, ["ATRIBUIDA"]),
     };
-    patchRequest?.(request.id, patch, `Atribuída para ${sector.name} / ${user.name}`);
+    try {
+      await patchRequest?.(request.id, patch, `Atribuída para ${sector.name} / ${user.name}`);
+      showToast(`Atribuído para ${user.name} — ${sector.name}`, "success");
+    } catch { showToast("Erro ao atribuir processo", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  function rejectRequestFromProcess(request, data: AnyRecord = {}) {
+  async function rejectRequestFromProcess(request, data: AnyRecord = {}) {
     if (!request) return;
     const note = String(data.note || "").trim();
     const patch = {
@@ -3795,11 +3843,14 @@ function AdminDashboard({
       rejectionNote: note,
       workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Indeferido" },
     };
-    patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
+    try {
+      await patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
+      showToast("Processo indeferido", "warning");
+    } catch { showToast("Erro ao indeferir processo", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  function confirmAttendanceFromProcess(request, data: AnyRecord = {}) {
+  async function confirmAttendanceFromProcess(request, data: AnyRecord = {}) {
     if (!request) return;
     const normalized = normalizeRequest(request);
     const microchip = String(data.microchip || "").trim();
@@ -3815,7 +3866,10 @@ function AdminDashboard({
       animals,
       workflow_data: { performedProcedures, attendanceMicrochip: microchip, attendanceNote: note },
     };
-    patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`);
+    try {
+      await patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`);
+      showToast("Comparecimento confirmado — procedimento realizado", "success");
+    } catch { showToast("Erro ao confirmar comparecimento", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
@@ -3826,6 +3880,7 @@ function AdminDashboard({
 
   return (
     <section className="request-workspace triage-workspace">
+      <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
       <div className="workspace-heading">
         <div>
           <h2>Solicitações</h2>
@@ -3951,7 +4006,11 @@ function AdminDashboard({
               </button>
             </div>
             <NewRequest
-              createRequest={createRequest}
+              createRequest={async (payload) => {
+                const result = await createRequest?.(payload);
+                if (result?.protocol) showToast(`Cadastro criado — Protocolo #${result.protocol}`, "success");
+                return result;
+              }}
               currentUser={currentUser}
               compact
               internalSimple
