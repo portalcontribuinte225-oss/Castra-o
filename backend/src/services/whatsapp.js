@@ -32,10 +32,12 @@ function getScheduleAddress(request = {}) {
 }
 
 function resolveConfirmationVariable(key, request = {}) {
+  const wf = request.workflow_data && typeof request.workflow_data === "object" ? request.workflow_data : {};
   const values = {
     tutor_name: request.tutor_name || "Tutor",
     protocol: request.protocol || "-",
     schedule_date: request.schedule_date || "data a confirmar",
+    schedule_time: wf.scheduleTime || request.schedule_time || "hora a confirmar",
     schedule_location_name: request.schedule_location_name || "local a confirmar",
     schedule_address: request.schedule_address || getScheduleAddress(request) || "endereco a confirmar",
     schedule_address_url: request.schedule_address_url || "link indisponivel",

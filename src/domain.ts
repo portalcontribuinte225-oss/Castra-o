@@ -101,6 +101,7 @@ export const initialWhatsappSettings: AnyRecord = {
 export const WHATSAPP_TEMPLATE_VARS = [
   { key: "tutor_name", label: "Nome do tutor" },
   { key: "schedule_date", label: "Data agendamento" },
+  { key: "schedule_time", label: "Hora agendamento" },
   { key: "protocol", label: "Protocolo" },
   { key: "schedule_location_name", label: "Local" },
   { key: "schedule_address", label: "Endereço" },
