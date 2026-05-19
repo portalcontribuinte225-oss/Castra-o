@@ -7371,65 +7371,72 @@ function ConfigView({
             <PanelHeader title="WhatsApp por município" />
 
             {configMunicipalityScopeId && (
-              <div className="whatsapp-status-card">
-                <span className={`whatsapp-status-badge ${isActive ? "whatsapp-status-badge--on" : "whatsapp-status-badge--off"}`}>
-                  {isActive ? "● Ativo" : "○ Inativo"}
+              <div className="whatsapp-statusbar">
+                <span className={`whatsapp-dot ${isActive ? "whatsapp-dot--on" : "whatsapp-dot--off"}`} />
+                <span className={`whatsapp-statusbar-state ${isActive ? "whatsapp-status-ok" : "whatsapp-status-err"}`}>
+                  {isActive ? "Ativo" : "Inativo"}
                 </span>
                 {whatsappQuotaLive?.plan ? (
                   <>
-                    <div className="whatsapp-status-item">
-                      <span className="whatsapp-status-label">Este mês</span>
-                      <span className="whatsapp-status-value">{whatsappQuotaLive.used ?? 0}/{whatsappQuotaLive.plan}</span>
-                    </div>
-                    <div className="whatsapp-status-item">
-                      <span className="whatsapp-status-label">Contrato</span>
-                      <span className={`whatsapp-status-value ${whatsappQuotaLive.active ? "whatsapp-status-ok" : "whatsapp-status-err"}`}>
-                        {whatsappQuotaLive.active ? "Vigente" : "Encerrado"}
-                        {contractEndLabel ? ` · até ${contractEndLabel}` : ""}
-                      </span>
-                    </div>
+                    <span className="whatsapp-statusbar-sep">·</span>
+                    <span className="whatsapp-statusbar-text">
+                      <strong>{whatsappQuotaLive.used ?? 0}/{whatsappQuotaLive.plan}</strong> mensagens este mês
+                    </span>
+                    <span className="whatsapp-statusbar-sep">·</span>
+                    <span className={`whatsapp-statusbar-text ${whatsappQuotaLive.active ? "" : "whatsapp-status-err"}`}>
+                      Contrato {whatsappQuotaLive.active ? "vigente" : "encerrado"}
+                      {contractEndLabel ? ` até ${contractEndLabel}` : ""}
+                    </span>
                   </>
                 ) : (
-                  <span className="whatsapp-status-label">Cota não configurada</span>
+                  <>
+                    <span className="whatsapp-statusbar-sep">·</span>
+                    <span className="whatsapp-statusbar-text">Cota não configurada</span>
+                  </>
                 )}
               </div>
             )}
 
             <div className="whatsapp-settings-grid">
-              <article className="whatsapp-card">
-                <div className="config-modal-options">
+              <section className="whatsapp-section">
+                <div className="whatsapp-section-header">
+                  <span className="whatsapp-section-label">Credenciais</span>
                   <ConfigActiveToggle
                     checked={Boolean(whatsappSettings.active)}
                     onChange={(checked) => setWhatsappSettings((current) => ({ ...current, active: checked }))}
                   />
                 </div>
-                <label className="field">
-                  <span>Provedor</span>
-                  <select
-                    value={whatsappSettings.provider || "cloud_api"}
-                    onChange={(event) => setWhatsappSettings((current) => ({ ...current, provider: event.target.value }))}
-                  >
-                    <option value="cloud_api">WhatsApp Cloud API</option>
-                  </select>
-                </label>
-                <Field
-                  label="ID do número remetente"
-                  value={whatsappSettings.phoneNumberId || ""}
-                  placeholder="Phone Number ID da Meta"
-                  onChange={(value) => setWhatsappSettings((current) => ({ ...current, phoneNumberId: value }))}
-                />
-                <Field
-                  label="Template de confirmação"
-                  value={whatsappSettings.confirmationTemplate || ""}
-                  placeholder="confirmacao_agenda_castracao"
-                  onChange={(value) => setWhatsappSettings((current) => ({ ...current, confirmationTemplate: value }))}
-                />
-                <Field
-                  label="Idioma do template"
-                  value={whatsappSettings.languageCode || ""}
-                  placeholder="pt_BR"
-                  onChange={(value) => setWhatsappSettings((current) => ({ ...current, languageCode: value }))}
-                />
+                <div className="whatsapp-fields-row">
+                  <label className="field">
+                    <span>Provedor</span>
+                    <select
+                      value={whatsappSettings.provider || "cloud_api"}
+                      onChange={(event) => setWhatsappSettings((current) => ({ ...current, provider: event.target.value }))}
+                    >
+                      <option value="cloud_api">WhatsApp Cloud API</option>
+                    </select>
+                  </label>
+                  <Field
+                    label="Idioma"
+                    value={whatsappSettings.languageCode || ""}
+                    placeholder="pt_BR"
+                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, languageCode: value }))}
+                  />
+                </div>
+                <div className="whatsapp-fields-row">
+                  <Field
+                    label="ID do número remetente"
+                    value={whatsappSettings.phoneNumberId || ""}
+                    placeholder="Phone Number ID da Meta"
+                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, phoneNumberId: value }))}
+                  />
+                  <Field
+                    label="Template de confirmação"
+                    value={whatsappSettings.confirmationTemplate || ""}
+                    placeholder="confirmacao_agenda_castracao"
+                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, confirmationTemplate: value }))}
+                  />
+                </div>
                 <div className="field">
                   <span>Variáveis do template</span>
                   <div className="whatsapp-vars-chips">
@@ -7456,7 +7463,7 @@ function ConfigView({
                   </div>
                 </div>
                 <label className="field">
-                  <span>Token permanente / chave de acesso</span>
+                  <span>Token de acesso</span>
                   <input
                     value={whatsappSettings.accessToken || ""}
                     type="password"
@@ -7464,12 +7471,14 @@ function ConfigView({
                     onChange={(event) => setWhatsappSettings((current) => ({ ...current, accessToken: event.target.value }))}
                   />
                 </label>
-                <button className="primary-action ai-save-key-action" type="button" onClick={saveWhatsappSettings} disabled={!configMunicipalityScopeId}>
-                  Salvar WhatsApp
-                </button>
-                {whatsappSaveStatus && <p className={whatsappSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{whatsappSaveStatus}</p>}
+                <div className="whatsapp-save-row">
+                  <button className="primary-action" type="button" onClick={saveWhatsappSettings} disabled={!configMunicipalityScopeId}>
+                    Salvar credenciais
+                  </button>
+                  {whatsappSaveStatus && <span className={whatsappSaveStatus.includes("sucesso") ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{whatsappSaveStatus}</span>}
+                </div>
 
-                <div className="whatsapp-section-heading"><span>Envio de teste</span></div>
+                <div className="whatsapp-section-heading"><span>Teste de envio</span></div>
                 <div className="whatsapp-test-row">
                   <Field
                     label="Número"
@@ -7489,72 +7498,78 @@ function ConfigView({
                 {testSendStatus && (
                   <p className={testSendStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{testSendStatus}</p>
                 )}
-              </article>
+              </section>
 
-              <article className="whatsapp-card">
-                <Field
-                  label="Limite mensal de mensagens"
-                  value={quotaSettings.plan}
-                  placeholder="Ex: 500"
-                  onChange={(value) => setQuotaSettings((current) => ({ ...current, plan: value }))}
-                />
-                <label className="field">
-                  <span>Início do contrato</span>
-                  <input
-                    type="date"
-                    value={quotaSettings.contractStart}
-                    onChange={(event) => setQuotaSettings((current) => ({ ...current, contractStart: event.target.value }))}
+              <section className="whatsapp-section">
+                <div className="whatsapp-section-header">
+                  <span className="whatsapp-section-label">Contrato e cota</span>
+                </div>
+                <div className="whatsapp-fields-row">
+                  <Field
+                    label="Limite mensal"
+                    value={quotaSettings.plan}
+                    placeholder="Ex: 500"
+                    onChange={(value) => setQuotaSettings((current) => ({ ...current, plan: value }))}
                   />
-                </label>
-                <label className="field">
-                  <span>Fim do contrato</span>
-                  <input
-                    type="date"
-                    value={quotaSettings.contractEnd}
-                    onChange={(event) => setQuotaSettings((current) => ({ ...current, contractEnd: event.target.value }))}
-                  />
-                </label>
-                <button className="primary-action ai-save-key-action" type="button" onClick={saveQuotaSettings} disabled={!configMunicipalityScopeId}>
-                  Salvar cota
-                </button>
-                {quotaSaveStatus && (
-                  <p className={quotaSaveStatus.includes("sucesso") || quotaSaveStatus.includes("zerada") || quotaSaveStatus.includes("encerrado") ? "sms-status confirmed" : "sms-status"}>
-                    {quotaSaveStatus}
-                  </p>
-                )}
+                  <label className="field">
+                    <span>Início</span>
+                    <input
+                      type="date"
+                      value={quotaSettings.contractStart}
+                      onChange={(event) => setQuotaSettings((current) => ({ ...current, contractStart: event.target.value }))}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Fim</span>
+                    <input
+                      type="date"
+                      value={quotaSettings.contractEnd}
+                      onChange={(event) => setQuotaSettings((current) => ({ ...current, contractEnd: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <div className="whatsapp-save-row">
+                  <button className="primary-action" type="button" onClick={saveQuotaSettings} disabled={!configMunicipalityScopeId}>
+                    Salvar cota
+                  </button>
+                  {quotaSaveStatus && (
+                    <span className={quotaSaveStatus.includes("sucesso") || quotaSaveStatus.includes("zerada") || quotaSaveStatus.includes("encerrado") ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>
+                      {quotaSaveStatus}
+                    </span>
+                  )}
+                </div>
 
                 <div className="whatsapp-section-heading"><span>Ações</span></div>
                 {confirmEndContract ? (
                   <div className="whatsapp-confirm-block">
                     <p>Encerrar contrato hoje ({new Date().toLocaleDateString("pt-BR")})?</p>
                     <div className="whatsapp-confirm-actions">
-                      <button className="whatsapp-btn-danger-solid" type="button" onClick={endContractToday}>Confirmar encerramento</button>
+                      <button className="whatsapp-btn-danger-solid" type="button" onClick={endContractToday}>Confirmar</button>
                       <button className="btn-secondary" type="button" onClick={() => setConfirmEndContract(false)}>Cancelar</button>
                     </div>
                   </div>
                 ) : (
-                  <button
-                    className="whatsapp-btn-danger"
-                    type="button"
-                    onClick={() => setConfirmEndContract(true)}
-                    disabled={!quotaSettings.plan || !configMunicipalityScopeId}
-                  >
-                    Encerrar contrato hoje
-                  </button>
+                  <div className="whatsapp-actions-row">
+                    <button
+                      className="whatsapp-btn-danger"
+                      type="button"
+                      onClick={() => setConfirmEndContract(true)}
+                      disabled={!quotaSettings.plan || !configMunicipalityScopeId}
+                    >
+                      Encerrar contrato
+                    </button>
+                    <button
+                      className="whatsapp-btn-warning"
+                      type="button"
+                      onClick={resetQuotaUsed}
+                      disabled={!whatsappQuotaLive?.plan || !configMunicipalityScopeId}
+                    >
+                      Zerar cota do mês
+                    </button>
+                  </div>
                 )}
-                <button
-                  className="whatsapp-btn-warning"
-                  type="button"
-                  onClick={resetQuotaUsed}
-                  disabled={!whatsappQuotaLive?.plan || !configMunicipalityScopeId}
-                >
-                  Zerar cota do mês
-                </button>
-
-                <div className="whatsapp-info-note">
-                  <p>Encerrar o contrato bloqueia novos envios imediatamente. Zerar a cota reinicia a contagem deste mês.</p>
-                </div>
-              </article>
+                <p className="whatsapp-note">Encerrar bloqueia novos envios imediatamente. Zerar reinicia a contagem deste mês.</p>
+              </section>
             </div>
           </div>
         );
