@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity,
   CalendarDays,
@@ -10,7 +10,6 @@ import {
   Layers3,
   LineChart,
   MapPin,
-  Navigation,
   PawPrint,
   ShieldCheck,
   Stethoscope,
@@ -287,11 +286,8 @@ export function DashboardView({
     const realizadas = filteredRequests.filter((request) => request.status === "REALIZADA");
     const byNeighborhood = topItems(countBy(realizadas, (request) => request.neighborhood || "Não informado"), 8);
     const neighborhoodsReached = new Set(realizadas.map((request) => request.neighborhood).filter(Boolean)).size;
-    const geocoded = realizadas.filter((request) => hasValidCoordinates(request)).length;
     const total = realizadas.length;
-    const withoutLocation = total - geocoded;
-    const coverageRate = pct(geocoded, total);
-    return { byNeighborhood, neighborhoodsReached, geocoded, withoutLocation, coverageRate, total };
+    return { byNeighborhood, neighborhoodsReached, total };
   }, [filteredRequests]);
 
   const decisionAnalysis = useMemo(() => {
@@ -460,16 +456,16 @@ export function DashboardView({
 
   const territorialSignals = useMemo(() => [
     {
-      label: "Sem localização",
-      value: territorial.withoutLocation,
-      detail: "realizadas sem ponto no mapa",
-      tone: territorial.withoutLocation ? "warn" : "ok",
+      label: "Realizadas",
+      value: intelligence.completed,
+      detail: "processos concluídos no período",
+      tone: intelligence.completed ? "ok" : "info",
     },
     {
-      label: "Cobertura do mapa",
-      value: `${territorial.coverageRate}%`,
-      detail: `${territorial.geocoded} de ${intelligence.completed} realizadas`,
-      tone: territorial.coverageRate >= 80 ? "ok" : territorial.coverageRate ? "info" : "warn",
+      label: "Bairros cobertos",
+      value: territorial.neighborhoodsReached,
+      detail: "com ao menos uma realização",
+      tone: territorial.neighborhoodsReached ? "ok" : "info",
     },
     {
       label: "Aguardando procedimento",
@@ -519,10 +515,10 @@ export function DashboardView({
       { label: "Encerramentos", value: operational.byCloser.reduce((sum, item) => sum + Number(item.value || 0), 0), helper: "produção concluída", icon: ClipboardCheck },
     ],
     territorio: [
-      { label: "Realizadas", value: intelligence.completed, helper: "processos realizados", icon: ShieldCheck },
-      { label: "No mapa", value: territorial.geocoded, helper: "com localização registrada", icon: MapPin },
-      { label: "Bairros cobertos", value: territorial.neighborhoodsReached, helper: "com deferimento", icon: Layers3 },
-      { label: "Realizadas", value: castration.completed, helper: "castrações executadas", icon: Stethoscope, tone: "ok" },
+      { label: "Realizadas", value: intelligence.completed, helper: "processos realizados", icon: ShieldCheck, tone: "ok" },
+      { label: "Bairros cobertos", value: territorial.neighborhoodsReached, helper: "com ao menos uma realização", icon: MapPin },
+      { label: "Castrações", value: castration.completed, helper: "procedimentos executados", icon: Stethoscope },
+      { label: "Fila ativa", value: intelligence.activeQueue, helper: "processos em andamento", icon: ClipboardList },
       { label: "Aguardando", value: intelligence.waitingProcedure, helper: "fila pré-procedimento", icon: CalendarDays },
       { label: "Ausências", value: intelligence.absent, helper: "não comparecimento", icon: Activity },
     ],
@@ -540,24 +536,33 @@ export function DashboardView({
 
   return (
     <section className={`opdash-root is-${activeTab}`}>
-      <nav className="opdash-nav" aria-label="Navegação do BI">
-        <div className="opdash-tabs">
-          {DASHBOARD_TABS.map((tab) => (
-            <button key={tab.id} type="button" className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>
-              {tab.label}
-            </button>
-          ))}
+      <header className="opdash-hero">
+        <div className="opdash-hero-copy">
+          <span>Fluxo operacional</span>
+          <h2>Dashboard de gestão</h2>
+          <p>Leitura geral de solicitações, agenda, castrações, adoções e território.</p>
         </div>
-        <div className="opdash-toolbar">
-          <div className="opdash-segment">
-            {PERIOD_OPTIONS.map((item) => (
-              <button key={item.id} type="button" className={period === item.id ? "is-active" : ""} onClick={() => setPeriod(item.id)}>
-                {item.label}
+
+        <nav className="opdash-nav" aria-label="Navegação do BI">
+          <div className="opdash-tabs">
+            {DASHBOARD_TABS.map((tab) => (
+              <button key={tab.id} type="button" className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>
+                {tab.label}
               </button>
             ))}
           </div>
-        </div>
-      </nav>
+          <div className="opdash-toolbar" aria-label="Filtro de período">
+            <span>Período</span>
+            <div className="opdash-segment">
+              {PERIOD_OPTIONS.map((item) => (
+                <button key={item.id} type="button" className={period === item.id ? "is-active" : ""} onClick={() => setPeriod(item.id)}>
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </nav>
+      </header>
 
       <div className="opdash-kpis">
         {kpis.map((item) => <KpiCard key={item.label} item={item} />)}
@@ -709,17 +714,20 @@ export function DashboardView({
       {activeTab === "territorio" && (
         <div className="opdash-territory-layout">
           <div className="opdash-territory-main">
-            <Panel className="opdash-panel--map" title="Mapa de processos realizados" meta={`${territorial.geocoded} processos com localização`}>
-              <GoogleDashboardMap requests={filteredRequests} />
+            <Panel title="Distribuição por bairro" meta={`${territorial.neighborhoodsReached} bairros com realizações`}>
+              <Ranking title="Realizados" items={territorial.byNeighborhood} />
+              <Ranking title="Castrações por bairro" items={castration.byNeighborhood} compact />
+            </Panel>
+            <Panel title="Perfil da demanda" meta="tipo de solicitação no território">
+              <Ranking title="Tipos de procedimento" items={operational.byType} />
             </Panel>
           </div>
           <div className="opdash-territory-side">
-            <Panel title="Saúde territorial" meta="cobertura e execução">
+            <Panel title="Saúde territorial" meta="execução e cobertura">
               <SignalList items={territorialSignals} />
             </Panel>
-            <Panel title="Distribuição por bairro" meta="demanda deferida vs. execução">
-              <Ranking title="Realizados" items={territorial.byNeighborhood} />
-              <Ranking title="Realizadas" items={castration.byNeighborhood} compact />
+            <Panel title="Bairros prioritários" meta="maior demanda pendente">
+              <Ranking title="Com fila ativa" items={topItems(countBy(filteredRequests.filter((r) => r.status === "NOVA" || r.status === "AGENDADA"), (r) => r.neighborhood || "Não informado"), 6)} compact />
             </Panel>
           </div>
         </div>
@@ -768,9 +776,11 @@ function KpiCard({ item }: { item: AnyRecord }) {
   const Icon = item.icon;
   return (
     <article className={`opdash-kpi ${item.tone ? `is-${item.tone}` : ""}`}>
-      <span className="opdash-kpi-icon">{Icon && <Icon size={17} />}</span>
+      <div className="opdash-kpi-head">
+        <span>{item.label}</span>
+        <span className="opdash-kpi-icon">{Icon && <Icon size={17} />}</span>
+      </div>
       <strong>{item.value}</strong>
-      <span>{item.label}</span>
       <small>{item.helper}</small>
     </article>
   );
@@ -907,181 +917,6 @@ function ScheduleList({ items = [] }: AnyRecord) {
   );
 }
 
-function GoogleDashboardMap({ requests = [] }: AnyRecord) {
-  const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-  const mapRef = useRef<HTMLDivElement | null>(null);
-  const mapInstanceRef = useRef<any>(null);
-  const markersRef = useRef<any[]>([]);
-  const userMarkerRef = useRef<any>(null);
-  const [status, setStatus] = useState(apiKey ? "Carregando Google Maps..." : "Configure a chave do Google Maps para visualizar o mapa.");
-  const [locating, setLocating] = useState(false);
-  const [satellite, setSatellite] = useState(false);
-
-  function toggleSatellite() {
-    const map = mapInstanceRef.current;
-    const google = window.google;
-    if (!map || !google?.maps) return;
-    const next = !satellite;
-    map.setMapTypeId(next ? google.maps.MapTypeId.HYBRID : google.maps.MapTypeId.ROADMAP);
-    setSatellite(next);
-  }
-
-  function locateUser() {
-    const map = mapInstanceRef.current;
-    const google = window.google;
-    if (!map || !google?.maps || !navigator.geolocation) return;
-    setLocating(true);
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const position = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if (userMarkerRef.current) userMarkerRef.current.setMap(null);
-        userMarkerRef.current = new google.maps.Marker({
-          map,
-          position,
-          title: "Sua localização",
-          zIndex: 999,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            fillColor: "#ef4444",
-            fillOpacity: 1,
-            strokeColor: "#ffffff",
-            strokeWeight: 3,
-            scale: 10,
-          },
-        });
-        map.panTo(position);
-        map.setZoom(14);
-        setLocating(false);
-      },
-      () => setLocating(false),
-      { enableHighAccuracy: true, timeout: 10000 },
-    );
-  }
-
-  const points = useMemo(() => {
-    return requests
-      .filter((request: AnyRecord) => request.status === "REALIZADA" && hasValidCoordinates(request))
-      .map((request: AnyRecord) => ({
-        lat: Number(request.latitude),
-        lng: Number(request.longitude),
-        tutor: request.tutor || "Tutor não informado",
-        microchip: request.animalMicrochip || request.animals?.[0]?.microchip || "",
-      }));
-  }, [requests]);
-
-  useEffect(() => {
-    if (!apiKey || !mapRef.current) return;
-    let active = true;
-    window.gm_authFailure = () => setStatus("Google Maps recusou a chave configurada.");
-    loadGoogleMapsApi(apiKey)
-      .then((google) => {
-        if (!active) return;
-        mapInstanceRef.current = new google.maps.Map(mapRef.current, {
-          center: { lat: -15.78, lng: -47.93 },
-          zoom: 5,
-          mapTypeControl: false,
-          streetViewControl: false,
-          fullscreenControl: true,
-        });
-        setStatus(points.length ? "" : "Nenhum processo realizado com localização registrada.");
-      })
-      .catch(() => setStatus("Não foi possível carregar o Google Maps."));
-    return () => {
-      active = false;
-      if (window.gm_authFailure) window.gm_authFailure = undefined;
-    };
-  }, [apiKey]);
-
-  useEffect(() => {
-    const google = window.google;
-    const map = mapInstanceRef.current;
-    if (!google?.maps || !map) return;
-    markersRef.current.forEach((marker) => marker.setMap(null));
-    markersRef.current = [];
-    if (!points.length) {
-      setStatus("Nenhum processo realizado com localização registrada.");
-      return;
-    }
-    const bounds = new google.maps.LatLngBounds();
-    const infoWindow = new google.maps.InfoWindow();
-    points.forEach((point: AnyRecord) => {
-      const position = { lat: point.lat, lng: point.lng };
-      const marker = new google.maps.Marker({
-        map,
-        position,
-        title: point.tutor,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          fillColor: "#2563eb",
-          fillOpacity: 1,
-          strokeColor: "#ffffff",
-          strokeWeight: 2,
-          scale: 8,
-        },
-      });
-      marker.addListener("click", () => {
-        const microchipLine = point.microchip ? `Microchip: ${escapeHtml(point.microchip)}` : "Sem microchip";
-        infoWindow.setContent(`<strong>${escapeHtml(point.tutor)}</strong><br>${microchipLine}`);
-        infoWindow.open({ anchor: marker, map });
-      });
-      bounds.extend(position);
-      markersRef.current.push(marker);
-    });
-    if (points.length > 1) map.fitBounds(bounds, 44);
-    else map.setCenter({ lat: points[0].lat, lng: points[0].lng });
-    setStatus("");
-  }, [points]);
-
-  if (!apiKey) return <div className="opdash-map-fallback">{status}</div>;
-
-  return (
-    <div className="opdash-map">
-      <div ref={mapRef} />
-      {status && <p>{status}</p>}
-      <div className="opdash-map-controls">
-        <button
-          type="button"
-          className={`opdash-map-satellite ${satellite ? "is-active" : ""}`}
-          onClick={toggleSatellite}
-          title={satellite ? "Voltar para mapa" : "Ver satélite"}
-        >
-          {satellite ? "Mapa" : "Satélite"}
-        </button>
-        <button
-          type="button"
-          className={`opdash-map-locate ${locating ? "is-locating" : ""}`}
-          onClick={locateUser}
-          disabled={locating}
-          title="Ir para minha localização"
-        >
-          <Navigation size={16} />
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function loadGoogleMapsApi(apiKey: string) {
-  if (window.google?.maps?.Map) return Promise.resolve(window.google);
-  const scriptId = "google-maps-js-api";
-  const existing = document.getElementById(scriptId);
-  if (existing) {
-    return new Promise<any>((resolve, reject) => {
-      existing.addEventListener("load", () => resolve(window.google), { once: true });
-      existing.addEventListener("error", reject, { once: true });
-    });
-  }
-  return new Promise<any>((resolve, reject) => {
-    const script = document.createElement("script");
-    script.id = scriptId;
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=maps,marker&v=beta`;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve(window.google);
-    script.onerror = reject;
-    document.head.appendChild(script);
-  });
-}
 
 function getPeriodStart(period: PeriodKey) {
   if (period === "all") return null;
@@ -1178,14 +1013,8 @@ function getPrimaryUserSectorName(user: AnyRecord = {}, teams: AnyRecord = initi
   return sectorIds.map((id: string) => getTeamSectorName(id, teams)).filter(Boolean)[0] || "";
 }
 
-function hasValidCoordinates(request: AnyRecord) {
-  const lat = Number(request.latitude);
-  const lng = Number(request.longitude);
-  return Number.isFinite(lat) && Number.isFinite(lng) && lat >= -33.75 && lat <= 5.27 && lng >= -73.99 && lng <= -29.35;
-}
-
 function hasIncompleteRegistration(request: AnyRecord = {}) {
-  return !request.phone || !request.cpf || !request.address || !request.neighborhood || !request.cep || !hasValidCoordinates(request);
+  return !request.phone || !request.cpf || !request.address || !request.neighborhood || !request.cep;
 }
 
 function getPriorityNeighborhood(requests: AnyRecord[]) {

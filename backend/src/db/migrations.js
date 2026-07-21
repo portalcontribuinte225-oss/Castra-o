@@ -334,6 +334,10 @@ export async function runMigrations() {
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS origin TEXT DEFAULT 'PUBLICA';
   `);
 
+  await pool.query(`
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS brasao TEXT;
+  `);
+
   /* ── Refatoração de status: EM_ANALISE/AGUARDANDO_CIRURGIA/ARQUIVADA → NOVA/AGENDADA/REALIZADA/CANCELADA ── */
   await pool.query(`
     ALTER TABLE requests DROP CONSTRAINT IF EXISTS requests_status_check;

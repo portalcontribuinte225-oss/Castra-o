@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import type { AnyRecord } from "../types";
 import { statusLabels } from "../domain";
 
@@ -27,7 +28,7 @@ export function ConfigSectionHeader({ title, createLabel, onCreate, children }: 
         <h2>{title}</h2>
         {children}
       </div>
-      {createLabel && <button className="secondary-action" type="button" onClick={onCreate}>{createLabel}</button>}
+      {createLabel && <button className="primary-action config-create-action" type="button" onClick={onCreate}>+ {createLabel}</button>}
     </div>
   );
 }
@@ -82,15 +83,22 @@ export function PanelHeader({ title, action, onAction, aside, actionClassName = 
   );
 }
 
-export function ModalHeader({ title, subtitle, onClose, actions }: AnyRecord) {
+export function ModalHeader({ title, subtitle, onClose, actions, icon: Icon }: AnyRecord) {
   return (
     <div className="modal-header">
-      <div>
+      {Icon && (
+        <div className="modal-header-icon">
+          <Icon size={18} />
+        </div>
+      )}
+      <div className="modal-header-text">
         {title && <h2>{title}</h2>}
-        {subtitle && <p>{subtitle}</p>}
+        {subtitle && <p className="modal-header-sub">{subtitle}</p>}
       </div>
       {actions}
-      <button className="icon-button" type="button" onClick={onClose} aria-label="Fechar">×</button>
+      <button className="modal-header-close" type="button" onClick={onClose} aria-label="Fechar">
+        <X size={15} />
+      </button>
     </div>
   );
 }

@@ -1,15 +1,9 @@
 import { useMemo, useState } from "react";
 import {
-  Building2,
   CheckCircle2,
   ClipboardList,
-  Clock,
-  Mail,
-  MapPin,
-  Phone,
   Shield,
   ShieldCheck,
-  User2,
   X,
   XCircle,
 } from "lucide-react";
@@ -56,7 +50,6 @@ export function AccessRequestsView({
   teams = initialTeams,
 }: AnyRecord) {
   const [filter, setFilter] = useState("PENDENTE");
-
   const [reviewing, setReviewing] = useState<AnyRecord | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -94,57 +87,36 @@ export function AccessRequestsView({
     }
   }
 
+  function openReview(item: AnyRecord) {
+    setReviewing(item);
+    setReviewNote(item.reviewNote || "");
+  }
+
   return (
     <section className="cr-root">
-      <header className="cr-header">
-        <div className="cr-header-left">
+      <div className="cr-toolbar">
+        <div className="cr-toolbar-left">
           <span className="cr-title-kicker">
             <Shield size={13} /> Gestão de acesso
           </span>
           <h2 className="cr-title">Credenciamentos</h2>
         </div>
-      </header>
-
-      <div className="cr-kpis">
-        <CrKpi
-          label="Total"
-          value={accessRequests.length}
-          helper="solicitações recebidas"
-          icon={ClipboardList}
-        />
-        <CrKpi
-          label="Pendentes"
-          value={pendingCount}
-          helper="aguardam análise"
-          icon={Clock}
-          tone={pendingCount > 0 ? "warn" : undefined}
-        />
-        <CrKpi
-          label="Aprovados"
-          value={approvedCount}
-          helper="acesso liberado"
-          icon={CheckCircle2}
-          tone={approvedCount > 0 ? "ok" : undefined}
-        />
-        <CrKpi
-          label="Recusados"
-          value={rejectedCount}
-          helper="acesso negado"
-          icon={XCircle}
-        />
+        <div className="cr-stats-row">
+          <span><ClipboardList size={12} /> {accessRequests.length} total</span>
+          {pendingCount > 0 && <span className="cr-stat-warn">{pendingCount} pendentes</span>}
+          {approvedCount > 0 && <span className="cr-stat-ok">{approvedCount} aprovados</span>}
+          {rejectedCount > 0 && <span>{rejectedCount} recusados</span>}
+        </div>
       </div>
 
       <nav className="request-nav cr-nav" aria-label="Filtros de credenciamento">
         <div className="request-filter-tabs">
           {FILTERS.map((item) => {
             const count =
-              item.id === "PENDENTE"
-                ? pendingCount
-                : item.id === "APROVADO"
-                  ? approvedCount
-                  : item.id === "RECUSADO"
-                    ? rejectedCount
-                    : accessRequests.length;
+              item.id === "PENDENTE" ? pendingCount :
+              item.id === "APROVADO" ? approvedCount :
+              item.id === "RECUSADO" ? rejectedCount :
+              accessRequests.length;
             return (
               <button
                 key={item.id}
@@ -166,16 +138,10 @@ export function AccessRequestsView({
       </nav>
 
       {feedback && (
-        <div
-          className={`cr-feedback ${
-            feedback.includes("sucesso") || feedback.includes("Senha") ? "is-ok" : "is-error"
-          }`}
-        >
-          {feedback.includes("sucesso") || feedback.includes("Senha") ? (
-            <CheckCircle2 size={15} />
-          ) : (
-            <XCircle size={15} />
-          )}
+        <div className={`cr-feedback ${feedback.includes("sucesso") || feedback.includes("Senha") ? "is-ok" : "is-error"}`}>
+          {feedback.includes("sucesso") || feedback.includes("Senha")
+            ? <CheckCircle2 size={15} />
+            : <XCircle size={15} />}
           <span>{feedback}</span>
           <button type="button" onClick={() => setFeedback("")} aria-label="Fechar">
             <X size={13} />
@@ -183,26 +149,56 @@ export function AccessRequestsView({
         </div>
       )}
 
-      <div className="cr-list">
+      <div className="cr-table-wrap">
         {filtered.length === 0 ? (
           <CrEmpty filter={filter} />
         ) : (
-          filtered.map((item) => {
-            const sector = (teams.sectors || []).find(
-              (s: AnyRecord) => normalizeText(s.name) === normalizeText(item.assignedSector),
-            );
-            return (
-              <CrCard
-                key={item.id}
-                item={item}
-                sectorName={sector?.name || item.assignedSector || ""}
-                onAnalyze={() => {
-                  setReviewing(item);
-                  setReviewNote(item.reviewNote || "");
-                }}
-              />
-            );
-          })
+          <table className="cr-table">
+            <thead>
+              <tr>
+                <th>Organização</th>
+                <th>Tipo</th>
+                <th>E-mail</th>
+                <th>Telefone</th>
+                <th>Cidade / UF</th>
+                <th>Setor</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((item) => {
+                const sector = (teams.sectors || []).find(
+                  (s: AnyRecord) => normalizeText(s.name) === normalizeText(item.assignedSector),
+                );
+                const sectorName = sector?.name || item.assignedSector || "—";
+                const tone = statusTone(item.status || "PENDENTE");
+                return (
+                  <tr
+                    key={item.id}
+                    className="cr-table-row"
+                    onClick={() => openReview(item)}
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === "Enter" && openReview(item)}
+                  >
+                    <td className="cr-col-name">
+                      {item.organizationName || item.responsibleName || "Solicitante"}
+                    </td>
+                    <td>{item.requesterLabel || "—"}</td>
+                    <td>{item.email || "—"}</td>
+                    <td>{item.phone || "—"}</td>
+                    <td>{[item.city, item.state].filter(Boolean).join(" / ") || "—"}</td>
+                    <td>{sectorName}</td>
+                    <td>
+                      <span className={`cr-badge is-${tone}`}>{accessStatusLabel(item.status)}</span>
+                      {item.temporaryPassword && (
+                        <span className="cr-temp-pw">Senha: {item.temporaryPassword}</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </div>
 
@@ -226,76 +222,12 @@ export function AccessRequestsView({
   );
 }
 
-function CrKpi({ label, value, helper, icon: Icon, tone }: AnyRecord) {
-  return (
-    <article className={`cr-kpi${tone ? ` is-${tone}` : ""}`}>
-      <span className="cr-kpi-icon">{Icon && <Icon size={16} />}</span>
-      <strong>{value}</strong>
-      <span>{label}</span>
-      <small>{helper}</small>
-    </article>
-  );
-}
-
-function CrCard({ item, sectorName, onAnalyze }: AnyRecord) {
-  const name = item.organizationName || item.responsibleName || "Solicitante";
-  const tone = statusTone(item.status || "PENDENTE");
-
-  return (
-    <article
-      className="cr-card"
-      onClick={onAnalyze}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onAnalyze()}
-    >
-      <div className="cr-row">
-        <div className="cr-col cr-col--nome">
-          <span className="cr-label">Organização</span>
-          <span className="cr-value">{name}</span>
-        </div>
-        <div className="cr-col cr-col--tipo">
-          <span className="cr-label">Tipo</span>
-          <span className="cr-value">{item.requesterLabel || "—"}</span>
-        </div>
-        <div className="cr-col cr-col--email">
-          <span className="cr-label">E-mail</span>
-          <span className="cr-value">{item.email || "—"}</span>
-        </div>
-        <div className="cr-col cr-col--telefone">
-          <span className="cr-label">Telefone</span>
-          <span className="cr-value">{item.phone || "—"}</span>
-        </div>
-        <div className="cr-col cr-col--cidade">
-          <span className="cr-label">Cidade / UF</span>
-          <span className="cr-value">{[item.city, item.state].filter(Boolean).join(" / ") || "—"}</span>
-        </div>
-        <div className="cr-col cr-col--setor">
-          <span className="cr-label">Setor</span>
-          <span className="cr-value">{sectorName || "—"}</span>
-        </div>
-        <div className="cr-col cr-col--status">
-          <span className={`cr-badge is-${tone}`}>{accessStatusLabel(item.status)}</span>
-          {item.temporaryPassword && (
-            <span className="cr-temp-pw">Senha: <strong>{item.temporaryPassword}</strong></span>
-          )}
-        </div>
-      </div>
-    </article>
-  );
-}
-
 function CrEmpty({ filter }: { filter: string }) {
   const msg =
-    filter === "PENDENTE"
-      ? "Nenhuma solicitação pendente"
-      : filter === "APROVADO"
-        ? "Nenhum credenciamento aprovado"
-        : filter === "RECUSADO"
-          ? "Nenhum credenciamento recusado"
-          : "Nenhuma solicitação encontrada";
-
-  const sub = "As solicitações enviadas pela home aparecerão aqui para análise.";
+    filter === "PENDENTE" ? "Nenhuma solicitação pendente" :
+    filter === "APROVADO" ? "Nenhum credenciamento aprovado" :
+    filter === "RECUSADO" ? "Nenhum credenciamento recusado" :
+    "Nenhuma solicitação encontrada";
 
   return (
     <div className="cr-empty">
@@ -303,21 +235,12 @@ function CrEmpty({ filter }: { filter: string }) {
         <ClipboardList size={28} strokeWidth={1.2} />
       </div>
       <strong>{msg}</strong>
-      <span>{sub}</span>
+      <span>As solicitações enviadas pela home aparecerão aqui para análise.</span>
     </div>
   );
 }
 
-function CrReviewModal({
-  item,
-  note,
-  onNoteChange,
-  deciding,
-  onApprove,
-  onReject,
-  onClose,
-  teams,
-}: AnyRecord) {
+function CrReviewModal({ item, note, onNoteChange, deciding, onApprove, onReject, onClose, teams }: AnyRecord) {
   const name = item.organizationName || item.responsibleName || "Solicitante";
   const tone = statusTone(item.status || "PENDENTE");
   const sector = (teams?.sectors || []).find(
@@ -335,19 +258,12 @@ function CrReviewModal({
           <div className="cr-modal-avatar">{getInitials(name)}</div>
           <div>
             <h3 className="cr-modal-name">{name}</h3>
-            {item.requesterLabel && (
-              <span className="cr-modal-type">{item.requesterLabel}</span>
-            )}
+            {item.requesterLabel && <span className="cr-modal-type">{item.requesterLabel}</span>}
           </div>
         </div>
         <div className="cr-modal-head-right">
           <span className={`cr-badge is-${tone}`}>{accessStatusLabel(item.status)}</span>
-          <button
-            className="cr-modal-close"
-            type="button"
-            onClick={onClose}
-            aria-label="Fechar"
-          >
+          <button className="cr-modal-close" type="button" onClick={onClose} aria-label="Fechar">
             <X size={16} />
           </button>
         </div>
@@ -370,47 +286,20 @@ function CrReviewModal({
 
       <div className="cr-modal-info">
         {item.requesterLabel && (
-          <div className="cr-info-row">
-            <span>Tipo</span>
-            <strong>{item.requesterLabel}</strong>
-          </div>
+          <div className="cr-info-row"><span>Tipo</span><span>{item.requesterLabel}</span></div>
         )}
-        <div className="cr-info-row">
-          <span>Responsável</span>
-          <strong>{item.responsibleName || "—"}</strong>
-        </div>
-        <div className="cr-info-row">
-          <span>E-mail</span>
-          <strong>{item.email || "—"}</strong>
-        </div>
-        {item.phone && (
-          <div className="cr-info-row">
-            <span>Telefone</span>
-            <strong>{item.phone}</strong>
-          </div>
-        )}
+        <div className="cr-info-row"><span>Responsável</span><span>{item.responsibleName || "—"}</span></div>
+        <div className="cr-info-row"><span>E-mail</span><span>{item.email || "—"}</span></div>
+        {item.phone && <div className="cr-info-row"><span>Telefone</span><span>{item.phone}</span></div>}
         {(item.city || item.state) && (
           <div className="cr-info-row">
             <span>Cidade / UF</span>
-            <strong>{[item.city, item.state].filter(Boolean).join(" / ")}</strong>
+            <span>{[item.city, item.state].filter(Boolean).join(" / ")}</span>
           </div>
         )}
-        <div className="cr-info-row">
-          <span>Setor</span>
-          <strong>{sectorName}</strong>
-        </div>
-        {item.intendedUse && (
-          <div className="cr-info-row">
-            <span>Finalidade</span>
-            <strong>{item.intendedUse}</strong>
-          </div>
-        )}
-        {item.reviewNote && (
-          <div className="cr-info-row">
-            <span>Parecer anterior</span>
-            <strong>{item.reviewNote}</strong>
-          </div>
-        )}
+        <div className="cr-info-row"><span>Setor</span><span>{sectorName}</span></div>
+        {item.intendedUse && <div className="cr-info-row"><span>Finalidade</span><span>{item.intendedUse}</span></div>}
+        {item.reviewNote && <div className="cr-info-row"><span>Parecer anterior</span><span>{item.reviewNote}</span></div>}
       </div>
 
       <label className="cr-note-field">
@@ -424,21 +313,10 @@ function CrReviewModal({
       </label>
 
       <div className="cr-modal-actions">
-        <button
-          className="cr-action-reject"
-          type="button"
-          onClick={onReject}
-          disabled={deciding}
-        >
-          <XCircle size={15} />
-          Recusar
+        <button className="cr-action-reject" type="button" onClick={onReject} disabled={deciding}>
+          <XCircle size={15} /> Recusar
         </button>
-        <button
-          className="cr-action-approve"
-          type="button"
-          onClick={onApprove}
-          disabled={deciding}
-        >
+        <button className="cr-action-approve" type="button" onClick={onApprove} disabled={deciding}>
           <ShieldCheck size={15} />
           {deciding ? "Processando..." : "Aprovar e criar usuário"}
         </button>

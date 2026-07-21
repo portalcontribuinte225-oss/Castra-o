@@ -176,7 +176,7 @@ function getScheduleWeekdayLabel(date: Date) {
   return ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][date.getDay()];
 }
 
-function generateScheduleDaysFromRule(rule: AnyRecord) {
+export function generateScheduleDaysFromRule(rule: AnyRecord) {
   const [startDay, startMonth, startYear] = rule.start.split("/").map(Number);
   const [endDay, endMonth, endYear] = rule.end.split("/").map(Number);
   const start = new Date(startYear, startMonth - 1, startDay);

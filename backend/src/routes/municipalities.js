@@ -166,7 +166,7 @@ router.patch("/:id", auth, async (req, res) => {
   if (!isGlobalUser(req.user)) return res.status(403).json({ error: "Acesso restrito ao suporte." });
   const fields = [];
   const values = [];
-  ["name", "state", "active"].forEach((field) => {
+  ["name", "state", "active", "brasao"].forEach((field) => {
     if (req.body?.[field] !== undefined) {
       values.push(field === "state" ? String(req.body[field]).trim().toUpperCase().slice(0, 2) : req.body[field]);
       fields.push(`${field} = $${values.length}`);

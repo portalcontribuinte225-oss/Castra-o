@@ -9,6 +9,7 @@ import {
   Cat,
   CheckCircle2,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   Clock,
   ClipboardCheck,
@@ -62,6 +63,7 @@ import {
   aiProviderOptions,
   brazilStatesFallback,
   filterByMunicipalityScope,
+  generateScheduleDaysFromRule,
   displayText,
   formatScheduleDate,
   formatSizeRange,
@@ -150,11 +152,11 @@ const menu = [
 ];
 
 const configSidebarItems = [
-  { id: "environment", label: "Configurar Ambiente" },
-  { id: "municipalities", label: "Criar Municípios", globalOnly: true },
-  { id: "users", label: "Criar Usuários" },
-  { id: "sectors", label: "Criar Setores" },
-  { id: "permissions", label: "Permissões" },
+  { id: "environment", label: "Configurar Ambiente", desc: "Parâmetros gerais do sistema" },
+  { id: "municipalities", label: "Criar Municípios", globalOnly: true, desc: "Gestão de municípios" },
+  { id: "users", label: "Criar Usuários", desc: "Acesso e permissões" },
+  { id: "sectors", label: "Criar Setores", desc: "Setores e equipes" },
+  { id: "permissions", label: "Permissões", desc: "Controle de acesso por perfil" },
 ];
 
 const permissionMenuItems = menu.map(({ id, label }) => ({ id, label }));
@@ -166,6 +168,16 @@ const permissionConfigItems = [
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
   { id: "whatsapp_settings", label: "Aba WhatsApp" },
+];
+
+const environmentConfigTabs = [
+  { id: "agenda", label: "Agenda" },
+  { id: "requests", label: "Tipo de Solicitação" },
+  { id: "sizes", label: "Portes" },
+  { id: "species", label: "Espécies" },
+  { id: "documents", label: "Documentos Solicitados" },
+  { id: "ai", label: "IA" },
+  { id: "whatsapp", label: "WhatsApp" },
 ];
 
 function scopeConfigItems(items = [], municipality: AnyRecord = {}) {
@@ -241,6 +253,7 @@ export default function App() {
   }
   const [active, setActive] = useState("admin");
   const [configArea, setConfigArea] = useState("environment");
+  const [configTab, setConfigTab] = useState("agenda");
   const [requests, setRequests] = useState([]);
   const [adoptionAnimals, setAdoptionAnimals] = useState([]);
   const [requestTypes, setRequestTypes] = useState([]);
@@ -266,7 +279,9 @@ export default function App() {
   const [configMenuOpen, setConfigMenuOpen] = useState(true);
   const [tenantConfigReady, setTenantConfigReady] = useState(false);
   const [loadedConfigKeys, setLoadedConfigKeys] = useState({});
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [sidebarResetOpen, setSidebarResetOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [sidebarResetPassword, setSidebarResetPassword] = useState("");
   const [sidebarResetConfirm, setSidebarResetConfirm] = useState("");
   const [sidebarResetStatus, setSidebarResetStatus] = useState("");
@@ -450,9 +465,14 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser) return;
-    api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(console.error);
-    api.getAccessRequests().then((list) => setAccessRequests(list.map(normalizeAccessRequest))).catch(console.error);
-    api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
+    function handleInitialLoadError(error) {
+      console.error(error);
+      const message = String(error?.message || "").toLowerCase();
+      if (message.includes("token")) setCurrentUser(null);
+    }
+    api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(handleInitialLoadError);
+    api.getAccessRequests().then((list) => setAccessRequests(list.map(normalizeAccessRequest))).catch(handleInitialLoadError);
+    api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(handleInitialLoadError);
     const municipalityId = isGlobalRole(currentUser.role) ? "" : currentUser.municipalityId || "";
     api.getSchedule(municipalityId).then((days) => {
       if (!days.length) return;
@@ -690,6 +710,8 @@ export default function App() {
   const visibleConfigSidebarItems = configSidebarItems
     .filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role))
     .filter((item) => !canUsePermissions || currentPermissionGroup.allowedConfigItems?.includes(item.id));
+  const visibleEnvironmentTabs = environmentConfigTabs
+    .filter((tab) => tab.id !== "whatsapp" || !canUsePermissions || currentPermissionGroup.allowedConfigItems?.includes("whatsapp_settings"));
   const activeMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : currentUser?.municipalityId || "";
   const scopedMunicipalityId = activeMunicipalityId;
   const scopedRequests = filterByMunicipalityScope(requests, scopedMunicipalityId);
@@ -700,6 +722,7 @@ export default function App() {
   const scopedSpeciesOptions = filterByMunicipalityScope(speciesOptions, scopedMunicipalityId);
   const scopedSizeOptions = filterByMunicipalityScope(sizeOptions, scopedMunicipalityId);
   const scopedScheduleRules = filterByMunicipalityScope(scheduleRules, scopedMunicipalityId);
+  const effectiveScopedScheduleDays = mergeScheduleDaysWithRules(scopedScheduleDays, scopedScheduleRules);
   const scopedPermissionGroups = filterByMunicipalityScope(permissionGroups, scopedMunicipalityId);
   const scopedTeams = {
     sectors: filterByMunicipalityScope(teams.sectors || [], scopedMunicipalityId),
@@ -722,15 +745,33 @@ export default function App() {
   }[active];
 
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${mobileOpen ? "open" : ""}`}>
+    <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
+      <aside className={`sidebar${mobileOpen ? " open" : ""}${sidebarCollapsed ? " collapsed" : ""}`}>
         <div className="brand">
-          <div className="brand-mark">
-            <PawPrint size={24} />
+          {(() => {
+            const sideMun = !isGlobalRole(currentUser.role) ? municipalities.find((m) => m.id === currentUser.municipalityId) : null;
+            return sideMun?.brasao ? (
+              <img src={sideMun.brasao} alt={`Brasão ${sideMun.name}`} className="brand-brasao" />
+            ) : (
+              <div className="brand-mark"><PawPrint size={20} /></div>
+            );
+          })()}
+          <div className="brand-text">
+            <strong>
+              {!isGlobalRole(currentUser.role)
+                ? municipalities.find((m) => m.id === currentUser.municipalityId)?.name || "Sistema municipal"
+                : "Plataforma"}
+            </strong>
+            <span>{userRoleLabel(currentUser.role)}</span>
           </div>
-          <div>
-            <strong>Sistema municipal</strong>
-          </div>
+          <button
+            className="sidebar-toggle-btn"
+            type="button"
+            onClick={() => setSidebarCollapsed(v => { const next = !v; localStorage.setItem("sidebar-collapsed", String(next)); return next; })}
+            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
+          >
+            <ChevronLeft size={15} className={`sidebar-toggle-icon${sidebarCollapsed ? " rotated" : ""}`} />
+          </button>
         </div>
 
         <nav aria-label="Menu principal">
@@ -740,6 +781,7 @@ export default function App() {
               <React.Fragment key={item.id}>
                 <button
                   className={`${active === item.id ? "active" : ""} ${item.id === "config" ? "sidebar-parent" : ""}`}
+                  title={sidebarCollapsed ? item.label : undefined}
                   onClick={() => {
                     if (item.id === "config") {
                       setConfigMenuOpen((current) => (active === "config" ? !current : true));
@@ -759,18 +801,38 @@ export default function App() {
                 {item.id === "config" && active === "config" && configMenuOpen && (
                   <div className="sidebar-subnav" aria-label="Subabas de configurações">
                     {visibleConfigSidebarItems.map((subitem) => (
-                      <button
-                        key={subitem.id}
-                        className={configArea === subitem.id ? "active" : ""}
-                        type="button"
-                        onClick={() => {
-                          setActive("config");
-                          setConfigArea(subitem.id);
-                          setMobileOpen(false);
-                        }}
-                      >
-                        {subitem.label}
-                      </button>
+                      <React.Fragment key={subitem.id}>
+                        <button
+                          className={`config-nav-item${configArea === subitem.id ? " active" : ""}`}
+                          type="button"
+                          onClick={() => {
+                            setActive("config");
+                            setConfigArea(configArea === subitem.id ? "" : subitem.id);
+                            setMobileOpen(false);
+                          }}
+                        >
+                          <span className="config-nav-dot" />
+                          <span className="config-nav-text">
+                            <span className="config-nav-label">{subitem.label}</span>
+                            {subitem.desc && <span className="config-nav-desc">{subitem.desc}</span>}
+                          </span>
+                          <ChevronRight size={13} className={`config-nav-chevron${subitem.id === "environment" && configArea === "environment" ? " open" : ""}`} />
+                        </button>
+                        {subitem.id === "environment" && configArea === "environment" && (
+                          <div className="config-nav-children">
+                            {visibleEnvironmentTabs.map((tab) => (
+                              <button
+                                key={tab.id}
+                                className={`config-nav-child${configTab === tab.id ? " active" : ""}`}
+                                type="button"
+                                onClick={() => { setActive("config"); setConfigArea("environment"); setConfigTab(tab.id); setMobileOpen(false); }}
+                              >
+                                {tab.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </React.Fragment>
                     ))}
                   </div>
                 )}
@@ -779,24 +841,34 @@ export default function App() {
           })}
         </nav>
 
-        <div className="sidebar-card">
-          <div className="sidebar-user">
-            <ShieldCheck size={18} />
-            <div className="public-animal-meta">
+        <div className="sidebar-footer">
+          {userMenuOpen && (
+            <>
+              <button className="sidebar-action-item" type="button" onClick={() => { setSidebarResetOpen(true); setUserMenuOpen(false); }}>
+                <KeyRound size={15} />
+                <span>Alterar senha</span>
+              </button>
+              <button className="sidebar-action-item sidebar-action-logout" type="button" onClick={() => setCurrentUser(null)}>
+                <LogOut size={15} />
+                <span>Sair</span>
+              </button>
+            </>
+          )}
+          <button
+            className={`sidebar-user-card${userMenuOpen ? " open" : ""}`}
+            type="button"
+            onClick={() => setUserMenuOpen((v) => !v)}
+            aria-expanded={userMenuOpen}
+          >
+            <div className="sidebar-user-avatar">
+              <ShieldCheck size={15} />
+            </div>
+            <div className="sidebar-user-info">
               <strong>{currentUser.name || "Usuário"}</strong>
               <span>{userRoleLabel(currentUser.role)}</span>
             </div>
-          </div>
-          <div className="sidebar-account-actions" aria-label="Ações da conta">
-            <button className="sidebar-reset-button" type="button" onClick={() => setSidebarResetOpen(true)}>
-              <KeyRound size={16} />
-              <span>Senha</span>
-            </button>
-            <button className="logout-button" type="button" onClick={() => setCurrentUser(null)}>
-              <LogOut size={16} />
-              <span>Sair</span>
-            </button>
-          </div>
+            <ChevronDown size={14} className={userMenuOpen ? "sidebar-chevron open" : "sidebar-chevron"} />
+          </button>
         </div>
       </aside>
 
@@ -806,7 +878,15 @@ export default function App() {
             <Menu size={20} />
           </button>
           <div className="main-reader">
-            <h1>Bem-estar e proteção animal</h1>
+            <div className="topbar-context-chip">
+              <span>Secretaria</span>
+              <strong>
+                {!isGlobalRole(currentUser.role)
+                  ? municipalities.find((m) => m.id === currentUser.municipalityId)?.name || "Bem-estar animal"
+                  : "Bem-estar animal"}
+              </strong>
+              <i aria-hidden="true" />
+            </div>
           </div>
           <div className="topbar-actions">
             {isGlobalRole(currentUser?.role) && municipalities.length > 0 && (
@@ -858,7 +938,7 @@ export default function App() {
           adoptionAnimals={scopedAdoptionAnimals}
           setAdoptionAnimals={setAdoptionAnimals}
           currentUser={currentUser}
-          scheduleDays={scopedScheduleDays}
+          scheduleDays={effectiveScopedScheduleDays}
           requestTypes={scopedRequestTypes}
           documentTypes={scopedDocumentTypes}
           setRequestTypes={setRequestTypes}
@@ -882,8 +962,13 @@ export default function App() {
           reviewAccessRequest={reviewAccessRequest}
           setActive={setActive}
           configArea={configArea}
+          configTab={configTab}
+          setConfigTab={setConfigTab}
+          environmentTabs={visibleEnvironmentTabs}
           globalSearch={globalSearch}
           selectedMunicipalityId={activeMunicipalityId}
+          onConsultAnimal={(query: AnyRecord) => api.consultAnimalByMicrochip(query)}
+          onGenerateProntuario={generateAndDownloadProntuario}
         />
       </main>
 
@@ -922,7 +1007,7 @@ export default function App() {
       {sidebarResetOpen && (
         <div className="modal-backdrop">
           <form className="workflow-modal reset-form" onSubmit={submitSidebarReset} role="dialog" aria-modal="true">
-            <ModalHeader title="Redefinir senha" subtitle={currentUser.email || currentUser.name} onClose={closeSidebarReset} />
+            <ModalHeader title="Redefinir senha" subtitle={currentUser.email || currentUser.name} onClose={closeSidebarReset} icon={KeyRound} />
             <label className="field">
               <span>Nova senha</span>
               <input
@@ -1065,7 +1150,7 @@ function canManagePublicAnimalFlows(role = "") {
 
 const ADOPTION_STATUS_LABEL = { disponivel: "Disponível", em_processo: "Em processo", adotado: "Adotado" };
 
-function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, municipalityId, onBack, municipalityName = "" }: AnyRecord) {
+function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, municipalityId, onBack, municipalityName = "", municipalityBrasao = "" }: AnyRecord) {
   const [microchip, setMicrochip] = useState("");
   const [cpf, setCpf] = useState(formatCpf(currentUser?.cpf || ""));
   const [validationKey, setValidationKey] = useState("");
@@ -1075,6 +1160,18 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   const [status, setStatus] = useState("");
   const [searchOk, setSearchOk] = useState(false);
   const [isConsulting, setIsConsulting] = useState(false);
+  const [activeServiceModal, setActiveServiceModal] = useState<string | null>(null);
+  const [svcStep, setSvcStep] = useState(1);
+  const [svcIdForm, setSvcIdForm] = useState({ microchip: "", cpf: "", key: "" });
+  const [svcFoundTutor, setSvcFoundTutor] = useState<any>(null);
+  const [svcFoundAnimal, setSvcFoundAnimal] = useState<any>(null);
+  const [svcLoading, setSvcLoading] = useState(false);
+  const [svcError, setSvcError] = useState("");
+  const [svcResult, setSvcResult] = useState("");
+  const [svcProcForm, setSvcProcForm] = useState({ type: "Castração", notes: "", animalMode: "other", otherMicrochip: "", otherAnimal: null as any, newName: "", newSpecies: "Cão", newSex: "Macho", newSize: "Pequeno" });
+  const [svcTransferForm, setSvcTransferForm] = useState({ targetName: "", targetCpf: "", notes: "" });
+  const [svcDeathForm, setSvcDeathForm] = useState({ date: "", cause: "", notes: "" });
+  const [svcSaving, setSvcSaving] = useState(false);
 
   const hasSearched = resultRequests !== null;
   const visibleRequests = hasSearched ? resultRequests : fallbackRequests;
@@ -1139,115 +1236,478 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     }
   }
 
+  function openService(type: string) {
+    setActiveServiceModal(type);
+    setSvcError("");
+    setSvcResult("");
+    setSvcSaving(false);
+    setSvcTransferForm({ targetName: "", targetCpf: "", notes: "" });
+    setSvcDeathForm({ date: "", cause: "", notes: "" });
+
+    const alreadyIdentified = type !== "prontuario" && animalRecord?.animal && cpf && validationKey;
+    if (alreadyIdentified) {
+      const latestReq = Array.isArray(resultRequests) && resultRequests.length > 0 ? resultRequests[0] : null;
+      setSvcFoundTutor(latestReq || { cpf, tutor_name: "" });
+      setSvcFoundAnimal(animalRecord.animal);
+      const preChip = animalRecord.animal.microchip || "";
+      setSvcProcForm({ type: "Castração", notes: "", animalMode: "other", otherMicrochip: preChip, otherAnimal: animalRecord.animal, newName: "", newSpecies: "Cão", newSex: "Macho", newSize: "Pequeno" });
+      setSvcStep(2);
+    } else {
+      setSvcStep(1);
+      const preChip = (type === "transfer" || type === "death") && animalRecord?.animal?.microchip
+        ? animalRecord.animal.microchip : "";
+      setSvcIdForm({ microchip: preChip, cpf: "", key: "" });
+      setSvcFoundTutor(null);
+      setSvcFoundAnimal(null);
+      setSvcProcForm({ type: "Castração", notes: "", animalMode: "other", otherMicrochip: "", otherAnimal: null, newName: "", newSpecies: "Cão", newSex: "Macho", newSize: "Pequeno" });
+    }
+  }
+
+  async function handleServiceIdentify(event) {
+    event.preventDefault();
+    setSvcError("");
+    setSvcLoading(true);
+    try {
+      if (activeServiceModal === "prontuario") {
+        const chip = svcIdForm.microchip.trim();
+        const cleanCpf = onlyDigits(svcIdForm.cpf);
+        const key = svcIdForm.key.trim();
+        if (!chip && cleanCpf.length !== 11) { setSvcError("Informe o microchip do animal ou o CPF do tutor."); return; }
+        if (cleanCpf.length === 11 && !key) { setSvcError("Informe a chave de validação junto com o CPF."); return; }
+        const hasCredentials = cleanCpf.length === 11 && Boolean(key);
+        const [record, reqList] = await Promise.all([
+          chip ? api.consultAnimalByMicrochip({ microchip: chip, ...(hasCredentials ? { cpf: cleanCpf, validationKey: key } : {}) }) : Promise.resolve(null),
+          hasCredentials ? api.consultRequestsByCredentials(cleanCpf, key, municipalityId) : Promise.resolve([]),
+        ]);
+        setCpf(hasCredentials ? svcIdForm.cpf : "");
+        setValidationKey(key);
+        setAnimalRecord(record);
+        setResultRequests(Array.isArray(reqList) ? reqList.map(normalizeRequest) : []);
+        setSearchOk(Boolean(record?.animal) || (Array.isArray(reqList) && reqList.length > 0));
+        setActiveServiceModal(null);
+        return;
+      }
+      const cleanCpf = onlyDigits(svcIdForm.cpf);
+      const key = svcIdForm.key.trim();
+      if (cleanCpf.length !== 11) { setSvcError("Informe um CPF válido."); return; }
+      if (!key) { setSvcError("Informe a chave de validação."); return; }
+      if (activeServiceModal === "transfer" || activeServiceModal === "death") {
+        const chip = svcIdForm.microchip.trim();
+        if (!chip) { setSvcError("Informe o microchip do animal."); return; }
+        const animalResult = await api.consultAnimalByMicrochip({ microchip: chip, cpf: cleanCpf, validationKey: key });
+        if (!animalResult?.animal) { setSvcError("Animal não encontrado para este microchip."); return; }
+        setSvcFoundAnimal(animalResult.animal);
+      }
+      const reqs = await api.consultRequestsByCredentials(cleanCpf, key, municipalityId);
+      const latestReq = Array.isArray(reqs) && reqs.length > 0 ? reqs[0] : null;
+      setSvcFoundTutor(latestReq || { cpf: cleanCpf });
+      setSvcStep(2);
+    } catch (err: any) {
+      setSvcError(err.message || "Erro ao identificar. Verifique seus dados.");
+    } finally {
+      setSvcLoading(false);
+    }
+  }
+
+  async function lookupServiceOtherAnimal() {
+    const chip = svcProcForm.otherMicrochip.trim();
+    if (!chip) return;
+    setSvcLoading(true);
+    setSvcError("");
+    try {
+      const result = await api.consultAnimalByMicrochip({ microchip: chip });
+      setSvcProcForm((f) => ({ ...f, otherAnimal: result?.animal || null }));
+      if (!result?.animal) setSvcError("Animal não encontrado para este microchip.");
+    } catch {
+      setSvcError("Erro ao buscar animal.");
+      setSvcProcForm((f) => ({ ...f, otherAnimal: null }));
+    } finally {
+      setSvcLoading(false);
+    }
+  }
+
+  async function submitServiceProcedure(event) {
+    event.preventDefault();
+    const tutorCpf = onlyDigits(svcIdForm.cpf);
+    const tutor = svcFoundTutor || {};
+    const isOther = svcProcForm.animalMode === "other";
+    const isNew = svcProcForm.animalMode === "new";
+    if (isOther && !svcProcForm.otherAnimal) { setSvcError("Busque o microchip do animal antes de continuar."); return; }
+    const activeAnimal = isOther ? svcProcForm.otherAnimal
+      : isNew ? { name: svcProcForm.newName, species: svcProcForm.newSpecies, sex: svcProcForm.newSex, size: svcProcForm.newSize }
+      : {};
+    try {
+      setSvcSaving(true);
+      const created = await api.createRequest({
+        tutor_name: tutor.tutor_name || "",
+        tutor_email: tutor.tutor_email || tutor.email || "",
+        cpf: tutorCpf,
+        phone: tutor.phone || "",
+        address: tutor.address || "",
+        neighborhood: tutor.neighborhood || "",
+        city: tutor.city || "",
+        state: tutor.state || "",
+        cep: tutor.cep || "",
+        animal_id: activeAnimal.id,
+        animal_microchip: activeAnimal.microchip,
+        animal_name: activeAnimal.name,
+        species: activeAnimal.species,
+        size: activeAnimal.size,
+        request_type: svcProcForm.type,
+        notes: svcProcForm.notes,
+        tags: ["MICROCHIP"],
+        workflow_data: { animal_request_type: "procedure_from_service" },
+        animals: [{ id: activeAnimal.id, microchip: activeAnimal.microchip, name: activeAnimal.name, species: activeAnimal.species, sex: activeAnimal.sex, size: activeAnimal.size, procedure: svcProcForm.type }],
+      });
+      setSvcResult("Solicitação enviada para análise com sucesso.");
+      onRequestCreated?.(created, { openAdmin: true });
+    } catch (err: any) {
+      setSvcError(err.message || "Não foi possível criar a solicitação.");
+    } finally {
+      setSvcSaving(false);
+    }
+  }
+
+  async function submitServiceTransfer(event) {
+    event.preventDefault();
+    if (!svcTransferForm.targetName.trim() || onlyDigits(svcTransferForm.targetCpf).length !== 11) { setSvcError("Informe nome e CPF válido do novo tutor."); return; }
+    try {
+      setSvcSaving(true);
+      const created = await api.createAnimalTransferRequest((svcFoundAnimal || {}).id, {
+        target_tutor_name: svcTransferForm.targetName,
+        target_tutor_cpf: onlyDigits(svcTransferForm.targetCpf),
+        notes: svcTransferForm.notes,
+        cpf: onlyDigits(svcIdForm.cpf),
+        validationKey: svcIdForm.key,
+      });
+      setSvcResult("Solicitação de troca enviada para análise.");
+      onRequestCreated?.(created, { openAdmin: true });
+    } catch (err: any) {
+      setSvcError(err.message || "Não foi possível solicitar a troca.");
+    } finally {
+      setSvcSaving(false);
+    }
+  }
+
+  async function submitServiceDeath(event) {
+    event.preventDefault();
+    if (!svcDeathForm.date || !svcDeathForm.cause.trim()) { setSvcError("Informe data e causa do óbito."); return; }
+    try {
+      setSvcSaving(true);
+      const created = await api.createAnimalDeathRequest((svcFoundAnimal || {}).id, {
+        death_date: svcDeathForm.date,
+        death_cause: svcDeathForm.cause,
+        notes: svcDeathForm.notes,
+        cpf: onlyDigits(svcIdForm.cpf),
+        validationKey: svcIdForm.key,
+      });
+      setSvcResult("Registro de óbito enviado para análise.");
+      onRequestCreated?.(created, { openAdmin: true });
+    } catch (err: any) {
+      setSvcError(err.message || "Não foi possível registrar o óbito.");
+    } finally {
+      setSvcSaving(false);
+    }
+  }
+
   return (
-    <div className="consultation-stack">
-      <form className="validation-key-card consultation-card" onSubmit={consult}>
-        <div className="consultation-card-topline">
-          <div className="consultation-card-location">
-            <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
-              <Home size={18} />
+    <div className="cons-shell">
+      <button className="consultation-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
+        <Home size={22} />
+      </button>
+
+      <header className="cons-topbar">
+        {municipalityBrasao && (
+          <img src={municipalityBrasao} alt={municipalityName} className="cons-brasao-hero" />
+        )}
+      </header>
+
+      <div className="cons-body">
+        <div className="cons-hero">
+          <h1 className="cons-title">Serviços do prontuário</h1>
+          <p className="cons-subtitle">Selecione o serviço desejado. A identificação é feita dentro de cada fluxo.</p>
+        </div>
+
+        <section className="cons-services">
+          <div className="cons-service-cards">
+            <button type="button" className="cons-service-card" onClick={() => openService("prontuario")}>
+              <div className="cons-svc-icon blue"><PawPrint size={22} /></div>
+              <div className="cons-svc-body"><strong>Prontuário</strong><span>Consulte o histórico completo do animal pelo microchip ou CPF do tutor.</span></div>
+              <ChevronRight size={15} className="cons-svc-arrow" />
             </button>
-            <span>{municipalityName || "Sistema municipal"}</span>
+            <button type="button" className="cons-service-card" onClick={() => openService("procedure")}>
+              <div className="cons-svc-icon indigo"><ClipboardCheck size={22} /></div>
+              <div className="cons-svc-body"><strong>Solicitar procedimento</strong><span>Abre nova solicitação vinculada ao tutor identificado.</span></div>
+              <ChevronRight size={15} className="cons-svc-arrow" />
+            </button>
+            <button type="button" className="cons-service-card" onClick={() => openService("transfer")}>
+              <div className="cons-svc-icon amber"><RefreshCw size={22} /></div>
+              <div className="cons-svc-body"><strong>Troca de tutor</strong><span>Vincula o animal a outro responsável.</span></div>
+              <ChevronRight size={15} className="cons-svc-arrow" />
+            </button>
+            <button type="button" className="cons-service-card danger" onClick={() => openService("death")}>
+              <div className="cons-svc-icon red"><AlertCircle size={22} /></div>
+              <div className="cons-svc-body"><strong>Registrar óbito</strong><span>Encerra o prontuário ativo do animal.</span></div>
+              <ChevronRight size={15} className="cons-svc-arrow" />
+            </button>
           </div>
-          <div className="consultation-inline-metrics">
-            <span>
-              <ClipboardCheck size={16} />
-              <strong>{activeRequestsCount}</strong>
-              Ativas
-            </span>
-            <span>
-              <CalendarDays size={16} />
-              <strong>{nextAppointment}</strong>
-              Agenda
-            </span>
-          </div>
-        </div>
-        <div className="consultation-card-header">
-          <div className="consultation-title-row">
-            <div className="metric-icon">
-              <ShieldCheck size={20} />
-            </div>
-            <div>
-              <h2>Prontuário animal</h2>
-              <p>Use o microchip para abrir o prontuário completo ou CPF e chave para localizar solicitações do tutor.</p>
-            </div>
-          </div>
-        </div>
-        <div className="consultation-search-row">
-          <label className="field">
-            <span>Microchip</span>
-            <input value={microchip} onChange={(event) => setMicrochip(event.target.value.toUpperCase())} placeholder="Digite o microchip" />
-          </label>
-          <label className="field">
-            <span>CPF</span>
-            <input value={cpf} onChange={(event) => setCpf(formatCpf(event.target.value))} placeholder="000.000.000-00" />
-          </label>
-          <label className="field">
-            <span>Chave de validação</span>
-            <input value={validationKey} onChange={(event) => setValidationKey(event.target.value.toUpperCase())} placeholder="Cole ou digite sua chave" />
-          </label>
-          <button className="primary-action consultation-submit" type="submit" disabled={isConsulting}>
-            <Search size={18} />
-            {isConsulting ? "Consultando" : "Consultar"}
-          </button>
-        </div>
-        {status && <p className={searchOk ? "sms-status confirmed" : "helper-text"}>{status}</p>}
-      </form>
+        </section>
+      </div>
 
-      {animalRecord?.animal && (
-        <AnimalRecordPanel
-          record={animalRecord}
-          cpf={onlyDigits(cpf)}
-          validationKey={validationKey.trim()}
-          onRequestCreated={(request) => {
-            const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
-            setResultRequests((current) => (
-              Array.isArray(current) && current.some((item) => item.id === normalized.id)
-                ? current.map((item) => (item.id === normalized.id ? normalized : item))
-                : [normalized, ...(Array.isArray(current) ? current : [])]
-            ));
-            setStatus(`Solicitação ${normalized.protocol} criada e enviada para análise.`);
-            setSearchOk(true);
-          }}
-        />
-      )}
+      <div className="cons-results">
+        {animalRecord?.animal && (
+          <AnimalRecordPanel
+            record={animalRecord}
+            cpf={onlyDigits(cpf)}
+            validationKey={validationKey.trim()}
+            onRequestCreated={(request) => {
+              const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
+              setResultRequests((current) => (
+                Array.isArray(current) && current.some((item) => item.id === normalized.id)
+                  ? current.map((item) => (item.id === normalized.id ? normalized : item))
+                  : [normalized, ...(Array.isArray(current) ? current : [])]
+              ));
+              setStatus(`Solicitação ${normalized.protocol} criada e enviada para análise.`);
+              setSearchOk(true);
+            }}
+          />
+        )}
 
-      {hasSearched && resultAdoptions.length > 0 && (
-        <div className="consultation-adoptions">
-          <h3 className="section-eyebrow-title">Adoções vinculadas</h3>
-          <div className="consult-adoption-list">
-            {resultAdoptions.map((a) => (
-              <div key={a.id} className="consult-adoption-card">
-                {a.photo_url && <img src={a.photo_url} alt={a.animal_name} className="consult-adoption-photo" />}
-                <div className="consult-adoption-info">
-                  <strong>{a.animal_name}</strong>
-                  <span>{[a.species, a.sex, a.age].filter(Boolean).join(" · ")}</span>
-                  <span className={`adoption-status-badge ${a.status}`}>{ADOPTION_STATUS_LABEL[a.status] || a.status}</span>
+        {hasSearched && resultAdoptions.length > 0 && (
+          <div className="consultation-adoptions">
+            <h3 className="section-eyebrow-title">Adoções vinculadas</h3>
+            <div className="consult-adoption-list">
+              {resultAdoptions.map((a) => (
+                <div key={a.id} className="consult-adoption-card">
+                  {a.photo_url && <img src={a.photo_url} alt={a.animal_name} className="consult-adoption-photo" />}
+                  <div className="consult-adoption-info">
+                    <strong>{a.animal_name}</strong>
+                    <span>{[a.species, a.sex, a.age].filter(Boolean).join(" · ")}</span>
+                    <span className={`adoption-status-badge ${a.status}`}>{ADOPTION_STATUS_LABEL[a.status] || a.status}</span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <TutorDashboard
-        requests={visibleRequests}
-        setActive={() => {}}
-        currentUser={currentUser}
-        compact
-        cpf={onlyDigits(cpf)}
-        validationKey={validationKey.trim()}
-        onRequestCreated={(request) => {
-          const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
-          setResultRequests((current) => (
-            Array.isArray(current) && current.some((item) => item.id === normalized.id)
-              ? current.map((item) => (item.id === normalized.id ? normalized : item))
-              : [normalized, ...(Array.isArray(current) ? current : [])]
-          ));
-          setStatus(`Solicitação ${normalized.protocol} criada e enviada para análise.`);
-          setSearchOk(true);
-        }}
-      />
+        {hasSearched && normalizedVisibleRequests.length > 0 && (
+          <TutorDashboard
+            requests={normalizedVisibleRequests}
+            setActive={() => {}}
+            currentUser={currentUser}
+            compact
+            cpf={onlyDigits(cpf)}
+            validationKey={validationKey.trim()}
+            animalRecord={animalRecord}
+            onRequestCreated={(request) => {
+              const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
+              setResultRequests((current) => (
+                Array.isArray(current) && current.some((item) => item.id === normalized.id)
+                  ? current.map((item) => (item.id === normalized.id ? normalized : item))
+                  : [normalized, ...(Array.isArray(current) ? current : [])]
+              ));
+            }}
+          />
+        )}
+      </div>
+
+      {activeServiceModal && (() => {
+        const isPront    = activeServiceModal === "prontuario";
+        const isProc     = activeServiceModal === "procedure";
+        const isTransfer = activeServiceModal === "transfer";
+        const isDeath    = activeServiceModal === "death";
+
+        const iconMap: Record<string, React.ReactNode> = {
+          prontuario: <PawPrint size={22} />,
+          procedure:  <ClipboardCheck size={22} />,
+          transfer:   <RefreshCw size={22} />,
+          death:      <AlertCircle size={22} />,
+        };
+        const colorMap: Record<string, string> = {
+          prontuario: "blue", procedure: "indigo", transfer: "amber", death: "red",
+        };
+        const titleMap: Record<string, string> = {
+          prontuario: "Prontuário animal",
+          procedure:  "Solicitar procedimento",
+          transfer:   "Troca de tutor",
+          death:      "Registrar óbito",
+        };
+        const subtitleMap: Record<string, string> = {
+          prontuario: "Informe o microchip ou CPF + chave de validação do tutor.",
+          procedure:  svcStep === 1 ? "Identifique o tutor para continuar." : `Tutor: ${svcFoundTutor?.tutor_name || "identificado"}`,
+          transfer:   svcStep === 1 ? "Identifique o tutor e o animal para continuar." : `Tutor atual: ${svcFoundTutor?.tutor_name || "identificado"}${svcFoundAnimal ? ` · ${svcFoundAnimal.name || svcFoundAnimal.microchip}` : ""}`,
+          death:      svcStep === 1 ? "Identifique o tutor e o animal para continuar." : `Animal: ${svcFoundAnimal?.name || "identificado"} · Tutor: ${svcFoundTutor?.tutor_name || "identificado"}`,
+        };
+
+        const onSubmit = svcStep === 1 ? handleServiceIdentify
+          : isProc ? submitServiceProcedure
+          : isTransfer ? submitServiceTransfer
+          : submitServiceDeath;
+
+        const primaryLabel = svcStep === 1
+          ? (isPront ? (svcLoading ? "Consultando..." : "Consultar") : (svcLoading ? "Identificando..." : "Identificar"))
+          : (isProc ? (svcSaving ? "Enviando..." : "Solicitar") : isTransfer ? (svcSaving ? "Enviando..." : "Solicitar troca") : (svcSaving ? "Enviando..." : "Confirmar óbito"));
+
+        const isDestructive = isDeath && svcStep === 2;
+
+        return (
+          <div className="modal-backdrop">
+            <form className="svc-modal" onSubmit={onSubmit} role="dialog" aria-modal="true">
+
+              {/* ── Header ── */}
+              <div className="svc-modal-header">
+                <div className="svc-modal-title">
+                  <div className={`cons-svc-icon ${colorMap[activeServiceModal]}`}>{iconMap[activeServiceModal]}</div>
+                  <div>
+                    <h3 className="svc-modal-h">{titleMap[activeServiceModal]}</h3>
+                    <p className="svc-modal-sub">{subtitleMap[activeServiceModal]}</p>
+                  </div>
+                </div>
+                <button type="button" className="svc-close-btn" onClick={() => setActiveServiceModal(null)} aria-label="Fechar"><X size={18} /></button>
+              </div>
+
+              {/* ── Body ── */}
+              <div className="svc-modal-body">
+                {svcResult ? (
+                  <p className="sms-status confirmed">{svcResult}</p>
+                ) : svcStep === 1 ? (
+                  <>
+                    {isPront ? (
+                      <div className="svc-grid-3">
+                        <label className="field svc-field">
+                          <span>Microchip do animal</span>
+                          <input autoFocus value={svcIdForm.microchip} onChange={(e) => setSvcIdForm((f) => ({ ...f, microchip: e.target.value }))} placeholder="Número do microchip" />
+                        </label>
+                        <label className="field svc-field">
+                          <span>CPF do tutor</span>
+                          <input value={svcIdForm.cpf} onChange={(e) => setSvcIdForm((f) => ({ ...f, cpf: formatCpf(e.target.value) }))} placeholder="000.000.000-00" />
+                        </label>
+                        <label className="field svc-field">
+                          <span>Chave de validação</span>
+                          <input value={svcIdForm.key} onChange={(e) => setSvcIdForm((f) => ({ ...f, key: e.target.value.toUpperCase() }))} placeholder="Cole ou digite sua chave" />
+                        </label>
+                      </div>
+                    ) : (
+                      <div className={isProc ? "svc-grid-2" : "svc-grid-3"}>
+                        <label className="field svc-field">
+                          <span>CPF do tutor</span>
+                          <input value={svcIdForm.cpf} onChange={(e) => setSvcIdForm((f) => ({ ...f, cpf: formatCpf(e.target.value) }))} placeholder="000.000.000-00" />
+                        </label>
+                        <label className="field svc-field">
+                          <span>Chave de validação</span>
+                          <input value={svcIdForm.key} onChange={(e) => setSvcIdForm((f) => ({ ...f, key: e.target.value.toUpperCase() }))} placeholder="Cole ou digite sua chave" />
+                        </label>
+                        {(isTransfer || isDeath) && (
+                          <label className="field svc-field">
+                            <span>Microchip do animal</span>
+                            <input value={svcIdForm.microchip} onChange={(e) => setSvcIdForm((f) => ({ ...f, microchip: e.target.value }))} placeholder="Número do microchip" />
+                          </label>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : isProc ? (
+                  <>
+                    <div className="svc-animal-mode-row">
+                      <label className={`svc-mode-btn${svcProcForm.animalMode === "other" ? " active" : ""}`}>
+                        <input type="radio" name="svcAnimalMode" value="other" checked={svcProcForm.animalMode === "other"} onChange={() => setSvcProcForm((f) => ({ ...f, animalMode: "other", otherAnimal: null }))} />
+                        Buscar por microchip
+                      </label>
+                      <label className={`svc-mode-btn${svcProcForm.animalMode === "new" ? " active" : ""}`}>
+                        <input type="radio" name="svcAnimalMode" value="new" checked={svcProcForm.animalMode === "new"} onChange={() => setSvcProcForm((f) => ({ ...f, animalMode: "new" }))} />
+                        Novo animal
+                      </label>
+                    </div>
+                    {svcProcForm.animalMode === "other" && (
+                      <div className="svc-lookup-row">
+                        <label className="field svc-field" style={{ flex: 1 }}>
+                          <span>Microchip</span>
+                          <input value={svcProcForm.otherMicrochip} onChange={(e) => setSvcProcForm((f) => ({ ...f, otherMicrochip: e.target.value, otherAnimal: null }))} placeholder="Número do microchip" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), lookupServiceOtherAnimal())} />
+                        </label>
+                        <button type="button" className="secondary-action svc-lookup-btn" onClick={lookupServiceOtherAnimal} disabled={svcLoading}>{svcLoading ? "Buscando..." : "Buscar"}</button>
+                        {svcProcForm.otherAnimal && (
+                          <div className="svc-found-tag">
+                            <BadgeCheck size={14} />
+                            <strong>{svcProcForm.otherAnimal.name || "Sem nome"}</strong>
+                            <span>{[svcProcForm.otherAnimal.species, svcProcForm.otherAnimal.sex].filter(Boolean).join(" · ")}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {svcProcForm.animalMode === "new" && (
+                      <div className="svc-grid-4">
+                        <label className="field svc-field"><span>Nome</span><input value={svcProcForm.newName} onChange={(e) => setSvcProcForm((f) => ({ ...f, newName: e.target.value }))} placeholder="Opcional" /></label>
+                        <label className="field svc-field"><span>Espécie</span><select value={svcProcForm.newSpecies} onChange={(e) => setSvcProcForm((f) => ({ ...f, newSpecies: e.target.value }))}><option>Cão</option><option>Gato</option></select></label>
+                        <label className="field svc-field"><span>Sexo</span><select value={svcProcForm.newSex} onChange={(e) => setSvcProcForm((f) => ({ ...f, newSex: e.target.value }))}><option>Macho</option><option>Fêmea</option></select></label>
+                        <label className="field svc-field"><span>Porte</span><select value={svcProcForm.newSize} onChange={(e) => setSvcProcForm((f) => ({ ...f, newSize: e.target.value }))}><option>Pequeno</option><option>Médio</option><option>Grande</option></select></label>
+                      </div>
+                    )}
+                    <div className="svc-grid-2">
+                      <label className="field svc-field">
+                        <span>Procedimento</span>
+                        <select value={svcProcForm.type} onChange={(e) => setSvcProcForm((f) => ({ ...f, type: e.target.value }))}><option>Castração</option><option>Microchipagem</option><option>Castração e microchipagem</option></select>
+                      </label>
+                      <label className="field svc-field">
+                        <span>Observações</span>
+                        <textarea value={svcProcForm.notes} onChange={(e) => setSvcProcForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Descreva a necessidade" rows={2} />
+                      </label>
+                    </div>
+                  </>
+                ) : isTransfer ? (
+                  <>
+                    <div className="svc-grid-2">
+                      <label className="field svc-field">
+                        <span>Nome do novo tutor</span>
+                        <input value={svcTransferForm.targetName} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetName: e.target.value }))} />
+                      </label>
+                      <label className="field svc-field">
+                        <span>CPF do novo tutor</span>
+                        <input value={svcTransferForm.targetCpf} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetCpf: formatCpf(e.target.value) }))} placeholder="000.000.000-00" />
+                      </label>
+                    </div>
+                    <label className="field svc-field">
+                      <span>Motivo</span>
+                      <textarea rows={3} value={svcTransferForm.notes} onChange={(e) => setSvcTransferForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Descreva o motivo da transferência..." />
+                    </label>
+                  </>
+                ) : isDeath ? (
+                  <>
+                    <div className="svc-grid-2">
+                      <label className="field svc-field">
+                        <span>Data do óbito</span>
+                        <input type="date" value={svcDeathForm.date} onChange={(e) => setSvcDeathForm((f) => ({ ...f, date: e.target.value }))} />
+                      </label>
+                      <label className="field svc-field">
+                        <span>Causa mortis</span>
+                        <input value={svcDeathForm.cause} onChange={(e) => setSvcDeathForm((f) => ({ ...f, cause: e.target.value }))} placeholder="Causa informada pelo tutor" />
+                      </label>
+                    </div>
+                    <label className="field svc-field">
+                      <span>Observações</span>
+                      <textarea rows={3} value={svcDeathForm.notes} onChange={(e) => setSvcDeathForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Informações adicionais sobre o óbito..." />
+                    </label>
+                  </>
+                ) : null}
+
+                {svcError && <p className="helper-text">{svcError}</p>}
+
+                {!svcResult && (
+                  <div className="svc-modal-footer">
+                    {svcStep === 2
+                      ? <button type="button" className="ghost-button" onClick={() => setSvcStep(1)}>Voltar</button>
+                      : <button type="button" className="ghost-button" onClick={() => setActiveServiceModal(null)}>Cancelar</button>
+                    }
+                    <button type="submit" className="primary-action" style={isDestructive ? { background: "#dc2626" } : {}} disabled={svcLoading || svcSaving}>
+                      {primaryLabel}
+                    </button>
+                  </div>
+                )}
+              </div>
+            </form>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -1492,7 +1952,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
             >
               <button className="public-animal-open-area" type="button" onClick={() => openAnimalModal(animal)}>
                 <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
-                  {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={36} />}
+                  {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={24} />}
                 </div>
               </button>
               <div className="public-animal-footer">
@@ -1508,8 +1968,8 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
                     openAnimalModal(animal, true);
                   }}
                 >
-                  <HeartHandshake size={16} />
-                  Quero adotar
+                  <HeartHandshake size={12} />
+                  Adotar
                 </button>
               </div>
             </article>
@@ -1741,15 +2201,17 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
         <section className="login-card">
           <div className="login-card-topbar">
             <div className="brand login-brand">
-              <div className="brand-mark">
-                <PawPrint size={24} />
-              </div>
+              {(() => {
+                const selMun = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
+                return selMun?.brasao ? (
+                  <img src={selMun.brasao} alt={`Brasão ${selMun.name}`} className="brand-brasao" />
+                ) : (
+                  <div className="brand-mark"><PawPrint size={24} /></div>
+                );
+              })()}
               <div>
                 {selectedMunicipalityId && municipalities.find((m) => m.id === selectedMunicipalityId) ? (
-                  <>
-                    <strong>{municipalities.find((m) => m.id === selectedMunicipalityId).name}</strong>
-                    <span className="brand-sub">Sistema municipal</span>
-                  </>
+                  <strong>{municipalities.find((m) => m.id === selectedMunicipalityId).name}</strong>
                 ) : (
                   <strong>Sistema municipal</strong>
                 )}
@@ -1979,24 +2441,16 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
   return (
     <div className="modal-backdrop">
       <form className="access-modal" onSubmit={submit}>
-        <button className="access-modal-close" type="button" onClick={onClose} aria-label="Fechar"><X size={15} /></button>
-
         {sent ? (
           <div className="access-modal-success">
             <CheckCircle2 size={38} strokeWidth={1.5} />
             <h2>Solicitação enviada!</h2>
             <p>Um usuário interno vai analisar o pedido e liberar o acesso se estiver tudo certo.</p>
-            <button className="access-modal-submit" type="button" onClick={onClose}>Fechar</button>
+            <button className="primary-action" type="button" onClick={onClose}>Fechar</button>
           </div>
         ) : (
           <>
-            <div className="access-modal-head">
-              <div className="access-modal-head-icon"><Shield size={20} /></div>
-              <div>
-                <h2>Solicitar credenciamento</h2>
-                <p>Acesso ao sistema para ONGs e protetores independentes</p>
-              </div>
-            </div>
+            <ModalHeader title="Solicitar credenciamento" subtitle="Acesso ao sistema para ONGs e protetores independentes" icon={Shield} onClose={onClose} />
 
             <div className="access-type-picker">
               {accessRequesterTypes.map((type) => (
@@ -2015,47 +2469,64 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
               ))}
             </div>
 
-            <div className="access-form-fields">
-              <div className="access-field">
-                <Building2 size={14} className="access-field-icon" />
-                <input type="text" placeholder="Nome da ONG ou grupo (opcional para protetor)" value={form.organizationName} onChange={(e) => patch("organizationName", e.target.value)} />
-              </div>
-              <div className="access-field">
-                <User size={14} className="access-field-icon" />
-                <input type="text" placeholder="Nome completo do responsável *" value={form.responsibleName} onChange={(e) => patch("responsibleName", e.target.value)} required />
-              </div>
-              <div className="access-field">
-                <Mail size={14} className="access-field-icon" />
-                <input type="email" placeholder="Email para contato *" value={form.email} onChange={(e) => patch("email", e.target.value)} required />
-              </div>
-              <div className="access-form-row">
+            <div className="single-request-form clean-form">
+              <label className="access-form-label">
+                <span>Organização</span>
                 <div className="access-field">
-                  <Phone size={14} className="access-field-icon" />
-                  <input type="tel" placeholder="Telefone" value={form.phone} onChange={(e) => patch("phone", e.target.value)} />
+                  <input type="text" placeholder="Nome da ONG ou grupo (opcional para protetor)" value={form.organizationName} onChange={(e) => patch("organizationName", e.target.value)} />
                 </div>
+              </label>
+              <label className="access-form-label">
+                <span>Responsável</span>
                 <div className="access-field">
-                  <FileText size={14} className="access-field-icon" />
-                  <input type="text" placeholder="CPF/CNPJ ou matrícula" value={form.document} onChange={(e) => patch("document", e.target.value)} />
+                  <input type="text" placeholder="Nome completo do responsável *" value={form.responsibleName} onChange={(e) => patch("responsibleName", e.target.value)} required />
                 </div>
-              </div>
-              <div className="access-form-row">
+              </label>
+              <label className="access-form-label">
+                <span>Email</span>
                 <div className="access-field">
-                  <MapPin size={14} className="access-field-icon" />
-                  <input type="text" placeholder="Cidade" value={form.city} onChange={(e) => patch("city", e.target.value)} />
+                  <input type="email" placeholder="Email para contato *" value={form.email} onChange={(e) => patch("email", e.target.value)} required />
                 </div>
+              </label>
+              <div className="two-column-fields">
+                <label className="access-form-label">
+                  <span>Telefone</span>
+                  <div className="access-field">
+                    <input type="tel" placeholder="(00) 00000-0000" value={form.phone} onChange={(e) => patch("phone", e.target.value)} />
+                  </div>
+                </label>
+                <label className="access-form-label">
+                  <span>CPF / CNPJ</span>
+                  <div className="access-field">
+                    <input type="text" placeholder="CPF, CNPJ ou matrícula" value={form.document} onChange={(e) => patch("document", e.target.value)} />
+                  </div>
+                </label>
+              </div>
+              <div className="two-column-fields">
+                <label className="access-form-label">
+                  <span>Cidade</span>
+                  <div className="access-field">
+                    <input type="text" placeholder="Cidade" value={form.city} onChange={(e) => patch("city", e.target.value)} />
+                  </div>
+                </label>
+                <label className="access-form-label">
+                  <span>UF</span>
+                  <div className="access-field">
+                    <input type="text" placeholder="UF" value={form.state} maxLength={2} onChange={(e) => patch("state", e.target.value.toUpperCase().slice(0, 2))} />
+                  </div>
+                </label>
+              </div>
+              <label className="access-form-label">
+                <span>Como pretende auxiliar</span>
                 <div className="access-field">
-                  <input type="text" placeholder="UF" value={form.state} maxLength={2} onChange={(e) => patch("state", e.target.value.toUpperCase().slice(0, 2))} />
+                  <textarea placeholder="Ex: cadastrar animais para adoção, indicar vagas de castração..." value={form.intendedUse} onChange={(e) => patch("intendedUse", e.target.value)} rows={3} />
                 </div>
-              </div>
-              <div className="access-field access-field--textarea">
-                <MessageCircle size={14} className="access-field-icon" />
-                <textarea placeholder="Como pretende auxiliar? Ex: cadastrar animais para adoção, indicar vagas de castração..." value={form.intendedUse} onChange={(e) => patch("intendedUse", e.target.value)} rows={3} />
-              </div>
+              </label>
             </div>
 
             {status && <p className={`access-status${status.includes("Enviando") ? " is-sending" : " is-error"}`}>{status}</p>}
 
-            <button className="access-modal-submit" type="submit">
+            <button className="primary-action" type="submit">
               <Shield size={14} />
               Enviar solicitação
             </button>
@@ -2169,6 +2640,7 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
   const [done, setDone] = useState(null);
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(initialMunicipalityId);
   const [publicScheduleDays, setPublicScheduleDays] = useState(scheduleDays);
+  const [publicScheduleRules, setPublicScheduleRules] = useState([]);
   const [publicRequestTypes, setPublicRequestTypes] = useState(requestTypes);
   const [publicSpeciesOptions, setPublicSpeciesOptions] = useState(speciesOptions);
   const [publicSizeOptions, setPublicSizeOptions] = useState(sizeOptions);
@@ -2183,20 +2655,28 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
     api.getSchedule(selectedMunicipalityId)
       .then((days) => setPublicScheduleDays(days.map(normalizeScheduleDay).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date))))
       .catch(console.error);
+    api.getConfig(CONFIG_KEYS.scheduleRules, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicScheduleRules(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.requestTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicRequestTypes(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicSpeciesOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicSizeOptions(value); }).catch(() => {});
   }, [selectedMunicipalityId]);
+  const effectivePublicScheduleDays = mergeScheduleDaysWithRules(publicScheduleDays, publicScheduleRules);
 
   function goToStart() {
     setScreen("formulario");
   }
 
+  const simpleHeaderMun = municipalities.find((m) => m.id === selectedMunicipalityId);
   const simpleHeader = (
     <header className="public-form-header">
-      <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
-        <Home size={18} />
-      </button>
+      <div className="nr-topbar-left">
+        <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
+          <Home size={18} />
+        </button>
+        {simpleHeaderMun?.brasao && (
+          <img src={simpleHeaderMun.brasao} alt={simpleHeaderMun.name} className="nr-topbar-brasao" />
+        )}
+      </div>
       <MunicipalitySelectorChip
         municipalities={municipalities}
         selectedMunicipalityId={selectedMunicipalityId}
@@ -2212,6 +2692,9 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
       <main className="public-form-page">
         {simpleHeader}
         <div className="public-form-success">
+          {simpleHeaderMun?.brasao && (
+            <img src={simpleHeaderMun.brasao} alt={simpleHeaderMun?.name || "Município"} className="success-brasao" />
+          )}
           <CheckCircle2 size={56} />
           <h2>Solicitação enviada!</h2>
           <p>Protocolo oficial: <strong>{done.protocol}</strong></p>
@@ -2238,6 +2721,7 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
             municipalityId={selectedMunicipalityId || undefined}
             onBack={onBack}
             municipalityName={selectedMunicipality?.name || "Sistema municipal"}
+            municipalityBrasao={selectedMunicipality?.brasao || ""}
           />
         </section>
       </main>
@@ -2247,9 +2731,12 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
   return (
     <main className="public-form-page">
       {!selectedMunicipalityId ? (
-        <div className="public-municipality-prompt">
-          <p>Selecione um município para iniciar a solicitação.</p>
-        </div>
+        <>
+          {simpleHeader}
+          <div className="public-municipality-prompt">
+            <p>Selecione um município para iniciar a solicitação.</p>
+          </div>
+        </>
       ) : (
         <NewRequest
           createRequest={createRequest}
@@ -2261,7 +2748,7 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
           onBack={onBack}
           onDone={(request) => { setDone(request); }}
           requests={requests}
-          scheduleDays={publicScheduleDays}
+          scheduleDays={effectivePublicScheduleDays}
           initialMunicipalityId={selectedMunicipalityId}
           requestTypes={publicRequestTypes}
           aiSettings={aiSettings}
@@ -2273,10 +2760,48 @@ function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda",
   );
 }
 
-function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf = "", validationKey = "", onRequestCreated }: AnyRecord) {
+function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf = "", validationKey = "", onRequestCreated, animalRecord = null }: AnyRecord) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
   const next = safeRequests.find((request) => request.status === "AGENDADA" && (request.appointment || request.preferredSchedule));
   const [detailsRequest, setDetailsRequest] = useState(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [downloadingProntuario, setDownloadingProntuario] = useState(false);
+
+  async function downloadRelatorioProcessual(request: AnyRecord) {
+    if (downloadingId) return;
+    setDownloadingId(request.id);
+    try {
+      const bundle = await generateRelatorioProcessualPdf(request);
+      if (bundle?.dataUrl) {
+        const a = document.createElement("a");
+        a.href = bundle.dataUrl;
+        a.download = bundle.fileName || `relatorio-${request.protocol || request.id}.pdf`;
+        a.click();
+      }
+    } catch (err) {
+      console.error("Erro ao gerar relatório:", err);
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
+  async function downloadProntuario() {
+    if (downloadingProntuario || !animalRecord) return;
+    setDownloadingProntuario(true);
+    try {
+      const bundle = await generateProntuarioPdf({}, animalRecord);
+      if (bundle?.dataUrl) {
+        const a = document.createElement("a");
+        a.href = bundle.dataUrl;
+        a.download = bundle.fileName || `prontuario-${animalRecord.animal?.name || "animal"}.pdf`;
+        a.click();
+      }
+    } catch (err) {
+      console.error("Erro ao gerar prontuário:", err);
+    } finally {
+      setDownloadingProntuario(false);
+    }
+  }
   const detailsAnimal = detailsRequest?.animals?.[0] || {};
   const detailsAnimalHistory = detailsRequest ? buildPublicAnimalHistory(detailsRequest, detailsAnimal) : [];
 
@@ -2300,7 +2825,21 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
       </div>}
 
       <div className="panel wide">
-        <PanelHeader title={compact ? "Solicitações" : "Minhas solicitações"} action={compact ? "" : "Ver todas"} />
+        <div className="panel-header">
+          <h3>{compact ? "Solicitações" : "Minhas solicitações"}</h3>
+          {animalRecord?.animal && (
+            <button
+              className="icon-btn-flat"
+              type="button"
+              title="Baixar prontuário do animal"
+              disabled={downloadingProntuario}
+              onClick={downloadProntuario}
+            >
+              <FileText size={15} />
+              <span style={{ fontSize: "0.78rem", fontWeight: 600 }}>Prontuário</span>
+            </button>
+          )}
+        </div>
         <div className="request-list">
           {safeRequests.length === 0 && (
             <EmptyState
@@ -2318,49 +2857,132 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
                 <small>{requestTypeLabel(request)}</small>
               </div>
               <div className="request-card-status">
-                <StatusBadge status={request.status} />
+                <StatusBadge status={request.status} className="card-status-plain" />
                 <span className="request-card-date">{request.appointment || request.preferredSchedule || request.createdAt}</span>
               </div>
-              <button className="ghost-button" type="button" onClick={() => setDetailsRequest(request)}>
-                Detalhes
-                <ChevronRight size={16} />
-              </button>
+              <div className="request-card-actions">
+                <button
+                  className="icon-btn-flat"
+                  type="button"
+                  title="Relatório processual"
+                  disabled={!!downloadingId}
+                  onClick={() => downloadRelatorioProcessual(request)}
+                >
+                  <Download size={15} />
+                </button>
+                <button className="ghost-button" type="button" onClick={() => setDetailsRequest(request)}>
+                  Detalhes
+                  <ChevronRight size={16} />
+                </button>
+              </div>
             </article>
           ))}
         </div>
       </div>
-      {detailsRequest && (
-        <div className="modal-backdrop">
-          <div className="public-request-details-modal" role="dialog" aria-modal="true">
-            <ModalHeader title={`Solicitação #${detailsRequest.protocol}`} subtitle={detailsRequest.tutor || currentUser?.name || ""} onClose={() => setDetailsRequest(null)} />
-            <div className="public-request-detail-hero">
-              <div>
-                <span>Animal</span>
-                <strong>{detailsRequest.animals.map((animal) => animal.name).join(", ") || "Animal não informado"}</strong>
-                <small>{requestTypeLabel(detailsRequest)}</small>
+      {detailsRequest && (() => {
+        const req = detailsRequest;
+        const animal = req.animals?.[0] || {};
+        const wf: AnyRecord = req.workflowData || req.workflow_data || {};
+        const animalBreed = animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "—");
+        const microchip = animal.microchip || req.animalMicrochip || "—";
+        const performed = wf.attendanceProcedure || wf.performedProcedures || req.performedProcedures || "";
+        const prescription = wf.attendancePrescription || "";
+        const cancelReason = wf.cancelReason || req.rejectionReason || "";
+        return (
+          <div className="modal-backdrop">
+            <div className="public-request-details-modal prontuario-modal" role="dialog" aria-modal="true">
+              <div className="prontuario-modal-header">
+                <div className="prontuario-modal-title">
+                  <span className="prontuario-modal-eyebrow">Prontuário · #{req.protocol}</span>
+                  <h2>{animal.name || "Animal não informado"}</h2>
+                  <StatusBadge status={req.status} />
+                </div>
+                <div className="prontuario-modal-actions">
+                  <button
+                    className="icon-btn-flat"
+                    type="button"
+                    title="Baixar prontuário do animal"
+                    disabled={downloadingId === req.id}
+                    onClick={async () => {
+                      setDownloadingId(req.id);
+                      try {
+                        const chip = (animal.microchip || req.animalMicrochip || "").trim();
+                        let history = animalRecord;
+                        if (!history && chip) {
+                          history = await api.consultAnimalByMicrochip({ microchip: chip }).catch(() => null);
+                        }
+                        const bundle = await generateProntuarioPdf(req, history);
+                        if (bundle?.dataUrl) {
+                          const a = document.createElement("a");
+                          a.href = bundle.dataUrl;
+                          a.download = bundle.fileName || `prontuario-${animal.name || req.protocol}.pdf`;
+                          a.click();
+                        }
+                      } finally { setDownloadingId(null); }
+                    }}
+                  >
+                    <Download size={16} />
+                  </button>
+                  <button className="icon-btn-flat" type="button" onClick={() => setDetailsRequest(null)} aria-label="Fechar">
+                    <X size={16} />
+                  </button>
+                </div>
               </div>
-              <StatusBadge status={detailsRequest.status} />
-            </div>
-            <div className="public-request-detail-grid">
-              <InfoTile label="Agenda" value={detailsRequest.appointment || detailsRequest.preferredSchedule || "Sem agenda"} />
-              <InfoTile label="Tutor" value={detailsRequest.tutor || currentUser?.name || "Não informado"} />
-              <InfoTile label="CPF" value={maskCpf(detailsRequest.cpf || cpf)} />
-              <InfoTile label="Telefone" value={detailsRequest.phone || "Não informado"} />
-              <InfoTile label="Endereço" value={[detailsRequest.address, detailsRequest.neighborhood, detailsRequest.city, detailsRequest.state].filter(Boolean).join(", ") || "Não informado"} />
-              <InfoTile label="Aberta em" value={detailsRequest.createdAt ? formatDateTime(detailsRequest.createdAt) : "Não informado"} />
-            </div>
-            <div className="public-request-detail-history">
-              <strong>Histórico do animal</strong>
-              {detailsAnimalHistory.map((item) => (
-                <p key={item.label}>
-                  <span>{item.label}</span>
-                  {item.value}
-                </p>
-              ))}
+
+              <div className="prontuario-modal-body">
+                <div className="prontuario-section">
+                  <span className="prontuario-section-label">Animal</span>
+                  <div className="prontuario-grid">
+                    <InfoTile label="Nome" value={animal.name || "—"} />
+                    <InfoTile label="Espécie" value={animal.species || "—"} />
+                    <InfoTile label="Sexo" value={animal.sex || "—"} />
+                    <InfoTile label="Porte" value={animal.size || "—"} />
+                    <InfoTile label="Raça" value={animalBreed} />
+                    <InfoTile label="Microchip" value={microchip} />
+                    <InfoTile label="Nascimento / Idade" value={animal.birthDate || animal.age || "—"} />
+                    <InfoTile label="Peso" value={animal.weight ? `${animal.weight} kg` : "—"} />
+                    <InfoTile label="Vermifugado" value={animal.dewormed || "—"} />
+                    <InfoTile label="Vacinado" value={animal.vaccinated || "—"} />
+                  </div>
+                </div>
+
+                <div className="prontuario-section">
+                  <span className="prontuario-section-label">Tutor</span>
+                  <div className="prontuario-grid">
+                    <InfoTile label="Nome" value={req.tutor || currentUser?.name || "—"} />
+                    <InfoTile label="CPF" value={maskCpf(req.cpf || cpf)} />
+                    <InfoTile label="Telefone" value={req.phone || "—"} />
+                    <InfoTile label="Endereço" value={[req.address, req.neighborhood, req.city, req.state].filter(Boolean).join(", ") || "—"} />
+                  </div>
+                </div>
+
+                <div className="prontuario-section">
+                  <span className="prontuario-section-label">Solicitação</span>
+                  <div className="prontuario-grid">
+                    <InfoTile label="Protocolo" value={`#${req.protocol}`} />
+                    <InfoTile label="Tipo" value={requestTypeLabel(req)} />
+                    <InfoTile label="Aberta em" value={req.createdAt ? formatDateTime(req.createdAt) : "—"} />
+                    <InfoTile label="Agendamento" value={req.appointment || req.preferredSchedule || "Sem agenda"} />
+                    {req.scheduleLocationName && <InfoTile label="Local" value={req.scheduleLocationName} />}
+                  </div>
+                </div>
+
+                {(performed || prescription || cancelReason) && (
+                  <div className="prontuario-section">
+                    <span className="prontuario-section-label">Atendimento</span>
+                    <div className="prontuario-grid">
+                      {performed && <InfoTile label="Procedimento realizado" value={performed} />}
+                      {wf.attendanceMicrochip && <InfoTile label="Microchip aplicado" value={wf.attendanceMicrochip} />}
+                      {prescription && <InfoTile label="Receita / Prescrição" value={prescription} />}
+                      {cancelReason && <InfoTile label="Motivo cancelamento" value={cancelReason} />}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </section>
   );
 }
@@ -3118,148 +3740,130 @@ function NewRequest({
     </div>
   );
 
-  const footerNode = (
-    <div className="form-actions">
-      <button
-        className="ghost-button nav-back-action"
-        type="button"
-        disabled={currentStepIndex === 0 && !onBack}
-        onClick={() => (currentStepIndex > 0 ? setFormStep(formSteps[currentStepIndex - 1].step) : onBack?.())}
-      >
-        Voltar
-      </button>
-      {currentStepIndex < formSteps.length - 1 ? (
-        <button
-          className="primary-action nav-next-action"
-          type="button"
-          disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
-          onClick={goToNextStep}
-        >
-          Continuar
-        </button>
-      ) : (
-        <button className="primary-action nav-next-action" type="button" disabled={!canSubmit || submitting} onClick={submit}>
-          {submitting ? "Enviando..." : "Encerrar"}
-        </button>
-      )}
-    </div>
-  );
+  const internalCompact = compact && !publicFlow;
+  const requestShellClassName = [
+    "nr-shell",
+    internalCompact ? "nr-shell--internal" : "",
+    publicFlow ? "nr-shell--public" : "",
+    !publicFlow && !compact ? "nr-shell--embedded" : "",
+  ].filter(Boolean).join(" ");
 
-  if (publicFlow || compact) {
-    const internalCompact = compact && !publicFlow;
-    return (
-      <div className={internalCompact ? "nr-shell nr-shell--internal" : "nr-shell"}>
+  const selectedMunForTopbar = municipalities.find((m) => m.id === selectedMunicipalityId);
+
+  return (
+      <div className={requestShellClassName}>
         <div className={internalCompact ? "nr-topbar nr-topbar--internal" : "nr-topbar"}>
           {!internalCompact && (
-            <button
-              className="nr-home-btn"
-              type="button"
-              onClick={onBack}
-              aria-label="Início"
-            >
-              <Home size={18} />
+            <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início">
+              <Home size={20} />
             </button>
           )}
           <div className="nr-topbar-stepper">{stepperNode}</div>
+          {!internalCompact && selectedMunForTopbar?.brasao && (
+            <div className="nr-topbar-right">
+              <img src={selectedMunForTopbar.brasao} alt={selectedMunForTopbar.name} className="nr-topbar-brasao" />
+            </div>
+          )}
         </div>
 
         <div className="nr-body">
 
           {submissionError && <p className="form-error">{submissionError}</p>}
           <div className="single-request-form clean-form">
-          {formStep === 0 && <FormSection title={<><User size={14} />Seus dados</>}>
-            <div className="two-column-fields">
-              <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`}>
-                <User size={14} className="access-field-icon" />
-                <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+          {formStep === 0 && <FormSection title="Tutor">
+            <div className="form-sub-card">
+              <span className="form-sub-card-title">Identificação</span>
+              <div className="two-column-fields">
+                <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Tutor">
+                  <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+                </div>
+                <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
+                  <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
+                </div>
               </div>
-              <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`}>
-                <FileText size={14} className="access-field-icon" />
-                <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
-              </div>
-            </div>
-            <div className="cadunico-row">
-              <div className="access-field">
-                <FileText size={14} className="access-field-icon" />
-                <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
-              </div>
-              <label className="checkbox-row cadunico-checkbox">
-                <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
-                Se aplica
-              </label>
-            </div>
-            <div className="form-subsection-title">Endereço</div>
-            <div className="address-lookup-grid">
-              <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`}>
-                <MapPin size={14} className="access-field-icon" />
-                <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
-              </div>
-              <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`}>
-                <Navigation size={14} className="access-field-icon" />
-                <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
-              </div>
-              <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`}>
-                <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
-              </div>
-            </div>
-            {cepStatus && <p className="cep-status">{cepStatus}</p>}
-            <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`}>
-              <MapPin size={14} className="access-field-icon" />
-              <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
-            </div>
-            <div className="address-city-grid">
-              <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`}>
-                <MapPin size={14} className="access-field-icon" />
-                <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
-              </div>
-              <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`}>
-                <Building2 size={14} className="access-field-icon" />
-                <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
-              </div>
-            </div>
-            {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
-            {locationStatus && <p className="cep-status">{locationStatus}</p>}
-            <div className="form-subsection-title">Contato</div>
-            <div className="two-column-fields">
-              <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`}>
-                <Mail size={14} className="access-field-icon" />
-                <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
-              </div>
-              <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`}>
-                <Phone size={14} className="access-field-icon" />
-                <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
-              </div>
-            </div>
-            {!internalSimple && !smsCode && !smsConfirmed && (
-              <button className="secondary-action sms-send-btn" type="button" onClick={sendSmsCode}>Enviar código de verificação</button>
-            )}
-            {!internalSimple && (smsCode || smsConfirmed) && (
-              <div className="sms-verify-row">
-                <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
-                  <span>Código SMS</span>
-                  <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
+              <div className="cadunico-row">
+                <div className="access-field" data-label="CadUnico">
+                  <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
+                </div>
+                <label className="checkbox-row cadunico-checkbox">
+                  <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
+                  Se aplica
                 </label>
-                <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
               </div>
-            )}
-            {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
+            </div>
+
+            <div className="form-sub-card">
+              <span className="form-sub-card-title">Endereço</span>
+              <div className="address-lookup-grid">
+                <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
+                  <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
+                </div>
+                <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Numero">
+                  <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
+                </div>
+                <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
+                  <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
+                </div>
+              </div>
+              {cepStatus && <p className="cep-status">{cepStatus}</p>}
+              <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereco">
+                <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
+              </div>
+              <div className="address-city-grid">
+                <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`} data-label="Bairro">
+                  <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
+                </div>
+                <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`} data-label="Cidade">
+                  <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
+                </div>
+              </div>
+              {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
+              {locationStatus && <p className="cep-status">{locationStatus}</p>}
+            </div>
+
+            <div className="form-sub-card">
+              <span className="form-sub-card-title">Contato</span>
+              <div className="two-column-fields">
+                <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
+                  <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
+                </div>
+                <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`} data-label="Telefone">
+                  <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
+                </div>
+              </div>
+              {!internalSimple && !smsCode && !smsConfirmed && (
+                <button className="secondary-action sms-send-btn" type="button" onClick={sendSmsCode}>Enviar código de verificação</button>
+              )}
+              {!internalSimple && (smsCode || smsConfirmed) && (
+                <div className="sms-verify-row">
+                  <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
+                    <span>Código SMS</span>
+                    <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
+                  </label>
+                  <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
+                </div>
+              )}
+              {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
+            </div>
           </FormSection>}
 
-          {formStep === 1 && <FormSection title={<><PawPrint size={14} />Dados do animal</>}>
+          {formStep === 1 && <FormSection title="Dados do animal">
             {configuredRequestTypes.length > 0 && (
-              <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
-                <span className="anm-type-label">Tipo de solicitação</span>
-                <div className="anm-type-cards">
-                  {configuredRequestTypes.map((type) => (
-                    <button
-                      key={type.id || type.name}
-                      type="button"
-                      className={`anm-type-card${requestData.type === type.name ? " is-selected" : ""}`}
-                      onClick={() => updateRequestField("type", type.name)}
-                    >
-                      {type.name}
-                    </button>
-                  ))}
+              <div className="form-sub-card">
+                <span className="form-sub-card-title">Tipo de solicitação</span>
+                <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
+                  <div className="anm-type-cards">
+                    {configuredRequestTypes.map((type) => (
+                      <button
+                        key={type.id || type.name}
+                        type="button"
+                        className={`anm-type-card${requestData.type === type.name ? " is-selected" : ""}`}
+                        onClick={() => updateRequestField("type", type.name)}
+                      >
+                        {type.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
@@ -3282,66 +3886,65 @@ function NewRequest({
                   </button>
 
                   {isOpen && <>
-                    <div className="animal-choice-grid two-col">
-                      <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
-                      <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
-                    </div>
-                    <div className="animal-choice-grid two-col">
-                      <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
-                      <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
-                    </div>
-                    {animal.breedType === "Definida" && (
-                      <div className="access-field">
-                        <PawPrint size={14} className="access-field-icon" />
-                        <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
+                    <div className="form-sub-card">
+                      <span className="form-sub-card-title">Identificação do animal</span>
+                      <div className="animal-choice-grid two-col">
+                        <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
+                        <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
                       </div>
-                    )}
-                    <div className="two-column-fields">
-                      <div className="access-field">
-                        <PawPrint size={14} className="access-field-icon" />
-                        <input type="text" placeholder="Nome do animal" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
+                      <div className="animal-choice-grid two-col">
+                        <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
+                        <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
                       </div>
-                      <div className="access-field">
-                        <Dog size={14} className="access-field-icon" />
-                        <input type="text" placeholder="Cor da pelagem" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
-                      </div>
-                    </div>
-                    <div className="two-column-fields">
-                      <div className="access-field">
-                        <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
-                      </div>
-                      <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`}>
-                        <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
-                      </div>
-                    </div>
-                    {internalSimple && (
-                      <div className="internal-microchip-row">
-                        <div className="access-field">
-                          <ScanLine size={14} className="access-field-icon" />
-                          <input
-                            type="text"
-                            placeholder={animal.hasChip === "Sim" ? "Codigo do microchip" : "Microchip nao informado"}
-                            value={animal.microchip}
-                            onChange={(event) => updateAnimal(index, "microchip", event.target.value)}
-                            readOnly={animal.hasChip !== "Sim"}
-                          />
+                      {animal.breedType === "Definida" && (
+                        <div className="access-field" data-label="Raca">
+                          <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
                         </div>
-                        <label className="doc-accept-check internal-chip-check">
-                          <input
-                            type="checkbox"
-                            checked={animal.hasChip === "Sim"}
-                            onChange={(event) => {
-                              updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao");
-                              if (!event.target.checked) updateAnimal(index, "microchip", "");
-                            }}
-                          />
-                          <span className="doc-check-box" />
-                          <span>Microchipado</span>
-                        </label>
+                      )}
+                      <div className="two-column-fields">
+                        <div className="access-field" data-label="Nome">
+                          <input type="text" placeholder="Nome do animal" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
+                        </div>
+                        <div className="access-field" data-label="Pelagem">
+                          <input type="text" placeholder="Cor da pelagem" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
+                        </div>
                       </div>
-                    )}
-                    <div className="health-card">
-                      <strong>Saúde e cuidados</strong>
+                      <div className="two-column-fields">
+                        <div className="access-field" data-label="Idade">
+                          <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
+                        </div>
+                        <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`} data-label="Peso">
+                          <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
+                        </div>
+                      </div>
+                      {internalSimple && (
+                        <div className="internal-microchip-row">
+                          <div className="access-field" data-label="Microchip">
+                            <input
+                              type="text"
+                              placeholder={animal.hasChip === "Sim" ? "Codigo do microchip" : "Microchip nao informado"}
+                              value={animal.microchip}
+                              onChange={(event) => updateAnimal(index, "microchip", event.target.value)}
+                              readOnly={animal.hasChip !== "Sim"}
+                            />
+                          </div>
+                          <label className="doc-accept-check internal-chip-check">
+                            <input
+                              type="checkbox"
+                              checked={animal.hasChip === "Sim"}
+                              onChange={(event) => {
+                                updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao");
+                                if (!event.target.checked) updateAnimal(index, "microchip", "");
+                              }}
+                            />
+                            <span className="doc-check-box" />
+                            <span>Microchipado</span>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-sub-card">
+                      <span className="form-sub-card-title">Saúde e cuidados</span>
                       <div className="health-grid">
                         <YesNoField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
                         <YesNoField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
@@ -3353,7 +3956,7 @@ function NewRequest({
                     {internalSimple && inlineAnimalPhotoUpload}
                     {animals.length > 1 && (
                       <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
-                        <X size={13} /> Remover animal {index + 1}
+                        Remover animal {index + 1}
                       </button>
                     )}
                   </>}
@@ -3361,11 +3964,11 @@ function NewRequest({
               );
             })}
             <button className="anm-add-btn" type="button" onClick={addAnimal}>
-              <Plus size={15} /> Adicionar animal
+              Adicionar animal
             </button>
           </FormSection>}
 
-          {formStep === 2 && <FormSection title={<><CalendarDays size={14} />Agenda</>}>
+          {formStep === 2 && <FormSection title="Agenda">
             <PublicSchedulePicker
               requests={requests}
               scheduleDays={scheduleDays}
@@ -3385,7 +3988,7 @@ function NewRequest({
             )}
           </FormSection>}
 
-          {!internalSimple && formStep === 3 && <FormSection title={<><FileText size={14} />Documentos comprobatórios</>}>
+          {!internalSimple && formStep === 3 && <FormSection title="Documentos comprobatórios">
             <label className="doc-photo-zone">
               {documentUploads.animal_photo?.dataUrl ? (
                 <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
@@ -3447,7 +4050,6 @@ function NewRequest({
                 type="button"
                 onClick={() => setFormStep(formSteps[currentStepIndex - 1].step)}
               >
-                <ChevronRight size={15} style={{ transform: "rotate(180deg)" }} />
                 Voltar
               </button>
             )}
@@ -3459,7 +4061,6 @@ function NewRequest({
                 onClick={goToNextStep}
               >
                 Continuar
-                <ChevronRight size={14} />
               </button>
             ) : (
               <button
@@ -3476,85 +4077,6 @@ function NewRequest({
 
         {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
       </div>
-    );
-  }
-
-  return (
-    <section className="content-grid">
-      <div className="panel wide">
-        <div className="nr-panel-top">
-          <strong className="nr-title">Novo Cadastro</strong>
-          {stepperNode}
-        </div>
-        {submissionError && <p className="form-error">{submissionError}</p>}
-        <div className="single-request-form clean-form">
-          {formStep === 0 && <FormSection title="Tutor e endereço">
-            <Field label="Nome" value={requestData.tutor} onChange={(value) => updateRequestField("tutor", value)} placeholder="Nome do tutor ou responsável" invalid={showInvalid("tutor")} />
-            <Field label="CPF" value={requestData.cpf} onChange={(value) => updateMaskedRequestField("cpf", value)} placeholder="000.000.000-00" invalid={showInvalid("cpf")} />
-            <div className="cadunico-row">
-              <Field label="CadÚnico" value={requestData.cadUnico} onChange={(value) => updateRequestField("cadUnico", value)} placeholder="Número do CadÚnico" readOnly={requestData.cadUnicoNotApplicable} />
-              <label className="checkbox-row cadunico-checkbox"><input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />Se aplica</label>
-            </div>
-            <div className="form-subsection-title">Endereço</div>
-            <div className="address-lookup-grid">
-              <div className="cep-with-map"><Field label="CEP" value={requestData.cep} onChange={lookupCep} placeholder="00000-000" invalid={showInvalid("cep")} /></div>
-              <Field label="Número" value={requestData.number} onChange={(value) => updateRequestField("number", value)} placeholder="123" invalid={showInvalid("number")} />
-            </div>
-            {cepStatus && <p className="cep-status">{cepStatus}</p>}
-            <Field label="Endereço completo" value={requestData.address} onChange={(value) => updateRequestField("address", value)} placeholder="Rua, número, complemento" invalid={showInvalid("address")} />
-            <Field label="Bairro" value={requestData.neighborhood} onChange={(value) => updateRequestField("neighborhood", value)} placeholder="Informe o bairro" invalid={showInvalid("neighborhood")} />
-            <div className="two-column-fields">
-              <Field label="Cidade" value={requestData.city} onChange={(value) => updateRequestField("city", value)} placeholder="Cidade" invalid={showInvalid("city")} />
-              <Field label="UF" value={requestData.state} onChange={(value) => updateMaskedRequestField("state", value)} placeholder="SP" invalid={showInvalid("state")} />
-            </div>
-            {locationStatus && <p className="cep-status">{locationStatus}</p>}
-            <div className="form-subsection-title">Contato</div>
-            <Field label="Email" value={requestData.email} onChange={(value) => updateRequestField("email", value)} placeholder="seuemail@exemplo.com" invalid={showInvalid("email")} />
-            <div className="contact-confirmation-panel">
-              <div className="phone-validation-row">
-                <Field label="Celular" value={requestData.phone} onChange={(value) => updateMaskedRequestField("phone", value)} placeholder="Digite seu WhatsApp/celular" invalid={showInvalid("phone")} />
-                {!internalSimple && !smsCode && !smsConfirmed && (<button className="secondary-action" type="button" onClick={sendSmsCode}>Enviar código</button>)}
-                {!internalSimple && (smsCode || smsConfirmed) && (<><label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}><span>Código SMS</span><input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} /></label><button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button></>)}
-              </div>
-            </div>
-            {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
-          </FormSection>}
-          {formStep === 1 && <FormSection title="Dados dos animais">
-            {configuredRequestTypes.length > 0 && (<label className={showInvalid("type") ? "field invalid" : "field"}><span>Tipo de solicitação</span><select value={requestData.type} onChange={(event) => updateRequestField("type", event.target.value)}><option value="">Selecione o tipo</option>{configuredRequestTypes.map((type) => (<option key={type.id || type.name} value={type.name}>{type.name}</option>))}</select></label>)}
-            {animals.map((animal, index) => (
-              <div className="animal-form" key={`animal-${index}`}>
-                <div className="animal-form-header"><strong>Animal {index + 1}</strong></div>
-                <div className="animal-main-grid">
-                  <Field label="Nome" value={animal.name} onChange={(value) => updateAnimal(index, "name", value)} placeholder="Nome do animal" />
-                  <Field label="Data de nascimento" value={animal.birthDate || animal.age} onChange={(value) => { updateAnimal(index, "birthDate", value); updateAnimal(index, "age", value); }} type="date" />
-                  <Field label="Cor da pelagem" value={animal.coat} onChange={(value) => updateAnimal(index, "coat", value)} placeholder="Ex: preto, caramelo" />
-                  <div className="inline-microchip-fields">
-                    <Field label="Código do microchip" value={animal.microchip} onChange={(value) => updateAnimal(index, "microchip", value)} placeholder={animal.hasChip === "Sim" ? "Número do chip" : "Marque o campo ao lado"} readOnly={animal.hasChip !== "Sim"} />
-                    <label className="checkbox-row compact-checkbox" title="Animal já é chipado"><input type="checkbox" aria-label="Animal já é chipado" checked={animal.hasChip === "Sim"} onChange={(event) => { updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao"); if (!event.target.checked) updateAnimal(index, "microchip", ""); }} /></label>
-                  </div>
-                </div>
-                <div className="choice-card"><strong>Características</strong><div className="animal-choice-grid"><CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} /><CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} /><CompactChoiceField label="Porte" value={animal.size} options={activeSizes.map((size) => ({ label: size.name, title: size.description, subtitle: formatSizeRange(size) }))} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} /><CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} /></div></div>
-                {animal.breedType === "Definida" && (<Field label="Descreva a raça" value={animal.breedDescription} onChange={(value) => updateAnimal(index, "breedDescription", value)} placeholder="Ex: Poodle, Siamês" />)}
-                <div className="health-card"><strong>Saúde e cuidados <span className="optional-label">opcional</span></strong><div className="health-grid"><YesNoField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} /><YesNoField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} /><YesNoField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} /><YesNoField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} /><CompactChoiceField label="Alimentação" value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} /></div></div>
-              </div>
-            ))}
-            <div className="animal-actions-row"><button className="secondary-action" type="button" onClick={addAnimal}><Plus size={18} />Adicionar animal</button>{animals.length > 1 && (<button className="ghost-button danger-action" type="button" onClick={() => removeAnimal(animals.length - 1)}>Remover último</button>)}</div>
-          </FormSection>}
-          {formStep === 2 && <FormSection title="Agenda"><PublicSchedulePicker requests={requests} scheduleDays={scheduleDays} selectedDate={requestData.schedule} pendingReservation={{ date: requestData.schedule, count: animals.length }} onSelect={(date) => updateRequestField("schedule", date)} /></FormSection>}
-          {!internalSimple && formStep === 3 && <FormSection title="Documentos comprobatórios">
-            <div className="animal-photo-upload-card"><div><strong>Foto de registro animal</strong><span>Opcional</span>{documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}</div>{documentUploads.animal_photo?.dataUrl && (<button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}><img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" /></button>)}<div className="animal-photo-actions"><label className="secondary-action file-button">Enviar foto<input type="file" accept="image/*" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label><label className="ghost-button file-button">Abrir câmera<input type="file" accept="image/*" capture="environment" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label>{documentUploads.animal_photo && (<button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>Remover</button>)}</div></div>
-            <div className="document-upload-list">{!selectedRequestType && (<EmptyState title="Nenhum documento obrigatório" text="Este cadastro seguirá sem anexos obrigatórios nesta etapa." />)}{selectedTypeDocuments.map((document) => { const upload = documentUploads[document.id]; return (<DocumentScannerUpload key={document.id} document={document} upload={upload} aiActive={aiSettings.active} onUpload={(file) => handleDocumentFile(document, file)} onRemove={() => removeDocumentFile(document.id)} />); })}</div>
-            <div className="declaration-box"><FileText size={20} /><p>O tutor declara ciência dos cuidados pré e pós-cirúrgicos, responsabilidades de acompanhamento e autorização para registro do procedimento.{" "}<button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração em PDF</button></p></div>
-            <label className={showInvalid("accepted") ? "checkbox-row invalid" : "checkbox-row"}><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />Li e aceito a declaração.</label>
-          </FormSection>}
-          {internalSimple && formStep === 3 && <FormSection title="Finalização">
-            <div className="animal-photo-upload-card"><div><strong>Foto de registro animal</strong><span>Opcional</span>{documentUploads.animal_photo?.fileName && <small>{documentUploads.animal_photo.fileName}</small>}</div>{documentUploads.animal_photo?.dataUrl && (<button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)}><img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" /></button>)}<div className="animal-photo-actions"><label className="secondary-action file-button">Enviar foto<input type="file" accept="image/*" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label><label className="ghost-button file-button">Abrir câmera<input type="file" accept="image/*" capture="environment" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} /></label>{documentUploads.animal_photo && (<button className="danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")}>Remover</button>)}</div></div>
-          </FormSection>}
-        </div>
-        {footerNode}
-      </div>
-      {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
-    </section>
   );
 }
 
@@ -3856,6 +4378,7 @@ function AdminDashboard({
     const normalized = normalizeRequest(request);
     const microchip = String(data.microchip || "").trim();
     const note = String(data.note || "").trim();
+    const receita = String(data.receita || "").trim();
     const performedProcedures = getPerformedProceduresLabel(normalized);
     const currentAnimals = Array.isArray(normalized.animals) ? normalized.animals : [];
     const animals = microchip
@@ -3865,10 +4388,10 @@ function AdminDashboard({
       status: "REALIZADA",
       animalMicrochip: microchip,
       animals,
-      workflow_data: { performedProcedures, attendanceMicrochip: microchip, attendanceNote: note },
+      workflow_data: { performedProcedures, attendanceMicrochip: microchip, attendanceNote: note, attendancePrescription: receita },
     };
     try {
-      await patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${note ? `. Observação: ${note}` : ""}`);
+      await patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${receita ? `. Receita registrada` : ""}${note ? `. Observação: ${note}` : ""}`);
       showToast("Comparecimento confirmado — procedimento realizado", "success");
     } catch { showToast("Erro ao confirmar comparecimento", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
@@ -3880,48 +4403,51 @@ function AdminDashboard({
   }
 
   return (
-    <section className="request-workspace triage-workspace">
+    <section className="request-workspace triage-workspace clean-requests-workspace">
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
-      <div className="workspace-heading">
-        <div>
+      <div className="workspace-heading request-page-head">
+        <div className="workspace-heading-main">
           <h2>Solicitações</h2>
+          <p>Acompanhe triagem, agenda e atendimento.</p>
         </div>
-        <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
-          <Plus size={18} />
-          Criar Solicitação
-        </button>
-      </div>
-
-      <nav className="request-nav">
-        <div className="request-filter-tabs">
-          {filterTabs.map((tab) => (
-            <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
-              {tab.label}<span>{tab.requests.length}</span>
-            </button>
-          ))}
-        </div>
-        <div className="request-today-segment">
-          <button
-            type="button"
-            className={todayOnly ? "selected" : ""}
-            aria-pressed={todayOnly}
-            onClick={() => setTodayOnly((current) => !current)}
-          >
-            <CalendarDays size={14} />
-            Hoje
-            <span>{todayRequests.length}</span>
+        <div className="workspace-heading-actions">
+          <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
+            <Plus size={18} />
+            Criar Solicitação
           </button>
         </div>
-      </nav>
+        <nav className="request-nav" aria-label="Filtros de solicitações">
+          <div className="request-filter-tabs">
+            {filterTabs.map((tab) => (
+              <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
+                {tab.label}<span>{tab.requests.length}</span>
+              </button>
+            ))}
+          </div>
+          <div className="request-today-segment">
+            <button
+              type="button"
+              className={todayOnly ? "selected" : ""}
+              aria-pressed={todayOnly}
+              onClick={() => setTodayOnly((current) => !current)}
+            >
+              <CalendarDays size={14} />
+              Hoje
+              <span>{todayRequests.length}</span>
+            </button>
+          </div>
+        </nav>
+      </div>
 
       <div className="triage-card-grid">
-        {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui em cards responsivos."} />}
+        {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui."} />}
         {activeRequests.map((request) => (
           <article
             className="triage-card clickable-triage-card"
             key={request.id}
             role="button"
             tabIndex={0}
+            aria-label={`Abrir solicitação #${request.protocol}`}
             onClick={() => openRequestPreview(request)}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
@@ -3955,23 +4481,20 @@ function AdminDashboard({
                 <span className="tc-label">Agenda</span>
                 <span className="tc-value">{request.preferredSchedule || request.appointment || "-"}</span>
               </div>
-	              <div className="tc-col tc-col--status">
-	                {(request.status === "REALIZADA" || request.status === "CANCELADA") ? (
-                  <span className={`tc-result-badge tc-result-badge--${
-                    request.status === "REALIZADA" ? "success" :
-                    "canceled"
-                  }`}>
+              <div className="tc-col tc-col--status">
+                {(request.status === "REALIZADA" || request.status === "CANCELADA") ? (
+                  <span className={`tc-result-badge tc-result-badge--${request.status === "REALIZADA" ? "success" : "canceled"}`}>
                     {request.status === "REALIZADA" ? "Realizada" : "Cancelada"}
                   </span>
-	                ) : (
-	                  <StatusBadge status={request.status} className={`triage-status-badge ${triageStatusTone(request)}`} />
-	                )}
-	                {request.rescheduleCount > 0 && (
-	                  <span className="prm-reschedule-badge">
-	                    {request.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${request.rescheduleCount}x`}
-	                  </span>
-	                )}
-	              </div>
+                ) : (
+                  <StatusBadge status={request.status} className={`triage-status-badge ${triageStatusTone(request)}`} />
+                )}
+                {request.rescheduleCount > 0 && (
+                  <span className="prm-reschedule-badge">
+                    {request.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${request.rescheduleCount}x`}
+                  </span>
+                )}
+              </div>
             </div>
           </article>
         ))}
@@ -3992,6 +4515,7 @@ function AdminDashboard({
           onAttendance={confirmAttendanceFromProcess}
           onReschedule={rescheduleFromPreview}
           onAssign={assignFromPreview}
+          patchRequest={patchRequest}
         />
       )}
 
@@ -4032,7 +4556,7 @@ function AdminDashboard({
   );
 }
 
-function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, requestTypes = [], scheduleDays = [], sectors = [], users = [], aiSettings = initialAiSettings }: AnyRecord) {
+function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], aiSettings = initialAiSettings }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -4042,20 +4566,23 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
   const [docDecisions, setDocDecisions] = useState({});
+  const [modalTab, setModalTab] = useState<"procedimento" | "animal">("procedimento");
+  const [savingAnimalData, setSavingAnimalData] = useState(false);
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [selectedRescheduleDate, setSelectedRescheduleDate] = useState("");
   const [attendanceData, setAttendanceData] = useState({
     microchip: normalizedRequest.animalMicrochip || normalizedRequest.animals?.find((animal) => animal.microchip)?.microchip || "",
+    receita: normalizedRequest.workflow_data?.attendancePrescription || normalizedRequest.workflowData?.attendancePrescription || "",
     note: normalizedRequest.attendanceNote || "",
   });
+  const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const [assignData, setAssignData] = useState({
     sectorId: normalizedRequest.assignedSectorId || sectors[0]?.id || "",
     userId: normalizedRequest.assignedUserId || "",
   });
+
   const canAnalyze = request.status === "NOVA";
-  const canApprove = canAnalyze;
   const canRecordAttendance = request.status === "AGENDADA";
-  const canReschedule = request.status === "AGENDADA";
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
   const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
   const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
@@ -4117,12 +4644,6 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     }));
 
   const anexos = [requerimento, ...requiredRows, ...extraDocs];
-  const hasPendingRequiredDocuments = !isInternal && requiredRows.some((item) => {
-    const decision = docDecisions[item.id];
-    if (decision === "approved") return false;
-    if (decision === "rejected") return true;
-    return item.status !== "Aprovado";
-  });
 
   const rejectionReasons = [
     "Documentação incompleta",
@@ -4133,16 +4654,15 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     "Outro",
   ];
 
-  const daysWaiting = normalizedRequest.createdAt
-    ? Math.floor((Date.now() - new Date(normalizedRequest.createdAt).getTime()) / 86400000)
-    : null;
-  const historyEntries = normalizedRequest.rawHistory.length ? normalizedRequest.rawHistory : normalizedRequest.history;
-  const operationalEvents = buildOperationalTimeline(normalizedRequest, historyEntries);
   const principalAnimal = normalizedRequest.animals?.[0] || {};
-  const operationalTags = buildOperationalTags(normalizedRequest, {
-    isInternal,
-    hasPendingRequiredDocuments,
-    daysWaiting,
+  const animalSummary = [principalAnimal.name, principalAnimal.species, principalAnimal.sex].filter(Boolean).join(" · ");
+  const wf = normalizedRequest.workflowData || normalizedRequest.workflow_data || {};
+  const [animalData, setAnimalData] = useState({
+    doencas: principalAnimal.doencas || wf.doencas || "",
+    alergias: principalAnimal.alergias || wf.alergias || "",
+    teveCrias: Boolean(principalAnimal.teveCrias || wf.teveCrias),
+    crias: (principalAnimal.crias || wf.crias || []) as { filhotes: string }[],
+    descendencia: principalAnimal.descendencia || wf.descendencia || "",
   });
 
   function statusClass(status) {
@@ -4197,23 +4717,23 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     }
   }
 
-  async function handleBundlePreview() {
+  async function handleRelatorioProcessual() {
     setBundleLoading(true);
     try {
-      const bundle = await generateDocumentBundlePdf(request);
+      const bundle = await generateRelatorioProcessualPdf(request);
       if (bundle?.dataUrl) {
         const anchor = window.document.createElement("a");
         anchor.href = bundle.dataUrl;
-        anchor.download = bundle.fileName || `juntada-${request.protocol || request.id || "processo"}.pdf`;
+        anchor.download = bundle.fileName || `relatorio-${request.protocol || request.id || "processo"}.pdf`;
         anchor.click();
       }
     } catch (error) {
-      console.error("Erro ao preparar juntada:", error);
+      console.error("Erro ao gerar relatorio processual:", error);
       const fallback = await generateFallbackBundlePdf(request, error);
       if (fallback?.dataUrl) {
         const anchor = window.document.createElement("a");
         anchor.href = fallback.dataUrl;
-        anchor.download = fallback.fileName || `juntada-${request.protocol || request.id || "processo"}.pdf`;
+        anchor.download = fallback.fileName || `relatorio-${request.protocol || request.id || "processo"}.pdf`;
         anchor.click();
       }
     } finally {
@@ -4229,8 +4749,20 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
 
   function confirmAttendanceInline(event) {
     event.preventDefault();
-    if (blockWithoutAssignment) return;
     onAttendance?.(request, attendanceData);
+  }
+
+  async function saveAnimalData() {
+    if (!patchRequest) return;
+    setSavingAnimalData(true);
+    const currentAnimals = Array.isArray(normalizedRequest.animals) ? normalizedRequest.animals : [];
+    const updatedAnimals = currentAnimals.length > 0
+      ? currentAnimals.map((a, i) => i === 0 ? { ...a, ...animalData } : a)
+      : [{ ...animalData }];
+    try {
+      await patchRequest(request.id, { animals: updatedAnimals }, "Dados clínicos do animal atualizados");
+    } catch { /* silencioso */ }
+    setSavingAnimalData(false);
   }
 
   function renderAttachments() {
@@ -4254,7 +4786,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
                 </div>
               </div>
               <div className="process-attachment-actions">
-                {anexo.available && anexo.kind !== "request" ? (
+                {anexo.available && anexo.kind !== "request" && canAnalyze ? (
                   <>
                     <button
                       className={`doc-decision-btn${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
@@ -4353,7 +4885,13 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
 
     return (
       <div className="prm-inline-panel">
-        <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Reagendar</strong>
+        <div className="prm-inline-panel-heading">
+          <div>
+            <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Reagendar atendimento</strong>
+            <p className="prm-inline-panel-note">Escolha uma nova data para a agenda.</p>
+          </div>
+          <span className="prm-reschedule-current">Atual: {normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>
+        </div>
         <label className="field">
           <span>Motivo do reagendamento</span>
           <textarea
@@ -4363,7 +4901,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
           />
         </label>
         {scheduleDays.length === 0
-          ? <p className="prm-muted-note">Nenhuma data disponível. Configure em Configurações â€º Agenda.</p>
+          ? <p className="prm-muted-note">Nenhuma data disponível. Configure em Configurações › Agenda.</p>
           : (
             <div className="reschedule-grid">
               {scheduleDays.map((day) => (
@@ -4393,282 +4931,304 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     );
   }
 
-  function renderHistoryTree() {
-    return (
-      <ol className="process-history-tree prm-operational-timeline">
-        {operationalEvents.map((item, index) => {
-          return (
-            <li key={`${item.status}-${item.at}-${index}`} className="process-history-node">
-              <span className="process-history-dot" />
-              <div className="process-history-card">
-                <div className="process-history-card-head">
-                  <strong>{item.status}</strong>
-                  {item.at && <time>{item.synthetic ? item.at : formatDateTime(item.at)}</time>}
-                </div>
-                {item.note && <p>{displayText(item.note)}</p>}
-                {item.by && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(item.by.trim()) && (
-                  <small>{displayText(item.by)}</small>
-                )}
-              </div>
-            </li>
-          );
-        })}
-      </ol>
-    );
-  }
+  const isRescheduleMode = activePanel === "reschedule";
 
   return (
     <div className="modal-backdrop">
       {activePanel === "assign" && renderAssignModal()}
-      <div className="prm-modal" role="dialog" aria-modal="true">
+      <div className={`prm-modal${isRescheduleMode ? " prm-modal--reschedule" : ""}`} role="dialog" aria-modal="true">
 
-        {/* HEADER */}
         <header className="prm-header">
-          <div className="prm-header-top">
-            <div className="prm-header-left">
-              <span className="prm-protocol">Processo #{request.protocol}</span>
-              {normalizedRequest.rescheduleCount > 0 && (
-                <span className="prm-reschedule-badge">
-                  <RefreshCw size={10} />
-                  {normalizedRequest.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${normalizedRequest.rescheduleCount}x`}
-                </span>
-              )}
+          <div className="prm-header-identity">
+            <div className="prm-header-identity-text">
+              <span className="prm-eyebrow">Processo #{normalizedRequest.protocol || request.protocol || "-"}</span>
+              <h2 className="prm-tutor-name">{displayText(normalizedRequest.tutor)}</h2>
+              {animalSummary && <p className="prm-animal-summary">{animalSummary}</p>}
             </div>
             <div className="prm-header-actions">
               <StatusBadge status={normalizedRequest.status} />
-              <button className="prm-pdf-btn" type="button" disabled={bundleLoading} onClick={handleBundlePreview}>
+              <button className="prm-pdf-btn" type="button" disabled={bundleLoading} onClick={handleRelatorioProcessual}>
                 <Download size={13} />
-                {bundleLoading ? "Preparando..." : "Baixar Prontuário"}
+                {bundleLoading ? "Preparando..." : "Relatório"}
               </button>
               <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
                 <X size={17} />
               </button>
             </div>
           </div>
-          <h2 className="prm-tutor-name">{displayText(normalizedRequest.tutor)}</h2>
-          <div className="prm-tag-strip">
-            {operationalTags.map((tag) => (
-              <span className={`prm-op-tag is-${tag.tone}`} key={tag.label}>{tag.label}</span>
-            ))}
-          </div>
+          {!isRescheduleMode && (
+            <div className="prm-header-meta" aria-label="Resumo do processo">
+              <span><strong>Tipo</strong>{requestTypeLabel(normalizedRequest)}</span>
+              <span><strong>Agenda</strong>{normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>
+              <span><strong>Responsável</strong>{displayText(normalizedRequest.responsible) || "-"}</span>
+            </div>
+          )}
         </header>
 
-        {/* QUICK ACTIONS ZONE */}
-        <div className="prm-actions-zone">
-          {isInternal && (
-            <p className="prm-internal-notice"><AlertCircle size={13} /> Solicitação interna - documentos não obrigatórios para avançar.</p>
+        <div className="prm-body">
+
+          {canAnalyze && activePanel === "reject" && (
+            <div className="prm-inline-panel prm-inline-panel--reject">
+                <strong className="prm-inline-panel-title">Indeferir solicitação</strong>
+                <label className="field">
+                  <span>Motivo</span>
+                  <select value={rejectData.category} onChange={(e) => setRejectData((d) => ({ ...d, category: e.target.value }))}>
+                    <option value="">Selecione o motivo...</option>
+                    {rejectionReasons.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Observação</span>
+                  <textarea value={rejectData.note} onChange={(e) => setRejectData((d) => ({ ...d, note: e.target.value }))} placeholder="Detalhe o motivo se necessário..." />
+                </label>
+                <div className="prm-inline-actions">
+                  <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
+                  <button className="secondary-action danger-action" type="button" disabled={!rejectData.category} onClick={confirmRejectInline}>Confirmar indeferimento</button>
+                </div>
+              </div>
           )}
 
-          {activePanel === "reschedule" && renderInlineReschedule()}
-          {activePanel === "reject" && (
-            <div className="prm-inline-panel">
-              <strong className="prm-inline-panel-title">Indeferir solicitação</strong>
-              <label className="field">
-                <span>Motivo</span>
-                <select value={rejectData.category} onChange={(e) => setRejectData((d) => ({ ...d, category: e.target.value }))}>
-                  <option value="">Selecione o motivo...</option>
-                  {rejectionReasons.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </label>
-              <label className="field">
-                <span>Observação interna</span>
-                <textarea value={rejectData.note} onChange={(e) => setRejectData((d) => ({ ...d, note: e.target.value }))} placeholder="Detalhe o motivo se necessário..." />
-              </label>
-              <div className="prm-inline-actions">
-                <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
-                <button className="secondary-action danger-action" type="button" disabled={!rejectData.category} onClick={confirmRejectInline}>Confirmar indeferimento</button>
-              </div>
+          {isRescheduleMode && (
+            <div className="prm-inline-panel-wrap">{renderInlineReschedule()}</div>
+          )}
+
+          {!isRescheduleMode && !isRescheduleMode && (
+            <div className="prm-tabs">
+              <button
+                type="button"
+                className={`prm-tab${modalTab === "procedimento" ? " prm-tab--active" : ""}`}
+                onClick={() => setModalTab("procedimento")}
+              >
+                <ClipboardList size={13} /> Procedimento
+              </button>
+              <button
+                type="button"
+                className={`prm-tab${modalTab === "animal" ? " prm-tab--active" : ""}`}
+                onClick={() => setModalTab("animal")}
+              >
+                <PawPrint size={13} /> Dados do Animal
+              </button>
             </div>
           )}
 
-          <div className="prm-actions-btns">
-            {canAnalyze && (
-              <>
-                <button
-                  className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
-                  type="button"
-                  onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
-                >
-                  <ClipboardList size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
-                </button>
-                {activePanel !== "reject" && (
+          {!isRescheduleMode && modalTab === "procedimento" && (
+            <>
+              {anexos.length > 0 && (
+                <div className="prm-section prm-section--documents">
+                  <div className="prm-section-head">
+                    <p className="prm-section-label"><FileText size={13} /> Documentos</p>
+                    <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
+                  </div>
+                  {renderAttachments()}
+                </div>
+              )}
+
+              {canRecordAttendance && (
+                <div className="prm-section prm-section--procedure">
+                  <div className="prm-section-head">
+                    <p className="prm-section-label"><ClipboardList size={13} /> Procedimento</p>
+                    <span className="prm-section-count">Atendimento</span>
+                  </div>
+                  <div className="prm-procedure-fields">
+                    <label className="field">
+                      <span>Microchip</span>
+                      <input
+                        value={attendanceData.microchip}
+                        onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+                        placeholder="Código aplicado ou lido"
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Observação</span>
+                      <textarea
+                        value={attendanceData.note}
+                        onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
+                        rows={2}
+                      />
+                    </label>
+                  </div>
+                </div>
+              )}
+
+              {!canAnalyze && !canRecordAttendance && anexos.length === 0 && (
+                <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
+              )}
+            </>
+          )}
+
+          {!isRescheduleMode && modalTab === "animal" && (
+            <div className="prm-section prm-section--animal-data">
+              <div className="prm-animal-data-grid">
+                <label className="field prm-animal-field--full">
+                  <span>Doenças pré-existentes</span>
+                  <textarea
+                    value={animalData.doencas}
+                    onChange={(e) => setAnimalData((d) => ({ ...d, doencas: e.target.value }))}
+                    placeholder="Ex: diabetes, displasia, cardiopatia..."
+                    rows={2}
+                  />
+                </label>
+                <label className="field prm-animal-field--full">
+                  <span>Alergias conhecidas</span>
+                  <textarea
+                    value={animalData.alergias}
+                    onChange={(e) => setAnimalData((d) => ({ ...d, alergias: e.target.value }))}
+                    placeholder="Ex: alergia a penicilina, sensibilidade a frango..."
+                    rows={2}
+                  />
+                </label>
+                <div className="prm-animal-field--full prm-crias-block">
+                  <div className="prm-crias-toggle-row">
+                    <span className="prm-crias-toggle-label">Já teve crias?</span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={animalData.teveCrias}
+                      className={`prm-toggle${animalData.teveCrias ? " prm-toggle--on" : ""}`}
+                      onClick={() => setAnimalData((d) => ({ ...d, teveCrias: !d.teveCrias, crias: !d.teveCrias ? (d.crias.length ? d.crias : [{ filhotes: "" }]) : d.crias }))}
+                    >
+                      <span className="prm-toggle-thumb" />
+                    </button>
+                  </div>
+                  {animalData.teveCrias && (
+                    <div className="prm-crias-list">
+                      {animalData.crias.map((cria, i) => (
+                        <div key={i} className="prm-cria-row">
+                          <span className="prm-cria-label">Cria {i + 1}</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={cria.filhotes}
+                            onChange={(e) => setAnimalData((d) => {
+                              const next = d.crias.map((c, ci) => ci === i ? { ...c, filhotes: e.target.value } : c);
+                              return { ...d, crias: next };
+                            })}
+                            placeholder="Filhotes"
+                            className="prm-cria-input"
+                          />
+                          <span className="prm-cria-suffix">filhotes</span>
+                          {animalData.crias.length > 1 && (
+                            <button
+                              type="button"
+                              className="prm-cria-remove"
+                              onClick={() => setAnimalData((d) => ({ ...d, crias: d.crias.filter((_, ci) => ci !== i) }))}
+                              aria-label="Remover cria"
+                            >
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        className="prm-cria-add"
+                        onClick={() => setAnimalData((d) => ({ ...d, crias: [...d.crias, { filhotes: "" }] }))}
+                      >
+                        <Plus size={13} /> Adicionar cria
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <label className="field prm-animal-field--full">
+                  <span>Descendência / observações reprodutivas</span>
+                  <textarea
+                    value={animalData.descendencia}
+                    onChange={(e) => setAnimalData((d) => ({ ...d, descendencia: e.target.value }))}
+                    placeholder="Informações sobre descendência, histórico reprodutivo..."
+                    rows={2}
+                  />
+                </label>
+              </div>
+              {patchRequest && (
+                <div className="prm-animal-save-row">
                   <button
-                    className="prm-action-btn prm-action-btn--ghost-danger"
                     type="button"
-                    disabled={blockWithoutAssignment}
-                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
-                    onClick={() => setActivePanel("reject")}
+                    className="prm-action-btn prm-action-btn--secondary"
+                    onClick={saveAnimalData}
+                    disabled={savingAnimalData}
                   >
-                    Indeferir
+                    {savingAnimalData ? "Salvando..." : "Salvar dados do animal"}
                   </button>
-                )}
-                {canApprove && activePanel !== "reject" && (
-                  <button
-                    className="prm-action-btn prm-action-btn--primary"
-                    type="button"
-                    disabled={blockWithoutAssignment}
-                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar agenda"}
-                    onClick={() => onApprove?.(request)}
-                  >
-                    <CheckCircle2 size={15} /> Confirmar Agenda
-                  </button>
-                )}
-              </>
-            )}
-            {canRecordAttendance && (
-              <>
-                <button
-                  className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
-                  type="button"
-                  onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
-                >
-                  <ClipboardList size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
-                </button>
-                {canReschedule && (
-                  <button
-                    className={`prm-action-btn prm-action-btn--ghost${activePanel === "reschedule" ? " is-active" : ""}`}
-                    type="button"
-                    disabled={blockWithoutAssignment}
-                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Reagendar"}
-                    onClick={() => setActivePanel(activePanel === "reschedule" ? null : "reschedule")}
-                  >
-                    <RefreshCw size={15} /> Reagendar
-                  </button>
-                )}
-                <button
-                  className="prm-action-btn prm-action-btn--warning"
-                  type="button"
-                  disabled={blockWithoutAssignment}
-                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Registrar não comparecimento"}
-                  onClick={() => onArchive?.(request, "NAO_COMPARECEU", "Não comparecimento registrado")}
-                >
-                  Não compareceu
-                </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {!isRescheduleMode && (
+          <footer className="prm-footer">
+          {canAnalyze && (
+            <>
+              <button
+                className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
+                type="button"
+                onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
+              >
+                <ClipboardList size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
+              </button>
+              {activePanel !== "reject" && (
                 <button
                   className="prm-action-btn prm-action-btn--ghost-danger"
                   type="button"
                   disabled={blockWithoutAssignment}
-                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Cancelar procedimento"}
-                  onClick={() => onArchive?.(request, "CANCELADA", "Procedimento cancelado")}
+                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
+                  onClick={() => setActivePanel("reject")}
                 >
-                  Cancelar
+                  Indeferir
                 </button>
+              )}
+              {activePanel !== "reject" && (
                 <button
                   className="prm-action-btn prm-action-btn--primary"
                   type="button"
                   disabled={blockWithoutAssignment}
-                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar comparecimento"}
-                  onClick={confirmAttendanceInline}
+                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar agenda"}
+                  onClick={() => onApprove?.(request)}
                 >
-                  <CheckCircle2 size={15} /> Confirmar comparecimento
+                  <CheckCircle2 size={15} /> Confirmar Agenda
                 </button>
-              </>
-            )}
-            {!canAnalyze && !canRecordAttendance && (
-              <p className="prm-muted-note">Nenhuma ação pendente neste momento.</p>
-            )}
-          </div>
-        </div>
-
-        {/* CONTENT */}
-        <div className="prm-content">
-          <div className="prm-content-main">
-            {canRecordAttendance && activePanel !== "reschedule" && (
-              <div className="prm-section">
-                <p className="prm-section-label"><ClipboardList size={13} /> Dados do procedimento</p>
-                <label className="field">
-                  <span>Código do microchip</span>
-                  <input
-                    value={attendanceData.microchip}
-                    onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
-                    placeholder="Informe o código aplicado ou lido"
-                  />
-                </label>
-                <label className="field">
-                  <span>Observação interna</span>
-                  <textarea value={attendanceData.note} onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))} />
-                </label>
-              </div>
-            )}
-            {anexos.length > 0 && (
-              <div className="prm-section">
-                <p className="prm-section-label"><FileText size={13} /> Documentos ({anexos.length})</p>
-                {renderAttachments()}
-              </div>
-            )}
-            {!canAnalyze && !canRecordAttendance && anexos.length === 0 && (
-              <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
-            )}
-            <div className="prm-section prm-section--timeline">
-              <p className="prm-section-label"><Clock size={13} /> Timeline operacional</p>
-              {operationalEvents.length > 0 ? renderHistoryTree() : <p className="prm-muted-note">Nenhum evento operacional registrado.</p>}
-            </div>
-          </div>
-
-          <div className="prm-content-side">
-            {normalizedRequest.animals.length > 0 && (
-              <div className="prm-side-block">
-                <p className="prm-side-label"><PawPrint size={13} />Animais</p>
-                <div className="prm-animals-list">
-                  {normalizedRequest.animals.map((animal, i) => (
-                    <div className="prm-animal-card" key={i}>
-                      <span className="prm-animal-name">{displayText(animal.name) || "Sem nome"}</span>
-                      <div className="prm-animal-tags">
-                        {animal.species && <span>{displayText(animal.species)}</span>}
-                        {animal.sex && <span>{displayText(animal.sex)}</span>}
-                        {animal.size && <span>{displayText(animal.size)}</span>}
-                        {(animal.breedDescription || animal.breedType) && <span>{displayText(animal.breedDescription || animal.breedType)}</span>}
-                        {(animal.birthDate || animal.age) && <span>{animal.birthDate || animal.age}</span>}
-                        {(animal.procedure || normalizedRequest.type) && (
-                          <span className="prm-tag--proc">{displayText(animal.procedure || getRequestTypeName(normalizedRequest, requestTypes))}</span>
-                        )}
-                        {animal.microchip && <span className="prm-tag--chip">Chip: {animal.microchip}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="prm-side-block">
-              <p className="prm-side-label"><User size={13} />Tutor</p>
-              <div className="prm-side-facts">
-                <span><strong>Nome</strong>{displayText(normalizedRequest.tutor)}</span>
-                {normalizedRequest.cpf && <span><strong>CPF</strong>{normalizedRequest.cpf}</span>}
-                {normalizedRequest.phone && <span><strong>Telefone</strong>{normalizedRequest.phone}</span>}
-                {[normalizedRequest.address, normalizedRequest.neighborhood, normalizedRequest.city].filter(Boolean).length > 0 && (
-                  <span><strong>Endereço</strong>{[normalizedRequest.address, normalizedRequest.neighborhood, normalizedRequest.city].filter(Boolean).join(" - ")}</span>
-                )}
-              </div>
-            </div>
-
-            <div className="prm-side-block">
-              <p className="prm-side-label"><ClipboardList size={13} />Processo</p>
-              <div className="prm-side-facts">
-                <span><strong>Status</strong>{statusLabels[normalizedRequest.status] || normalizedRequest.status}</span>
-                <span><strong>Protocolo</strong>{normalizedRequest.protocol}</span>
-                {normalizedRequest.createdAt && <span><strong>Abertura</strong>{formatDateTime(normalizedRequest.createdAt)}</span>}
-                <span><strong>Setor</strong>{displayText(normalizedRequest.assignedSectorName) || "Sem setor"}</span>
-                <span><strong>Responsável</strong>{displayText(normalizedRequest.responsible) || "Não atribuído"}</span>
-              </div>
-            </div>
-
-            <div className="prm-side-block">
-              <p className="prm-side-label"><Paperclip size={13} />Anexos</p>
-              <div className="prm-side-facts">
-                <span><strong>Total</strong>{anexos.length}</span>
-                <span><strong>Pendentes</strong>{anexos.filter((item) => item.status === "Não enviado" || item.status === "Aguardando análise").length}</span>
-              </div>
-            </div>
-
-            <div className="prm-side-block">
-              <p className="prm-side-label"><FileText size={13} />Observações</p>
-              <div className="prm-side-facts">
-                <span>{displayText(normalizedRequest.attendanceNote || normalizedRequest.rejectionNote || normalizedRequest.notes || "Sem observações internas")}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+              )}
+            </>
+          )}
+          {canRecordAttendance && (
+            <>
+              <button
+                className="prm-action-btn prm-action-btn--warning"
+                type="button"
+                onClick={() => onArchive?.(request, "NAO_COMPARECEU", "Não comparecimento registrado")}
+              >
+                Não compareceu
+              </button>
+              <button
+                className="prm-action-btn prm-action-btn--ghost"
+                type="button"
+                onClick={() => setActivePanel("reschedule")}
+              >
+                <RefreshCw size={15} /> Reagendar
+              </button>
+              <button
+                className="prm-action-btn prm-action-btn--secondary"
+                type="button"
+                onClick={() => setPrescriptionModalOpen(true)}
+              >
+                <FileText size={15} /> Emitir Receita{attendanceData.receita && <CheckCircle2 size={13} style={{ marginLeft: 5, color: "#15803d" }} />}
+              </button>
+              <button
+                className="prm-action-btn prm-action-btn--primary"
+                type="button"
+                disabled={blockWithoutAssignment}
+                title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar atendimento"}
+                onClick={confirmAttendanceInline}
+              >
+                <CheckCircle2 size={15} /> Confirmar atendimento
+              </button>
+            </>
+          )}
+          {!canAnalyze && !canRecordAttendance && (
+            <p className="prm-muted-note">Nenhuma ação pendente.</p>
+          )}
+          </footer>
+        )}
 
         {previewAttachment && (
           <DocumentPreviewModal
@@ -4677,66 +5237,17 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
           />
         )}
       </div>
+
+      {prescriptionModalOpen && (
+        <PrescriptionModal
+          request={request}
+          initialText={attendanceData.receita}
+          onSave={(text) => setAttendanceData((d) => ({ ...d, receita: text }))}
+          onClose={() => setPrescriptionModalOpen(false)}
+        />
+      )}
     </div>
   );
-}
-function buildOperationalTimeline(request: AnyRecord = {}, historyEntries: any[] = []) {
-  const events = [];
-  if (request.createdAt) {
-    events.push({
-      status: "Solicitação criada",
-      note: `Protocolo ${request.protocol || "sem protocolo"}`,
-      by: request.tutor || "",
-      at: request.createdAt,
-    });
-  }
-  historyEntries.forEach((entry) => {
-    if (entry && typeof entry === "object") {
-      events.push({
-        status: statusLabels[entry.status] || workflowTagLabels[entry.status] || entry.status || "Registro operacional",
-        note: entry.notes || entry.note || "",
-        by: entry.by || "",
-        at: entry.at || entry.createdAt || "",
-      });
-      return;
-    }
-    const text = String(entry || "");
-    const parts = text.split(" - ");
-    const status = parts.shift() || "Registro operacional";
-    const at = parts.find((part) => /\d{4}-\d{2}-\d{2}T/.test(part)) || "";
-    const byPart = parts.find((part) => part.trim().startsWith("por "));
-    const note = parts.filter((part) => part !== at && part !== byPart).join(" - ");
-    events.push({
-      status: statusLabels[status] || workflowTagLabels[status] || displayText(status.replaceAll("_", " ").toLowerCase()),
-      note,
-      by: byPart ? byPart.replace(/^por\s+/i, "") : "",
-      at,
-    });
-  });
-  if (request.preferredSchedule) {
-    events.push({
-      status: requestHasTag(request, "REAGENDADA") ? "Reagendamento" : "Agendamento",
-      note: request.preferredSchedule,
-      by: request.responsible || "",
-      at: request.updatedAt || request.createdAt || "",
-    });
-  }
-  if ((request.status === "REALIZADA" || request.status === "CANCELADA") && !events.some((event) => ["Procedimento executado", "Cancelamento", "Indeferimento", "Conclusão"].includes(event.status))) {
-    const cancelReason = request.workflow_data?.cancelReason || request.workflowData?.cancelReason || "";
-    events.push({
-      status: request.status === "REALIZADA" ? "Procedimento executado" : cancelReason === "Indeferido" ? "Indeferimento" : "Cancelamento",
-      note: request.attendanceNote || request.rejectionNote || cancelReason || "",
-      by: request.responsible || "",
-      at: request.updatedAt || "",
-    });
-  }
-  return events
-    .filter((event) => event.status || event.note)
-    .sort((left, right) => {
-      const leftTime = left.at ? new Date(left.at).getTime() : 0;
-      const rightTime = right.at ? new Date(right.at).getTime() : 0;
-      return leftTime - rightTime;
-    });
 }
 
 function PwaInstallPrompt() {
@@ -4818,22 +5329,196 @@ function PwaInstallPrompt() {
   );
 }
 
-function buildOperationalTags(request: AnyRecord = {}, context: AnyRecord = {}) {
-  const tags = [];
-  if (request.rescheduleCount > 0) tags.push({ label: request.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${request.rescheduleCount}x`, tone: "warn" });
-  if (context.daysWaiting >= 7 && request.status !== "REALIZADA" && request.status !== "CANCELADA") tags.push({ label: "Prioritário", tone: "danger" });
-  if (context.isInternal) tags.push({ label: "Interno", tone: "info" });
-  if (context.hasPendingRequiredDocuments) tags.push({ label: "Falta documento", tone: "warn" });
-  if (request.animalMicrochip || request.animals?.some((animal: AnyRecord) => animal.microchip)) tags.push({ label: "Microchipado", tone: "ok" });
-  if (requestHasTag(request, "PRIORIDADE")) tags.push({ label: "Urgente", tone: "danger" });
-  return tags;
-}
 
 function getPerformedProceduresLabel(request: AnyRecord = {}) {
   const animals = Array.isArray(request.animals) ? request.animals : [];
   const procedures = animals.map((animal) => animal.procedure).filter(Boolean);
   const uniqueProcedures = [...new Set(procedures)];
   return uniqueProcedures.length ? uniqueProcedures.join(", ") : request.type || request.request_type || "Procedimento realizado";
+}
+
+function PrescriptionModal({ request, initialText, onSave, onClose }: AnyRecord) {
+  const normalizedRequest = normalizeRequest(request);
+  const principalAnimal = normalizedRequest.animals?.[0] || {};
+  const [text, setText] = useState(initialText || "");
+  const [previewDoc, setPreviewDoc] = useState(null);
+  const [generating, setGenerating] = useState(false);
+
+  async function handleGenerate() {
+    if (!text.trim()) return;
+    setGenerating(true);
+    try {
+      setPreviewDoc(await generatePrescriptionPdf(request, text));
+    } catch (err) {
+      console.error("Erro ao gerar receita:", err);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  function handleSave() {
+    onSave(text);
+    onClose();
+  }
+
+  const animalLabel = [principalAnimal.name, principalAnimal.species, principalAnimal.sex].filter(Boolean).join(" · ");
+
+  return (
+    <div className="modal-backdrop">
+      <div className="prescription-modal" role="dialog" aria-modal="true">
+        <header className="prescription-modal-header">
+          <div className="prescription-modal-title">
+            <h2>Receita Veterinária</h2>
+            {animalLabel && <p>{animalLabel} · {displayText(normalizedRequest.tutor)}</p>}
+          </div>
+          <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
+            <X size={17} />
+          </button>
+        </header>
+
+        <div className="prescription-modal-body">
+          <div className="prescription-patient-strip">
+            <div className="prescription-patient-tag">
+              <strong>{displayText(principalAnimal.name) || "Animal"}</strong>
+              {principalAnimal.species && <span>{displayText(principalAnimal.species)}</span>}
+              {principalAnimal.sex && <span>{displayText(principalAnimal.sex)}</span>}
+              {(normalizedRequest.animalMicrochip || principalAnimal.microchip) && (
+                <span className="prescription-chip-tag">Chip: {normalizedRequest.animalMicrochip || principalAnimal.microchip}</span>
+              )}
+            </div>
+            {request.protocol && <span className="prescription-proto">#{request.protocol}</span>}
+          </div>
+
+          <div className="prescription-rx-area">
+            <span className="prescription-rx-symbol">Rx</span>
+            <label className="field prescription-field">
+              <span>Prescrição</span>
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={"1. Amoxicilina 50mg - 1 comprimido a cada 8h por 7 dias\n2. Meloxicam 0,5mg/kg - 1x ao dia por 3 dias\n\nOrientacoes: manter em repouso nas primeiras 24h..."}
+                rows={10}
+                autoFocus
+              />
+            </label>
+          </div>
+
+          <div className="prescription-sig-row">
+            <span className="prescription-date">{new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}</span>
+            <div className="prescription-sig-line"><span>Responsável técnico</span></div>
+          </div>
+        </div>
+
+        <footer className="prescription-modal-footer">
+          <button className="ghost-button" type="button" onClick={onClose}>Cancelar</button>
+          <button className="prm-action-btn prm-action-btn--secondary" type="button" onClick={handleSave}>
+            Salvar
+          </button>
+          <button
+            className="prm-action-btn prm-action-btn--primary"
+            type="button"
+            disabled={!text.trim() || generating}
+            onClick={handleGenerate}
+          >
+            <FileText size={15} />
+            {generating ? "Gerando..." : "Gerar PDF"}
+          </button>
+        </footer>
+      </div>
+
+      {previewDoc && (
+        <DocumentPreviewModal
+          document={previewDoc}
+          onClose={() => setPreviewDoc(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+async function generatePrescriptionPdf(request: AnyRecord = {}, prescriptionText: string = "") {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
+
+  const normalizedRequest = normalizeRequest(request);
+  const animal = normalizedRequest.animals?.[0] || {};
+  const microchip = normalizedRequest.animalMicrochip || animal.microchip || "";
+
+  const colors = {
+    ink: rgb(0.09, 0.13, 0.15),
+    muted: rgb(0.42, 0.49, 0.55),
+    green: rgb(0.07, 0.43, 0.21),
+    greenDark: rgb(0.04, 0.27, 0.13),
+    greenSoft: rgb(0.94, 0.99, 0.96),
+    greenLight: rgb(0.82, 0.97, 0.88),
+    line: rgb(0.82, 0.89, 0.93),
+    white: rgb(1, 1, 1),
+  };
+
+  const pageSize: [number, number] = [595.28, 841.89];
+  const page = pdf.addPage(pageSize);
+  const margin = 50;
+  const width = pageSize[0] - margin * 2;
+  let y = pageSize[1] - margin;
+
+  const headerH = 64;
+  page.drawRectangle({ x: margin, y: y - headerH, width, height: headerH, color: colors.greenDark });
+  page.drawRectangle({ x: margin + width * 0.58, y: y - headerH, width: width * 0.42, height: headerH, color: colors.green });
+  page.drawText("RECEITA VETERINARIA", { x: margin + 14, y: y - 26, size: 17, font: bold, color: colors.white });
+  page.drawText("Sistema Municipal de Bem-Estar Animal", { x: margin + 14, y: y - 46, size: 8, font, color: rgb(0.78, 1, 0.87) });
+  if (request.protocol) {
+    const protoText = pdfText(request.protocol);
+    const boxW = 112;
+    const boxX = margin + width - boxW - 12;
+    page.drawRectangle({ x: boxX, y: y - headerH + 10, width: boxW, height: 44, color: colors.greenDark, borderColor: colors.greenLight, borderWidth: 1 });
+    page.drawText("PROTOCOLO", { x: boxX + 10, y: y - headerH + 38, size: 7, font: bold, color: rgb(0.78, 1, 0.87) });
+    page.drawText(protoText, { x: boxX + 10, y: y - headerH + 20, size: 12, font: bold, color: colors.white });
+  }
+  y = y - headerH - 18;
+
+  const patBoxH = 72;
+  page.drawRectangle({ x: margin, y: y - patBoxH, width, height: patBoxH, color: colors.greenSoft, borderColor: rgb(0.8, 0.94, 0.85), borderWidth: 1 });
+  page.drawRectangle({ x: margin, y: y - patBoxH, width: 4, height: patBoxH, color: colors.green });
+  page.drawText("PACIENTE", { x: margin + 14, y: y - 14, size: 7, font: bold, color: colors.green });
+  page.drawText(pdfText(animal.name || "Sem nome"), { x: margin + 14, y: y - 30, size: 12, font: bold, color: colors.ink });
+  const speciesLine = [animal.species && `Especie: ${pdfText(animal.species)}`, animal.sex && `Sexo: ${pdfText(animal.sex)}`, microchip && `Microchip: ${pdfText(microchip)}`].filter(Boolean).join("   ");
+  if (speciesLine) page.drawText(speciesLine, { x: margin + 14, y: y - 46, size: 9, font, color: colors.ink });
+  page.drawText(`Tutor: ${pdfText(normalizedRequest.tutor || "-")}`, { x: margin + 14, y: y - 62, size: 9, font, color: colors.muted });
+  y = y - patBoxH - 26;
+
+  page.drawText("Rx", { x: margin, y, size: 36, font: italic, color: colors.green });
+  y = y - 16;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + width, y }, thickness: 0.5, color: colors.line });
+  y = y - 20;
+
+  for (const line of prescriptionText.split("\n")) {
+    if (y < margin + 100) break;
+    if (!line.trim()) { y -= 10; continue; }
+    const isMed = /^\d+[\.\-\)]/.test(line.trim());
+    page.drawText(pdfText(line.slice(0, 88)), { x: margin + 10, y, size: isMed ? 11 : 9, font: isMed ? bold : font, color: colors.ink });
+    y -= isMed ? 20 : 15;
+  }
+
+  const footerY = margin + 90;
+  page.drawLine({ start: { x: margin, y: footerY }, end: { x: margin + width, y: footerY }, thickness: 0.5, color: colors.line });
+  page.drawText(pdfText(new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })), { x: margin, y: footerY - 16, size: 9, font, color: colors.muted });
+  const sigX = margin + width / 2 - 60;
+  const sigY = footerY - 56;
+  page.drawLine({ start: { x: sigX, y: sigY }, end: { x: sigX + 120, y: sigY }, thickness: 0.5, color: colors.ink });
+  page.drawText("Responsavel tecnico", { x: sigX + 10, y: sigY - 14, size: 8, font, color: colors.muted });
+  page.drawText("Sistema municipal", { x: margin, y: margin - 12, size: 7, font, color: colors.muted });
+  page.drawText(`Receita Veterinaria${request.protocol ? ` - ${pdfText(request.protocol)}` : ""}`, { x: margin + width - 160, y: margin - 12, size: 7, font, color: colors.muted });
+
+  return {
+    documentName: "Receita Veterinaria",
+    fileName: `Receita ${pdfText(request.protocol || "")}.pdf`.trim(),
+    fileType: "application/pdf",
+    eyebrow: "Receita",
+    dataUrl: uint8ArrayToDataUrl(await pdf.save(), "application/pdf"),
+  };
 }
 
 function AdoptionView({
@@ -4867,6 +5552,7 @@ function AdoptionView({
   const emptyAdoptionModalForm = {
     tutor: "", cpf: "", cep: "", number: "", address: "", neighborhood: "", city: "", state: "", email: "", phone: "",
     procedimentos: "", adopted_at: new Date().toISOString().slice(0, 10),
+    doencas: "", alergias: "", teveCrias: false, crias: [] as { filhotes: string }[], comportamento: "", vacinas: "",
   };
   const [adoptionConfirmModal, setAdoptionConfirmModal] = useState(null);
   const [adoptionModalForm, setAdoptionModalForm] = useState(emptyAdoptionModalForm);
@@ -5181,23 +5867,30 @@ function AdoptionView({
     }
   }
 
+  const totalInterests = adoptionAnimals.reduce(
+    (sum, animal) => sum + (Array.isArray(animal.interests) ? animal.interests.length : 0), 0
+  );
+
   return (
     <section className="content-grid adoption-workspace">
-      <div className="hero-panel adoption-hero">
-        <video className="pet-welcome-video" autoPlay muted loop playsInline preload="metadata" poster="https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=1400&q=80">
-          <source src="https://assets.mixkit.co/videos/preview/mixkit-dog-catches-a-ball-in-a-river-1494-large.mp4" type="video/mp4" />
-        </video>
-        <div className="pet-video-shade" />
-        <div className="adoption-hero-copy">
-          <span className="eyebrow">Adoção responsável</span>
-          <h2>Adicione pets para adoção</h2>
-          <p>Gerencie animais disponíveis, interessados e confirmações de adoção em uma área mais clara e rápida de operar.</p>
-          <div className="adoption-hero-stats" aria-label="Resumo da adoção">
-            <span><strong>{availableAnimals.length}</strong> disponíveis</span>
-            <span><strong>{adoptedAnimals.length}</strong> adotados</span>
-            <span><strong>{adoptionAnimals.reduce((sum, animal) => sum + (Array.isArray(animal.interests) ? animal.interests.length : 0), 0)}</strong> interessados</span>
+      <div className="adoption-toolbar">
+        <div className="adoption-toolbar-left">
+          <span className="cr-title-kicker">
+            <HeartHandshake size={13} /> Adoção responsável
+          </span>
+          <h2 className="cr-title">Galeria de adoção</h2>
+          <div className="cr-stats-row" style={{ marginTop: 4 }}>
+            <span>{availableAnimals.length} disponíveis</span>
+            {adoptedAnimals.length > 0 && <span className="cr-stat-ok">{adoptedAnimals.length} adotados</span>}
+            {totalInterests > 0 && <span>{totalInterests} interessados</span>}
           </div>
         </div>
+        {canManageAdoptions && (
+          <button className="primary-action" type="button" onClick={openAnimalForm}>
+            <Plus size={16} />
+            Cadastrar animal
+          </button>
+        )}
       </div>
 
       {canManageAdoptions && isFormOpen && (
@@ -5287,48 +5980,48 @@ function AdoptionView({
       )}
 
       {canManageAdoptions && (
-        <div className="adoption-filter-rail internal-adoption-filters" aria-label="Filtros internos de adoção">
+        <nav className="adoption-nav" aria-label="Filtros de adoção">
           <div className="adoption-filter-group" aria-label="Filtrar por status">
             {statusQuickFilters.map((filter) => {
               const Icon = filter.icon;
               return (
-                <button key={filter.value} className={adoptionTab === filter.value ? "selected" : ""} type="button" title={filter.label} aria-label={filter.label} onClick={() => setAdoptionTab(filter.value)}>
-                  <Icon size={18} />
+                <button key={filter.value} className={adoptionTab === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionTab(filter.value)}>
+                  <Icon size={15} />
                   <span>{filter.label}</span>
                 </button>
               );
             })}
           </div>
+          <div className="adoption-filter-sep" />
           <div className="adoption-filter-group" aria-label="Filtrar por espécie">
             {speciesQuickFilters.map((filter) => {
               const Icon = filter.icon;
               return (
-                <button key={`internal-species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" title={filter.label} aria-label={filter.label} onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}>
-                  <Icon size={18} />
+                <button key={`species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((c) => ({ ...c, species: filter.value }))}>
+                  <Icon size={15} />
                   <span>{filter.label}</span>
                 </button>
               );
             })}
           </div>
+          <div className="adoption-filter-sep" />
           <div className="adoption-filter-group" aria-label="Filtrar por sexo">
             {sexQuickFilters.map((filter) => {
               const Icon = filter.icon;
               return (
-                <button key={`internal-sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" title={filter.label} aria-label={filter.label} onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}>
-                  <Icon size={18} />
+                <button key={`sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((c) => ({ ...c, sex: filter.value }))}>
+                  <Icon size={15} />
                   <span>{filter.label}</span>
                 </button>
               );
             })}
           </div>
           {activeFilterCount > 0 && (
-            <button className="ghost-button adoption-clear-filters" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>Limpar filtros</button>
+            <button className="ghost-button adoption-clear-btn" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>
+              Limpar filtros
+            </button>
           )}
-          <button className="primary-action adoption-create-action" type="button" onClick={openAnimalForm}>
-            <Plus size={18} />
-            <span>Cadastrar animal</span>
-          </button>
-        </div>
+        </nav>
       )}
 
       <div className="adoption-grid">
@@ -5447,6 +6140,13 @@ function AdoptionView({
               >
                 Procedimentos
               </button>
+              <button
+                className={`adoption-confirm-tab${adoptionModalStep === 2 ? " active" : ""}`}
+                type="button"
+                onClick={() => setAdoptionModalStep(2)}
+              >
+                Dados do Animal
+              </button>
             </div>
 
             <div className="adoption-confirm-body">
@@ -5483,6 +6183,106 @@ function AdoptionView({
                       rows={6}
                     />
                   </label>
+                </div>
+              )}
+
+              {adoptionModalStep === 2 && (
+                <div className="adoption-confirm-panel">
+                  <label className="field-label">
+                    Doenças pré-existentes
+                    <textarea
+                      className="adoption-notes-textarea"
+                      value={adoptionModalForm.doencas}
+                      onChange={(e) => updateAdoptionModalForm("doencas", e.target.value)}
+                      placeholder="Ex: diabetes, displasia, cardiopatia..."
+                      rows={2}
+                    />
+                  </label>
+                  <label className="field-label">
+                    Alergias conhecidas
+                    <textarea
+                      className="adoption-notes-textarea"
+                      value={adoptionModalForm.alergias}
+                      onChange={(e) => updateAdoptionModalForm("alergias", e.target.value)}
+                      placeholder="Ex: alergia a penicilina, sensibilidade a frango..."
+                      rows={2}
+                    />
+                  </label>
+                  <label className="field-label">
+                    Vacinas aplicadas
+                    <textarea
+                      className="adoption-notes-textarea"
+                      value={adoptionModalForm.vacinas}
+                      onChange={(e) => updateAdoptionModalForm("vacinas", e.target.value)}
+                      placeholder="Ex: V8, antirrábica, giárdia..."
+                      rows={2}
+                    />
+                  </label>
+                  <label className="field-label">
+                    Comportamento
+                    <textarea
+                      className="adoption-notes-textarea"
+                      value={adoptionModalForm.comportamento}
+                      onChange={(e) => updateAdoptionModalForm("comportamento", e.target.value)}
+                      placeholder="Ex: sociável com crianças, não convive com outros animais, tímido..."
+                      rows={2}
+                    />
+                  </label>
+                  <div className="prm-crias-block">
+                    <div className="prm-crias-toggle-row">
+                      <span className="prm-crias-toggle-label">Já teve crias?</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={adoptionModalForm.teveCrias}
+                        className={`prm-toggle${adoptionModalForm.teveCrias ? " prm-toggle--on" : ""}`}
+                        onClick={() => {
+                          updateAdoptionModalForm("teveCrias", !adoptionModalForm.teveCrias);
+                          if (!adoptionModalForm.teveCrias && adoptionModalForm.crias.length === 0) updateAdoptionModalForm("crias", [{ filhotes: "" }]);
+                        }}
+                      >
+                        <span className="prm-toggle-thumb" />
+                      </button>
+                    </div>
+                    {adoptionModalForm.teveCrias && (
+                      <div className="prm-crias-list">
+                        {(adoptionModalForm.crias as { filhotes: string }[]).map((cria, i) => (
+                          <div key={i} className="prm-cria-row">
+                            <span className="prm-cria-label">Cria {i + 1}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cria.filhotes}
+                              onChange={(e) => {
+                                const next = adoptionModalForm.crias.map((c, ci) => ci === i ? { ...c, filhotes: e.target.value } : c);
+                                updateAdoptionModalForm("crias", next);
+                              }}
+                              placeholder="Filhotes"
+                              className="prm-cria-input"
+                            />
+                            <span className="prm-cria-suffix">filhotes</span>
+                            {adoptionModalForm.crias.length > 1 && (
+                              <button
+                                type="button"
+                                className="prm-cria-remove"
+                                onClick={() => updateAdoptionModalForm("crias", adoptionModalForm.crias.filter((_, ci) => ci !== i))}
+                                aria-label="Remover cria"
+                              >
+                                <X size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="prm-cria-add"
+                          onClick={() => updateAdoptionModalForm("crias", [...adoptionModalForm.crias, { filhotes: "" }])}
+                        >
+                          <Plus size={13} /> Adicionar cria
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -5547,6 +6347,9 @@ function ConfigView({
   setActive,
   currentUser = null,
   configArea = "environment",
+  configTab = "agenda",
+  setConfigTab = (_value: string | ((current: string) => string)) => {},
+  environmentTabs = environmentConfigTabs,
   selectedMunicipalityId = "",
 }) {
   const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepTutor: true, stepAgenda: true, stepDocuments: true };
@@ -5570,7 +6373,6 @@ function ConfigView({
     latitude: "",
     longitude: "",
   };
-  const [configTab, setConfigTab] = useState("agenda");
   const [configModal, setConfigModal] = useState(null);
   const [configStatusFilters, setConfigStatusFilters] = useState({});
   const [editingScheduleRuleId, setEditingScheduleRuleId] = useState(null);
@@ -5597,7 +6399,7 @@ function ConfigView({
   const [permissionModal, setPermissionModal] = useState(false);
   const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
   const [newTeamUser, setNewTeamUser] = useState(emptyTeamUser);
-  const [newMunicipality, setNewMunicipality] = useState({ name: "", state: "", active: true });
+  const [newMunicipality, setNewMunicipality] = useState({ name: "", state: "", active: true, brasao: "" });
   const [editingMunicipalityId, setEditingMunicipalityId] = useState(null);
   const [municipalitySaving, setMunicipalitySaving] = useState(false);
   const [municipalitySaveStatus, setMunicipalitySaveStatus] = useState("");
@@ -5635,15 +6437,6 @@ function ConfigView({
     group.id === configCurrentTeamUser?.permissionGroupId && group.active !== false
   );
   const canUseConfigPermissions = configCurrentPermissionGroup && !isGlobalRole(currentUser?.role);
-  const environmentTabs = [
-    { id: "agenda", label: "Agenda" },
-    { id: "requests", label: "Tipo de Solicitação" },
-    { id: "sizes", label: "Portes" },
-    { id: "species", label: "Espécies" },
-    { id: "documents", label: "Documentos Solicitados" },
-    { id: "ai", label: "IA" },
-    { id: "whatsapp", label: "WhatsApp" },
-  ].filter((tab) => tab.id !== "whatsapp" || !canUseConfigPermissions || configCurrentPermissionGroup.allowedConfigItems?.includes("whatsapp_settings"));
 
   useEffect(() => {
     if (configArea === "environment") {
@@ -5785,7 +6578,10 @@ function ConfigView({
   const currentConfigKey = configArea === "environment" ? configTab : configArea;
   const configStatusFilter = configStatusFilters[currentConfigKey] || "active";
   const filterByConfigStatus = (items = []) =>
-    items.filter((item) => (configStatusFilter === "active" ? item.active !== false : item.active === false));
+    items.filter((item) => {
+      if (configStatusFilter === "all") return true;
+      return configStatusFilter === "active" ? item.active !== false : item.active === false;
+    });
 
   function setConfigStatusFilter(value) {
     setConfigStatusFilters((current) => ({ ...current, [currentConfigKey]: value }));
@@ -6095,10 +6891,11 @@ function ConfigView({
         name: municipality.name || "",
         state: municipality.state || "",
         active: municipality.active !== false,
+        brasao: municipality.brasao || "",
       });
     } else {
       setEditingMunicipalityId(null);
-      setNewMunicipality({ name: "", state: "", active: true });
+      setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
     }
     setConfigModal("municipality");
   }
@@ -6115,7 +6912,7 @@ function ConfigView({
       if (editingMunicipalityId) {
         await patchMunicipality(editingMunicipalityId, newMunicipality);
         setEditingMunicipalityId(null);
-        setNewMunicipality({ name: "", state: "", active: true });
+        setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
         setMunicipalitySaveStatus("");
         setConfigModal(null);
         return;
@@ -6196,7 +6993,7 @@ function ConfigView({
           });
         return mergeScopedConfigItems(current, scopedRules, created.id);
       });
-      setNewMunicipality({ name: "", state: "", active: true });
+      setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
       setMunicipalitySaveStatus("");
       setConfigModal(null);
     } catch (err) {
@@ -6210,7 +7007,9 @@ function ConfigView({
   async function patchMunicipality(municipalityId, patch) {
     try {
       const updated = await api.updateMunicipality(municipalityId, patch);
-      setMunicipalities?.((current) => current.map((item) => (item.id === municipalityId ? updated : item)));
+      setMunicipalities?.((current) => current.map((item) => (
+        item.id === municipalityId ? { ...item, ...patch, ...updated } : item
+      )));
       return updated;
     } catch (err) {
       console.error("Erro ao atualizar municipio:", err);
@@ -6781,24 +7580,6 @@ function ConfigView({
 
   return (
     <section className="config-workspace">
-      {configArea === "environment" && (
-        <div className="panel wide">
-          <PanelHeader title={configAreaTitle} />
-          <div className="config-tabs" aria-label="Subabas de configurações">
-            {environmentTabs.map((tab) => (
-              <button key={tab.id} className={configTab === tab.id ? "selected" : ""} type="button" onClick={() => setConfigTab(tab.id)}>
-                {tab.label}
-              </button>
-            ))}
-            <ConfigStatusFilter
-              value={configStatusFilter}
-              onChange={setConfigStatusFilter}
-              activeCount={currentConfigItems.filter((item) => item.active !== false).length}
-              inactiveCount={currentConfigItems.filter((item) => item.active === false).length}
-            />
-          </div>
-        </div>
-      )}
 
       {configArea === "municipalities" && isGlobalRole(currentUser?.role) && (
         <div className="panel wide">
@@ -6812,27 +7593,16 @@ function ConfigView({
           </ConfigSectionHeader>
           <div className="config-editor-grid">
             {filteredMunicipalities.length === 0 && <EmptyState title="Nenhum município cadastrado" text="Cadastre um município para liberar um ambiente próprio." />}
-            {filteredMunicipalities.map((municipality) => (
-              <article className="request-type-card config-summary-card" key={municipality.id}>
-                <div className="config-card-title">
+            {filteredMunicipalities.map((municipality, index) => (
+              <article className="config-list-row" key={municipality.id} onClick={() => openMunicipalityModal(municipality)} role="button" tabIndex={0}>
+                <span className="config-list-index">{index + 1}</span>
+                <div className="config-list-main">
                   <strong>{municipality.name}</strong>
-                  <small className={municipality.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                    {municipality.active === false ? "Inativo" : "Ativo"}
-                  </small>
-                </div>
-                <div className="config-card-details">
                   <span>{municipality.state || "UF não informada"}</span>
                 </div>
-                <ToggleSwitch
-                  label="Município ativo"
-                  checked={municipality.active !== false}
-                  onChange={(checked) => patchMunicipality(municipality.id, { active: checked })}
-                  onText="Ativo"
-                  offText="Inativo"
-                />
-                <div className="form-actions">
-                  <button className="ghost-button" type="button" onClick={() => openMunicipalityModal(municipality)}>Editar</button>
-                </div>
+                <small className={municipality.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                  {municipality.active === false ? "Inativo" : "Ativo"}
+                </small>
               </article>
             ))}
           </div>
@@ -6841,32 +7611,28 @@ function ConfigView({
 
       {configArea === "environment" && configTab === "requests" && (
         <div className="panel wide">
-          <ConfigSectionHeader title="Tipos de solicitação" createLabel="Criar tipo" onCreate={() => setConfigModal("requestType")} />
+          <ConfigSectionHeader title="Tipos de solicitação" createLabel="Criar tipo" onCreate={() => setConfigModal("requestType")}>
+            <ConfigStatusFilter
+              value={configStatusFilter}
+              onChange={setConfigStatusFilter}
+              activeCount={requestTypes.filter((item) => item.active !== false).length}
+              inactiveCount={requestTypes.filter((item) => item.active === false).length}
+            />
+          </ConfigSectionHeader>
           <div className="config-editor-grid">
             {filteredRequestTypes.length === 0 && (
               <EmptyState title="Nenhum tipo configurado" text="Crie os tipos de solicitação que o tutor poderá escolher. Cada tipo define taxa e documentos exigidos." />
             )}
-            {filteredRequestTypes.map((type) => (
-              <article className="request-type-card config-summary-card" key={type.id}>
-                <div className="config-card-title">
+            {filteredRequestTypes.map((type, index) => (
+              <article className="config-list-row" key={type.id} onClick={() => { setEditingRequestTypeId(type.id); setNewRequestType({ ...emptyRequestType, ...type }); setConfigModal("requestType"); }} role="button" tabIndex={0}>
+                <span className="config-list-index">{index + 1}</span>
+                <div className="config-list-main">
                   <strong>{type.name}</strong>
-                  <small className={type.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                    {type.active === false ? "Inativo" : "Ativo"}
-                  </small>
+                  <span>{type.charged ? `Taxa: ${type.billingAmount || type.fee || "-"}` : "Gratuito"} · {(type.documents?.length || 0)} documento(s)</span>
                 </div>
-                <div className="config-card-details">
-                  <span>{type.charged ? `Taxa: ${type.billingAmount || type.fee || "-"}` : "Gratuito"}</span>
-                  {type.overrideDailyLimit && <span>Sobrepõe limite diário</span>}
-                  {type.charged && type.billingDescription && <span>{type.billingDescription}</span>}
-                  <span>{(type.documents?.length || 0)} documento(s) vinculado(s)</span>
-                </div>
-                <div className="form-actions">
-                  <button className="ghost-button" type="button" onClick={() => {
-                    setEditingRequestTypeId(type.id);
-                    setNewRequestType({ ...emptyRequestType, ...type });
-                    setConfigModal("requestType");
-                  }}>Editar</button>
-                </div>
+                <small className={type.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                  {type.active === false ? "Inativo" : "Ativo"}
+                </small>
               </article>
             ))}
           </div>
@@ -6875,37 +7641,28 @@ function ConfigView({
 
       {configArea === "environment" && configTab === "agenda" && (
         <div className="panel wide">
-          <ConfigSectionHeader title="Agenda" createLabel="Criar agenda" onCreate={() => openAgendaModal()} />
+          <ConfigSectionHeader title="Agenda" createLabel="Criar agenda" onCreate={() => openAgendaModal()}>
+            <ConfigStatusFilter
+              value={configStatusFilter}
+              onChange={setConfigStatusFilter}
+              activeCount={scheduleRules.filter((item) => item.active !== false).length}
+              inactiveCount={scheduleRules.filter((item) => item.active === false).length}
+            />
+          </ConfigSectionHeader>
           <div className="config-editor-grid">
             {filteredScheduleRules.length === 0 && (
               <EmptyState title="Nenhuma agenda cadastrada" text="Crie uma agenda para gerar dias disponíveis para castração." />
             )}
-            {filteredScheduleRules.map((rule) => (
-              <article className="request-type-card config-summary-card" key={rule.id}>
-                <div className="config-card-title">
-                  <span className="config-card-description">{rule.description}</span>
-                  <small className={rule.active ? "schedule-status active" : "schedule-status inactive"}>
-                    {rule.active ? "Ativo" : "Inativo"}
-                  </small>
+            {filteredScheduleRules.map((rule, index) => (
+              <article className="config-list-row" key={rule.id} onClick={() => openAgendaModal(rule)} role="button" tabIndex={0}>
+                <span className="config-list-index">{index + 1}</span>
+                <div className="config-list-main">
+                  <strong>{rule.description}</strong>
+                  <span>{rule.start} a {rule.end} · {sumScheduleSlotsVacancies(rule.slots, rule.time, rule.vacancies)} vagas/dia{rule.municipalityName ? ` · ${rule.municipalityName}` : ""}</span>
                 </div>
-                <div className="config-card-details">
-                  <span>{rule.kind || "Agenda"} - {rule.type}</span>
-                  <span>{rule.start} a {rule.end}</span>
-                  <span>{normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies).map((slot) => `${slot.time}h (${slot.vacancies})`).join(" | ")}</span>
-                  <span>Total: {sumScheduleSlotsVacancies(rule.slots, rule.time, rule.vacancies)} vagas/dia</span>
-                  {rule.municipalityName && <span>{rule.municipalityName}</span>}
-                  {rule.locationName && <span>{rule.locationName}</span>}
-                  {normalizeText(rule.type) === "recorrencia" && <span>{formatScheduleWeekdays(rule.weekdays)}</span>}
-                </div>
-                <div className="form-actions">
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => openAgendaModal(rule)}
-                  >
-                    Editar
-                  </button>
-                </div>
+                <small className={rule.active ? "schedule-status active" : "schedule-status inactive"}>
+                  {rule.active ? "Ativo" : "Inativo"}
+                </small>
               </article>
             ))}
           </div>
@@ -6913,11 +7670,11 @@ function ConfigView({
       )}
 
       {configArea === "environment" && configTab === "sizes" && (
-        <SimpleConfigList title="Portes" items={filteredSizes} onCreate={() => openSizeModal()} onEdit={openSizeModal} onPatch={(id, patch) => patchListItem(setSizeOptions, id, patch)} showDescription />
+        <SimpleConfigList title="Portes" items={filteredSizes} allItems={sizeOptions} filterValue={configStatusFilter} onFilterChange={setConfigStatusFilter} onCreate={() => openSizeModal()} onEdit={openSizeModal} onPatch={(id, patch) => patchListItem(setSizeOptions, id, patch)} showDescription />
       )}
 
       {configArea === "environment" && configTab === "species" && (
-        <SimpleConfigList title="Espécies" items={filteredSpecies} onCreate={() => openSpeciesModal()} onEdit={openSpeciesModal} onPatch={(id, patch) => patchListItem(setSpeciesOptions, id, patch)} />
+        <SimpleConfigList title="Espécies" items={filteredSpecies} allItems={speciesOptions} filterValue={configStatusFilter} onFilterChange={setConfigStatusFilter} onCreate={() => openSpeciesModal()} onEdit={openSpeciesModal} onPatch={(id, patch) => patchListItem(setSpeciesOptions, id, patch)} />
       )}
 
       {configArea === "sectors" && (
@@ -6935,29 +7692,21 @@ function ConfigView({
               {filteredSectors.length === 0 && (
                 <EmptyState title="Nenhum setor cadastrado" text="Crie setores para organizar usuários e atribuições internas." />
               )}
-              {filteredSectors.map((sector) => {
+              {filteredSectors.map((sector, index) => {
                 const sectorMunicipalityId = getItemMunicipalityId(sector);
                 const sectorUsers = dedupeMunicipalityItems(teams.users || []).filter((u) =>
                   getItemMunicipalityId(u) === sectorMunicipalityId && userBelongsToSector(u, sector.id)
                 );
                 return (
-                  <article className="request-type-card config-summary-card" key={`${sectorMunicipalityId}:${sector.id}`}>
-                    <div className="config-card-title">
+                  <article className="config-list-row" key={`${sectorMunicipalityId}:${sector.id}`} onClick={() => openSectorModal(sector)} role="button" tabIndex={0}>
+                    <span className="config-list-index">{index + 1}</span>
+                    <div className="config-list-main">
                       <strong>{sector.name || "Setor sem nome"}</strong>
-                      <small className={sector.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                        {sector.active === false ? "Inativo" : "Ativo"}
-                      </small>
+                      <span>{sectorUsers.length} usuário(s) vinculado(s){sectorUsers.length > 0 ? ` · ${sectorUsers.map((u) => u.name).join(", ")}` : ""}</span>
                     </div>
-                    <div className="config-card-details">
-                      <span>{sectorUsers.length} usuário(s) vinculado(s)</span>
-                      {sectorUsers.length > 0 && <span>{sectorUsers.map((u) => u.name).join(", ")}</span>}
-                      {sector.defaultMunicipalitySector && (
-                        <span className="default-user-note">Setor padrão</span>
-                      )}
-                    </div>
-                    <div className="form-actions">
-                      <button className="ghost-button" type="button" onClick={() => openSectorModal(sector)}>Editar</button>
-                    </div>
+                    <small className={sector.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                      {sector.active === false ? "Inativo" : "Ativo"}
+                    </small>
                   </article>
                 );
               })}
@@ -7013,32 +7762,18 @@ function ConfigView({
             {filteredPermissionGroups.length === 0 && (
               <EmptyState title="Nenhum grupo de permissão" text="Crie grupos para controlar menus e áreas de configuração de cada usuário." />
             )}
-            {filteredPermissionGroups.map((group) => {
+            {filteredPermissionGroups.map((group, index) => {
               const linkedUsers = (teams.users || []).filter((user) => user.permissionGroupId === group.id);
               return (
-                <article className="request-type-card config-summary-card" key={group.id}>
-                  <div className="config-card-title">
+                <article className="config-list-row" key={group.id} onClick={() => openPermissionModal(group)} role="button" tabIndex={0}>
+                  <span className="config-list-index">{index + 1}</span>
+                  <div className="config-list-main">
                     <strong>{group.name || "Grupo sem nome"}</strong>
-                    <small className={group.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                      {group.active === false ? "Inativo" : "Ativo"}
-                    </small>
+                    <span>{linkedUsers.length} usuário(s) · Menus: {(group.allowedMenuItems || []).length || 0} · Config: {(group.allowedConfigItems || []).length || 0}</span>
                   </div>
-                  <div className="config-card-details">
-                    <span>{linkedUsers.length} usuário(s) vinculado(s)</span>
-                    <span>Menus: {(group.allowedMenuItems || []).length || 0}</span>
-                    <span>Configurações: {(group.allowedConfigItems || []).length || 0}</span>
-                    {group.municipalityName && <span>{group.municipalityName}</span>}
-                  </div>
-                  <ToggleSwitch
-                    label="Grupo ativo"
-                    checked={group.active !== false}
-                    onChange={(checked) => patchPermissionGroup(group.id, { active: checked })}
-                    onText="Ativo"
-                    offText="Inativo"
-                  />
-                  <div className="form-actions">
-                    <button className="ghost-button" type="button" onClick={() => openPermissionModal(group)}>Editar</button>
-                  </div>
+                  <small className={group.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                    {group.active === false ? "Inativo" : "Ativo"}
+                  </small>
                 </article>
               );
             })}
@@ -7061,31 +7796,18 @@ function ConfigView({
               {filteredTeamUsers.length === 0 && (
                 <EmptyState title="Nenhum usuário cadastrado" text="Crie usuários internos e vincule cada um a um setor." />
               )}
-              {filteredTeamUsers.map((user) => {
-                return (
-                <article className="request-type-card config-summary-card" key={`${getItemMunicipalityId(user)}:${user.id}`}>
-                  <div className="config-card-title">
+              {filteredTeamUsers.map((user, index) => (
+                <article className="config-list-row" key={`${getItemMunicipalityId(user)}:${user.id}`} onClick={() => openTeamUserModal(user)} role="button" tabIndex={0}>
+                  <span className="config-list-index">{index + 1}</span>
+                  <div className="config-list-main">
                     <strong>{user.name || "Usuário sem nome"}</strong>
-                    <small className={user.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                      {user.active === false ? "Inativo" : "Ativo"}
-                    </small>
+                    <span>{user.email || "Sem e-mail"} · {getMunicipalityLabel(user.municipalityId, municipalities)}</span>
                   </div>
-                  <div className="config-card-details">
-                    <span>E-mail: {user.email || "Não informado"}</span>
-                    <span>Cargo: {user.role || "Analista"}</span>
-                    <span>Município: {getMunicipalityLabel(user.municipalityId, municipalities)}</span>
-                    <span>Setores: {getUserSectorNames(user, teams.sectors || [])}</span>
-                    <span>Permissão: {permissionGroups.find((group) => group.id === user.permissionGroupId)?.name || "Sem grupo"}</span>
-                    {user.defaultMunicipalityUser && (
-                      <span className="default-user-note">Usuário padrão</span>
-                    )}
-                  </div>
-                  <div className="form-actions">
-                    <button className="ghost-button" type="button" onClick={() => openTeamUserModal(user)}>Editar</button>
-                  </div>
+                  <small className={user.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                    {user.active === false ? "Inativo" : "Ativo"}
+                  </small>
                 </article>
-                );
-              })}
+              ))}
             </div>
           </div>
         </div>
@@ -7577,39 +8299,32 @@ function ConfigView({
 
       {configArea === "environment" && configTab === "documents" && (
         <div className="panel wide">
-          <ConfigSectionHeader title="Tipos de documentos" createLabel="Criar documento" onCreate={() => openDocumentModal()} />
+          <ConfigSectionHeader title="Tipos de documentos" createLabel="Criar documento" onCreate={() => openDocumentModal()}>
+            <ConfigStatusFilter
+              value={configStatusFilter}
+              onChange={setConfigStatusFilter}
+              activeCount={documentTypes.filter((item) => item.active !== false).length}
+              inactiveCount={documentTypes.filter((item) => item.active === false).length}
+            />
+          </ConfigSectionHeader>
           <div className="config-editor-grid">
             {filteredDocumentTypes.length === 0 && (
               <EmptyState title="Nenhum documento cadastrado" text="Crie documentos para vincular aos tipos de solicitação." />
             )}
-            {filteredDocumentTypes.map((document) => (
-              <article className="request-type-card config-summary-card document-summary-card" key={document.id}>
-                <div className="config-card-title">
+            {filteredDocumentTypes.map((document, index) => (
+              <article className="config-list-row" key={document.id} onClick={() => openDocumentModal(document)} role="button" tabIndex={0}>
+                <span className="config-list-index">{index + 1}</span>
+                <div className="config-list-main">
                   <strong>{document.name || "Documento sem nome"}</strong>
-                  <small className={document.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                    {document.active === false ? "Inativo" : "Ativo"}
-                  </small>
+                  <span>
+                    {document.required === false ? "Opcional" : "Obrigatório"}
+                    {document.modelHint ? ` · ${document.modelHint}` : ""}
+                    {document.aiCriteria ? " · Critérios de IA configurados" : ""}
+                  </span>
                 </div>
-                <div className="config-card-details">
-                  {document.modelHint && <span>Descrição: {document.modelHint}</span>}
-                </div>
-                <label className="field">
-                  <span>Descrição/instrução para IA</span>
-                  <textarea value={document.modelHint} onChange={(event) => patchDocumentType(document.id, { modelHint: event.target.value })} />
-                </label>
-                <label className="field">
-                  <span>Critérios obrigatórios</span>
-                  <textarea value={document.aiCriteria || ""} onChange={(event) => patchDocumentType(document.id, { aiCriteria: event.target.value })} />
-                </label>
-                <label className="field">
-                  <span>Regras de recusa</span>
-                  <textarea value={document.rejectionRules || ""} onChange={(event) => patchDocumentType(document.id, { rejectionRules: event.target.value })} />
-                </label>
-                <div className="form-actions">
-                  <button className="ghost-button" type="button" onClick={() => openDocumentModal(document)}>
-                    Editar
-                  </button>
-                </div>
+                <small className={document.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                  {document.active === false ? "Inativo" : "Ativo"}
+                </small>
               </article>
             ))}
           </div>
@@ -7631,7 +8346,7 @@ function ConfigView({
                 setConfigModal(null);
                 setEditingMunicipalityId(null);
                 setMunicipalitySaveStatus("");
-                setNewMunicipality({ name: "", state: "", active: true });
+                setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
               }}
             />
             <div className="config-modal-options">
@@ -7691,6 +8406,45 @@ function ConfigView({
               </label>
             )}
             {brazilLocationStatus && <p className="helper-text">{brazilLocationStatus}</p>}
+
+            <div className="field">
+              <span>Brasão do município</span>
+              <label className="brasao-upload-label">
+                {newMunicipality.brasao ? (
+                  <div className="brasao-preview-wrap">
+                    <img src={newMunicipality.brasao} alt="Brasão" className="brasao-preview-img" />
+                    <button
+                      type="button"
+                      className="brasao-remove-btn"
+                      onClick={() => setNewMunicipality((c) => ({ ...c, brasao: "" }))}
+                      aria-label="Remover brasão"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <div className="brasao-dropzone">
+                    <ImagePlus size={22} strokeWidth={1.4} />
+                    <span>Clique para selecionar imagem</span>
+                    <small>PNG ou JPG · recomendado 256×256px</small>
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                  style={{ display: "none" }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = () => setNewMunicipality((c) => ({ ...c, brasao: String(reader.result || "") }));
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+              </label>
+            </div>
+
             {municipalitySaveStatus && (
               <p className={municipalitySaveStatus.includes("Não") || municipalitySaveStatus.includes("Selecione") ? "form-error" : "helper-text"}>
                 {municipalitySaveStatus}
@@ -7704,7 +8458,7 @@ function ConfigView({
                   setConfigModal(null);
                   setEditingMunicipalityId(null);
                   setMunicipalitySaveStatus("");
-                  setNewMunicipality({ name: "", state: "", active: true });
+                  setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
                 }}
               >
                 Cancelar
@@ -8080,39 +8834,16 @@ function SimpleConfigList({ title, items, allItems = items, filterValue = "activ
         {items.length === 0 && (
           <EmptyState title={`Nenhum item ${filterValue === "active" ? "ativo" : "desativado"}`} text="Use o botão de criação para cadastrar novos itens nesta seção." />
         )}
-        {items.map((item) => (
-          <article className="request-type-card config-summary-card simple-summary-card" key={item.id}>
-            {showDescription && (
-              <>
-                <div className="config-card-title">
-                  <strong>{item.name}</strong>
-                  <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                    {item.active === false ? "Inativo" : "Ativo"}
-                  </small>
-                </div>
-                <div className="config-card-details">
-                  <span>{formatSizeRange(item) || "Faixa de peso não informada"}</span>
-                </div>
-              </>
-            )}
-            {!showDescription && (
-              <>
-                <div className="config-card-title">
-                  <strong>{item.name || "Item sem nome"}</strong>
-                  <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                    {item.active === false ? "Inativo" : "Ativo"}
-                  </small>
-                </div>
-                <div className="config-card-details">
-                  <span>Cadastro disponível para solicitações</span>
-                </div>
-              </>
-            )}
-            <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => onEdit?.(item)}>
-                Editar
-              </button>
+        {items.map((item, index) => (
+          <article className="config-list-row" key={item.id} onClick={() => onEdit?.(item)} role="button" tabIndex={0}>
+            <span className="config-list-index">{index + 1}</span>
+            <div className="config-list-main">
+              <strong>{item.name || "Item sem nome"}</strong>
+              {showDescription && <span>{formatSizeRange(item) || "Faixa de peso não informada"}</span>}
             </div>
+            <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
+              {item.active === false ? "Inativo" : "Ativo"}
+            </small>
           </article>
         ))}
       </div>
@@ -8121,10 +8852,16 @@ function SimpleConfigList({ title, items, allItems = items, filterValue = "activ
 }
 
 function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: AnyRecord) {
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [procedureOpen, setProcedureOpen] = useState(false);
   const [deathOpen, setDeathOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const [procedureForm, setProcedureForm] = useState({ request_type: "Castração", notes: "" });
+  const [procedureAnimalMode, setProcedureAnimalMode] = useState("current");
+  const [procedureOtherMicrochip, setProcedureOtherMicrochip] = useState("");
+  const [procedureOtherAnimal, setProcedureOtherAnimal] = useState(null as any);
+  const [procedureLookingUp, setProcedureLookingUp] = useState(false);
+  const [procedureNewAnimal, setProcedureNewAnimal] = useState({ name: "", species: "Cão", sex: "Macho", size: "Pequeno" });
   const [deathForm, setDeathForm] = useState({ death_date: "", death_cause: "", notes: "" });
   const [transferForm, setTransferForm] = useState({
     target_tutor_name: "",
@@ -8139,11 +8876,41 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
   const tutor = record.tutor || {};
   const history = Array.isArray(record.history) ? record.history : [];
 
+  async function lookupProcedureAnimal() {
+    const chip = procedureOtherMicrochip.trim();
+    if (!chip) return;
+    try {
+      setProcedureLookingUp(true);
+      setFormStatus("");
+      const result = await api.consultAnimalByMicrochip({ microchip: chip });
+      const found = result?.animal || null;
+      setProcedureOtherAnimal(found);
+      if (!found) setFormStatus("Animal não encontrado para este microchip.");
+    } catch {
+      setFormStatus("Erro ao buscar animal.");
+      setProcedureOtherAnimal(null);
+    } finally {
+      setProcedureLookingUp(false);
+    }
+  }
+
   async function submitProcedure(event) {
     event.preventDefault();
     const tutorCpf = onlyDigits(tutor.cpf || cpf);
     if (tutorCpf.length !== 11) {
       setFormStatus("CPF do tutor não está válido para abrir procedimento.");
+      return;
+    }
+    const activeAnimal =
+      procedureAnimalMode === "other" ? (procedureOtherAnimal || {})
+      : procedureAnimalMode === "new" ? procedureNewAnimal
+      : animal;
+    if (procedureAnimalMode === "other" && !procedureOtherAnimal) {
+      setFormStatus("Busque o microchip do animal antes de continuar.");
+      return;
+    }
+    if (procedureAnimalMode === "new" && !procedureNewAnimal.species) {
+      setFormStatus("Informe ao menos a espécie do animal.");
       return;
     }
     try {
@@ -8158,27 +8925,31 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
         city: tutor.city || "",
         state: tutor.state || "",
         cep: tutor.cep || "",
-        animal_id: animal.id,
-        animal_microchip: animal.microchip,
-        animal_name: animal.name,
-        species: animal.species,
-        size: animal.size,
+        animal_id: activeAnimal.id,
+        animal_microchip: activeAnimal.microchip,
+        animal_name: activeAnimal.name,
+        species: activeAnimal.species,
+        size: activeAnimal.size,
         request_type: procedureForm.request_type,
         notes: procedureForm.notes,
         tags: ["MICROCHIP"],
         workflow_data: { animal_request_type: "procedure_from_record" },
         animals: [{
-          id: animal.id,
-          microchip: animal.microchip,
-          name: animal.name,
-          species: animal.species,
-          sex: animal.sex,
-          size: animal.size,
+          id: activeAnimal.id,
+          microchip: activeAnimal.microchip,
+          name: activeAnimal.name,
+          species: activeAnimal.species,
+          sex: activeAnimal.sex,
+          size: activeAnimal.size,
           procedure: procedureForm.request_type,
         }],
       });
       setProcedureOpen(false);
       setProcedureForm({ request_type: "Castração", notes: "" });
+      setProcedureAnimalMode("current");
+      setProcedureOtherMicrochip("");
+      setProcedureOtherAnimal(null);
+      setProcedureNewAnimal({ name: "", species: "Cão", sex: "Macho", size: "Pequeno" });
       setFormStatus("Solicitação de procedimento enviada para análise.");
       onRequestCreated?.(created);
     } catch (err) {
@@ -8270,9 +9041,25 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
         </div>
         <div className="animal-record-header-tools">
           <span className="animal-status-chip">{animal.status || "ativo"}</span>
-          <button className="ghost-button animal-export-action" type="button" onClick={() => printAnimalRecordPdf(animal, tutor, history)}>
-            <Download size={16} />
-            Exportar
+          <button
+            className="icon-btn-flat"
+            type="button"
+            title="Baixar prontuário PDF"
+            disabled={downloadingPdf}
+            onClick={async () => {
+              setDownloadingPdf(true);
+              try {
+                const bundle = await generateProntuarioPdf({}, record);
+                if (bundle?.dataUrl) {
+                  const a = document.createElement("a");
+                  a.href = bundle.dataUrl;
+                  a.download = bundle.fileName || `prontuario-${animal.name || "animal"}.pdf`;
+                  a.click();
+                }
+              } catch (err) { console.error(err); } finally { setDownloadingPdf(false); }
+            }}
+          >
+            <Download size={15} />
           </button>
         </div>
       </div>
@@ -8304,35 +9091,94 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
         <InfoTile label="Eventos" value={`${history.length} registro(s)`} />
       </div>
 
-      <div className="animal-record-actions">
-        <div>
-          <strong>Ações do prontuário</strong>
-          <span>Abra novas solicitações vinculadas ao microchip.</span>
-        </div>
-        <button className="primary-action" type="button" onClick={() => { setProcedureOpen((value) => !value); setDeathOpen(false); setTransferOpen(false); }}>
-          <ClipboardCheck size={17} />
-          Solicitar procedimento
-        </button>
-        <div className="animal-record-secondary-actions">
-          <button className="secondary-action" type="button" onClick={() => { setTransferOpen((value) => !value); setProcedureOpen(false); setDeathOpen(false); }}>
-            <RefreshCw size={16} />
-            Troca de tutor
-          </button>
-          <button className="secondary-action danger-soft" type="button" onClick={() => { setDeathOpen((value) => !value); setProcedureOpen(false); setTransferOpen(false); }}>
-            <AlertCircle size={16} />
-            Registrar óbito
-          </button>
-        </div>
-      </div>
 
       {procedureOpen && (
         <div className="modal-backdrop">
           <form className="workflow-modal animal-action-modal" onSubmit={submitProcedure} role="dialog" aria-modal="true">
-            <ModalHeader title="Solicitar procedimento" subtitle={animal.name || undefined} onClose={() => setProcedureOpen(false)} />
-            <div className="detail-grid compact-detail-grid">
-              <p><span>Microchip</span>{animal.microchip || "Não informado"}</p>
-              <p><span>Tutor</span>{tutor.tutor_name || tutor.name || "Não informado"}</p>
+            <ModalHeader title="Solicitar procedimento" onClose={() => setProcedureOpen(false)} />
+
+            <div className="pac-tutor-banner">
+              <span className="pac-tutor-label">Tutor identificado</span>
+              <strong>{tutor.tutor_name || tutor.name || "Não informado"}</strong>
+              <span className="pac-tutor-cpf">{tutor.cpf ? `CPF ${tutor.cpf}` : ""}</span>
             </div>
+
+            <div className="field">
+              <span className="field-label">Para qual animal?</span>
+              <div className="pac-animal-options">
+                <label className="pac-animal-option">
+                  <input type="radio" name="animalMode" value="current" checked={procedureAnimalMode === "current"} onChange={() => { setProcedureAnimalMode("current"); setProcedureOtherAnimal(null); setProcedureOtherMicrochip(""); }} />
+                  <div className="pac-animal-option-body">
+                    <strong>Este animal</strong>
+                    <span>{[animal.name, animal.species, animal.sex].filter(Boolean).join(" · ") || animal.microchip || "Animal atual"}</span>
+                  </div>
+                </label>
+                <label className="pac-animal-option">
+                  <input type="radio" name="animalMode" value="other" checked={procedureAnimalMode === "other"} onChange={() => setProcedureAnimalMode("other")} />
+                  <div className="pac-animal-option-body">
+                    <strong>Outro animal deste tutor</strong>
+                    <span>Busque pelo microchip</span>
+                  </div>
+                </label>
+                <label className="pac-animal-option">
+                  <input type="radio" name="animalMode" value="new" checked={procedureAnimalMode === "new"} onChange={() => setProcedureAnimalMode("new")} />
+                  <div className="pac-animal-option-body">
+                    <strong>Animal ainda não cadastrado</strong>
+                    <span>Preencha os dados básicos</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            {procedureAnimalMode === "other" && (
+              <div className="pac-lookup-row">
+                <label className="field" style={{ flex: 1 }}>
+                  <span>Microchip do animal</span>
+                  <input value={procedureOtherMicrochip} onChange={(e) => { setProcedureOtherMicrochip(e.target.value); setProcedureOtherAnimal(null); }} placeholder="Número do microchip" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), lookupProcedureAnimal())} />
+                </label>
+                <button type="button" className="secondary-action" style={{ alignSelf: "flex-end" }} onClick={lookupProcedureAnimal} disabled={procedureLookingUp}>
+                  {procedureLookingUp ? "Buscando..." : "Buscar"}
+                </button>
+                {procedureOtherAnimal && (
+                  <div className="pac-found-animal">
+                    <strong>{procedureOtherAnimal.name || "Sem nome"}</strong>
+                    <span>{[procedureOtherAnimal.species, procedureOtherAnimal.sex, procedureOtherAnimal.size].filter(Boolean).join(" · ")}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {procedureAnimalMode === "new" && (
+              <div className="two-column-fields">
+                <label className="field">
+                  <span>Nome do animal</span>
+                  <input value={procedureNewAnimal.name} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, name: e.target.value }))} placeholder="Opcional" />
+                </label>
+                <label className="field">
+                  <span>Espécie</span>
+                  <select value={procedureNewAnimal.species} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, species: e.target.value }))}>
+                    <option>Cão</option>
+                    <option>Gato</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Sexo</span>
+                  <select value={procedureNewAnimal.sex} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, sex: e.target.value }))}>
+                    <option>Macho</option>
+                    <option>Fêmea</option>
+                  </select>
+                </label>
+                <label className="field">
+                  <span>Porte</span>
+                  <select value={procedureNewAnimal.size} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, size: e.target.value }))}>
+                    <option>Pequeno</option>
+                    <option>Médio</option>
+                    <option>Grande</option>
+                  </select>
+                </label>
+              </div>
+            )}
+
             <label className="field">
               <span>Procedimento</span>
               <select value={procedureForm.request_type} onChange={(event) => setProcedureForm((current) => ({ ...current, request_type: event.target.value }))}>
@@ -8347,7 +9193,7 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
             </label>
             <div className="form-actions">
               <button className="ghost-button" type="button" onClick={() => setProcedureOpen(false)}>Cancelar</button>
-              <button className="primary-action" type="submit" disabled={saving === "procedure"}>{saving === "procedure" ? "Enviando..." : "Enviar procedimento"}</button>
+              <button className="primary-action" type="submit" disabled={saving === "procedure"}>{saving === "procedure" ? "Enviando..." : "Solicitar"}</button>
             </div>
           </form>
         </div>
@@ -8890,6 +9736,729 @@ async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord
   };
 }
 
+function drawProntuarioHeader(page, protocol, statusLabel, statusColor, ctx, microchip = "", docTitle = "PRONTUARIO DO ANIMAL", idOverride = "") {
+  const { font, bold, colors, margin } = ctx;
+  const pageW = page.getWidth();
+  const pageH = page.getHeight();
+  const topY = pageH - margin;
+
+  page.drawRectangle({ x: margin, y: topY - 58, width: 4, height: 58, color: colors.blue });
+
+  page.drawText("PROGRAMA MUNICIPAL DE CASTRACAO ANIMAL", {
+    x: margin + 12, y: topY - 12, size: 7, font: bold, color: colors.muted,
+  });
+  page.drawText(pdfText(docTitle), {
+    x: margin + 12, y: topY - 29, size: 16, font: bold, color: colors.ink,
+  });
+  const idLabel = idOverride
+    ? pdfText(idOverride)
+    : microchip
+      ? pdfText(`Microchip: ${microchip}`)
+      : pdfText(`Ref. protocolo: #${protocol || "-"}  (animal sem microchip)`);
+  page.drawText(idLabel, {
+    x: margin + 12, y: topY - 48, size: 8, font, color: colors.ink,
+  });
+
+  // issue date (right)
+  const rightX = pageW - margin - 140;
+  page.drawText("EMITIDO EM", { x: rightX, y: topY - 12, size: 7, font: bold, color: colors.muted });
+  page.drawText(pdfText(new Date().toLocaleDateString("pt-BR")), {
+    x: rightX, y: topY - 26, size: 11, font: bold, color: colors.ink,
+  });
+
+  // status pill
+  const pillText = pdfText(statusLabel);
+  const pillW = Math.max(58, pillText.length * 6 + 20);
+  const pillH = 16;
+  const pillX = pageW - margin - pillW;
+  const pillY = topY - 56;
+  page.drawRectangle({ x: pillX, y: pillY, width: pillW, height: pillH, color: statusColor });
+  page.drawText(pillText, {
+    x: pillX + Math.round((pillW - pillText.length * 5.5) / 2),
+    y: pillY + 5, size: 8, font: bold, color: colors.white,
+  });
+
+  // divider
+  const divY = topY - 66;
+  page.drawLine({ start: { x: margin, y: divY }, end: { x: pageW - margin, y: divY }, thickness: 0.5, color: colors.line });
+
+  return divY - 14;
+}
+
+function drawProntuarioSectionTitle(page, title, y, ctx) {
+  const { bold, colors, margin } = ctx;
+  page.drawRectangle({ x: margin, y: y - 13, width: 3, height: 13, color: colors.blue });
+  page.drawText(pdfText(title), { x: margin + 9, y: y - 11, size: 8, font: bold, color: colors.ink });
+  return y - 22;
+}
+
+function drawProntuarioFields(page, rows, y, ctx) {
+  // rows: array of { label, value }[] — each inner array is one row of columns
+  const { font, bold, colors, margin } = ctx;
+  const contentW = page.getWidth() - margin * 2;
+  const rowH = 30;
+  rows.forEach((cols, ri) => {
+    const colW = contentW / cols.length;
+    cols.forEach(({ label, value }, ci) => {
+      const x = margin + ci * colW;
+      const fy = y - ri * rowH;
+      page.drawText(pdfText(String(label || "")), { x, y: fy, size: 7, font: bold, color: colors.muted });
+      const val = pdfText(String(value || "-"));
+      const wrapped = wrapPdfText(val, Math.floor(colW / 5.5));
+      wrapped.slice(0, 2).forEach((line, li) => {
+        page.drawText(line, { x, y: fy - 12 - li * 11, size: 9, font: bold, color: colors.ink });
+      });
+    });
+  });
+  return y - rows.length * rowH;
+}
+
+function drawProntuarioTimeline(page, events, y, ctx) {
+  // events: { date, title, details[], done }[]
+  const { font, bold, colors, margin } = ctx;
+  const lineX = margin + 70;
+  const contentX = lineX + 16;
+  const eventH = 36;
+  const r = 4;
+
+  events.forEach((ev, i) => {
+    const nodeY = y - i * eventH - 8;
+    // connector line
+    if (i < events.length - 1) {
+      page.drawLine({
+        start: { x: lineX, y: nodeY - r - 1 },
+        end: { x: lineX, y: nodeY - eventH + r + 1 },
+        thickness: 1,
+        color: ev.done ? colors.blue : colors.line,
+      });
+    }
+    // node circle
+    page.drawCircle({ x: lineX, y: nodeY, size: r + 1.5, color: colors.white });
+    page.drawCircle({ x: lineX, y: nodeY, size: r, color: ev.done ? colors.blue : colors.line });
+
+    // date (left of line)
+    if (ev.date) {
+      page.drawText(pdfText(ev.date), { x: margin, y: nodeY + 3, size: 7.5, font, color: colors.muted });
+    }
+
+    // title (right of line)
+    page.drawText(pdfText(ev.title), { x: contentX, y: nodeY + 4, size: 9, font: bold, color: ev.done ? colors.ink : colors.muted });
+
+    // detail lines
+    (ev.details || []).forEach((detail, di) => {
+      page.drawText(pdfText(String(detail)), { x: contentX, y: nodeY - 8 - di * 11, size: 8, font, color: colors.muted });
+    });
+  });
+
+  return y - events.length * eventH - 8;
+}
+
+function drawProntuarioSectionBand(page, title, y, _bg, _text, ctx, _right = "") {
+  return drawProntuarioSectionTitle(page, title, y, ctx);
+}
+
+const prmHistoryEventLabel = (type: string) => ({
+  SOLICITACAO: "Solicitacao de procedimento",
+  IMPORTACAO_SOLICITACAO: "Cadastro importado",
+  CIRURGIA_REALIZADA: "Cirurgia realizada",
+  SOLICITACAO_OBITO: "Solicitacao de obito",
+  ANIMAL_OBITO: "Obito registrado",
+  SOLICITACAO_TROCA_TUTOR: "Solicitacao de troca de tutor",
+  TROCA_TUTOR: "Troca de tutor",
+  SOLICITACAO_PROCEDIMENTO: "Procedimento solicitado",
+  ADOCAO: "Adocao confirmada",
+} as AnyRecord)[type] || type || "Evento";
+
+async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const req = normalizeRequest(request);
+  const wf: AnyRecord = request.workflowData || request.workflow_data || {};
+  const output = await PDFDocument.create();
+  const font = await output.embedFont(StandardFonts.Helvetica);
+  const bold = await output.embedFont(StandardFonts.HelveticaBold);
+
+  const isRealizada = req.status === "REALIZADA";
+  const isCancelada = req.status === "CANCELADA";
+  const statusLabel = statusLabels[req.status] || req.status || "Sem status";
+
+  const statusColorMap: AnyRecord = {
+    NOVA: rgb(0.45, 0.52, 0.57),
+    AGENDADA: rgb(0.08, 0.48, 0.72),
+    REALIZADA: rgb(0.07, 0.44, 0.22),
+    CANCELADA: rgb(0.75, 0.18, 0.18),
+  };
+  const statusColor = statusColorMap[req.status] || statusColorMap.NOVA;
+
+  const colors = {
+    ink: rgb(0.07, 0.12, 0.18),
+    muted: rgb(0.38, 0.47, 0.55),
+    blue: rgb(0.05, 0.45, 0.69),
+    line: rgb(0.88, 0.92, 0.95),
+    white: rgb(1, 1, 1),
+  };
+  const margin = 40;
+  const ctx = { font, bold, colors, rgb, margin };
+  const pageSize: [number, number] = [595.28, 841.89];
+  const contentW = 595.28 - margin * 2;
+
+  const histAnimal: AnyRecord = fullHistory?.animal || {};
+  const histTutor: AnyRecord = fullHistory?.tutor || {};
+  const animals = Array.isArray(req.animals) ? req.animals : [];
+  const animal: AnyRecord = animals[0] || histAnimal;
+
+  const animalBreed = animal.breedType === "Definida"
+    ? (animal.breedDescription || "Definida")
+    : (animal.breedType || "");
+
+  const fullAddr = [
+    [req.address, req.number].filter(Boolean).join(", "),
+    req.neighborhood,
+    req.city && req.state ? `${req.city}/${req.state}` : (req.city || req.state || ""),
+    req.cep ? `CEP ${req.cep}` : "",
+  ].filter(Boolean).join(" - ");
+
+  const scheduleAddress = [req.scheduleLocationName, req.scheduleAddress, req.scheduleMunicipality]
+    .filter(Boolean).join(" - ");
+
+  const microchipApplied = String(wf.attendanceMicrochip || "").trim();
+  const prescription = String(wf.attendancePrescription || "").trim();
+  const attendanceNote = String(req.attendanceNote || "").trim();
+  const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
+  const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
+
+  const hasClinical = animal.doencas || animal.alergias || animal.teveCrias;
+  const criasInfo = animal.teveCrias
+    ? Array.isArray(animal.crias) && animal.crias.length
+      ? animal.crias.map((c, i) => `Cria ${i + 1}: ${c.filhotes || "?"} filhotes`).join("  |  ")
+      : "Sim (sem detalhes)"
+    : "Nao teve crias";
+
+  const animalMicrochip = (fullHistory?.animal?.microchip || req.animalMicrochip || animal.microchip || "").trim();
+
+  const page = output.addPage(pageSize);
+  let y = drawProntuarioHeader(page, req.protocol, statusLabel, statusColor, ctx, animalMicrochip);
+  y -= 10;
+
+  // ── ANIMAL ──────────────────────────────────────────────────────
+  y = drawProntuarioSectionTitle(page, "IDENTIFICACAO DO ANIMAL", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "NOME", value: animal.name || "-" },
+      { label: "ESPECIE", value: animal.species || "-" },
+      { label: "SEXO", value: animal.sex || "-" },
+      { label: "PORTE", value: animal.size || "-" },
+    ],
+    [
+      { label: "RACA", value: animalBreed || "-" },
+      { label: "NASCIMENTO / IDADE", value: animal.birthDate || animal.age || "-" },
+      { label: "COR / PELAGEM", value: animal.color || "-" },
+      { label: "MICROCHIP", value: animal.microchip || req.animalMicrochip || "-" },
+    ],
+    [
+      { label: "PROCEDIMENTO SOLICITADO", value: animal.procedure || requestTypeLabel(req) || "-" },
+      { label: "ORIGEM DA SOLICITACAO", value: req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcao" : "Portal publico" },
+      { label: "TIPO DE ANIMAL", value: req.type || "-" },
+      { label: "SETOR RESPONSAVEL", value: req.assignedSectorName || "-" },
+    ],
+  ], y, ctx);
+  y -= 14;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  // ── DADOS CLINICOS ───────────────────────────────────────────────
+  y = drawProntuarioSectionTitle(page, "DADOS CLINICOS", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "DOENCAS PRE-EXISTENTES", value: animal.doencas || "Nao informado" },
+      { label: "ALERGIAS CONHECIDAS", value: animal.alergias || "Nao informado" },
+    ],
+    [
+      { label: "HISTORICO REPRODUTIVO", value: criasInfo },
+      { label: "DESCENDENCIA / OBSERVACOES", value: animal.descendencia || "-" },
+    ],
+  ], y, ctx);
+  y -= 14;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  // ── TUTOR ────────────────────────────────────────────────────────
+  y = drawProntuarioSectionTitle(page, "TUTOR / RESPONSAVEL", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "NOME COMPLETO", value: req.tutor || histTutor.name || histTutor.tutor_name || "-" },
+      { label: "CPF", value: req.cpf || histTutor.cpf || "-" },
+      { label: "CELULAR", value: req.phone || histTutor.phone || histTutor.celular || "-" },
+      { label: "EMAIL", value: req.email || histTutor.email || "-" },
+    ],
+    [{ label: "ENDERECO COMPLETO", value: fullAddr || "-" }],
+  ], y, ctx);
+  y -= 14;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  // ── HISTORICO (timeline) ─────────────────────────────────────────
+  const historyTitle = fullHistory?.history?.length
+    ? "HISTORICO COMPLETO DO ANIMAL"
+    : "HISTORICO DO PROCESSO";
+  y = drawProntuarioSectionTitle(page, historyTitle, y, ctx);
+  y -= 12;
+
+  const tlEvents: { date: string; title: string; details: string[]; done: boolean }[] = [];
+
+  if (fullHistory?.history?.length) {
+    // histórico completo via /animals/consult — todos os eventos do animal
+    const sortedHistory = [...fullHistory.history].sort((a, b) => {
+      const da = new Date(a.occurred_at || a.created_at || 0).getTime();
+      const db = new Date(b.occurred_at || b.created_at || 0).getTime();
+      return da - db;
+    });
+    for (const item of sortedHistory) {
+      const eventDate = item.occurred_at || item.created_at
+        ? new Date(item.occurred_at || item.created_at).toLocaleDateString("pt-BR")
+        : "-";
+      const details: string[] = [];
+      if (item.protocol) details.push(`Protocolo: ${item.protocol}`);
+      if (item.status) details.push(`Status: ${statusLabels[item.status] || item.status}`);
+      if (item.notes) details.push(pdfText(String(item.notes)).slice(0, 80));
+      tlEvents.push({
+        date: eventDate,
+        title: prmHistoryEventLabel(item.type),
+        details,
+        done: true,
+      });
+    }
+  } else {
+    // fallback: apenas o processo atual
+    const openDate = req.createdAt ? new Date(req.createdAt).toLocaleDateString("pt-BR") : "-";
+    const openTime = req.createdAt ? new Date(req.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+    const scheduleDate = req.preferredSchedule || req.appointment || "-";
+
+    tlEvents.push({
+      date: openDate,
+      title: "Abertura da solicitacao",
+      details: [[requestTypeLabel(req), openTime].filter(Boolean).join("  ·  "), `Protocolo: ${req.protocol || "-"}`],
+      done: true,
+    });
+    tlEvents.push({
+      date: scheduleDate,
+      title: "Agendamento",
+      details: [scheduleAddress || "Local nao informado", req.responsible ? `Responsavel: ${req.responsible}` : ""].filter(Boolean),
+      done: req.status === "AGENDADA" || isRealizada,
+    });
+    if (isRealizada) {
+      const realizadaDate = wf.attendedAt ? new Date(wf.attendedAt).toLocaleDateString("pt-BR") : scheduleDate;
+      tlEvents.push({
+        date: realizadaDate,
+        title: "Procedimento realizado",
+        details: [
+          microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: nao registrado",
+          attendanceNote ? `Obs.: ${attendanceNote}` : "",
+        ].filter(Boolean),
+        done: true,
+      });
+      if (prescription) {
+        tlEvents.push({ date: "", title: "Receita prescrita", details: wrapPdfText(pdfText(prescription), 72).slice(0, 4), done: true });
+      }
+    }
+    if (isCancelada) {
+      tlEvents.push({
+        date: "",
+        title: "Processo cancelado / indeferido",
+        details: [cancelReason || "Motivo nao informado", cancelNote].filter(Boolean),
+        done: true,
+      });
+    }
+    if (!isRealizada && !isCancelada) {
+      tlEvents.push({ date: "-", title: "Realizacao · aguardando", details: ["Procedimento ainda nao realizado"], done: false });
+    }
+  }
+
+  y = drawProntuarioTimeline(page, tlEvents, y, ctx);
+
+  // nota de rodapé quando sem microchip
+  if (!animalMicrochip) {
+    page.drawText("* Historico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
+      x: margin, y: margin + 20, size: 7, font, color: colors.muted,
+    });
+  }
+
+  void y;
+  drawRequestPdfFooter(page, "Prontuario emitido pelo sistema municipal", "Pagina 1", ctx);
+
+  const bytes = await output.save();
+  const animalName = animal.name || histAnimal.name || "";
+  const animalMicrochipFinal = animalMicrochip || "";
+  const fileName = ["Prontuario", animalName, animalMicrochipFinal || req.protocol || ""]
+    .filter(Boolean).join(" ").trim() + ".pdf";
+  return {
+    documentName: "Prontuario do animal",
+    fileName,
+    fileType: "application/pdf",
+    eyebrow: "Prontuario",
+    dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
+  };
+}
+
+async function generateAndDownloadProntuario(fullHistory: AnyRecord) {
+  const bundle = await generateProntuarioPdf({}, fullHistory);
+  if (bundle?.dataUrl) {
+    const anchor = window.document.createElement("a");
+    anchor.href = bundle.dataUrl;
+    anchor.download = bundle.fileName || "Prontuario.pdf";
+    anchor.click();
+  }
+}
+
+function buildProcessEvents(request: AnyRecord): AnyRecord[] {
+  const req = normalizeRequest(request);
+  const wf: AnyRecord = request.workflowData || request.workflow_data || {};
+  const events: AnyRecord[] = [];
+
+  const fmt = (d: string | undefined) =>
+    d ? new Date(d).toLocaleDateString("pt-BR") + " " + new Date(d).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "-";
+  const fmtDate = (d: string | undefined) =>
+    d ? new Date(d).toLocaleDateString("pt-BR") : "-";
+
+  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
+  const scheduleAddress = [req.scheduleLocationName, req.scheduleAddress, req.scheduleMunicipality].filter(Boolean).join(" - ");
+
+  // 1. Requerimento submetido — sempre (LEFT)
+  events.push({
+    label: "Requerimento submetido",
+    actor: req.tutor || "Tutor",
+    date: fmt(req.createdAt),
+    details: [
+      `Procedimento: ${requestTypeLabel(req) || "-"}`,
+      `Origem: ${req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcao" : "Portal publico"}`,
+      `Protocolo: #${req.protocol || "-"}`,
+      animal.name ? `Animal: ${animal.name} (${[animal.species, animal.sex].filter(Boolean).join(", ")})` : "",
+    ].filter(Boolean),
+    side: "left",
+    color: "blue",
+  });
+
+  // 2. Documentos enviados — se houver (LEFT)
+  const docs = getUserUploadedProcessDocuments(request.documents);
+  if (docs.length > 0) {
+    const docLines = docs.map((d) => {
+      const name = d.documentName || d.fileName || "Documento";
+      const status = d.status === "approved" ? "aprovado" : d.status === "rejected" ? "recusado" : "enviado";
+      return `${pdfText(name)} — ${status}`;
+    });
+    events.push({
+      label: "Documentos enviados",
+      actor: req.tutor || "Tutor",
+      date: fmtDate(req.createdAt),
+      details: docLines,
+      side: "left",
+      color: "gray",
+    });
+  }
+
+  // 3. Atribuição ao setor — se tiver setor ou tag ATRIBUIDA (RIGHT)
+  if (requestHasTag(req, "ATRIBUIDA") || req.assignedSectorName) {
+    events.push({
+      label: "Atribuicao ao setor",
+      actor: req.assignedSectorName || req.responsible || "Equipe",
+      date: fmtDate(req.createdAt),
+      details: [
+        req.assignedSectorName ? `Setor: ${req.assignedSectorName}` : "",
+        req.responsible ? `Responsavel: ${req.responsible}` : "",
+        requestHasTag(req, "PRIORIDADE") ? "Marcado como PRIORIDADE" : "",
+      ].filter(Boolean),
+      side: "right",
+      color: "amber",
+    });
+  }
+
+  // 4. Mutirão — se tag MUTIRAO (RIGHT)
+  if (requestHasTag(req, "MUTIRAO")) {
+    events.push({
+      label: "Incluido em mutirao",
+      actor: req.assignedSectorName || "Equipe",
+      date: fmtDate(req.preferredSchedule || req.appointment),
+      details: ["Solicitacao vinculada a mutirao de castração"],
+      side: "right",
+      color: "purple",
+    });
+  }
+
+  // 5. Agendamento — se tiver data (RIGHT)
+  const schedDate = req.preferredSchedule || req.appointment;
+  if (schedDate) {
+    const slotTime = wf.scheduleTime || wf.scheduleSlotTime || "";
+    events.push({
+      label: requestHasTag(req, "REAGENDADA") ? "Reagendamento" : "Agendamento",
+      actor: req.assignedSectorName || req.responsible || "Equipe",
+      date: fmtDate(req.createdAt),
+      details: [
+        `Data agendada: ${fmtDate(schedDate)}${slotTime ? " as " + slotTime : ""}`,
+        scheduleAddress ? `Local: ${scheduleAddress}` : "",
+        wf.previousSchedule ? `Data anterior: ${fmtDate(wf.previousSchedule)}` : "",
+      ].filter(Boolean),
+      side: "right",
+      color: requestHasTag(req, "REAGENDADA") ? "yellow" : "blue",
+    });
+  }
+
+  // 6. Retorno do tutor — se tag RETORNO_TUTOR (LEFT)
+  if (requestHasTag(req, "RETORNO_TUTOR")) {
+    events.push({
+      label: "Retorno do tutor",
+      actor: req.tutor || "Tutor",
+      date: "-",
+      details: ["Tutor entrou em contato para acompanhamento"],
+      side: "left",
+      color: "gray",
+    });
+  }
+
+  // 7. Movimentações do history[] — com notas
+  const rawHistory: AnyRecord[] = Array.isArray(request.history) ? request.history : [];
+  for (const item of rawHistory) {
+    if (!item.notes && !item.by) continue;
+    events.push({
+      label: "Movimentacao",
+      actor: item.by || "Sistema",
+      date: item.at ? fmt(item.at) : "-",
+      details: [item.notes ? pdfText(String(item.notes)) : ""].filter(Boolean),
+      side: item.by ? "right" : "left",
+      color: "gray",
+    });
+  }
+
+  // 8. Procedimento realizado (RIGHT)
+  if (req.status === "REALIZADA") {
+    const microchipApplied = String(wf.attendanceMicrochip || "").trim();
+    const attendanceNote = String(req.attendanceNote || wf.attendanceNote || "").trim();
+    events.push({
+      label: "Procedimento realizado",
+      actor: req.responsible || req.assignedSectorName || "Equipe",
+      date: fmt(wf.attendedAt || schedDate),
+      details: [
+        microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: nao registrado",
+        wf.performedProcedures ? `Procedimentos: ${pdfText(wf.performedProcedures)}` : "",
+        attendanceNote ? `Obs.: ${pdfText(attendanceNote)}` : "",
+      ].filter(Boolean),
+      side: "right",
+      color: "green",
+    });
+    const prescription = String(wf.attendancePrescription || "").trim();
+    if (prescription) {
+      events.push({
+        label: "Receita prescrita",
+        actor: req.responsible || "Veterinario",
+        date: fmt(wf.attendedAt || schedDate),
+        details: wrapPdfText(pdfText(prescription), 44).slice(0, 6),
+        side: "right",
+        color: "teal",
+      });
+    }
+  }
+
+  // 9. Cancelamento (RIGHT)
+  if (req.status === "CANCELADA") {
+    const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
+    const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
+    events.push({
+      label: "Processo cancelado",
+      actor: req.assignedSectorName || req.responsible || "Sistema",
+      date: fmtDate(req.updatedAt || req.createdAt),
+      details: [
+        cancelReason ? `Motivo: ${pdfText(cancelReason)}` : "Motivo: nao informado",
+        cancelNote ? `Obs.: ${pdfText(cancelNote)}` : "",
+      ].filter(Boolean),
+      side: "right",
+      color: "red",
+    });
+  }
+
+  return events;
+}
+
+function drawProcessBubble(page, bubble: AnyRecord, y: number, ctx: AnyRecord): number {
+  const { font, bold, colors, rgb, margin } = ctx;
+  const pageW = page.getWidth();
+  const contentW = pageW - margin * 2;
+  const bubbleW = 320;
+  const isLeft = bubble.side === "left";
+  const x = isLeft ? margin : margin + contentW - bubbleW;
+
+  const colorMap: AnyRecord = {
+    blue:   rgb(0.05, 0.45, 0.69),
+    green:  rgb(0.07, 0.44, 0.22),
+    teal:   rgb(0.05, 0.38, 0.38),
+    red:    rgb(0.75, 0.18, 0.18),
+    amber:  rgb(0.72, 0.42, 0.05),
+    yellow: rgb(0.60, 0.48, 0.02),
+    purple: rgb(0.42, 0.18, 0.62),
+    gray:   rgb(0.38, 0.47, 0.55),
+  };
+  const accentColor = colorMap[bubble.color] || colorMap.gray;
+  const bgLeft  = rgb(0.96, 0.97, 1.00);
+  const bgRight = rgb(0.95, 0.99, 0.97);
+  const bg = isLeft ? bgLeft : bgRight;
+
+  const detailLines: string[] = (bubble.details as string[]).flatMap((d) =>
+    wrapPdfText(pdfText(d), 44)
+  );
+  const headerH = 32;
+  const lineH = 13;
+  const padV = 8;
+  const bubbleH = headerH + padV + detailLines.length * lineH + padV;
+
+  // background
+  page.drawRectangle({ x, y: y - bubbleH, width: bubbleW, height: bubbleH, color: bg });
+  // accent bar
+  page.drawRectangle({ x, y: y - bubbleH, width: 3, height: bubbleH, color: accentColor });
+  // label
+  page.drawText(pdfText(bubble.label), { x: x + 10, y: y - 14, size: 8, font: bold, color: colors.ink });
+  // date (right-aligned in bubble)
+  const dateStr = pdfText(bubble.date);
+  page.drawText(dateStr, { x: x + bubbleW - 6 - dateStr.length * 4.5, y: y - 14, size: 7, font, color: colors.muted });
+  // actor
+  page.drawText(pdfText(bubble.actor), { x: x + 10, y: y - 26, size: 7, font, color: accentColor });
+  // divider
+  page.drawLine({
+    start: { x: x + 3, y: y - 33 },
+    end: { x: x + bubbleW, y: y - 33 },
+    thickness: 0.3,
+    color: rgb(0.82, 0.88, 0.93),
+  });
+  // details
+  let textY = y - headerH - padV;
+  for (const line of detailLines) {
+    page.drawText(line, { x: x + 10, y: textY, size: 8, font, color: colors.ink });
+    textY -= lineH;
+  }
+
+  return y - bubbleH - 10;
+}
+
+async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
+  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const req = normalizeRequest(request);
+  const output = await PDFDocument.create();
+  const font = await output.embedFont(StandardFonts.Helvetica);
+  const bold = await output.embedFont(StandardFonts.HelveticaBold);
+
+  const statusLabel = statusLabels[req.status] || req.status || "Sem status";
+  const statusColorMap: AnyRecord = {
+    NOVA: rgb(0.45, 0.52, 0.57),
+    AGENDADA: rgb(0.08, 0.48, 0.72),
+    REALIZADA: rgb(0.07, 0.44, 0.22),
+    CANCELADA: rgb(0.75, 0.18, 0.18),
+  };
+  const statusColor = statusColorMap[req.status] || statusColorMap.NOVA;
+
+  const colors = {
+    ink: rgb(0.07, 0.12, 0.18),
+    muted: rgb(0.38, 0.47, 0.55),
+    blue: rgb(0.05, 0.45, 0.69),
+    line: rgb(0.88, 0.92, 0.95),
+    white: rgb(1, 1, 1),
+  };
+  const margin = 40;
+  const ctx = { font, bold, colors, rgb, margin };
+  const pageSize: [number, number] = [595.28, 841.89];
+  const pageH = 841.89;
+  const contentW = 595.28 - margin * 2;
+
+  const animals = Array.isArray(req.animals) ? req.animals : [];
+  const animal: AnyRecord = animals[0] || {};
+
+  let page = output.addPage(pageSize);
+  let y = drawProntuarioHeader(
+    page, req.protocol, statusLabel, statusColor, ctx, "",
+    "RELATORIO PROCESSUAL",
+    pdfText(`Protocolo: #${req.protocol || "-"}`)
+  );
+  y -= 10;
+
+  // ── Linha de identificação compacta ─────────────────────────────
+  const idParts = [
+    req.tutor ? `Tutor: ${pdfText(req.tutor)}` : "",
+    animal.name ? `Animal: ${pdfText(animal.name)}${animal.species ? ` (${pdfText(animal.species)})` : ""}` : "",
+    requestTypeLabel(req) ? `Tipo: ${pdfText(requestTypeLabel(req))}` : "",
+    req.assignedSectorName ? `Setor: ${pdfText(req.assignedSectorName)}` : "",
+  ].filter(Boolean).join("   ·   ");
+  if (idParts) {
+    page.drawText(idParts, { x: margin, y, size: 8, font, color: colors.muted });
+    y -= 14;
+  }
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.6, color: colors.line });
+  y -= 14;
+
+  // ── Título da seção de tramitações ───────────────────────────────
+  y = drawProntuarioSectionTitle(page, "TRAMITACOES DO PROCESSO", y, ctx);
+  y -= 14;
+
+  // ── Bolhas de tramitação ─────────────────────────────────────────
+  const events = buildProcessEvents(request);
+  let pageNum = 1;
+  for (const bubble of events) {
+    const detailLines: string[] = (bubble.details as string[]).flatMap((d: string) =>
+      wrapPdfText(pdfText(d), 44)
+    );
+    const bubbleH = 32 + 8 + detailLines.length * 13 + 8 + 10;
+    if (y - bubbleH < margin + 50) {
+      drawRequestPdfFooter(page, "Relatorio processual emitido pelo sistema municipal", `Pagina ${pageNum}`, ctx);
+      page = output.addPage(pageSize);
+      pageNum += 1;
+      y = pageH - margin - 20;
+    }
+    y = drawProcessBubble(page, bubble, y, ctx);
+  }
+
+  if (events.length === 0) {
+    page.drawText("Nenhuma tramitacao registrada para este processo.", {
+      x: margin, y, size: 9, font, color: colors.muted,
+    });
+    y -= 20;
+  }
+
+  drawRequestPdfFooter(page, "Relatorio processual emitido pelo sistema municipal", `Pagina ${pageNum}`, ctx);
+  void y;
+
+  const documents = getUserUploadedProcessDocuments(request.documents);
+  for (const document of documents) {
+    const dataUrl = getDocumentPreviewSource(document);
+    const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
+    if (!dataUrl) {
+      await appendUnsupportedAttachmentPage(output, {
+        title: document.documentName || "Documento anexado",
+        fileName: document.fileName || "Arquivo sem previa",
+        StandardFonts,
+        rgb,
+      });
+      continue;
+    }
+    try {
+      if (mimeType === "application/pdf") { await appendPdfDataUrl(output, dataUrl); continue; }
+      if (mimeType?.startsWith("image/")) { await appendImageDataUrl(output, dataUrl, mimeType); continue; }
+    } catch {
+      console.warn("Aviso: anexo ignorado no relatorio processual:", document.fileName);
+    }
+    await appendUnsupportedAttachmentPage(output, {
+      title: document.documentName || "Documento anexado",
+      fileName: document.fileName || "Arquivo sem previa",
+      StandardFonts,
+      rgb,
+    });
+  }
+
+  const bytes = await output.save();
+  return {
+    documentName: "Relatorio Processual",
+    fileName: `Relatorio ${req.protocol || ""}`.trim() + ".pdf",
+    fileType: "application/pdf",
+    dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
+  };
+}
+
 async function generateDocumentBundlePdf(request: AnyRecord = {}) {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
   const output = await PDFDocument.create();
@@ -8973,73 +10542,165 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const colors = {
-    ink: rgb(0.09, 0.13, 0.15),
-    muted: rgb(0.36, 0.43, 0.49),
-    blue: rgb(0.08, 0.48, 0.72),
-    blueDark: rgb(0.06, 0.21, 0.31),
-    blueSoft: rgb(0.94, 0.98, 1),
-    line: rgb(0.82, 0.89, 0.93),
-    orange: rgb(0.78, 0.25, 0.05),
-    orangeSoft: rgb(1, 0.97, 0.91),
+    ink: rgb(0.07, 0.12, 0.18),
+    muted: rgb(0.38, 0.47, 0.55),
+    blue: rgb(0.05, 0.45, 0.69),
+    line: rgb(0.88, 0.92, 0.95),
     white: rgb(1, 1, 1),
   };
-  const ctx = { font, bold, colors, rgb, margin: 40 };
+  const margin = 40;
+  const ctx = { font, bold, colors, rgb, margin };
   const pageSize: [number, number] = [595.28, 841.89];
-  const validationKey = request.validationKey || request.validation_key || "A definir";
-  const animals = Array.isArray(request.animals) ? request.animals : [];
-  const signedAt = request.signedAt || request.signed_at || request.createdAt || request.created_at || new Date().toISOString();
+  const contentW = 595.28 - margin * 2;
+
+  const req = normalizeRequest(request);
+  const animals = Array.isArray(req.animals) ? req.animals : [];
+  const validationKey = req.validationKey || req.validation_key || "A definir";
+  const signedAt = req.signedAt || req.signed_at || req.createdAt || req.created_at || new Date().toISOString();
   const scheduleAddress = [
-    request.scheduleLocationName || request.locationName,
-    request.scheduleAddress || request.schedule_address,
-    request.scheduleMunicipality || request.municipalityName || request.city,
+    req.scheduleLocationName || req.locationName,
+    req.scheduleAddress || req.schedule_address,
+    req.scheduleMunicipality || req.municipalityName || req.city,
   ].filter(Boolean).join(" - ");
-  const scheduleMapUrl = request.scheduleAddressUrl || request.schedule_address_url || "";
-
-  const page1 = pdf.addPage(pageSize);
-  let y = drawRequestPdfHeader(page1, "REQUERIMENTO MUNICIPAL", "Solicitação de castração animal", request.protocol || "-", ctx);
-  y = drawRequestPdfSectionTitle(page1, "Agendamento", y, ctx);
-  y = drawRequestPdfInfoGrid(page1, [
-    ["DATA DA AGENDA", request.preferredSchedule || request.appointment || "-"],
-    ["PROCEDIMENTO", requestTypeLabel(request)],
-    ["POSTO / LOCAL DE ATENDIMENTO", scheduleAddress || "A confirmar", 2],
-    ["ABERTURA", request.createdAt ? formatDateTime(request.createdAt) : new Date().toLocaleDateString("pt-BR")],
-    ["LINK DO MAPA", scheduleMapUrl || "-", 4],
-  ], y, { ...ctx, columns: 4, valueMaxChars: 118, rowHeight: 42, boxHeight: 32 });
-  y = drawRequestPdfSectionTitle(page1, "Dados do tutor", y - 4, ctx);
+  const scheduleMapUrl = req.scheduleAddressUrl || req.schedule_address_url || "";
   const fullAddr = [
-    [request.address, request.number].filter(Boolean).join(", "),
-    request.neighborhood,
-    request.city && request.state ? `${request.city}/${request.state}` : (request.city || request.state || ""),
-    request.cep ? `CEP ${request.cep}` : "",
+    [req.address, req.number].filter(Boolean).join(", "),
+    req.neighborhood,
+    req.city && req.state ? `${req.city}/${req.state}` : (req.city || req.state || ""),
+    req.cep ? `CEP ${req.cep}` : "",
   ].filter(Boolean).join(" - ");
-  y = drawRequestPdfInfoGrid(page1, [
-    ["NOME", request.tutor || "-"],
-    ["CPF", request.cpf || "-"],
-    ["CADUNICO", request.cadUnicoNotApplicable ? "Nao se aplica" : request.cadUnico || "-"],
-    ["CELULAR", request.phone || "-"],
-    ["EMAIL", request.email || "-"],
-    ["AGRICULTOR", request.isFarmer ? "Sim" : "Nao"],
-    ["ENDEREÇO COMPLETO", fullAddr || "-"],
-  ], y, { ...ctx, columns: 3, wideLast: true, rowHeight: 42, boxHeight: 32 });
-  y = drawRequestPdfSectionTitle(page1, `Animais (${animals.length})`, y - 4, ctx);
-  for (const [index, animal] of animals.slice(0, 2).entries()) {
-    y = drawRequestPdfAnimalCard(page1, animal, index, y, ctx);
-  }
-  y = drawRequestPdfSectionTitle(page1, "Validação", y - 2, ctx);
-  drawRequestPdfValidationBox(page1, validationKey, y, ctx);
-  drawRequestPdfFooter(page1, "Sistema municipal", "Página 1 de 2", ctx);
 
+  // ── PÁGINA 1: dados ──────────────────────────────────────────────
+  const page1 = pdf.addPage(pageSize);
+  let y = drawProntuarioHeader(
+    page1, req.protocol, "Requerimento", rgb(0.05, 0.45, 0.69), ctx, "",
+    "REQUERIMENTO DE SERVICO",
+    pdfText(`Protocolo: #${req.protocol || "-"}`)
+  );
+  y -= 10;
+
+  y = drawProntuarioSectionTitle(page1, "AGENDAMENTO", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page1, [
+    [
+      { label: "DATA DA AGENDA", value: req.preferredSchedule || req.appointment || "-" },
+      { label: "PROCEDIMENTO", value: requestTypeLabel(req) || "-" },
+      { label: "ABERTURA", value: req.createdAt ? formatDateTime(req.createdAt) : new Date().toLocaleDateString("pt-BR") },
+      { label: "MUNICIPIO", value: req.scheduleMunicipality || req.municipalityName || "-" },
+    ],
+    [{ label: "LOCAL / POSTO DE ATENDIMENTO", value: scheduleAddress || "A confirmar" }],
+    ...(scheduleMapUrl ? [[{ label: "LINK DO MAPA", value: pdfText(scheduleMapUrl) }]] : []),
+  ], y, ctx);
+  y -= 14;
+  page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page1, "DADOS DO TUTOR", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page1, [
+    [
+      { label: "NOME COMPLETO", value: req.tutor || "-" },
+      { label: "CPF", value: req.cpf || "-" },
+      { label: "CADUNICO", value: req.cadUnicoNotApplicable ? "Nao se aplica" : req.cadUnico || "-" },
+      { label: "AGRICULTOR", value: req.isFarmer ? "Sim" : "Nao" },
+    ],
+    [
+      { label: "CELULAR", value: req.phone || "-" },
+      { label: "EMAIL", value: req.email || "-" },
+    ],
+    [{ label: "ENDERECO COMPLETO", value: fullAddr || "-" }],
+  ], y, ctx);
+  y -= 14;
+  page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page1, `ANIMAIS (${animals.length})`, y, ctx);
+  y -= 6;
+  for (const animal of animals.slice(0, 2)) {
+    const animalBreed = animal.breedType === "Definida"
+      ? (animal.breedDescription || "Definida") : (animal.breedType || "-");
+    y = drawProntuarioFields(page1, [
+      [
+        { label: "NOME", value: animal.name || "-" },
+        { label: "ESPECIE", value: animal.species || "-" },
+        { label: "SEXO", value: animal.sex || "-" },
+        { label: "PORTE", value: animal.size || "-" },
+      ],
+      [
+        { label: "RACA", value: animalBreed },
+        { label: "NASCIMENTO / IDADE", value: animal.birthDate || animal.age || "-" },
+        { label: "COR / PELAGEM", value: animal.color || "-" },
+        { label: "MICROCHIP", value: animal.microchip || "-" },
+      ],
+      [
+        { label: "VACINAS", value: animal.vaccines || animal.vacinas || "-" },
+        { label: "VERMIFUGADO", value: animal.dewormed || animal.vermifugado || "-" },
+        { label: "JA TEVE CRIAS", value: animal.teveCrias ? "Sim" : "Nao" },
+        { label: "PROCEDIMENTO", value: animal.procedure || requestTypeLabel(req) || "-" },
+      ],
+    ], y, ctx);
+    y -= 10;
+  }
+
+  y -= 4;
+  page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page1, "VALIDACAO", y, ctx);
+  y -= 8;
+  page1.drawText("CHAVE DE VALIDACAO DIGITAL", { x: margin + 9, y, size: 7, font: bold, color: colors.muted });
+  y -= 18;
+  page1.drawText(pdfText(validationKey), { x: margin + 9, y, size: 18, font: bold, color: colors.blue });
+  y -= 14;
+  page1.drawText(
+    pdfText(`Aceite eletronico registrado em ${formatDateTime(signedAt)}`),
+    { x: margin + 9, y, size: 8, font, color: colors.muted }
+  );
+
+  drawRequestPdfFooter(page1, "Requerimento municipal", "Pagina 1 de 2", ctx);
+
+  // ── PÁGINA 2: declaração ─────────────────────────────────────────
   const page2 = pdf.addPage(pageSize);
-  y = drawRequestPdfHeader(page2, "DECLARAÇÃO DO TUTOR", "Responsabilidade e autorização", request.protocol || "-", ctx);
-  y = drawRequestPdfDeclaration(page2, request, y, ctx);
-  y = drawRequestPdfSectionTitle(page2, "Aceite eletrônico do tutor", y - 16, ctx);
-  y = drawRequestPdfInfoGrid(page2, [
-    ["ACEITE REGISTRADO POR", request.tutor || "-"],
-    ["CPF", maskCpf(request.cpf || "") || "-"],
-    ["DATA/HORA", formatDateTime(signedAt)],
-    ["MÉTODO", "Li e aceito"],
-  ], y, { ...ctx, columns: 4 });
-  drawRequestPdfFooter(page2, "Sistema municipal", "Página 2 de 2", ctx);
+  let y2 = drawProntuarioHeader(
+    page2, req.protocol, "Declaracao", rgb(0.05, 0.45, 0.69), ctx, "",
+    "DECLARACAO DE RESPONSABILIDADE",
+    pdfText(`Protocolo: #${req.protocol || "-"}`)
+  );
+  y2 -= 14;
+
+  y2 = drawProntuarioSectionTitle(page2, "DECLARACAO DO TUTOR", y2, ctx);
+  y2 -= 10;
+
+  const paragraphs = [
+    `Eu, ${req.tutor || "-"}, inscrito(a) no CPF ${req.cpf || "-"}, declaro que as informacoes prestadas neste requerimento sao verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.`,
+    "Declaro ciencia dos cuidados pre e pos-cirurgicos, das responsabilidades de acompanhamento do animal, da necessidade de cumprir as orientacoes fornecidas pela equipe responsavel e de manter os contatos informados disponiveis para comunicacoes sobre a solicitacao.",
+    "Estou ciente de que a solicitacao podera passar por analise documental, validacao das informacoes, confirmacao de agenda e eventuais solicitacoes de complementacao antes da realizacao do atendimento.",
+  ];
+  for (const paragraph of paragraphs) {
+    const lines = wrapPdfText(pdfText(paragraph), 90);
+    for (const line of lines) {
+      page2.drawText(line, { x: margin + 9, y: y2, size: 10, font, color: colors.ink });
+      y2 -= 15;
+    }
+    y2 -= 8;
+  }
+
+  y2 -= 10;
+  page2.drawLine({ start: { x: margin, y: y2 }, end: { x: margin + contentW, y: y2 }, thickness: 0.4, color: colors.line });
+  y2 -= 18;
+
+  y2 = drawProntuarioSectionTitle(page2, "ACEITE ELETRONICO DO TUTOR", y2, ctx);
+  y2 -= 6;
+  drawProntuarioFields(page2, [
+    [
+      { label: "ACEITE REGISTRADO POR", value: req.tutor || "-" },
+      { label: "CPF", value: maskCpf(req.cpf || "") || "-" },
+      { label: "DATA / HORA", value: formatDateTime(signedAt) },
+      { label: "METODO", value: "Li e aceito" },
+    ],
+  ], y2, ctx);
+
+  drawRequestPdfFooter(page2, "Requerimento municipal", "Pagina 2 de 2", ctx);
 
   return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
 }
@@ -9342,6 +11003,32 @@ function buildScheduleMonths(days) {
     const [rightMonth, rightYear] = right.split("/").map(Number);
     return leftYear === rightYear ? leftMonth - rightMonth : leftYear - rightYear;
   });
+}
+
+function mergeScheduleDaysWithRules(days = [], rules = []) {
+  const byDate = new Map(
+    (Array.isArray(days) ? days : [])
+      .map(normalizeScheduleDay)
+      .filter((day) => day.date)
+      .map((day) => [day.date, day])
+  );
+
+  (Array.isArray(rules) ? rules : [])
+    .filter((rule) => rule && rule.active !== false && !rule.unavailable)
+    .flatMap((rule) => {
+      try {
+        return generateScheduleDaysFromRule(rule).map(normalizeScheduleDay);
+      } catch {
+        return [];
+      }
+    })
+    .forEach((day) => {
+      if (!day.date) return;
+      const existing = byDate.get(day.date);
+      byDate.set(day.date, existing ? { ...day, ...existing, slots: existing.slots?.length ? existing.slots : day.slots } : day);
+    });
+
+  return Array.from(byDate.values()).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date));
 }
 
 function buildMonthCalendarDays(monthKey = getCurrentScheduleMonthKey()): AnyRecord[] {
