@@ -23,7 +23,6 @@ import {
   KeyRound,
   LayoutDashboard,
   ListChecks,
-  Lock,
   LogOut,
   MapPin,
   Menu,
@@ -2264,11 +2263,6 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
               <ChevronRight size={16} className="login-big-action-chevron" />
             </button>
           </div>
-
-          <button type="button" className="login-restricted-link" onClick={() => setShowVetModal(true)}>
-            <Lock size={13} />
-            Acesso restrito · área credenciada
-          </button>
         </section>
 
       </div>

@@ -1117,30 +1117,6 @@ button:disabled {
 }
 
 
-.login-restricted-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 2px;
-  padding-top: 12px;
-  border-top: 1px solid #eef1f4;
-  background: none;
-  border-left: none;
-  border-right: none;
-  border-bottom: none;
-  color: var(--muted);
-  font-size: 0.78rem;
-  font-weight: 500;
-  cursor: pointer;
-  width: 100%;
-}
-
-
-.login-restricted-link:hover {
-  color: var(--ink);
-}
-
-
 .access-modal {
   position: relative;
   width: min(480px, calc(100vw - 24px));
