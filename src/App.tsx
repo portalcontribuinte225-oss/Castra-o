@@ -2224,7 +2224,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
           {showMobileAdoption ? "Ocultar adoção" : "Ver animais para adoção"}
         </button>
 
-        <PetWelcomeArt className="login-wide-banner" onPublicRequest={onPublicRequest} onOpenAdoption={() => setShowMobileAdoption(true)} />
+        <PetWelcomeArt className="login-wide-banner" />
 
         <section className={showMobileAdoption ? "login-adoption-panel mobile-visible" : "login-adoption-panel"}>
           <AdoptionCarousel adoptionAnimals={adoptionAnimals} limit={12} showViewAll={false} onInterestSent={onInterestSent} />
@@ -2542,7 +2542,7 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
   );
 }
 
-function PetWelcomeArt({ className = "", onPublicRequest, onOpenAdoption }: AnyRecord) {
+function PetWelcomeArt({ className = "" }: AnyRecord) {
   return (
     <section className={`public-hero ${className}`.trim()}>
       <div className="hero-content">
@@ -2552,15 +2552,6 @@ function PetWelcomeArt({ className = "", onPublicRequest, onOpenAdoption }: AnyR
         </div>
         <h1 className="hero-title">Cuidado e proteção para quem não tem voz</h1>
         <p className="hero-subtitle">Castração gratuita, adoção responsável e bem-estar animal - digital e acessível.</p>
-        <div className="hero-actions">
-          <button type="button" className="hero-cta primary" onClick={onPublicRequest}>
-            Solicitar castração gratuita
-            <ChevronRight size={14} />
-          </button>
-          <button type="button" className="hero-cta ghost" onClick={onOpenAdoption}>
-            Ver animais para adoção
-          </button>
-        </div>
       </div>
     </section>
   );
