@@ -8617,6 +8617,51 @@ main {
 }
 
 
+/* The public home sidebar is now a single-column action list (lighter than
+   the old 2x2 button grid), so it no longer needs the full 1120px collapse
+   below to stay readable. Re-establish the 2-column layout down to 900px,
+   without touching the shared 1120px breakpoint used by other screens. */
+@media (min-width: 901px) and (max-width: 1120px) {
+
+  .login-layout {
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 26vw, 380px);
+    align-items: stretch;
+    max-width: none;
+  }
+
+
+  .public-topbar {
+    max-width: none;
+  }
+
+
+  .login-card {
+    position: sticky;
+    align-self: start;
+    max-height: calc(100vh - 32px);
+    overflow: auto;
+    order: 0;
+  }
+
+
+  .login-big-action:first-child,
+  .login-big-action:nth-child(2) {
+    min-height: 74px;
+  }
+
+
+  .login-adoption-panel {
+    display: grid;
+  }
+
+
+  .mobile-adoption-toggle {
+    display: none;
+  }
+
+}
+
+
 @media (max-width: 720px) {
 
   main {
