@@ -1953,6 +1953,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
               <button className="public-animal-open-area" type="button" onClick={() => openAnimalModal(animal)}>
                 <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
                   {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={24} />}
+                  {profileSummary && <span className="public-animal-badge">{profileSummary}</span>}
                 </div>
               </button>
               <div className="public-animal-footer">
@@ -2185,38 +2186,19 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
     }
   }
 
+  const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
+
   return (
     <main className="login-page">
-      <div className="login-layout">
-        <button className="mobile-adoption-toggle" type="button" onClick={() => setShowMobileAdoption((current) => !current)}>
-          {showMobileAdoption ? "Ocultar adoção" : "Ver animais para adoção"}
-        </button>
-
-        <PetWelcomeArt className="login-wide-banner" />
-
-        <section className={showMobileAdoption ? "login-adoption-panel mobile-visible" : "login-adoption-panel"}>
-          <AdoptionCarousel adoptionAnimals={adoptionAnimals} limit={12} showViewAll={false} onInterestSent={onInterestSent} />
-        </section>
-
-        <section className="login-card">
-          <div className="login-card-topbar">
-            <div className="brand login-brand">
-              {(() => {
-                const selMun = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
-                return selMun?.brasao ? (
-                  <img src={selMun.brasao} alt={`Brasão ${selMun.name}`} className="brand-brasao" />
-                ) : (
-                  <div className="brand-mark"><PawPrint size={24} /></div>
-                );
-              })()}
-              <div>
-                {selectedMunicipalityId && municipalities.find((m) => m.id === selectedMunicipalityId) ? (
-                  <strong>{municipalities.find((m) => m.id === selectedMunicipalityId).name}</strong>
-                ) : (
-                  <strong>Sistema municipal</strong>
-                )}
-              </div>
-            </div>
+      <div className="public-topbar">
+        <div className="public-topbar-brand">
+          {activeMunicipality?.brasao ? (
+            <img src={activeMunicipality.brasao} alt={`Brasão ${activeMunicipality.name}`} className="brand-brasao" />
+          ) : (
+            <div className="brand-mark"><PawPrint size={20} /></div>
+          )}
+          <div>
+            <strong>{activeMunicipality ? activeMunicipality.name : "Sistema municipal"}</strong>
             {municipalities.length > 0 && (
               <MunicipalitySelectorChip
                 municipalities={municipalities}
@@ -2226,9 +2208,32 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
               />
             )}
           </div>
+        </div>
+        <nav className="public-topbar-nav">
+          <span className="public-topbar-link">Serviços</span>
+          <span className="public-topbar-link">Dúvidas frequentes</span>
+          <button type="button" className="public-topbar-enter" onClick={() => setShowVetModal(true)}>
+            <User size={15} />
+            Entrar
+          </button>
+        </nav>
+      </div>
 
+      <div className="login-layout">
+        <button className="mobile-adoption-toggle" type="button" onClick={() => setShowMobileAdoption((current) => !current)}>
+          {showMobileAdoption ? "Ocultar adoção" : "Ver animais para adoção"}
+        </button>
+
+        <PetWelcomeArt className="login-wide-banner" onPublicRequest={onPublicRequest} onOpenAdoption={() => setShowMobileAdoption(true)} />
+
+        <section className={showMobileAdoption ? "login-adoption-panel mobile-visible" : "login-adoption-panel"}>
+          <AdoptionCarousel adoptionAnimals={adoptionAnimals} limit={12} showViewAll={false} onInterestSent={onInterestSent} />
+        </section>
+
+        <section className="login-card">
           <div className="login-welcome">
             <h1>Bem-estar e proteção animal</h1>
+            <p className="login-welcome-subtitle">Serviços para a população</p>
           </div>
 
           <div className="login-main-actions">
@@ -2238,6 +2243,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
                 <strong>Solicitações</strong>
                 <span>Primeiro cadastro do tutor e animal</span>
               </div>
+              <ChevronRight size={16} className="login-big-action-chevron" />
             </button>
 
             <button className="login-big-action consult" onClick={onPublicConsult}>
@@ -2246,14 +2252,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
                 <strong>Prontuário</strong>
                 <span>Consultar histórico e solicitar procedimento</span>
               </div>
-            </button>
-
-            <button className="login-big-action secondary login-vet-action" onClick={() => setShowVetModal(true)}>
-              <div className="action-icon-wrap"><Lock size={20} /></div>
-              <div className="action-text">
-                <strong>Acesso restrito</strong>
-                <span>Área credenciada</span>
-              </div>
+              <ChevronRight size={16} className="login-big-action-chevron" />
             </button>
 
             <button className="login-big-action access" onClick={() => setShowAccessModal(true)}>
@@ -2262,8 +2261,14 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
                 <strong>Credenciamento</strong>
                 <span>ONGs e protetores</span>
               </div>
+              <ChevronRight size={16} className="login-big-action-chevron" />
             </button>
           </div>
+
+          <button type="button" className="login-restricted-link" onClick={() => setShowVetModal(true)}>
+            <Lock size={13} />
+            Acesso restrito · área credenciada
+          </button>
         </section>
 
       </div>
@@ -2537,7 +2542,7 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
   );
 }
 
-function PetWelcomeArt({ className = "" }: AnyRecord) {
+function PetWelcomeArt({ className = "", onPublicRequest, onOpenAdoption }: AnyRecord) {
   return (
     <section className={`public-hero ${className}`.trim()}>
       <div className="hero-content">
@@ -2547,10 +2552,14 @@ function PetWelcomeArt({ className = "" }: AnyRecord) {
         </div>
         <h1 className="hero-title">Cuidado e proteção para quem não tem voz</h1>
         <p className="hero-subtitle">Castração gratuita, adoção responsável e bem-estar animal - digital e acessível.</p>
-        <div className="hero-features">
-          <div className="hero-feature"><CheckCircle2 size={12} /><span>Castração gratuita</span></div>
-          <div className="hero-feature"><CheckCircle2 size={12} /><span>Adoção responsável</span></div>
-          <div className="hero-feature"><CheckCircle2 size={12} /><span>Prontuário digital</span></div>
+        <div className="hero-actions">
+          <button type="button" className="hero-cta primary" onClick={onPublicRequest}>
+            Solicitar castração gratuita
+            <ChevronRight size={14} />
+          </button>
+          <button type="button" className="hero-cta ghost" onClick={onOpenAdoption}>
+            Ver animais para adoção
+          </button>
         </div>
       </div>
     </section>
