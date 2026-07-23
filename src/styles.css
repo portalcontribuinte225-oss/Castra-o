@@ -612,120 +612,175 @@ button:disabled {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: #fdfaf4;
 }
 
 
-.login-layout {
-  width: min(1760px, 100%);
-  margin: 0 auto;
-  padding: clamp(14px, 1.8vw, 30px);
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(340px, 22vw, 420px);
-  grid-template-rows: auto 1fr;
-  gap: clamp(16px, 2vw, 36px);
-  align-items: stretch;
-  flex: 1;
-  min-height: 0;
-}
-
-
-.login-card {
-  position: sticky;
-  top: clamp(16px, 2vw, 28px);
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 24px;
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.08);
-  padding: 24px;
-  display: grid;
-  gap: 16px;
-  align-self: start;
-  width: 100%;
-  max-height: calc(100vh - 32px);
-  overflow: auto;
-}
-
-
-.login-adoption-panel {
-  display: grid;
-  grid-template-columns: 1fr;
-  grid-template-rows: 1fr;
-  gap: 0;
-  align-items: stretch;
-  max-width: none;
-  min-width: 0;
-  min-height: 0;
-}
-
-
-.mobile-adoption-toggle {
-  display: none;
-}
-
-
-.login-wide-banner {
-  grid-column: 1 / -1;
+.public-home-footer {
+  text-align: center;
+  padding: clamp(20px, 2.5vw, 32px);
+  font-size: 0.78rem;
+  color: #93887a;
 }
 
 
 /* -- PUBLIC HERO ------------------------------- */
 .public-hero {
   position: relative;
-  border-radius: 22px;
+  width: min(1760px, calc(100% - clamp(28px, 3.6vw, 60px)));
+  margin: clamp(16px, 2vw, 28px) auto 0;
+  border-radius: 20px;
   overflow: hidden;
   display: grid;
-  grid-template-columns: 1fr;
-  min-height: clamp(128px, 11vw, 168px);
-  background:
-    radial-gradient(circle at 84% 50%, rgba(255, 255, 255, 0.14), transparent 26%),
-    linear-gradient(100deg, #071522 0%, #08283a 52%, #0a4650 100%);
-  box-shadow:
-    0 16px 50px rgba(9, 24, 40, 0.18),
-    0 0 0 1px rgba(255, 255, 255, 0.04);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 260px);
+  align-items: center;
+  gap: clamp(20px, 3vw, 40px);
+  min-height: clamp(220px, 24vw, 300px);
+  padding: 0 clamp(24px, 4vw, 60px);
+  background: linear-gradient(135deg, #e9dfc8 0%, #f3ead6 100%);
 }
 
 
 .hero-content {
-  padding: clamp(20px, 2.2vw, 32px) clamp(24px, 3.2vw, 46px);
+  padding: clamp(20px, 3vw, 32px) 0;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  gap: 3px;
+  gap: 14px;
   position: relative;
   z-index: 2;
-}
-
-
-.hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.11em;
-  text-transform: uppercase;
-  color: #93c5fd;
-  margin-bottom: 1px;
+  max-width: 480px;
 }
 
 
 .hero-title {
-  font-size: clamp(0.95rem, 1.55vw, 1.35rem);
-  line-height: 1.18;
-  color: #f8fafc;
+  font-size: clamp(1.5rem, 3.2vw, 2.1rem);
+  line-height: 1.2;
+  color: #2b2420;
   font-weight: 700;
   margin: 0;
-  letter-spacing: -0.018em;
+  letter-spacing: -0.01em;
 }
 
 
 .hero-subtitle {
-  font-size: 0.76rem;
-  line-height: 1.45;
-  color: rgba(248, 250, 252, 0.52);
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: #7a6f60;
   margin: 0;
+}
+
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+
+.hero-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  padding: 13px 24px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: filter 0.14s, background 0.14s;
+}
+
+
+.hero-cta.primary {
+  border: none;
+  background: #1f8a5f;
+  color: #ffffff;
+}
+
+
+.hero-cta.primary:hover {
+  background: #196f4c;
+}
+
+
+.hero-cta.outline {
+  border: 1.5px solid #2b2420;
+  background: transparent;
+  color: #2b2420;
+}
+
+
+.hero-cta.outline:hover {
+  background: rgba(43, 36, 32, 0.06);
+}
+
+
+.hero-photo-frame {
+  position: relative;
+  flex-shrink: 0;
+  width: 100%;
+  height: clamp(160px, 16vw, 220px);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 14px 34px rgba(60, 40, 20, 0.16);
+}
+
+
+.hero-photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+
+/* -- PUBLIC STATS ------------------------------- */
+.public-stats-row {
+  width: min(1760px, calc(100% - clamp(28px, 3.6vw, 60px)));
+  margin: clamp(20px, 2.5vw, 32px) auto 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+}
+
+
+.public-stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 16px 22px;
+  box-shadow: 0 4px 16px rgba(60, 40, 20, 0.05);
+  color: #1f8a5f;
+}
+
+
+.public-stat-card div {
+  display: flex;
+  flex-direction: column;
+}
+
+
+.public-stat-card strong {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #2b2420;
+}
+
+
+.public-stat-card span {
+  font-size: 0.7rem;
+  color: #93887a;
+}
+
+
+.public-adoption-section {
+  width: min(1760px, calc(100% - clamp(28px, 3.6vw, 60px)));
+  margin: 0 auto;
+  padding: clamp(20px, 2.5vw, 32px) 0 clamp(32px, 4vw, 56px);
 }
 
 
@@ -865,14 +920,6 @@ button:disabled {
 }
 
 
-.login-card .field input {
-  min-height: 46px;
-  border-radius: 12px;
-  border-color: #cfe2ea;
-  background: #fbfdfe;
-}
-
-
 .password-field > div {
   position: relative;
 }
@@ -948,6 +995,16 @@ button:disabled {
   font-weight: 500;
   color: #3f4d5c;
   white-space: nowrap;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+
+.public-topbar-link:hover {
+  color: #1f8a5f;
 }
 
 
@@ -996,124 +1053,6 @@ button:disabled {
 .public-topbar-brand .municipality-popover {
   left: 0;
   right: auto;
-}
-
-
-.login-welcome {
-  padding: 2px 0 4px;
-}
-
-
-.login-welcome-subtitle {
-  margin: 2px 0 0;
-  font-size: 0.78rem;
-  color: var(--muted);
-}
-
-.login-welcome h1 {
-  font-size: 1.08rem;
-  margin: 0;
-  color: var(--ink);
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-
-.login-main-actions {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 9px;
-}
-
-
-.login-big-action {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 14px;
-  min-height: 74px;
-  padding: 14px 16px;
-  border-radius: 14px;
-  border: 1.5px solid transparent;
-  cursor: pointer;
-  transition: transform 0.14s, box-shadow 0.14s, filter 0.14s;
-  text-align: left;
-}
-
-
-.action-icon-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.22);
-  flex-shrink: 0;
-}
-
-
-.action-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-
-.login-big-action-chevron {
-  flex-shrink: 0;
-  opacity: 0.55;
-}
-
-
-.login-big-action strong {
-  font-size: 0.88rem;
-  font-weight: 700;
-  line-height: 1.2;
-  display: block;
-}
-
-
-.login-big-action span {
-  font-size: 0.73rem;
-  line-height: 1.35;
-  opacity: 0.72;
-  display: block;
-}
-
-
-.login-big-action:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.06);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
-}
-
-
-.login-big-action.primary {
-  background: #2563eb;
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.32);
-}
-
-
-.login-big-action.consult {
-  background: #0a0a0a;
-  color: #fff;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-}
-
-
-.login-big-action.access {
-  background: #fff7ed;
-  color: #374151;
-  border-color: #fed7aa;
-}
-
-
-.login-big-action.access .action-icon-wrap {
-  background: rgba(251, 146, 60, 0.18);
 }
 
 
@@ -1647,20 +1586,6 @@ button:disabled {
 }
 
 
-.login-card .primary-action {
-  min-height: 46px;
-  border-radius: 12px;
-  box-shadow: 0 14px 28px rgba(56, 168, 232, 0.24);
-}
-
-
-.login-card .ghost-button {
-  min-height: 42px;
-  border-radius: 12px;
-  background: #f3f8fa;
-}
-
-
 .form-error {
   color: var(--red) !important;
   font-weight: 600;
@@ -1979,12 +1904,17 @@ button:disabled {
 
 
 .adoption-showcase {
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
   padding: 0;
   display: flex;
   flex-direction: column;
   gap: 0;
-  grid-column: 1 / -1;
-  overflow: hidden;
 }
 
 
@@ -2066,271 +1996,67 @@ button:disabled {
 
 .showcase-header {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
-  gap: 12px;
-}
-
-
-.adoption-showcase-header {
-  position: relative;
-  min-height: 0;
-  padding: 14px clamp(20px, 3vw, 36px);
-  border-radius: 23px 23px 0 0;
-  background:
-    linear-gradient(100deg, rgba(9, 24, 40, 0.95) 0%, rgba(12, 47, 69, 0.88) 55%, rgba(8, 61, 69, 0.80) 100%),
-    url("https://images.unsplash.com/photo-1548681528-6a5c45b66b42?auto=format&fit=crop&w=1400&q=75") center 35% / cover;
-  color: #ffffff;
-  z-index: 4;
-  overflow: hidden;
-}
-
-
-.adoption-showcase-header::after {
-  content: "";
-  position: absolute;
-  inset: auto 0 0;
-  height: 52%;
-  background: linear-gradient(0deg, rgba(255, 255, 255, 0.08), transparent);
-  pointer-events: none;
-}
-
-
-.adoption-showcase-header > div > .eyebrow {
-  display: inline-block;
-  color: #a8e9ff;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
 }
 
 
 .adoption-showcase-header h2 {
-  color: #ffffff;
+  margin: 0 0 6px;
+  color: #2b2420;
   max-width: 620px;
 }
 
 
-.adoption-showcase-header p {
+.adoption-showcase-subtitle {
+  margin: 0;
   max-width: 520px;
-  margin: 8px 0 0;
-  color: rgba(255, 255, 255, 0.84);
-  font-size: 0.98rem;
+  color: #93887a;
+  font-size: 0.88rem;
   line-height: 1.45;
-}
-
-
-.adoption-showcase-header .ghost-button {
-  border-color: rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.12);
-  color: #ffffff;
-}
-
-
-.adoption-header-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  margin-left: auto;
-  flex-wrap: wrap;
-  justify-content: flex-end;
 }
 
 
 .showcase-filter-pills {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 
-.showcase-pill-sep {
-  width: 1px;
-  height: 18px;
-  background: rgba(255, 255, 255, 0.25);
-  border-radius: 2px;
-  margin: 0 2px;
-}
-
-
-.showcase-pill {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+.showcase-pill-text {
+  padding: 9px 18px;
   border-radius: 999px;
-  border: 1.5px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(8px);
-  cursor: pointer;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-
-
-.showcase-pill:hover {
-  background: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.4);
-  transform: scale(1.08);
-}
-
-
-/* species — resting tint */
-.showcase-pill.species-all { color: rgba(255, 255, 255, 0.65); }
-
-.showcase-pill.species-felino { color: #7c3aed; border-color: rgba(124, 58, 237, 0.3); background: rgba(124, 58, 237, 0.08); }
-
-.showcase-pill.species-canino { color: #a78bfa; border-color: rgba(167, 139, 250, 0.4); background: rgba(167, 139, 250, 0.12); }
-
-
-/* sex — resting tint */
-.showcase-pill.sex-femea { color: #f472b6; border-color: rgba(244, 114, 182, 0.4); background: rgba(244, 114, 182, 0.12); }
-
-.showcase-pill.sex-macho { color: #22d3ee; border-color: rgba(34, 211, 238, 0.4); background: rgba(34, 211, 238, 0.12); }
-
-
-/* active states — vivid solid */
-.showcase-pill.species-all.active,
-.showcase-pill.sex-all.active {
-  background: rgba(255, 255, 255, 0.28);
-  border-color: rgba(255, 255, 255, 0.55);
-  color: #fff;
-  box-shadow: 0 3px 12px rgba(255, 255, 255, 0.15);
-}
-
-
-.showcase-pill.species-felino.active {
-  background: #7c3aed;
-  border-color: #7c3aed;
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
-  transform: scale(1.1);
-}
-
-
-.showcase-pill.species-canino.active {
-  background: #8b5cf6;
-  border-color: #8b5cf6;
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.55);
-  transform: scale(1.1);
-}
-
-
-.showcase-pill.sex-femea.active {
-  background: #ec4899;
-  border-color: #ec4899;
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(236, 72, 153, 0.55);
-  transform: scale(1.1);
-}
-
-
-.showcase-pill.sex-macho.active {
-  background: #06b6d4;
-  border-color: #06b6d4;
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(6, 182, 212, 0.55);
-  transform: scale(1.1);
-}
-
-
-.showcase-pill-clear {
-  display: inline-flex;
-  align-items: center;
-  padding: 0 10px;
-  min-height: 24px;
-  border-radius: 999px;
-  font-size: 0.7rem;
+  border: none;
+  background: #ffffff;
+  color: #7a6f60;
+  font-family: inherit;
+  font-size: 0.82rem;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.55);
   cursor: pointer;
-  transition: all 0.14s;
+  transition: background 0.14s, color 0.14s;
 }
 
 
-.showcase-pill-clear:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+.showcase-pill-text:hover:not(.active) {
+  background: #f0e9da;
 }
 
 
-.showcase-header h2 {
-  margin: 2px 0 0;
-  font-size: clamp(1.35rem, 1.6vw, 2rem);
-  letter-spacing: 0;
+.showcase-pill-text.active {
+  background: #2b2420;
+  color: #ffffff;
 }
 
 
 .public-animal-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(138px, 160px));
-  gap: 10px;
-  padding: clamp(10px, 1.4vw, 16px);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(240, 250, 252, 0.9));
-  flex: 1;
-  align-content: start;
-  overflow-y: auto;
-}
-
-
-.adoption-showcase.compact-gallery {
-  min-height: 0;
-}
-
-
-.adoption-showcase.compact-gallery .adoption-showcase-header {
-  min-height: 104px;
-  padding: 16px clamp(16px, 2vw, 24px);
-}
-
-
-.adoption-showcase.compact-gallery .public-animal-grid {
-  grid-template-columns: repeat(auto-fill, minmax(120px, 140px));
-  gap: 8px;
-  max-height: min(54vh, 500px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 10px;
-  align-content: start;
-}
-
-
-.adoption-showcase.compact-gallery .public-animal-card {
-  grid-template-rows: 1fr auto;
-}
-
-
-.adoption-showcase.compact-gallery .public-animal-photo {
-  aspect-ratio: 1 / 1;
-}
-
-
-.adoption-showcase.compact-gallery .public-interest-cta {
-  min-height: 24px;
-  font-size: 0.68rem;
-  gap: 3px;
-  padding: 0 6px;
-}
-
-
-.adoption-showcase.compact-gallery .public-interest-count {
-  min-height: 18px;
-  padding: 0 4px;
-  font-size: 0.64rem;
-}
-
-
-.adoption-showcase.compact-gallery .showcase-header h2 {
-  font-size: clamp(1.22rem, 1.45vw, 1.65rem);
-}
-
-
-.adoption-showcase.compact-gallery .adoption-showcase-header p {
-  margin-top: 5px;
-  font-size: 0.86rem;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 20px;
 }
 
 
@@ -2348,63 +2074,9 @@ button:disabled {
 }
 
 
-.login-adoption-panel .public-animal-grid {
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-}
-
-
-.adoption-showcase.few-animals .public-animal-grid {
-  grid-template-columns: repeat(auto-fit, minmax(110px, 150px));
-}
-
-
-.login-adoption-panel .public-animal-card {
-  min-height: unset;
-  border-color: #e5e7eb;
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(16, 54, 79, 0.07);
-  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
-}
-
-
-.login-adoption-panel .public-animal-card:hover {
-  transform: translateY(-2px);
-  border-color: #bfdbfe;
-  box-shadow: 0 8px 20px rgba(16, 54, 79, 0.12);
-}
-
-
-.login-adoption-panel .public-animal-photo {
-  min-height: 0;
-}
-
-
-.login-adoption-panel .public-animal-meta {
-  padding: 7px 8px 6px;
-}
-
-
-.login-adoption-panel .public-animal-card strong {
-  font-size: 0.84rem;
-}
-
-
-.login-adoption-panel .public-animal-meta small {
-  display: none;
-}
-
-
-.login-adoption-panel .public-interest-cta {
-  min-height: 30px;
-  margin: 0 7px 7px;
-  width: calc(100% - 14px);
-  font-size: 0.74rem;
-}
-
-
 .public-animal-card {
-  border: 1px solid rgba(203, 213, 225, 0.84);
-  border-radius: 12px;
+  border: none;
+  border-radius: 18px;
   background: #ffffff;
   color: var(--ink);
   padding: 0;
@@ -2413,15 +2085,14 @@ button:disabled {
   grid-template-rows: 1fr auto;
   text-align: left;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.07);
-  transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s;
+  box-shadow: 0 4px 16px rgba(60, 40, 20, 0.05);
+  transition: transform 0.18s, box-shadow 0.18s;
 }
 
 
 .public-animal-card:hover {
   transform: translateY(-2px);
-  border-color: #e2e8f0;
-  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.10);
+  box-shadow: 0 8px 22px rgba(60, 40, 20, 0.09);
 }
 
 
@@ -2453,25 +2124,25 @@ button:disabled {
 
 .public-animal-photo {
   position: relative;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 3;
   display: grid;
   place-items: center;
   color: white;
   overflow: hidden;
-  background: #10364f;
+  background: #e9dfc8;
 }
 
 
 .public-animal-badge {
   position: absolute;
-  top: 8px;
-  left: 8px;
-  max-width: calc(100% - 16px);
-  padding: 3px 8px;
+  top: 10px;
+  left: 10px;
+  max-width: calc(100% - 20px);
+  padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(15, 23, 42, 0.72);
+  background: rgba(43, 36, 32, 0.72);
   color: #ffffff;
-  font-size: 0.6rem;
+  font-size: 0.62rem;
   font-weight: 600;
   line-height: 1.3;
   overflow: hidden;
@@ -2510,83 +2181,56 @@ button:disabled {
 
 .public-animal-footer {
   display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+  padding: 16px;
+}
+
+
+.public-interest-count {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px;
-  border-top: 1px solid #f1f5f9;
+  gap: 6px;
+  color: #93887a;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+
+.public-interest-count.has-interest {
+  color: #1f8a5f;
+  font-weight: 600;
 }
 
 
 .public-interest-cta {
-  margin: 0;
-  width: auto;
-  flex: 1;
-  min-height: 26px;
-  border: 1px solid #bfdbfe;
-  border-radius: 8px;
-  background: var(--teal-soft);
-  color: var(--teal-dark);
+  width: 100%;
+  min-height: 42px;
+  border: none;
+  border-radius: 999px;
+  background: #1f8a5f;
+  color: #ffffff;
   font-weight: 600;
-  font-size: 0.70rem;
-  padding: 0 6px;
+  font-size: 0.84rem;
+  padding: 0 12px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: 6px;
   white-space: nowrap;
+  cursor: pointer;
   transition: background-color 150ms ease, transform 150ms ease;
 }
 
 
 .public-interest-cta:hover {
-  background: #dbeafe;
-  box-shadow: 0 6px 14px rgba(37, 99, 235, 0.16);
+  background: #196f4c;
 }
 
 
 .public-interest-cta:active {
   transform: translateY(1px);
-}
-
-
-.public-animal-card .adoption-status-badge,
-.public-interest-count {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0;
-  width: fit-content;
-  min-height: 22px;
-  font-size: 0.72rem;
-  font-weight: 600;
-  line-height: 1;
-  padding: 4px 8px;
-  border-radius: 999px;
-}
-
-
-.public-animal-card .adoption-status-badge {
-  border: 1px solid #b7dbc8;
-  background: #eefaf3;
-  color: #0f5132;
-}
-
-
-.public-interest-count {
-  border: none;
-  background: transparent;
-  color: #94a3b8;
-  flex-shrink: 0;
-  padding: 0 4px 0 2px;
-  font-size: 0.74rem;
-  font-weight: 600;
-  min-height: unset;
-}
-
-
-.public-interest-count.has-interest {
-  color: var(--teal);
-  font-weight: 700;
 }
 
 
@@ -8369,74 +8013,18 @@ main {
   }
 
 
-  .login-layout {
-    grid-template-columns: 1fr;
-    align-items: start;
-    max-width: 680px;
-  }
-
-
   .public-hero {
     grid-template-columns: 1fr;
-    min-height: clamp(72px, 12vw, 96px);
-    border-radius: 16px;
   }
 
 
-  .hero-content {
-    padding: 14px 18px;
-    gap: 10px;
-  }
-
-
-  .hero-title {
-    font-size: clamp(0.9rem, 3.5vw, 1.1rem);
-  }
-
-
-  .login-card {
-    position: static;
-    align-self: auto;
-    max-height: none;
-    overflow: visible;
-    order: -1;
-    border-radius: 20px;
-  }
-
-
-  .login-big-action:first-child,
-  .login-big-action:nth-child(2) {
-    min-height: 86px;
-  }
-
-
-  .login-adoption-panel {
+  .hero-photo-frame {
     display: none;
-    grid-template-columns: 1fr;
   }
 
 
-  .login-adoption-panel.mobile-visible {
-    display: grid;
-  }
-
-
-  .mobile-adoption-toggle {
-    order: -2;
-    min-height: 42px;
-    border: 1px solid #bae6fd;
-    border-radius: 14px;
-    background: #ffffff;
-    color: var(--teal-dark);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 600;
-  }
-
-
-  .login-adoption-panel .public-animal-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .public-animal-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 
 
@@ -8507,46 +8095,6 @@ main {
 }
 
 
-/* The public home sidebar is now a single-column action list (lighter than
-   the old 2x2 button grid), so it no longer needs the full 1120px collapse
-   below to stay readable. Re-establish the 2-column layout down to 900px,
-   without touching the shared 1120px breakpoint used by other screens. */
-@media (min-width: 901px) and (max-width: 1120px) {
-
-  .login-layout {
-    grid-template-columns: minmax(0, 1fr) clamp(300px, 26vw, 380px);
-    align-items: stretch;
-    max-width: none;
-  }
-
-
-  .login-card {
-    position: sticky;
-    align-self: start;
-    max-height: calc(100vh - 32px);
-    overflow: auto;
-    order: 0;
-  }
-
-
-  .login-big-action:first-child,
-  .login-big-action:nth-child(2) {
-    min-height: 74px;
-  }
-
-
-  .login-adoption-panel {
-    display: grid;
-  }
-
-
-  .mobile-adoption-toggle {
-    display: none;
-  }
-
-}
-
-
 @media (max-width: 720px) {
 
   main {
@@ -8570,24 +8118,8 @@ main {
   }
 
 
-  .public-topbar-link {
+  span.public-topbar-link {
     display: none;
-  }
-
-
-  .login-layout {
-    gap: 10px;
-  }
-
-
-  .login-card {
-    padding: 16px;
-    gap: 12px;
-  }
-
-
-  .login-adoption-panel {
-    gap: 10px;
   }
 
 
@@ -8710,11 +8242,6 @@ main {
   }
 
 
-  .login-adoption-panel .public-animal-grid {
-    grid-template-columns: 1fr;
-  }
-
-
   .adoption-profile-modal {
     grid-template-columns: 1fr;
     height: calc(100vh - 20px);
@@ -8780,11 +8307,6 @@ main {
   }
 
 
-  .login-card {
-    padding: 14px;
-  }
-
-
   .brand-mark,
   .metric-icon {
     width: 38px;
@@ -8805,20 +8327,7 @@ main {
   }
 
 
-  .public-hero {
-    min-height: 64px;
-    border-radius: 14px;
-  }
-
-
-  .adoption-showcase {
-    padding: 12px;
-  }
-
-
-  .public-animal-grid,
-  .login-adoption-panel .public-animal-grid,
-  .adoption-showcase.few-animals .public-animal-grid {
+  .public-animal-grid {
     grid-template-columns: 1fr;
   }
 
@@ -14095,9 +13604,6 @@ body * {
 }
 
 
-.login-layout,
-.login-card,
-.login-adoption-panel,
 .public-topbar,
 .public-topbar-brand,
 .public-topbar-nav,
@@ -14115,7 +13621,6 @@ body * {
 }
 
 
-.login-main-actions button,
 .primary-action,
 .secondary-action,
 .ghost-button,
@@ -14130,7 +13635,6 @@ body * {
 }
 
 
-.login-big-action,
 .access-modal-submit,
 .primary-action,
 .secondary-action,
@@ -14152,8 +13656,7 @@ body * {
 
 
 .nr-body,
-.public-animal-grid,
-.adoption-showcase.compact-gallery .public-animal-grid {
+.public-animal-grid {
   overscroll-behavior: contain;
 }
 
@@ -14249,11 +13752,6 @@ body * {
 
   .access-type-picker {
     grid-template-columns: 1fr;
-  }
-
-
-  .login-big-action {
-    min-height: 78px;
   }
 
 
@@ -16028,11 +15526,6 @@ body * {
 
 /* Solicitação pública: leitura e ergonomia em smartphones */
 @media (max-width: 720px) {
-
-  .login-wide-banner {
-    order: -4;
-  }
-
 
   .public-form-page:not(.public-form-page--consultation) {
     background:

@@ -43,8 +43,6 @@ import {
   Building2,
   Mail,
   Phone,
-  Flower2,
-  Zap,
   X,
   Home,
   Paperclip,
@@ -1820,36 +1818,21 @@ function PublicSchedulePicker({
   );
 }
 
-function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showViewAll = true, onInterestSent }: AnyRecord) {
+function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRecord) {
   const availableAnimals = adoptionAnimals.filter((animal) => animal.status !== "adotado");
-  const [adoptionFilters, setAdoptionFilters] = useState({ species: "", sex: "" });
+  const [speciesFilter, setSpeciesFilter] = useState("");
   const [selectedAnimal, setSelectedAnimal] = useState(null);
   const [showInterestForm, setShowInterestForm] = useState(false);
   const [interestSent, setInterestSent] = useState(false);
   const [interestForm, setInterestForm] = useState({ name: "", phone: "", visit_date: "" });
-  const speciesFilterOptions = [...new Set(["Felino", "Canino", ...availableAnimals.map((animal) => animal.species).filter(Boolean)])];
-  const sexFilterOptions = [...new Set(["Femea", "Macho", ...availableAnimals.map((animal) => animal.sex).filter(Boolean)])];
-  const filteredAnimals = availableAnimals
-    .filter((animal) => !adoptionFilters.species || animal.species === adoptionFilters.species)
-    .filter((animal) => !adoptionFilters.sex || animal.sex === adoptionFilters.sex)
-    .slice(0, limit);
-  const activeFilterCount = Number(Boolean(adoptionFilters.species)) + Number(Boolean(adoptionFilters.sex));
   const speciesQuickFilters = [
-    { value: "", label: "Todos os pets", icon: PawPrint },
-    ...speciesFilterOptions.map((species) => ({
-      value: species,
-      label: species,
-      icon: normalizeText(species).includes("fel") ? Cat : normalizeText(species).includes("can") ? Dog : PawPrint,
-    })),
+    { value: "", label: "Todos" },
+    { value: "canino", label: "Cães" },
+    { value: "felino", label: "Gatos" },
   ];
-  const sexQuickFilters = [
-    { value: "", label: "Todos os sexos", icon: PawPrint },
-    ...sexFilterOptions.map((sex) => ({
-      value: sex,
-      label: sex,
-      icon: normalizeText(sex).includes("feme") ? Flower2 : Zap,
-    })),
-  ];
+  const filteredAnimals = availableAnimals
+    .filter((animal) => !speciesFilter || normalizeText(animal.species).includes(speciesFilter))
+    .slice(0, limit);
 
   function openAnimalModal(animal, openInterestForm = false) {
     setSelectedAnimal(animal);
@@ -1878,55 +1861,23 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
 
   return (
     <>
-    <section className={`${filteredAnimals.length <= 2 ? "adoption-showcase few-animals" : "adoption-showcase"} ${showViewAll ? "" : "compact-gallery"}`.trim()}>
+    <section className="adoption-showcase">
       <div className="showcase-header adoption-showcase-header">
         <div>
-          <h2>Animais disponíveis para adoção</h2>
+          <h2>Quem está esperando por você</h2>
+          <p className="adoption-showcase-subtitle">Cada adoção abre espaço para salvar outro animal</p>
         </div>
-        <div className="adoption-header-actions">
-          <div className="showcase-filter-pills">
-            {speciesQuickFilters.map((filter) => {
-              const Icon = filter.icon;
-              const key = (filter.value || "all").toLowerCase();
-              return (
-                <button
-                  key={`sp-${key}`}
-                  className={`showcase-pill species-${key}${adoptionFilters.species === filter.value ? " active" : ""}`}
-                  type="button"
-                  title={filter.label}
-                  onClick={() => setAdoptionFilters((c) => ({ ...c, species: filter.value }))}
-                >
-                  <Icon size={18} />
-                </button>
-              );
-            })}
-            <span className="showcase-pill-sep" />
-            {sexQuickFilters.filter((f) => f.value !== "").map((filter) => {
-              const Icon = filter.icon;
-              const key = filter.value.toLowerCase();
-              return (
-                <button
-                  key={`sx-${key}`}
-                  className={`showcase-pill sex-${key}${adoptionFilters.sex === filter.value ? " active" : ""}`}
-                  type="button"
-                  title={filter.label}
-                  onClick={() => setAdoptionFilters((c) => ({ ...c, sex: filter.value }))}
-                >
-                  <Icon size={18} />
-                </button>
-              );
-            })}
-            {activeFilterCount > 0 && (
-              <button className="showcase-pill-clear" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>
-                Limpar
-              </button>
-            )}
-          </div>
-          {showViewAll && (
-            <button className="ghost-button" type="button" onClick={onOpenAdoption}>
-              Ver todos
+        <div className="showcase-filter-pills">
+          {speciesQuickFilters.map((filter) => (
+            <button
+              key={filter.value || "all"}
+              type="button"
+              className={`showcase-pill-text${speciesFilter === filter.value ? " active" : ""}`}
+              onClick={() => setSpeciesFilter(filter.value)}
+            >
+              {filter.label}
             </button>
-          )}
+          ))}
         </div>
       </div>
 
@@ -1940,10 +1891,6 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
           const displayName = String(animal.name || animal.animal_name || "Animal").trim();
           const profileSummary = [animal.species, animal.sex, animal.age].map((item) => String(item || "").trim()).filter(Boolean).join(" - ");
           const interestCount = Array.isArray(animal.interests) ? animal.interests.length : 0;
-          const rawStatus = String(animal.status || "").toLowerCase();
-          const statusLabel = rawStatus === "em_processo" ? "Em análise" : "Disponível";
-          const statusClass = rawStatus === "em_processo" ? "adoption-status-badge processing" : "adoption-status-badge available";
-          const description = String(animal.tone || animal.description || "").trim();
           return (
             <article
               className="public-animal-card"
@@ -1958,7 +1905,7 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
               <div className="public-animal-footer">
                 <span className={interestCount > 0 ? "public-interest-count has-interest" : "public-interest-count"}>
                   <Users size={13} />
-                  {interestCount}
+                  {interestCount} interessado{interestCount === 1 ? "" : "s"}
                 </span>
                 <button
                   className="public-interest-cta"
@@ -1968,8 +1915,8 @@ function AdoptionCarousel({ adoptionAnimals, onOpenAdoption, limit = 6, showView
                     openAnimalModal(animal, true);
                   }}
                 >
-                  <HeartHandshake size={12} />
-                  Adotar
+                  <HeartHandshake size={14} />
+                  Quero adotar
                 </button>
               </div>
             </article>
@@ -2106,7 +2053,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
   const [error, setError] = useState("");
   const [showVetModal, setShowVetModal] = useState(false);
   const [showAccessModal, setShowAccessModal] = useState(false);
-  const [showMobileAdoption, setShowMobileAdoption] = useState(false);
+  const adoptionSectionRef = useRef(null);
   const [resetScreen, setResetScreen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
   const [resetCode, setResetCode] = useState("");
@@ -2186,6 +2133,13 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
   }
 
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
+  const availableForAdoption = adoptionAnimals.filter((animal) => animal.status !== "adotado");
+  const heroAnimalWithPhoto = availableForAdoption.find((animal) => getAnimalMainPhoto(animal));
+  const heroImage = heroAnimalWithPhoto ? getAnimalMainPhoto(heroAnimalWithPhoto) : "";
+
+  function scrollToAdoption() {
+    adoptionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   return (
     <main className="login-page">
@@ -2209,8 +2163,10 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
           </div>
         </div>
         <nav className="public-topbar-nav">
-          <span className="public-topbar-link">Serviços</span>
-          <span className="public-topbar-link">Dúvidas frequentes</span>
+          <button type="button" className="public-topbar-link" onClick={onPublicRequest}>Solicitações</button>
+          <button type="button" className="public-topbar-link" onClick={onPublicConsult}>Prontuário</button>
+          <button type="button" className="public-topbar-link" onClick={() => setShowAccessModal(true)}>Credenciamento</button>
+          <span className="public-topbar-link">Denunciar</span>
           <button type="button" className="public-topbar-enter" onClick={() => setShowVetModal(true)}>
             <User size={15} />
             Entrar
@@ -2218,54 +2174,44 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
         </nav>
       </div>
 
-      <div className="login-layout">
-        <button className="mobile-adoption-toggle" type="button" onClick={() => setShowMobileAdoption((current) => !current)}>
-          {showMobileAdoption ? "Ocultar adoção" : "Ver animais para adoção"}
-        </button>
+      <PetWelcomeArt
+        heroImage={heroImage}
+        onGoToAdoption={scrollToAdoption}
+        onPublicRequest={onPublicRequest}
+      />
 
-        <PetWelcomeArt className="login-wide-banner" />
-
-        <section className={showMobileAdoption ? "login-adoption-panel mobile-visible" : "login-adoption-panel"}>
-          <AdoptionCarousel adoptionAnimals={adoptionAnimals} limit={12} showViewAll={false} onInterestSent={onInterestSent} />
-        </section>
-
-        <section className="login-card">
-          <div className="login-welcome">
-            <h1>Bem-estar e proteção animal</h1>
-            <p className="login-welcome-subtitle">Serviços para a população</p>
+      <div className="public-stats-row">
+        <div className="public-stat-card">
+          <HeartHandshake size={20} />
+          <div>
+            <strong>0</strong>
+            <span>adotados</span>
           </div>
-
-          <div className="login-main-actions">
-            <button className="login-big-action primary" onClick={onPublicRequest}>
-              <div className="action-icon-wrap"><PawPrint size={22} /></div>
-              <div className="action-text">
-                <strong>Solicitações</strong>
-                <span>Primeiro cadastro do tutor e animal</span>
-              </div>
-              <ChevronRight size={16} className="login-big-action-chevron" />
-            </button>
-
-            <button className="login-big-action consult" onClick={onPublicConsult}>
-              <div className="action-icon-wrap"><Search size={22} /></div>
-              <div className="action-text">
-                <strong>Prontuário</strong>
-                <span>Consultar histórico e solicitar procedimento</span>
-              </div>
-              <ChevronRight size={16} className="login-big-action-chevron" />
-            </button>
-
-            <button className="login-big-action access" onClick={() => setShowAccessModal(true)}>
-              <div className="action-icon-wrap"><Users size={20} /></div>
-              <div className="action-text">
-                <strong>Credenciamento</strong>
-                <span>ONGs e protetores</span>
-              </div>
-              <ChevronRight size={16} className="login-big-action-chevron" />
-            </button>
+        </div>
+        <div className="public-stat-card">
+          <ClipboardCheck size={20} />
+          <div>
+            <strong>0</strong>
+            <span>castrações</span>
           </div>
-        </section>
-
+        </div>
+        <div className="public-stat-card">
+          <Users size={20} />
+          <div>
+            <strong>0</strong>
+            <span>ONGs parceiras</span>
+          </div>
+        </div>
       </div>
+
+      <section className="public-adoption-section" ref={adoptionSectionRef}>
+        <AdoptionCarousel adoptionAnimals={adoptionAnimals} onInterestSent={onInterestSent} />
+      </section>
+
+      <footer className="public-home-footer">
+        <span>{activeMunicipality ? `Prefeitura Municipal de ${activeMunicipality.name}` : "Sistema Municipal de Proteção Animal"} · Bem-estar animal</span>
+      </footer>
+
       {showAccessModal && (
         <PublicAccessRequestModal
           onClose={() => setShowAccessModal(false)}
@@ -2536,17 +2482,26 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
   );
 }
 
-function PetWelcomeArt({ className = "" }: AnyRecord) {
+function PetWelcomeArt({ className = "", heroImage = "", onGoToAdoption, onPublicRequest }: AnyRecord) {
   return (
     <section className={`public-hero ${className}`.trim()}>
       <div className="hero-content">
-        <div className="hero-eyebrow">
-          <PawPrint size={11} />
-          <span>Sistema Municipal de Proteção Animal</span>
-        </div>
         <h1 className="hero-title">Cuidado e proteção para quem não tem voz</h1>
         <p className="hero-subtitle">Castração gratuita, adoção responsável e bem-estar animal - digital e acessível.</p>
+        <div className="hero-actions">
+          <button type="button" className="hero-cta primary" onClick={onGoToAdoption}>
+            Quero adotar
+          </button>
+          <button type="button" className="hero-cta outline" onClick={onPublicRequest}>
+            Agendar castração
+          </button>
+        </div>
       </div>
+      {heroImage && (
+        <div className="hero-photo-frame">
+          <img src={heroImage} alt="Animal disponível para adoção" />
+        </div>
+      )}
     </section>
   );
 }
