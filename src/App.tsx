@@ -2198,7 +2198,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
             <div className="brand-mark"><PawPrint size={20} /></div>
           )}
           <div>
-            <strong>{activeMunicipality ? activeMunicipality.name : "Sistema municipal"}</strong>
+            <strong>{activeMunicipality ? `Prefeitura de ${activeMunicipality.name}` : "Sistema municipal"}</strong>
             {municipalities.length > 0 && (
               <MunicipalitySelectorChip
                 municipalities={municipalities}

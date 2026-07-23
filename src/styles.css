@@ -612,7 +612,6 @@ button:disabled {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  padding: clamp(14px, 1.8vw, 30px);
   background: #ffffff;
 }
 
@@ -620,6 +619,7 @@ button:disabled {
 .login-layout {
   width: min(1760px, 100%);
   margin: 0 auto;
+  padding: clamp(14px, 1.8vw, 30px);
   display: grid;
   grid-template-columns: minmax(0, 1fr) clamp(340px, 22vw, 420px);
   grid-template-rows: auto 1fr;
@@ -987,16 +987,14 @@ button:disabled {
 
 /* -- PUBLIC TOPBAR ------------------------------- */
 .public-topbar {
-  width: min(1760px, 100%);
-  margin: 0 auto clamp(14px, 1.8vw, 22px);
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 14px clamp(16px, 2vw, 28px);
+  padding: 16px clamp(16px, 2vw, 40px);
   background: #ffffff;
-  border: 1px solid #e5e7eb;
-  border-radius: 18px;
+  border-bottom: 1px solid #e5e7eb;
 }
 
 
@@ -8481,11 +8479,6 @@ main {
   }
 
 
-  .public-topbar {
-    max-width: 680px;
-  }
-
-
   .public-hero {
     grid-template-columns: 1fr;
     min-height: clamp(72px, 12vw, 96px);
@@ -8630,11 +8623,6 @@ main {
   }
 
 
-  .public-topbar {
-    max-width: none;
-  }
-
-
   .login-card {
     position: sticky;
     align-self: start;
@@ -8676,8 +8664,7 @@ main {
 
   .public-topbar {
     flex-wrap: wrap;
-    padding: 12px 14px;
-    border-radius: 14px;
+    padding: 12px 16px;
   }
 
 
