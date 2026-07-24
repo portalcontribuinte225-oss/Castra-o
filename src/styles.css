@@ -17785,28 +17785,69 @@ form textarea:focus,
 }
 
 
-/* fluxo público de solicitação: sobrepõe o azul acima (compartilhado com .nr-shell--internal/--embedded, fora de escopo) */
+/* fluxo público de solicitação: sobrepõe o azul acima (compartilhado com .nr-shell--internal/--embedded, fora de escopo).
+   Mockup: dia com vaga mantém fundo branco (só a borda fica verde-clara) — o dia
+   NÃO ganha um preenchimento verde; só o texto de vagas (small) fica verde/negrito,
+   o número do dia (strong) continua na cor padrão escura. */
+.nr-shell--public .calendar-day-button {
+  border-color: #e6ddc9;
+}
+
+
 .nr-shell--public .calendar-day-button.has-vacancy {
   border-color: #bfe0cf;
+  background: #ffffff;
+}
+
+
+.nr-shell--public .calendar-day-button.has-vacancy strong {
+  color: #2b2420;
+}
+
+
+.nr-shell--public .calendar-day-button.has-vacancy small {
+  color: #1f8a5f;
+  font-weight: 700;
+}
+
+
+/* Selecionado: mockup usa fundo verde-claro + borda verde, não preenchimento
+   sólido com texto branco. */
+.nr-shell--public .calendar-day-button.selected {
+  border-color: #1f8a5f;
   background: #eaf3ee;
 }
 
 
-.nr-shell--public .calendar-day-button.has-vacancy strong,
-.nr-shell--public .calendar-day-button.has-vacancy small {
-  color: #156b48;
+.nr-shell--public .calendar-day-button.selected strong {
+  color: #2b2420;
 }
 
 
-.nr-shell--public .calendar-day-button.selected {
-  border-color: #1f8a5f;
-  background: #1f8a5f;
-}
-
-
-.nr-shell--public .calendar-day-button.selected strong,
 .nr-shell--public .calendar-day-button.selected small {
-  color: #ffffff;
+  color: #1f8a5f;
+  font-weight: 700;
+}
+
+
+.nr-shell--public .calendar-day-button:disabled {
+  color: #b0a894;
+  background: #ffffff;
+  border-color: #e6ddc9;
+}
+
+
+.nr-shell--public .calendar-day-button:disabled strong,
+.nr-shell--public .calendar-day-button:disabled small {
+  color: #b0a894;
+}
+
+
+.nr-shell--public .calendar-weekdays span {
+  color: #93887a;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
 }
 
 
@@ -21232,9 +21273,33 @@ form textarea:focus,
 .nr-shell--public .cadunico-checkbox,
 .nr-shell--public .animal-photo-upload-card,
 .nr-shell--public .public-schedule-picker,
-.nr-shell--public .doc-declaration,
 .nr-shell--public .doc-empty-note,
 .nr-shell--public .form-sub-card {
+  border-color: #e6ddc9;
+}
+
+
+/* Mockup não coloca a declaração dentro de uma caixa própria — é texto/checkbox
+   direto no card "Documentos e termo" (que agora existe, ver App.tsx). Achata o
+   .doc-declaration (que antes era uma caixa cinza com borda própria) pra isso. */
+.nr-shell--public .doc-declaration {
+  border: none;
+  background: transparent;
+}
+
+.nr-shell--public .doc-declaration p {
+  padding: 0 0 16px;
+  border-bottom: none;
+  color: #5c5348;
+}
+
+.nr-shell--public .doc-accept-check {
+  padding: 0;
+  background: transparent;
+  color: #2b2420;
+}
+
+.nr-shell--public .doc-check-box {
   border-color: #e6ddc9;
 }
 
@@ -21274,21 +21339,38 @@ form textarea:focus,
 }
 
 
+/* Mockup: pill do mês sem borda, fundo bege (mesma cor da trilha dos pills de
+   Espécie/Sexo/Porte) — não branco com borda creme. */
 .nr-shell--public .sched-month-trigger {
-  border-color: #e6ddc9;
-  background: #ffffff;
-  color: #1f8a5f;
+  border: none;
+  background: #f1ede3;
+  color: #2b2420;
 }
 
 
 .nr-shell--public .sched-month-trigger:hover {
-  border-color: #bfe0cf;
   background: #eaf3ee;
 }
 
 
 .nr-shell--public .sched-month-trigger svg:first-child {
   color: #1f8a5f;
+}
+
+
+/* Dropdown de meses (funcionalidade real, sem equivalente no mockup estático) —
+   estende a paleta creme/verde já usada no hover/is-active para o restante. */
+.nr-shell--public .sched-month-dropdown {
+  border-color: #e6ddc9;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(43, 36, 32, 0.1);
+}
+
+
+.nr-shell--public .sched-month-tab {
+  border-color: #e6ddc9;
+  background: #fdfaf4;
+  color: #5c5348;
 }
 
 
@@ -21315,8 +21397,26 @@ form textarea:focus,
 
 .nr-shell--public .doc-attach-btn {
   border-color: #e6ddc9;
-  background: #ffffff;
+  background: #eaf3ee;
   color: #1f8a5f;
+}
+
+
+/* Linha de documento no estado padrão/vazio (aguardando arquivo) — .empty é a classe
+   real quando não há upload (ver DocumentScannerUpload). Os estados de validação por
+   IA (.approved/.rejected/.checking/.attached) continuam com as cores semânticas de
+   sempre — por isso o seletor mira .empty especificamente, não .doc-row genérico
+   (que teria a mesma especificidade das variantes e venceria por ordem no arquivo). */
+.nr-shell--public .doc-row.empty {
+  border-color: #e6ddc9;
+}
+
+.nr-shell--public .doc-row-hint {
+  color: #93887a;
+}
+
+.nr-shell--public .doc-row-info strong {
+  color: #2b2420;
 }
 
 

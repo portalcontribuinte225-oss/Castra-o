@@ -4069,55 +4069,58 @@ function NewRequest({
             )}
           </FormSection>}
 
-          {!internalSimple && formStep === 3 && <FormSection title="Documentos comprobatórios">
-            <label className="doc-photo-zone">
-              {documentUploads.animal_photo?.dataUrl ? (
-                <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
-              ) : (
-                <div className="doc-photo-placeholder">
-                  <ImagePlus size={28} />
-                  <span>Foto do animal</span>
-                  <small>Opcional</small>
+          {!internalSimple && formStep === 3 && <FormSection title="Documentos e termo">
+            <div className="form-sub-card">
+              <span className="form-sub-card-title">Documentos e termo</span>
+              <label className="doc-photo-zone">
+                {documentUploads.animal_photo?.dataUrl ? (
+                  <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
+                ) : (
+                  <div className="doc-photo-placeholder">
+                    <ImagePlus size={28} />
+                    <span>Foto do animal</span>
+                    <small>Opcional</small>
+                  </div>
+                )}
+                <input type="file" accept="image/*" onClick={(e) => { e.currentTarget.value = ""; }} onChange={(e) => handleAnimalPhotoFile(e.target.files?.[0])} />
+                {documentUploads.animal_photo && (
+                  <button className="doc-photo-remove" type="button" onClick={(e) => { e.preventDefault(); removeDocumentFile("animal_photo"); }}>
+                    <Trash2 size={13} />
+                  </button>
+                )}
+              </label>
+
+              {!selectedRequestType && (
+                <div className="doc-empty-note">
+                  <BadgeCheck size={16} />
+                  <span>Nenhum documento obrigatório para este cadastro.</span>
                 </div>
               )}
-              <input type="file" accept="image/*" onClick={(e) => { e.currentTarget.value = ""; }} onChange={(e) => handleAnimalPhotoFile(e.target.files?.[0])} />
-              {documentUploads.animal_photo && (
-                <button className="doc-photo-remove" type="button" onClick={(e) => { e.preventDefault(); removeDocumentFile("animal_photo"); }}>
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </label>
+              {selectedTypeDocuments.map((document) => {
+                const upload = documentUploads[document.id];
+                return (
+                  <DocumentScannerUpload
+                    key={document.id}
+                    document={document}
+                    upload={upload}
+                    aiActive={aiSettings.active}
+                    onUpload={(file) => handleDocumentFile(document, file)}
+                    onRemove={() => removeDocumentFile(document.id)}
+                  />
+                );
+              })}
 
-            {!selectedRequestType && (
-              <div className="doc-empty-note">
-                <BadgeCheck size={16} />
-                <span>Nenhum documento obrigatório para este cadastro.</span>
+              <div className="doc-declaration">
+                <p>
+                  O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.{" "}
+                  <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
+                </p>
+                <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
+                  <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+                  <span className="doc-check-box" />
+                  <span>Li e concordo com os termos</span>
+                </label>
               </div>
-            )}
-            {selectedTypeDocuments.map((document) => {
-              const upload = documentUploads[document.id];
-              return (
-                <DocumentScannerUpload
-                  key={document.id}
-                  document={document}
-                  upload={upload}
-                  aiActive={aiSettings.active}
-                  onUpload={(file) => handleDocumentFile(document, file)}
-                  onRemove={() => removeDocumentFile(document.id)}
-                />
-              );
-            })}
-
-            <div className="doc-declaration">
-              <p>
-                O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.{" "}
-                <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
-              </p>
-              <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
-                <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-                <span className="doc-check-box" />
-                <span>Li e concordo com os termos</span>
-              </label>
             </div>
           </FormSection>}
 
