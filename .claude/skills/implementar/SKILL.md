@@ -112,6 +112,40 @@ Não comece codando sem entender o padrão existente.
 
 ---
 
+## Eliminar código antigo, duplicado e obsoleto
+
+Esta skill não deve empilhar código novo sobre código antigo. O objetivo final é que, para o que foi alterado, exista **uma única versão vigente** — a nova — não a nova coexistindo com uma antiga escondida, morta ou ainda ativa por baixo.
+
+Isso vale especialmente para CSS, mas também para funções, componentes, hooks, imports e lógica condicional.
+
+### Regra central
+
+Ao alterar um componente/estilo/função que já existe:
+
+1. Procure **todas** as outras definições/ocorrências relacionadas antes de considerar a mudança concluída — não só o primeiro lugar que você editou.
+2. Se encontrar uma versão antiga (de uma sessão/redesign/refatoração anterior) que ainda afeta o mesmo elemento: **atualize ou remova essa versão antiga diretamente**. Não escreva uma regra nova só para "vencer" a antiga por cima.
+3. Usar `!important`, seletores mais específicos ou maior prioridade como forma de sobrepor uma regra antiga só é aceitável quando a regra antiga é genuinamente compartilhada com outros componentes que estão fora do escopo desta implementação e não podem ser tocados — e mesmo assim, deixe um comentário curto explicando o motivo (ex: `/* sobrepõe a regra X, compartilhada com Y, fora de escopo */`).
+4. Se, depois da mudança, alguma função/bloco/regra ficou 100% inalcançável (dead code), **remova** — não deixe "por precaução". Código morto não é rede de segurança, é fonte de confusão para a próxima pessoa que mexer ali (inclusive você mesmo, numa sessão futura).
+
+### Checklist específico para CSS
+
+Antes de considerar uma restilização/redesign concluído:
+
+- Rode uma busca (grep) pelo nome de **cada classe alterada** no arquivo de estilos inteiro — não só no trecho que você editou. Projetos que já passaram por redesigns anteriores costumam ter blocos escopados (`.modal-x .classe`, `.tela-y .classe`) com especificidade maior que a regra "base" que você acabou de mexer, e essas regras mais específicas vencem silenciosamente.
+- Para cada ocorrência extra encontrada: confirme se ela ainda é alcançável (renderiza de fato) e, se sim, se ela está com a paleta/comportamento antigo. Se estiver, atualize ela — é provavelmente ela quem está realmente na tela, não a que você editou primeiro.
+- Verifique visualmente estados além do padrão: `:hover`, `:focus`/`:focus-within`, `:disabled`, breakpoints mobile. Resíduos de estilo antigo adoram se esconder exatamente nesses estados (ex: um anel de foco azul de uma paleta antiga, escondido atrás da borda verde nova).
+- Depois de identificar a regra que **realmente** vence a cascata (a de maior especificidade, ou a última em ordem de origem quando a especificidade empata), edite essa — não adicione mais uma camada por cima "só para garantir".
+
+### Checklist específico para lógica/componentes
+
+- Ao substituir uma função, hook, componente ou fluxo, procure por outras implementações parecidas/duplicadas no projeto antes de decidir se cria algo novo ou reaproveita.
+- Remova imports, variáveis de estado, props e arquivos que ficaram sem uso após a mudança — não deixe para "uma limpeza depois".
+- Não deixe branches condicionais, feature flags ou fallbacks para um comportamento antigo que não existe mais.
+
+Não comece a próxima etapa (testes/validações) achando que terminou só porque a primeira edição "parece certa" — o critério de conclusão é confirmar que não sobrou nenhuma versão antiga/duplicada ainda ativa.
+
+---
+
 ## Enums e Constantes de Domínio
 
 ### Evite strings mágicas
@@ -479,6 +513,10 @@ Evite:
 - fazer refactor oportunista
 - criar padrões paralelos
 - duplicar lógica existente
+- empilhar CSS/lógica nova sobre a antiga em vez de atualizar ou remover a antiga
+- resolver conflito de especificidade/prioridade com `!important` ou seletor mais específico sem antes investigar e tentar corrigir a regra antiga conflitante
+- deixar código morto/inalcançável no arquivo achando que é "mais seguro" não mexer
+- considerar uma restilização concluída sem ter buscado outras ocorrências das classes alteradas no arquivo inteiro
 - usar `any` para calar TypeScript
 - fazer fetch/axios direto no componente
 - criar queryKey hardcoded
@@ -504,6 +542,8 @@ Antes de concluir:
 - [ ] A implementação ficou dentro do escopo.
 - [ ] Arquivos desnecessários não foram alterados.
 - [ ] Padrões existentes foram seguidos.
+- [ ] Buscado (grep) cada classe/função/componente alterado no arquivo/projeto inteiro para confirmar que não sobrou versão antiga, duplicada ou de maior especificidade/prioridade ainda ativa por baixo da mudança.
+- [ ] Nenhum código morto/inalcançável foi deixado "por precaução"; o que ficou obsoleto foi removido ou atualizado, não apenas sobreposto.
 - [ ] Testes foram adicionados/atualizados quando aplicável.
 - [ ] Lint/typecheck/test/build foram executados quando disponíveis.
 - [ ] Nenhuma migration foi executada sem confirmação.
