@@ -2466,13 +2466,6 @@ button:disabled {
   flex-shrink: 0;
 }
 
-.nr-topbar-right {
-  position: absolute;
-  right: 20px;
-  top: 50%;
-  transform: translateY(-50%);
-}
-
 .nr-home-btn {
   position: fixed;
   top: 16px;
@@ -5304,13 +5297,6 @@ main {
 
 
 
-.animal-form,
-.declaration-box {
-  border: 1px solid #d0d7e3;
-  border-radius: 12px;
-  padding: 16px;
-  background: #ffffff;
-}
 
 
 /* --- Documentos comprobatórios modernizado --- */
@@ -5607,22 +5593,6 @@ main {
 }
 
 
-.animal-form {
-  display: grid;
-  gap: 12px;
-}
-
-
-/* --- Animal card — public form overrides --- */
-.single-request-form .animal-form {
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  overflow: hidden;
-  gap: 0;
-  background: #fff;
-}
-
-
 .single-request-form .animal-accordion-toggle {
   background: #ffffff;
   padding: 11px 16px;
@@ -5655,9 +5625,7 @@ main {
 .single-request-form .animal-form .compact-choice-field,
 .single-request-form .animal-form .animal-choice-grid,
 .single-request-form .animal-form .two-column-fields,
-.single-request-form .animal-form .birth-weight-row,
-.single-request-form .animal-form .access-field,
-.single-request-form .animal-form .health-card {
+.single-request-form .animal-form .access-field {
   padding: 10px 14px;
   margin: 0;
 }
@@ -5672,12 +5640,6 @@ main {
 
 .single-request-form .animal-form .animal-choice-grid.two-col {
   grid-template-columns: repeat(2, 1fr);
-}
-
-
-.single-request-form .animal-form .animal-choice-grid.breed-weight-row {
-  grid-template-columns: minmax(0, 1fr) 100px;
-  align-items: end;
 }
 
 
@@ -5696,8 +5658,7 @@ main {
 }
 
 
-.single-request-form .animal-form .compact-choice-field button,
-.single-request-form .animal-form .yes-no-field button {
+.single-request-form .animal-form .compact-choice-field button {
   min-height: 36px;
   border-radius: 8px;
   font-size: 0.83rem;
@@ -5706,33 +5667,6 @@ main {
   background: #f8fafc;
   color: #475569;
   transition: border-color 0.13s, background 0.13s, color 0.13s;
-}
-
-
-.single-request-form .animal-form .compact-choice-field button.selected,
-.single-request-form .animal-form .yes-no-field button.selected {
-  background: #dbeafe;
-  border-color: #3b82f6;
-  color: #1d4ed8;
-}
-
-
-.single-request-form .animal-form .health-card {
-  background: #f8fafc;
-  border: none;
-  border-top: 1px solid #f1f5f9;
-  border-radius: 0;
-}
-
-
-.single-request-form .animal-form .health-card > strong {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #64748b;
-  display: block;
-  margin-bottom: 8px;
 }
 
 
@@ -5861,31 +5795,8 @@ main {
 }
 
 
-.animal-choice-grid.breed-weight-row {
-  grid-template-columns: minmax(0, 1fr) minmax(130px, 0.48fr);
-  align-items: end;
-}
-
-
 .animal-choice-grid.three-col {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-
-.health-card,
-.choice-card {
-  border: 1px solid #e5e7eb;
-  background: #ffffff;
-  border-radius: var(--radius);
-  padding: 12px;
-  display: grid;
-  gap: 10px;
-}
-
-
-.health-card > strong,
-.choice-card > strong {
-  font-size: 0.92rem;
 }
 
 
@@ -6000,7 +5911,6 @@ main {
 }
 
 
-.yes-no-field,
 .compact-choice-field {
   display: grid;
   gap: 6px;
@@ -6008,7 +5918,6 @@ main {
 }
 
 
-.yes-no-field > span,
 .compact-choice-field > span {
   color: var(--muted);
   font-size: 0.84rem;
@@ -6016,7 +5925,6 @@ main {
 }
 
 
-.yes-no-field > div,
 .compact-choice-field > div {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -6024,7 +5932,6 @@ main {
 }
 
 
-.yes-no-field button,
 .compact-choice-field button {
   min-height: 34px;
   border: 1px solid #e5e7eb;
@@ -6044,25 +5951,11 @@ main {
 }
 
 
-.health-card .compact-choice-field button {
-  min-height: 34px;
-  padding: 4px 8px;
-}
-
-
 .compact-choice-field button small {
   color: var(--muted);
   font-size: 0.56rem;
   font-weight: 600;
   line-height: 1;
-}
-
-
-.yes-no-field button.selected,
-.compact-choice-field button.selected {
-  background: #e6f5ff;
-  border-color: #2563eb;
-  color: #1479b8;
 }
 
 
@@ -8183,9 +8076,7 @@ main {
   .animal-choice-grid,
   .animal-choice-grid.species-row,
   .animal-choice-grid.two-col,
-  .animal-choice-grid.breed-weight-row,
   .animal-choice-grid.three-col,
-  .birth-weight-row,
   .inline-microchip-fields,
   .animal-main-grid,
   .access-metrics-grid,
@@ -12863,9 +12754,7 @@ body * {
 
 
 .internal-request-modal .field > span,
-.internal-request-modal .field-label,
-.internal-request-modal .compact-choice-label,
-.internal-request-modal .segmented-label {
+.internal-request-modal .field-label {
   color: #475569;
   font-size: 0.78rem;
   font-weight: 760;
@@ -12911,20 +12800,12 @@ body * {
 }
 
 
-.internal-request-modal .animal-form,
-.internal-request-modal .choice-card,
-.internal-request-modal .health-card,
 .internal-request-modal .animal-photo-upload-card,
 .internal-request-modal .public-schedule-picker {
   border: 1px solid rgba(203, 213, 225, 0.86);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.055);
-}
-
-
-.internal-request-modal .animal-form {
-  padding: 14px;
 }
 
 
@@ -12943,23 +12824,9 @@ body * {
 }
 
 
-.internal-request-modal .choice-card,
-.internal-request-modal .health-card {
-  padding: 12px;
-}
-
-
-.internal-request-modal .compact-choice-grid,
 .internal-request-modal .animal-choice-grid,
 .internal-request-modal .health-grid {
   gap: 8px;
-}
-
-
-.internal-request-modal .compact-choice button,
-.internal-request-modal .yes-no-field button {
-  min-height: 38px;
-  border-radius: 11px;
 }
 
 
@@ -13423,12 +13290,6 @@ body * {
 }
 
 
-.internal-request-modal .single-request-form .animal-form {
-  padding: 0;
-  overflow: hidden;
-}
-
-
 .internal-request-modal .single-request-form .animal-form-header {
   margin: 0;
 }
@@ -13437,25 +13298,13 @@ body * {
 .internal-request-modal .single-request-form .animal-form .compact-choice-field,
 .internal-request-modal .single-request-form .animal-form .animal-choice-grid,
 .internal-request-modal .single-request-form .animal-form .two-column-fields,
-.internal-request-modal .single-request-form .animal-form .birth-weight-row,
-.internal-request-modal .single-request-form .animal-form .access-field,
-.internal-request-modal .single-request-form .animal-form .health-card {
+.internal-request-modal .single-request-form .animal-form .access-field {
   padding: 9px 14px;
 }
 
 
 .internal-request-modal .single-request-form .animal-form .animal-choice-grid.two-col {
   grid-template-columns: minmax(0, 1fr) minmax(250px, 0.9fr);
-}
-
-
-.internal-request-modal .single-request-form .animal-form .animal-choice-grid.breed-weight-row {
-  grid-template-columns: minmax(0, 1fr) 132px;
-}
-
-
-.internal-request-modal .single-request-form .animal-form .birth-weight-row {
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
 }
 
 
@@ -13504,8 +13353,6 @@ body * {
 @media (max-width: 760px) {
 
   .internal-request-modal .single-request-form .animal-form .animal-choice-grid.two-col,
-  .internal-request-modal .single-request-form .animal-form .animal-choice-grid.breed-weight-row,
-  .internal-request-modal .single-request-form .animal-form .birth-weight-row,
   .internal-request-modal .internal-microchip-row {
     grid-template-columns: 1fr;
   }
@@ -15543,9 +15390,8 @@ body * {
     justify-content: center;
     align-items: center;
     padding: 10px 12px 8px;
-    background: rgba(246, 248, 251, 0.94);
-    backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgba(207, 229, 240, 0.8);
+    background: transparent;
+    border-bottom: 0;
   }
 
 
@@ -15693,8 +15539,6 @@ body * {
   .public-form-page:not(.public-form-page--consultation) .sms-verify-row,
   .public-form-page:not(.public-form-page--consultation) .animal-choice-grid,
   .public-form-page:not(.public-form-page--consultation) .animal-choice-grid.two-col,
-  .public-form-page:not(.public-form-page--consultation) .animal-choice-grid.breed-weight-row,
-  .public-form-page:not(.public-form-page--consultation) .birth-weight-row,
   .public-form-page:not(.public-form-page--consultation) .health-grid {
     grid-template-columns: 1fr;
   }
@@ -15721,7 +15565,6 @@ body * {
 
 
   .public-form-page:not(.public-form-page--consultation) .anm-type-picker,
-  .public-form-page:not(.public-form-page--consultation) .health-card,
   .public-form-page:not(.public-form-page--consultation) .doc-declaration {
     border-radius: 16px;
   }
@@ -15753,14 +15596,12 @@ body * {
 
 
   .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .compact-choice-field > div,
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .yes-no-field > div,
   .public-form-page:not(.public-form-page--consultation) .compact-choice-field:has(button:nth-child(3)) > div {
     grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   }
 
 
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .compact-choice-field button,
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .yes-no-field button {
+  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .compact-choice-field button {
     min-height: 44px;
     padding: 8px 10px;
     border-radius: 12px;
@@ -16440,15 +16281,6 @@ form textarea:focus,
 }
 
 
-.nr-shell--embedded {
-  border: 1px solid var(--ui-border);
-  border-radius: 18px;
-  overflow: hidden;
-  background: #ffffff;
-  box-shadow: var(--ui-shadow-line);
-}
-
-
 .public-form-page:not(.public-form-page--consultation) .nr-shell--public {
   min-height: 100dvh;
   background: var(--ui-page, #f6f8fb);
@@ -16708,11 +16540,18 @@ form textarea:focus,
 .nr-shell .access-field[data-label]::before,
 .access-modal .access-field[data-label]::before {
   content: attr(data-label);
+  line-height: 1;
+}
+
+
+/* cor/tamanho/peso/uppercase do rótulo do staff (.access-modal, fora da etapa Animal)
+   — a versão do .nr-shell (~L17043) redefine tudo isso de novo, mais tarde no arquivo,
+   então é ela quem vale para .nr-shell; esta cobre só o .access-modal. */
+.access-modal .access-field[data-label]::before {
   color: #66758a;
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.08em;
-  line-height: 1;
   text-transform: uppercase;
 }
 
@@ -16782,8 +16621,7 @@ form textarea:focus,
 
 .nr-shell .form-subsection-title,
 .nr-shell .anm-type-label,
-.nr-shell .compact-choice-field > span,
-.nr-shell .health-card > strong {
+.nr-shell .compact-choice-field > span {
   color: #64748b;
   font-size: 0.72rem;
   font-weight: 800;
@@ -16828,15 +16666,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .animal-form {
-  border: 1px solid var(--ui-border);
-  border-radius: 15px;
-  background: #ffffff;
-  overflow: hidden;
-  box-shadow: none;
-}
-
-
 .nr-shell .single-request-form .animal-accordion-toggle {
   min-height: 46px;
   border: 0;
@@ -16861,8 +16690,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .health-card,
-.nr-shell .choice-card,
 .nr-shell .animal-photo-upload-card,
 .nr-shell .public-schedule-picker,
 .nr-shell .doc-declaration,
@@ -16870,25 +16697,6 @@ form textarea:focus,
   border: 1px solid #dbe4ef;
   border-radius: 14px;
   background: #f8fbff;
-}
-
-
-.nr-shell .compact-choice button,
-.nr-shell .yes-no-field button,
-.nr-shell .anm-type-card {
-  border-color: #dbe4ef;
-  border-radius: 11px;
-  background: #ffffff;
-  color: #334155;
-}
-
-
-.nr-shell .compact-choice button.is-selected,
-.nr-shell .yes-no-field button.is-selected,
-.nr-shell .anm-type-card.is-selected {
-  border-color: var(--ui-action, #2563eb);
-  background: #eff6ff;
-  color: #1d4ed8;
 }
 
 
@@ -17258,13 +17066,10 @@ form textarea:focus,
 }
 
 
-.nr-shell .health-card,
-.nr-shell .choice-card,
 .nr-shell .animal-photo-upload-card,
 .nr-shell .public-schedule-picker,
 .nr-shell .doc-declaration,
-.nr-shell .doc-empty-note,
-.nr-shell .animal-form {
+.nr-shell .doc-empty-note {
   border-color: #dbe4ef;
   border-radius: 11px;
   background: #ffffff;
@@ -17635,20 +17440,20 @@ form textarea:focus,
 }
 
 
-/* Public registration steps use the same clean model */
+/* Public registration steps: página normal, sem altura travada — o documento
+   inteiro rola (igual ao mockup), não um "shell" de app com scroll preso no meio. */
 .public-form-page:not(.public-form-page--consultation) {
-  display: flex;
-  flex-direction: column;
-  height: 100dvh;
-  overflow: hidden;
+  display: block;
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
   background: #f6f8fb;
+  font-family: "Poppins", sans-serif;
 }
 
 
 .public-form-page:not(.public-form-page--consultation) .nr-shell--public {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+  display: block;
   width: 100%;
   min-height: 0;
   margin: 0;
@@ -17656,7 +17461,7 @@ form textarea:focus,
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  overflow: hidden;
+  overflow: visible;
 }
 
 
@@ -17670,28 +17475,27 @@ form textarea:focus,
   min-height: 56px;
   padding: 10px 20px 8px;
   border: 0;
-  border-bottom: 1px solid rgba(207, 220, 240, 0.5);
-  background: rgba(246, 248, 251, 0.95);
-  backdrop-filter: blur(12px);
+  background: transparent;
 }
 
 
+/* Mockup: ícone dentro da própria linha do topbar (ao lado do stepper), não flutuando
+   fixo sobre a página — e no tamanho/cor exatos do ícone quadrado do mockup. */
 .public-form-page:not(.public-form-page--consultation) .nr-home-btn {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 100;
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  position: static;
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #2b2420;
+  box-shadow: none;
 }
 
 
 .public-form-page:not(.public-form-page--consultation) .nr-topbar-stepper {
   grid-column: auto;
   width: 100%;
-  max-width: 640px;
+  max-width: 480px;
   overflow: visible;
   padding: 0;
 }
@@ -17752,20 +17556,24 @@ form textarea:focus,
 }
 
 
+/* overflow-y sozinho não bastava: com overflow-x ainda "auto" (herdado do .nr-body base),
+   a spec de CSS força overflow-y "visible" de volta para "auto" quando o outro eixo não é
+   visible — por isso o scroll ainda ficava preso aqui mesmo com overflow-y:visible. Usar o
+   shorthand para os dois eixos resolve. */
 .public-form-page:not(.public-form-page--consultation) .nr-body {
-  flex: 1;
-  overflow-y: auto;
+  overflow: visible;
   width: 100%;
-  max-width: 640px;
+  max-width: 760px;
   margin: 0 auto;
   padding: 0;
+  background: transparent;
 }
 
 
 .public-form-page:not(.public-form-page--consultation) .nr-body .single-request-form {
   width: 100%;
   max-width: none;
-  padding: 14px 20px 12px;
+  padding: 32px 40px 64px;
 }
 
 
@@ -18068,9 +17876,7 @@ form textarea:focus,
 
 
 .nr-shell .anm-type-label,
-.nr-shell .compact-choice-field > span,
-.nr-shell .yes-no-field > span,
-.nr-shell .health-card > strong {
+.nr-shell .compact-choice-field > span {
   color: #66758a;
   font-size: 0.66rem;
   font-weight: 800;
@@ -18081,15 +17887,13 @@ form textarea:focus,
 
 .nr-shell .anm-type-cards,
 .nr-shell .compact-choice-field > div,
-.nr-shell .yes-no-field > div,
 .nr-shell .health-grid {
   gap: 8px;
 }
 
 
 .nr-shell .anm-type-card,
-.nr-shell .compact-choice-field button,
-.nr-shell .yes-no-field button {
+.nr-shell .compact-choice-field button {
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid #d7e2ef;
@@ -18101,8 +17905,7 @@ form textarea:focus,
 
 
 .nr-shell .anm-type-card.is-selected,
-.nr-shell .compact-choice-field button.selected,
-.nr-shell .yes-no-field button.selected {
+.nr-shell .compact-choice-field button.selected {
   border-color: #2563eb;
   background: #eff6ff;
   color: #1d4ed8;
@@ -18155,9 +17958,7 @@ form textarea:focus,
 .nr-shell .single-request-form .animal-form .compact-choice-field,
 .nr-shell .single-request-form .animal-form .animal-choice-grid,
 .nr-shell .single-request-form .animal-form .two-column-fields,
-.nr-shell .single-request-form .animal-form .birth-weight-row,
-.nr-shell .single-request-form .animal-form .access-field,
-.nr-shell .single-request-form .animal-form .health-card {
+.nr-shell .single-request-form .animal-form .access-field {
   padding: 0;
   margin: 0;
 }
@@ -18169,8 +17970,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .health-card,
-.nr-shell .choice-card,
 .nr-shell .animal-photo-upload-card {
   padding: 0;
   border: 0;
@@ -21203,12 +21002,38 @@ form textarea:focus,
    de mesma especificidade espalhadas pelo arquivo. */
 .nr-shell--public .anm-type-label,
 .nr-shell--public .compact-choice-field > span,
-.nr-shell--public .yes-no-field > span,
-.nr-shell--public .yes-no-toggle-field > span,
-.nr-shell--public .health-card > strong,
-.nr-shell--public .access-field[data-label]::before,
-.nr-shell--public .form-sub-card-title {
+.nr-shell--public .access-field[data-label]::before {
   color: #93887a;
+}
+
+/* .access-field[data-label]::before (~L16704, base) usa font-weight:800/0.66rem —
+   mais pesado/menor que a legenda irmã .compact-choice-field > span (700/11.5px, já
+   correta) e mais pesado que o mockup (700). Alinha as duas para ficarem consistentes. */
+.nr-shell--public .access-field[data-label]::before,
+.nr-shell--public .anm-type-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+
+.nr-shell--public .anm-type-label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+
+/* Título do card (ex.: "Tipo e identificação") vira texto grande e escuro, como no mockup —
+   não a legenda pequena/uppercase usada pelos cards genéricos do resto do app. */
+.nr-shell--public .form-sub-card-title {
+  font-size: 0.94rem;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: normal;
+  color: #2b2420;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 
 
@@ -21217,13 +21042,26 @@ form textarea:focus,
 }
 
 
+/* Pills viram um controle segmentado (trilho bege + pill branca no selecionado), como no mockup:
+   o container ganha o fundo/raio do trilho e cada botão fica transparente até ser selecionado. */
+.nr-shell--public .anm-type-cards,
+.nr-shell--public .compact-choice-field > div,
+.nr-shell--public .single-request-form .animal-form .compact-choice-field > div {
+  gap: 4px;
+  border: none;
+  border-radius: 10px;
+  background: #f1ede3;
+  padding: 4px;
+}
+
+
 .nr-shell--public .anm-type-card,
 .nr-shell--public .compact-choice-field button,
-.nr-shell--public .yes-no-field button {
+.nr-shell--public .single-request-form .animal-form .compact-choice-field button {
   border: none;
-  border-radius: 0;
-  background: #ffffff;
-  color: #2b2420;
+  border-radius: 8px;
+  background: transparent;
+  color: #93887a;
 }
 
 
@@ -21232,71 +21070,39 @@ form textarea:focus,
 }
 
 
-/* .compact-choice-field button.selected (~L8800, sem prefixo) usa !important —
+/* .compact-choice-field button.selected (~L8716, sem prefixo) usa !important —
    precisa de !important aqui também para vencer, com especificidade igual/maior */
 .nr-shell--public .anm-type-card.is-selected,
 .nr-shell--public .compact-choice-field button.selected,
-.nr-shell--public .yes-no-field button.selected {
-  background: #eaf3ee !important;
-  color: #1f8a5f !important;
-  box-shadow: none !important;
+.nr-shell--public .single-request-form .animal-form .compact-choice-field button.selected {
+  background: #ffffff !important;
+  color: #2b2420 !important;
+  box-shadow: 0 1px 3px rgba(43, 36, 32, 0.15) !important;
 }
 
 
-/* .single-request-form .animal-form .compact-choice-field/.yes-no-field button (~L5699) tem
-   especificidade maior (4 classes/tipo) que a regra acima — precisa do mesmo prefixo para vencer */
-.nr-shell--public .single-request-form .animal-form .compact-choice-field button,
-.nr-shell--public .single-request-form .animal-form .yes-no-field button {
-  border: none;
-  border-radius: 0;
-  background: #ffffff;
-  color: #2b2420;
-}
-
-
-.nr-shell--public .single-request-form .animal-form .compact-choice-field button.selected,
-.nr-shell--public .single-request-form .animal-form .yes-no-field button.selected {
-  background: #eaf3ee !important;
-  color: #1f8a5f !important;
-  box-shadow: none !important;
-}
-
-
-/* Pills viram uma barra única dividida (sem borda individual por botão), como no mockup:
-   o container ganha a borda/raio externos, e um divisor fino aparece entre os botões. */
-.nr-shell--public .anm-type-cards,
-.nr-shell--public .compact-choice-field > div,
-.nr-shell--public .yes-no-field > div {
+/* Campos de saúde: cada item vira uma linha cheia (rótulo à esquerda, toggle switch à direita),
+   como no mockup — não mais pares em grade de 2 colunas com legenda acima do controle. */
+.nr-shell--public .health-grid {
+  grid-template-columns: 1fr;
   gap: 0;
-  border: 1px solid #e6ddc9;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #ffffff;
 }
 
 
-.nr-shell--public .single-request-form .animal-form .compact-choice-field > div,
-.nr-shell--public .single-request-form .animal-form .yes-no-field > div {
-  gap: 0;
-  border: 1px solid #e6ddc9;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-
-.nr-shell--public .anm-type-card:not(:first-child),
-.nr-shell--public .compact-choice-field button:not(:first-child),
-.nr-shell--public .yes-no-field button:not(:first-child) {
-  border-left: 1px solid #e6ddc9;
-}
-
-
-/* Campos de saúde: Sim/Não vira toggle switch (reaproveita o componente ToggleSwitch já existente). */
 .nr-shell--public .yes-no-toggle-field {
-  display: grid;
-  gap: 6px;
-  align-content: start;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid #f1ede3;
+}
+
+
+.nr-shell--public .yes-no-toggle-field > span {
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: #2b2420;
 }
 
 
@@ -21315,13 +21121,26 @@ form textarea:focus,
   background: transparent;
   padding: 0;
   color: #2b2420;
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 600;
 }
 
 
+/* Mockup mostra o texto (Sim/Não) antes do switch — mas a ordem no DOM (input, track, texto)
+   precisa continuar assim porque ".toggle-switch input:checked + .toggle-track" (~L1578,
+   base) é um seletor de irmão adjacente que depende do track vir logo após o input. Usa
+   `order` do flex só para inverter a posição visual, sem quebrar esse seletor. */
 .nr-shell--public .yes-no-toggle-field .toggle-track {
-  background: #e6ddc9;
+  width: 38px;
+  height: 22px;
+  background: #e3ddd0;
+  order: 1;
+}
+
+
+.nr-shell--public .yes-no-toggle-field .toggle-thumb {
+  width: 18px;
+  height: 18px;
 }
 
 
@@ -21330,15 +21149,52 @@ form textarea:focus,
 }
 
 
-/* Ícone do topbar do cadastro público, no lugar do brasão do município removido a pedido do usuário. */
-.nr-topbar-badge {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+/* Mockup vai direto do título do card "Procedimento desejado" para os pills, sem
+   legenda extra (o título do card já basta) — esconde a legenda redundante do
+   CompactChoiceField só aqui, sem afetar Espécie/Sexo/Raça (grid .three-col). */
+.nr-shell--public .animal-choice-grid.species-row .compact-choice-field > span {
+  display: none;
+}
+
+
+/* "Adicionar outro animal": .nr-shell .anm-add-btn (~L16887) o deixa azul sólido preenchido —
+   esta sobrepõe para o tracejado verde do mockup. */
+.nr-shell--public .anm-add-btn {
+  border: 1.5px dashed #1f8a5f;
   background: #eaf3ee;
   color: #1f8a5f;
+  box-shadow: none;
+}
+
+
+.nr-shell--public .anm-add-btn:hover {
+  border-color: #156b48;
+  background: #ddebe2;
+  box-shadow: none;
+}
+
+
+/* "Adicionar animal" e "Remover animal" lado a lado, dividindo a mesma linha,
+   em vez de blocos full-width empilhados. */
+.nr-shell--public .anm-actions-row {
+  display: flex;
+  gap: 10px;
+}
+
+.nr-shell--public .anm-actions-row .anm-add-btn,
+.nr-shell--public .anm-actions-row .animal-remove-inline {
+  width: auto;
+  flex: 1 1 0;
+}
+
+
+/* Faixa de peso do porte (ex: "0–5 kg"), mostrada como legenda abaixo do nome do porte. */
+.nr-shell--public .compact-choice-field button small {
+  color: #93887a;
+}
+
+.nr-shell--public .compact-choice-field button.selected small {
+  color: #2b2420;
 }
 
 
@@ -21357,16 +21213,30 @@ form textarea:focus,
 
 
 .nr-shell--public .cadunico-checkbox,
-.nr-shell--public .internal-chip-check,
-.nr-shell--public .health-card,
-.nr-shell--public .choice-card,
 .nr-shell--public .animal-photo-upload-card,
 .nr-shell--public .public-schedule-picker,
 .nr-shell--public .doc-declaration,
 .nr-shell--public .doc-empty-note,
-.nr-shell--public .animal-form,
 .nr-shell--public .form-sub-card {
   border-color: #e6ddc9;
+}
+
+
+/* Card do mockup: padding/raio/espaçamento interno mais generosos que o card genérico do resto do app. */
+.nr-shell--public .form-sub-card {
+  padding: 24px 26px;
+  border-radius: 18px;
+  gap: 18px;
+}
+
+
+.nr-shell--public .single-request-form {
+  gap: 18px;
+}
+
+
+.nr-shell--public .animal-choice-grid.three-col {
+  gap: 20px;
 }
 
 

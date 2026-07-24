@@ -113,6 +113,7 @@ import {
   ModalHeader,
   PanelHeader,
   StatusBadge,
+  ToggleChoiceField,
   YesNoField,
   YesNoToggleField,
 } from "./components/ui";
@@ -2967,6 +2968,16 @@ function NewRequest({
       .filter(Boolean),
   ));
   const activeSizes = sizeOptions.filter((item) => item.active !== false);
+  const sizeChoiceOptions = activeSizes.map((s) => {
+    const unit = s.weightUnit || "kg";
+    const start = parseFloat(s.weightStart ?? "");
+    const end = parseFloat(s.weightEnd ?? "");
+    let subtitle = "";
+    if (!isNaN(start) && !isNaN(end)) subtitle = `${s.weightStart}–${s.weightEnd} ${unit}`;
+    else if (!isNaN(start)) subtitle = `A partir de ${s.weightStart} ${unit}`;
+    else if (!isNaN(end)) subtitle = `Até ${s.weightEnd} ${unit}`;
+    return { value: s.name, label: s.name, subtitle };
+  });
   const skipTutorStep = currentUser.role === "tutor" && currentUser.profileComplete;
   const [requestData, setRequestData] = useState({
     tutor: canManagePublicAnimalFlows(currentUser.role) ? "" : currentUser.name,
@@ -3675,9 +3686,9 @@ function NewRequest({
     "nr-shell",
     internalCompact ? "nr-shell--internal" : "",
     publicFlow ? "nr-shell--public" : "",
-    !publicFlow && !compact ? "nr-shell--embedded" : "",
   ].filter(Boolean).join(" ");
   const HealthField = publicFlow ? YesNoToggleField : YesNoField;
+  const FoodField = publicFlow ? ToggleChoiceField : CompactChoiceField;
 
   return (
       <div className={requestShellClassName}>
@@ -3688,13 +3699,6 @@ function NewRequest({
             </button>
           )}
           <div className="nr-topbar-stepper">{stepperNode}</div>
-          {!internalCompact && (
-            <div className="nr-topbar-right">
-              <span className="nr-topbar-badge" aria-hidden="true">
-                <Home size={16} />
-              </span>
-            </div>
-          )}
         </div>
 
         <div className="nr-body">
@@ -3779,7 +3783,7 @@ function NewRequest({
           </FormSection>}
 
           {formStep === 1 && <FormSection title="Dados do animal">
-            {configuredRequestTypes.length > 0 && (
+            {(!publicFlow || animals.length > 1) && configuredRequestTypes.length > 0 && (
               <div className="form-sub-card">
                 <span className="form-sub-card-title">Tipo de solicitação</span>
                 <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
@@ -3802,6 +3806,7 @@ function NewRequest({
             {animals.map((animal, index) => {
               const isOpen = animals.length === 1 || expandedAnimal === index;
               const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
+              const showTypeSelector = publicFlow && index === 0 && animals.length === 1 && configuredRequestTypes.length > 0;
               return (
                 <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
                   {animals.length > 1 && (
@@ -3820,35 +3825,74 @@ function NewRequest({
 
                   {isOpen && <>
                     <div className="form-sub-card">
-                      <span className="form-sub-card-title">Identificação do animal</span>
-                      <div className="animal-choice-grid species-row">
+                      <span className="form-sub-card-title">{showTypeSelector ? "Tipo e identificação" : "Identificação do animal"}</span>
+
+                      {showTypeSelector && (
+                        <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
+                          <span className="anm-type-label">Tipo de solicitação</span>
+                          <div className="anm-type-cards">
+                            {configuredRequestTypes.map((type) => (
+                              <button
+                                key={type.id || type.name}
+                                type="button"
+                                className={`anm-type-card${requestData.type === type.name ? " is-selected" : ""}`}
+                                onClick={() => updateRequestField("type", type.name)}
+                              >
+                                {type.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {publicFlow && (
+                        <div className="access-field" data-label="Nome">
+                          <input type="text" placeholder="Ex: Bidu" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
+                        </div>
+                      )}
+
+                      <div className="animal-choice-grid three-col">
                         <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
-                      </div>
-                      <div className="animal-choice-grid two-col">
-                        <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
                         <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
+                        <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
                       </div>
                       {animal.breedType === "Definida" && (
                         <div className="access-field" data-label="Raca">
                           <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
                         </div>
                       )}
-                      <div className="two-column-fields">
-                        <div className="access-field" data-label="Nome">
-                          <input type="text" placeholder="Nome do animal" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
-                        </div>
-                        <div className="access-field" data-label="Pelagem">
-                          <input type="text" placeholder="Cor da pelagem" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
-                        </div>
-                      </div>
-                      <div className="two-column-fields">
-                        <div className="access-field" data-label="Idade">
-                          <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
-                        </div>
-                        <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`} data-label="Peso">
-                          <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
-                        </div>
-                      </div>
+                      {publicFlow ? (
+                        <>
+                          <CompactChoiceField label="Porte" value={animal.size} options={sizeChoiceOptions} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} />
+                          <div className="animal-choice-grid two-col">
+                            <div className="access-field" data-label="Idade">
+                              <input type="text" placeholder="Ex: 2 anos" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
+                            </div>
+                            <div className="access-field" data-label="Pelagem">
+                              <input type="text" placeholder="Cor" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="two-column-fields">
+                            <div className="access-field" data-label="Nome">
+                              <input type="text" placeholder="Nome do animal" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
+                            </div>
+                            <div className="access-field" data-label="Pelagem">
+                              <input type="text" placeholder="Cor da pelagem" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
+                            </div>
+                          </div>
+                          <div className="two-column-fields">
+                            <div className="access-field" data-label="Idade">
+                              <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
+                            </div>
+                            <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`} data-label="Peso">
+                              <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
+                            </div>
+                          </div>
+                        </>
+                      )}
                       {internalSimple && (
                         <div className="internal-microchip-row">
                           <div className="access-field" data-label="Microchip">
@@ -3884,15 +3928,15 @@ function NewRequest({
                     <div className="form-sub-card">
                       <span className="form-sub-card-title">Saúde e cuidados</span>
                       <div className="health-grid">
-                        <HealthField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
-                        <HealthField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
-                        <HealthField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
-                        <HealthField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
-                        <CompactChoiceField label="Alimentação" value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
+                        <HealthField label={publicFlow ? "Vermifugado" : "Vermifugado?"} value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
+                        <HealthField label={publicFlow ? "Vacinas em dia" : "Vacinas em dia?"} value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
+                        <HealthField label={publicFlow ? "Já teve cria" : "Já teve cria?"} value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
+                        <HealthField label={publicFlow ? "Histórico de doenças" : "Histórico de doenças?"} value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
+                        <FoodField label={publicFlow ? "Alimentação exclusiva com ração" : "Alimentação"} value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
                       </div>
                     </div>
                     {internalSimple && inlineAnimalPhotoUpload}
-                    {animals.length > 1 && (
+                    {!publicFlow && animals.length > 1 && (
                       <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
                         Remover animal {index + 1}
                       </button>
@@ -3901,9 +3945,24 @@ function NewRequest({
                 </div>
               );
             })}
-            <button className="anm-add-btn" type="button" onClick={addAnimal}>
-              Adicionar animal
-            </button>
+            <div className={publicFlow ? "anm-actions-row" : undefined}>
+              <button className="anm-add-btn" type="button" onClick={addAnimal}>
+                Adicionar animal
+              </button>
+              {publicFlow && animals.length > 1 && (
+                <button
+                  className="animal-remove-inline"
+                  type="button"
+                  onClick={() => {
+                    const idx = expandedAnimal >= 0 ? expandedAnimal : animals.length - 1;
+                    removeAnimal(idx);
+                    setExpandedAnimal(Math.max(0, idx - 1));
+                  }}
+                >
+                  Remover animal
+                </button>
+              )}
+            </div>
           </FormSection>}
 
           {formStep === 2 && <FormSection title="Agenda">
