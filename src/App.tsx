@@ -1716,6 +1716,7 @@ function PublicSchedulePicker({
   selectedDate = "",
   onSelect,
   pendingReservation = null,
+  title = "",
 }) {
   const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
@@ -1760,6 +1761,7 @@ function PublicSchedulePicker({
 
   return (
     <section className="panel public-schedule-picker">
+      {title && <span className="form-sub-card-title">{title}</span>}
       <div className="sched-month-selector">
         <button
           type="button"
@@ -4056,6 +4058,7 @@ function NewRequest({
               selectedDate={requestData.schedule}
               pendingReservation={{ date: requestData.schedule, count: animals.length }}
               onSelect={(date) => updateRequestField("schedule", date)}
+              title={publicFlow ? "Escolha data e horário" : ""}
             />
             {internalSimple && (
               <label className="field internal-notes-field">

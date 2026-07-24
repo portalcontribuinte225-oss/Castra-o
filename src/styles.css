@@ -21279,6 +21279,14 @@ form textarea:focus,
 }
 
 
+/* Mesmo padding generoso dos demais cards da etapa (24px/26px) — .panel base
+   usa 18px, que ficava inconsistente com .form-sub-card ao lado. */
+.nr-shell--public .public-schedule-picker {
+  padding: 24px 26px;
+  gap: 16px;
+}
+
+
 /* Mockup não coloca a declaração dentro de uma caixa própria — é texto/checkbox
    direto no card "Documentos e termo" (que agora existe, ver App.tsx). Achata o
    .doc-declaration (que antes era uma caixa cinza com borda própria) pra isso. */
