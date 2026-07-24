@@ -133,6 +133,16 @@ export function YesNoField({ label, value, onChange }: AnyRecord) {
   );
 }
 
+export function YesNoToggleField({ label, value, onChange }: AnyRecord) {
+  const checked = value === "Sim";
+  return (
+    <div className="yes-no-toggle-field">
+      <span>{label}</span>
+      <ToggleSwitch checked={checked} onChange={(next: boolean) => onChange(next ? "Sim" : "Não")} label={checked ? "Sim" : "Não"} />
+    </div>
+  );
+}
+
 export function CompactChoiceField({ label, value, options, onChange, invalid = false }: AnyRecord) {
   return (
     <div className={`compact-choice-field ${invalid ? "invalid" : ""}`}>

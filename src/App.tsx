@@ -113,8 +113,8 @@ import {
   ModalHeader,
   PanelHeader,
   StatusBadge,
-  ToggleSwitch,
   YesNoField,
+  YesNoToggleField,
 } from "./components/ui";
 import {
   dataUrlToUint8Array,
@@ -3677,8 +3677,7 @@ function NewRequest({
     publicFlow ? "nr-shell--public" : "",
     !publicFlow && !compact ? "nr-shell--embedded" : "",
   ].filter(Boolean).join(" ");
-
-  const selectedMunForTopbar = municipalities.find((m) => m.id === selectedMunicipalityId);
+  const HealthField = publicFlow ? YesNoToggleField : YesNoField;
 
   return (
       <div className={requestShellClassName}>
@@ -3689,9 +3688,11 @@ function NewRequest({
             </button>
           )}
           <div className="nr-topbar-stepper">{stepperNode}</div>
-          {!internalCompact && selectedMunForTopbar?.brasao && (
+          {!internalCompact && (
             <div className="nr-topbar-right">
-              <img src={selectedMunForTopbar.brasao} alt={selectedMunForTopbar.name} className="nr-topbar-brasao" />
+              <span className="nr-topbar-badge" aria-hidden="true">
+                <Home size={16} />
+              </span>
             </div>
           )}
         </div>
@@ -3799,28 +3800,29 @@ function NewRequest({
             )}
 
             {animals.map((animal, index) => {
-              const isOpen = expandedAnimal === index;
+              const isOpen = animals.length === 1 || expandedAnimal === index;
               const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
               return (
                 <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
-                  <button
-                    type="button"
-                    className="animal-form-header animal-accordion-toggle"
-                    onClick={() => setExpandedAnimal(isOpen ? -1 : index)}
-                  >
-                    <div className="animal-accordion-title">
-                      <strong>Animal {index + 1}</strong>
-                      {!isOpen && <span className="animal-accordion-summary">{summary}</span>}
-                    </div>
-                    <ChevronRight size={15} className={`animal-accordion-chevron${isOpen ? " is-open" : ""}`} />
-                  </button>
+                  {animals.length > 1 && (
+                    <button
+                      type="button"
+                      className="animal-form-header animal-accordion-toggle"
+                      onClick={() => setExpandedAnimal(isOpen ? -1 : index)}
+                    >
+                      <div className="animal-accordion-title">
+                        <strong>Animal {index + 1}</strong>
+                        {!isOpen && <span className="animal-accordion-summary">{summary}</span>}
+                      </div>
+                      <ChevronRight size={15} className={`animal-accordion-chevron${isOpen ? " is-open" : ""}`} />
+                    </button>
+                  )}
 
                   {isOpen && <>
                     <div className="form-sub-card">
                       <span className="form-sub-card-title">Identificação do animal</span>
-                      <div className="animal-choice-grid two-col">
+                      <div className="animal-choice-grid species-row">
                         <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
-                        <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
                       </div>
                       <div className="animal-choice-grid two-col">
                         <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
@@ -3874,12 +3876,18 @@ function NewRequest({
                       )}
                     </div>
                     <div className="form-sub-card">
+                      <span className="form-sub-card-title">Procedimento desejado</span>
+                      <div className="animal-choice-grid species-row">
+                        <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
+                      </div>
+                    </div>
+                    <div className="form-sub-card">
                       <span className="form-sub-card-title">Saúde e cuidados</span>
                       <div className="health-grid">
-                        <YesNoField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
-                        <YesNoField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
-                        <YesNoField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
-                        <YesNoField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
+                        <HealthField label="Vermifugado?" value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
+                        <HealthField label="Vacinas em dia?" value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
+                        <HealthField label="Já teve cria?" value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
+                        <HealthField label="Histórico de doenças?" value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
                         <CompactChoiceField label="Alimentação" value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
                       </div>
                     </div>
