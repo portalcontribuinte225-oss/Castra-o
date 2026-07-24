@@ -17570,10 +17570,15 @@ form textarea:focus,
 }
 
 
+/* padding-bottom era 64px (o espaço final da página no mockup), mas aqui .nr-nav-row
+   é um IRMÃO depois deste elemento, não um filho — então esse espaço criava um vão
+   grande ENTRE o último card e o "Continuar", em vez de depois dele. Reduzido para
+   ficar igual ao espaçamento entre seções (18px); o respiro final agora fica no
+   próprio .nr-nav-row (padding-bottom). */
 .public-form-page:not(.public-form-page--consultation) .nr-body .single-request-form {
   width: 100%;
   max-width: none;
-  padding: 32px 40px 64px;
+  padding: 32px 40px 18px;
 }
 
 
@@ -17591,12 +17596,16 @@ form textarea:focus,
 }
 
 
+/* Padding lateral igual ao do .single-request-form (40px) para o botão "Continuar"
+   alinhar com a borda direita dos cards/botões acima (a regra antiga usava 20px,
+   metade do padding do conteúdo). padding-bottom carrega o respiro final da página
+   que antes estava (no lugar errado) no .single-request-form. */
 .public-form-page:not(.public-form-page--consultation) .nr-nav-row {
   position: relative;
   bottom: auto;
   max-width: none;
   margin: 0;
-  padding: 10px 20px 18px;
+  padding: 10px 40px 40px;
   border: 0;
   background: transparent;
   backdrop-filter: none;

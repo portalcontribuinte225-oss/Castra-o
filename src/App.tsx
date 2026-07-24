@@ -3962,6 +3962,11 @@ function NewRequest({
                   Remover animal
                 </button>
               )}
+              {publicFlow && (
+                <button className="nr-topbar-continue" type="button" onClick={goToNextStep}>
+                  Continuar
+                </button>
+              )}
             </div>
           </FormSection>}
 
@@ -4039,37 +4044,39 @@ function NewRequest({
 
           </div>
 
-          {submissionError && <p className="nr-bottom-error">{submissionError}</p>}
-          <div className="nr-nav-row">
-            {currentStepIndex > 0 && (
-              <button
-                className="nr-back-btn"
-                type="button"
-                onClick={() => setFormStep(formSteps[currentStepIndex - 1].step)}
-              >
-                Voltar
-              </button>
-            )}
-            {currentStepIndex < formSteps.length - 1 ? (
-              <button
-                className="nr-topbar-continue"
-                type="button"
-                disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
-                onClick={goToNextStep}
-              >
-                Continuar
-              </button>
-            ) : (
-              <button
-                className="nr-topbar-continue"
-                type="button"
-                disabled={!canSubmit || submitting}
-                onClick={submit}
-              >
-                {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
-              </button>
-            )}
-          </div>
+          {!(publicFlow && formStep === 1) && <>
+            {submissionError && <p className="nr-bottom-error">{submissionError}</p>}
+            <div className="nr-nav-row">
+              {currentStepIndex > 0 && (
+                <button
+                  className="nr-back-btn"
+                  type="button"
+                  onClick={() => setFormStep(formSteps[currentStepIndex - 1].step)}
+                >
+                  Voltar
+                </button>
+              )}
+              {currentStepIndex < formSteps.length - 1 ? (
+                <button
+                  className="nr-topbar-continue"
+                  type="button"
+                  disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
+                  onClick={goToNextStep}
+                >
+                  Continuar
+                </button>
+              ) : (
+                <button
+                  className="nr-topbar-continue"
+                  type="button"
+                  disabled={!canSubmit || submitting}
+                  onClick={submit}
+                >
+                  {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
+                </button>
+              )}
+            </div>
+          </>}
         </div>
 
         {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
