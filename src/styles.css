@@ -21335,3 +21335,90 @@ form textarea:focus,
 .public-form-page:not(.public-form-page--consultation) {
   background: #f4f1ea;
 }
+
+
+/* -- LOGIN MODAL (staff/veterinários): padrão v4 verde/creme, por analogia com os módulos públicos -- */
+.modal-backdrop > .compact-auth-modal {
+  border: 1px solid #e6ddc9;
+  border-radius: 20px;
+  background: #ffffff;
+  box-shadow: 0 30px 70px rgba(30, 25, 18, 0.18);
+  padding: 28px;
+  gap: 16px;
+}
+
+.compact-auth-modal .modal-header-text h2 {
+  color: #2b2420;
+}
+
+.compact-auth-modal .modal-header-close {
+  border-color: #e6ddc9;
+  background: #f4f1ea;
+  color: #2b2420;
+}
+
+.compact-auth-modal .modal-header-close:hover {
+  border-color: #d9cdaf;
+  background: #eee7d8;
+  color: #156b48;
+}
+
+.compact-auth-modal .field > span {
+  color: #93887a;
+}
+
+.compact-auth-modal .field input {
+  border: 1px solid #e6ddc9;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #2b2420;
+}
+
+.compact-auth-modal .field input:focus {
+  border-color: #1f8a5f;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.12);
+}
+
+.compact-auth-modal .password-field button:hover {
+  background: #eaf3ee;
+  color: #156b48;
+}
+
+.compact-auth-modal .reset-password-link {
+  color: #1f8a5f;
+}
+
+.compact-auth-modal .reset-password-link:hover {
+  color: #156b48;
+}
+
+.compact-auth-modal .ghost-button {
+  border-color: #e6ddc9;
+  background: #ffffff;
+  color: #2b2420;
+}
+
+.compact-auth-modal .ghost-button:hover {
+  border-color: #d9cdaf;
+  background: #fdfaf4;
+}
+
+.compact-auth-modal .reset-success-msg p,
+.compact-auth-modal .form-success {
+  color: #156b48;
+}
+
+/* Entrar/reset (login staff): sobrepõe a correção neutra (near-black) para usar o verde do padrão v4, mesma lógica já aplicada ao .access-modal do credenciamento */
+.compact-auth-modal .primary-action {
+  border-color: #1f8a5f !important;
+  background: #1f8a5f !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.compact-auth-modal .primary-action:hover:not(:disabled) {
+  border-color: #156b48 !important;
+  background: #156b48 !important;
+  box-shadow: none !important;
+}
