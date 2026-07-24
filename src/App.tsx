@@ -1889,7 +1889,6 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
         )}
         {filteredAnimals.map((animal) => {
           const displayName = String(animal.name || animal.animal_name || "Animal").trim();
-          const profileSummary = [animal.species, animal.sex, animal.age].map((item) => String(item || "").trim()).filter(Boolean).join(" - ");
           const interestCount = Array.isArray(animal.interests) ? animal.interests.length : 0;
           return (
             <article
@@ -1899,7 +1898,6 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
               <button className="public-animal-open-area" type="button" onClick={() => openAnimalModal(animal)}>
                 <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
                   {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={24} />}
-                  {profileSummary && <span className="public-animal-badge">{profileSummary}</span>}
                 </div>
               </button>
               <div className="public-animal-footer">
@@ -2133,9 +2131,6 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
   }
 
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
-  const availableForAdoption = adoptionAnimals.filter((animal) => animal.status !== "adotado");
-  const heroAnimalWithPhoto = availableForAdoption.find((animal) => getAnimalMainPhoto(animal));
-  const heroImage = heroAnimalWithPhoto ? getAnimalMainPhoto(heroAnimalWithPhoto) : "";
 
   function scrollToAdoption() {
     adoptionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -2175,7 +2170,6 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
       </div>
 
       <PetWelcomeArt
-        heroImage={heroImage}
         onGoToAdoption={scrollToAdoption}
         onPublicRequest={onPublicRequest}
       />
@@ -2346,7 +2340,6 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
     document: "",
     city: "",
     state: "",
-    intendedUse: "",
   });
   const [status, setStatus] = useState("");
   const [sent, setSent] = useState(false);
@@ -2373,7 +2366,6 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
         document: form.document,
         city: form.city,
         state: form.state,
-        intended_use: form.intendedUse,
         assigned_sector: selectedType.sector,
       });
       setSent(true);
@@ -2395,7 +2387,7 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
           </div>
         ) : (
           <>
-            <ModalHeader title="Solicitar credenciamento" subtitle="Acesso ao sistema para ONGs e protetores independentes" icon={Shield} onClose={onClose} />
+            <ModalHeader title="Solicitar credenciamento" subtitle="Acesso ao sistema para ONGs e protetores independentes" onClose={onClose} />
 
             <div className="access-type-picker">
               {accessRequesterTypes.map((type) => (
@@ -2461,12 +2453,6 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
                   </div>
                 </label>
               </div>
-              <label className="access-form-label">
-                <span>Como pretende auxiliar</span>
-                <div className="access-field">
-                  <textarea placeholder="Ex: cadastrar animais para adoção, indicar vagas de castração..." value={form.intendedUse} onChange={(e) => patch("intendedUse", e.target.value)} rows={3} />
-                </div>
-              </label>
             </div>
 
             {status && <p className={`access-status${status.includes("Enviando") ? " is-sending" : " is-error"}`}>{status}</p>}
@@ -2482,7 +2468,7 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
   );
 }
 
-function PetWelcomeArt({ className = "", heroImage = "", onGoToAdoption, onPublicRequest }: AnyRecord) {
+function PetWelcomeArt({ className = "", onGoToAdoption, onPublicRequest }: AnyRecord) {
   return (
     <section className={`public-hero ${className}`.trim()}>
       <div className="hero-content">
@@ -2497,11 +2483,6 @@ function PetWelcomeArt({ className = "", heroImage = "", onGoToAdoption, onPubli
           </button>
         </div>
       </div>
-      {heroImage && (
-        <div className="hero-photo-frame">
-          <img src={heroImage} alt="Animal disponível para adoção" />
-        </div>
-      )}
     </section>
   );
 }
