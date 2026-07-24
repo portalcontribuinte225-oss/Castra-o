@@ -2853,11 +2853,6 @@ button:disabled {
 }
 
 
-.sms-send-btn {
-  align-self: flex-start;
-}
-
-
 .single-request-form .form-section {
   background: transparent;
   border: none;
@@ -4951,17 +4946,6 @@ main {
 }
 
 
-.single-request-form .form-section-header h3 {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: #0f172a;
-  letter-spacing: 0.01em;
-}
-
-
 .single-request-form .cadunico-checkbox {
   gap: 7px;
   font-size: 0.76rem;
@@ -5244,7 +5228,6 @@ main {
 
 .field.invalid > span,
 .compact-choice-field.invalid > span,
-.checkbox-row.invalid,
 .invalid-block {
   color: var(--red);
 }
@@ -5259,8 +5242,7 @@ main {
 }
 
 
-.compact-choice-field.invalid button,
-.checkbox-row.invalid {
+.compact-choice-field.invalid button {
   border-color: #ef4444;
   background: #fff1f2;
 }
@@ -12800,8 +12782,7 @@ body * {
 }
 
 
-.internal-request-modal .animal-photo-upload-card,
-.internal-request-modal .public-schedule-picker {
+.internal-request-modal .animal-photo-upload-card {
   border: 1px solid rgba(203, 213, 225, 0.86);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.94);
@@ -12827,11 +12808,6 @@ body * {
 .internal-request-modal .animal-choice-grid,
 .internal-request-modal .health-grid {
   gap: 8px;
-}
-
-
-.internal-request-modal .public-schedule-picker {
-  padding: 16px;
 }
 
 
@@ -15498,20 +15474,6 @@ body * {
   }
 
 
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .form-section-header {
-    min-height: 50px;
-    margin: 0 -12px 2px;
-    padding: 12px 14px;
-    border-radius: 20px 20px 0 0;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .form-section-header h3 {
-    font-size: 0.94rem;
-    line-height: 1.2;
-  }
-
-
   .public-form-page:not(.public-form-page--consultation) .access-field input,
   .public-form-page:not(.public-form-page--consultation) .access-field textarea,
   .public-form-page:not(.public-form-page--consultation) .field input,
@@ -15550,8 +15512,7 @@ body * {
   }
 
 
-  .public-form-page:not(.public-form-page--consultation) .sms-verify-row .ghost-button,
-  .public-form-page:not(.public-form-page--consultation) .sms-send-btn {
+  .public-form-page:not(.public-form-page--consultation) .sms-verify-row .ghost-button {
     width: 100%;
   }
 
@@ -16495,25 +16456,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .single-request-form .form-section-header {
-  border: 0;
-  border-bottom: 1px solid var(--ui-border);
-  border-radius: 0;
-  padding: 0 0 12px;
-  background: transparent;
-}
-
-
-.nr-shell .single-request-form .form-section-header h3 {
-  color: #0f172a;
-}
-
-
-.nr-shell .single-request-form .form-section-header svg {
-  color: var(--ui-action, #2563eb);
-}
-
-
 .nr-shell .access-field,
 .access-modal .access-field,
 .nr-shell .field input,
@@ -16701,7 +16643,6 @@ form textarea:focus,
 
 
 .nr-shell .anm-add-btn,
-.nr-shell .sms-send-btn,
 .nr-shell .nr-topbar-continue {
   border: 1px solid var(--ui-action, #2563eb);
   background: var(--ui-action, #2563eb);
@@ -16711,7 +16652,6 @@ form textarea:focus,
 
 
 .nr-shell .anm-add-btn:hover,
-.nr-shell .sms-send-btn:hover,
 .nr-shell .nr-topbar-continue:hover:not(:disabled) {
   border-color: var(--ui-action-hover, #1d4ed8);
   background: var(--ui-action-hover, #1d4ed8);
@@ -17591,11 +17531,6 @@ form textarea:focus,
 }
 
 
-.public-form-page:not(.public-form-page--consultation) .single-request-form .form-section-header {
-  display: none;
-}
-
-
 /* Padding lateral igual ao do .single-request-form (40px) para o botão "Continuar"
    alinhar com a borda direita dos cards/botões acima (a regra antiga usava 20px,
    metade do padding do conteúdo). padding-bottom carrega o respiro final da página
@@ -17785,7 +17720,7 @@ form textarea:focus,
 }
 
 
-/* fluxo público de solicitação: sobrepõe o azul acima (compartilhado com .nr-shell--internal/--embedded, fora de escopo).
+/* fluxo público de solicitação: sobrepõe o azul acima (compartilhado com .nr-shell--internal, fora de escopo).
    Mockup: dia com vaga mantém fundo branco (só a borda fica verde-clara) — o dia
    NÃO ganha um preenchimento verde; só o texto de vagas (small) fica verde/negrito,
    o número do dia (strong) continua na cor padrão escura. */
@@ -21054,7 +20989,7 @@ form textarea:focus,
 
 /* Fluxo público de solicitação (Solicitações v2): paleta verde/creme.
    Escopado a .nr-shell--public (presente só quando publicFlow=true) para não
-   afetar .nr-shell--internal/--embedded, usados dentro de .internal-request-modal
+   afetar .nr-shell--internal, usado dentro de .internal-request-modal
    (fora de escopo). Colocado ao final do arquivo para vencer, de forma
    previsível, as demais regras .nr-shell/.compact-choice-field/.anm-type-card
    de mesma especificidade espalhadas pelo arquivo. */
@@ -21434,6 +21369,36 @@ form textarea:focus,
   color: #2b2420;
 }
 
+.nr-shell--public .doc-row-msg {
+  color: #93887a;
+}
+
+.nr-shell--public .doc-photo-zone:hover {
+  border-color: #1f8a5f;
+}
+
+.nr-shell--public .doc-photo-placeholder {
+  color: #93887a;
+}
+
+.nr-shell--public .doc-photo-placeholder svg {
+  color: #b0a894;
+}
+
+.nr-shell--public .doc-photo-placeholder span {
+  color: #2b2420;
+}
+
+.nr-shell--public .doc-photo-placeholder small {
+  color: #93887a;
+  background: #f1ede3;
+}
+
+.nr-shell--public .doc-attach-btn:hover {
+  background: #dff0e6;
+  border-color: #1f8a5f;
+}
+
 
 .public-form-page:not(.public-form-page--consultation) {
   background: #f4f1ea;
@@ -21609,4 +21574,17 @@ form textarea:focus,
   border-top: none;
   border-left: none;
   transform: rotate(45deg) translate(-1px, -2px);
+}
+
+
+.nr-shell--public .sms-status {
+  color: #93887a;
+}
+
+.nr-shell--public .sms-status.confirmed {
+  color: #1f8a5f;
+}
+
+.nr-shell--public .cep-status {
+  color: #1f8a5f;
 }

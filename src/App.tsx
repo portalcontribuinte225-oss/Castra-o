@@ -3845,19 +3845,6 @@ function NewRequest({
                       <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
                     </div>
                   </div>
-                  {!internalSimple && !smsCode && !smsConfirmed && (
-                    <button className="secondary-action sms-send-btn" type="button" onClick={sendSmsCode}>Enviar código de verificação</button>
-                  )}
-                  {!internalSimple && (smsCode || smsConfirmed) && (
-                    <div className="sms-verify-row">
-                      <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
-                        <span>Código SMS</span>
-                        <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
-                      </label>
-                      <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
-                    </div>
-                  )}
-                  {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
                 </div>
               </>
             )}
