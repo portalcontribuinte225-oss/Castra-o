@@ -3706,80 +3706,159 @@ function NewRequest({
           {submissionError && <p className="form-error">{submissionError}</p>}
           <div className="single-request-form clean-form">
           {formStep === 0 && <FormSection title="Tutor">
-            <div className="form-sub-card">
-              <span className="form-sub-card-title">Identificação</span>
-              <div className="two-column-fields">
-                <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Tutor">
-                  <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+            {publicFlow ? (
+              <>
+                <div className="form-sub-card">
+                  <span className="form-sub-card-title">Responsável e contato</span>
+                  <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Nome completo">
+                    <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+                  </div>
+                  <div className="two-column-fields">
+                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
+                      <input type="text" placeholder="000.000.000-00" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
+                    </div>
+                    <div className="access-field" data-label="CadÚnico (se aplica)">
+                      <div className="access-field-action-row">
+                        <input type="text" placeholder="Número" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
+                        <label className={`cadunico-square-toggle${!requestData.cadUnicoNotApplicable ? " is-checked" : ""}`}>
+                          <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
+                          <span className="cadunico-check-box" />
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="two-column-fields">
+                    <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
+                      <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`} data-label="Telefone">
+                      <div className="access-field-action-row">
+                        <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
+                        {!smsCode && !smsConfirmed && (
+                          <button type="button" className="sms-verify-inline-btn" onClick={sendSmsCode}>Verificar</button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  {(smsCode || smsConfirmed) && (
+                    <div className="sms-verify-row">
+                      <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
+                        <span>Código SMS</span>
+                        <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
+                      </label>
+                      <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
+                    </div>
+                  )}
+                  {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
                 </div>
-                <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
-                  <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
-                </div>
-              </div>
-              <div className="cadunico-row">
-                <div className="access-field" data-label="CadUnico">
-                  <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
-                </div>
-                <label className="checkbox-row cadunico-checkbox">
-                  <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
-                  Se aplica
-                </label>
-              </div>
-            </div>
 
-            <div className="form-sub-card">
-              <span className="form-sub-card-title">Endereço</span>
-              <div className="address-lookup-grid">
-                <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
-                  <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
+                <div className="form-sub-card">
+                  <span className="form-sub-card-title">Endereço</span>
+                  <div className="address-lookup-grid">
+                    <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
+                      <input type="text" placeholder="00000-000" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Numero">
+                      <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
+                      <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
+                    </div>
+                  </div>
+                  {cepStatus && <p className="cep-status">{cepStatus}</p>}
+                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereco">
+                    <input type="text" placeholder="Rua, complemento" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
+                  </div>
+                  <div className="address-city-grid">
+                    <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`} data-label="Bairro">
+                      <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`} data-label="Cidade">
+                      <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
+                    </div>
+                  </div>
+                  {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
+                  {locationStatus && <p className="cep-status">{locationStatus}</p>}
                 </div>
-                <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Numero">
-                  <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
+              </>
+            ) : (
+              <>
+                <div className="form-sub-card">
+                  <span className="form-sub-card-title">Identificação</span>
+                  <div className="two-column-fields">
+                    <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Tutor">
+                      <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
+                      <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="cadunico-row">
+                    <div className="access-field" data-label="CadUnico">
+                      <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
+                    </div>
+                    <label className="checkbox-row cadunico-checkbox">
+                      <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
+                      Se aplica
+                    </label>
+                  </div>
                 </div>
-                <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
-                  <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
-                </div>
-              </div>
-              {cepStatus && <p className="cep-status">{cepStatus}</p>}
-              <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereco">
-                <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
-              </div>
-              <div className="address-city-grid">
-                <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`} data-label="Bairro">
-                  <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
-                </div>
-                <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`} data-label="Cidade">
-                  <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
-                </div>
-              </div>
-              {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
-              {locationStatus && <p className="cep-status">{locationStatus}</p>}
-            </div>
 
-            <div className="form-sub-card">
-              <span className="form-sub-card-title">Contato</span>
-              <div className="two-column-fields">
-                <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
-                  <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
+                <div className="form-sub-card">
+                  <span className="form-sub-card-title">Endereço</span>
+                  <div className="address-lookup-grid">
+                    <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
+                      <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Numero">
+                      <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
+                      <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
+                    </div>
+                  </div>
+                  {cepStatus && <p className="cep-status">{cepStatus}</p>}
+                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereco">
+                    <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
+                  </div>
+                  <div className="address-city-grid">
+                    <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`} data-label="Bairro">
+                      <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`} data-label="Cidade">
+                      <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
+                    </div>
+                  </div>
+                  {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
+                  {locationStatus && <p className="cep-status">{locationStatus}</p>}
                 </div>
-                <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`} data-label="Telefone">
-                  <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
+
+                <div className="form-sub-card">
+                  <span className="form-sub-card-title">Contato</span>
+                  <div className="two-column-fields">
+                    <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
+                      <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
+                    </div>
+                    <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`} data-label="Telefone">
+                      <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
+                    </div>
+                  </div>
+                  {!internalSimple && !smsCode && !smsConfirmed && (
+                    <button className="secondary-action sms-send-btn" type="button" onClick={sendSmsCode}>Enviar código de verificação</button>
+                  )}
+                  {!internalSimple && (smsCode || smsConfirmed) && (
+                    <div className="sms-verify-row">
+                      <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
+                        <span>Código SMS</span>
+                        <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
+                      </label>
+                      <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
+                    </div>
+                  )}
+                  {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
                 </div>
-              </div>
-              {!internalSimple && !smsCode && !smsConfirmed && (
-                <button className="secondary-action sms-send-btn" type="button" onClick={sendSmsCode}>Enviar código de verificação</button>
-              )}
-              {!internalSimple && (smsCode || smsConfirmed) && (
-                <div className="sms-verify-row">
-                  <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
-                    <span>Código SMS</span>
-                    <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
-                  </label>
-                  <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
-                </div>
-              )}
-              {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
-            </div>
+              </>
+            )}
           </FormSection>}
 
           {formStep === 1 && <FormSection title="Dados do animal">
@@ -4064,6 +4143,7 @@ function NewRequest({
                   onClick={goToNextStep}
                 >
                   Continuar
+                  {publicFlow && <ChevronRight size={15} />}
                 </button>
               ) : (
                 <button
@@ -4073,6 +4153,7 @@ function NewRequest({
                   onClick={submit}
                 >
                   {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
+                  {publicFlow && <ChevronRight size={15} />}
                 </button>
               )}
             </div>

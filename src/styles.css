@@ -17613,11 +17613,19 @@ form textarea:focus,
 }
 
 
+/* Mockup usa os dois botões com largura igual (flex:1 cada), não um menor e
+   um maior — e "Continuar"/"Enviar" ganham um ícone de seta ao lado do texto. */
 .public-form-page:not(.public-form-page--consultation) .nr-back-btn,
 .public-form-page:not(.public-form-page--consultation) .nr-topbar-continue {
   width: auto;
-  min-height: 40px;
-  border-radius: 10px;
+  flex: 1 1 0;
+  min-height: 44px;
+  border-radius: 12px;
+  margin-left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 
@@ -21401,4 +21409,89 @@ form textarea:focus,
   border-color: #156b48 !important;
   background: #156b48 !important;
   box-shadow: none !important;
+}
+
+
+/* -- ETAPA TUTOR (público): card único "Responsável e contato", igual ao mockup -- */
+
+/* input + botão de ação lado a lado dentro do mesmo .access-field (ex.: CadÚnico
+   com o toggle quadrado, Telefone com "Verificar") — a legenda (::before) do
+   .access-field continua vindo de cima, essa linha só organiza o segundo item. */
+.nr-shell--public .access-field-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nr-shell--public .access-field-action-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.nr-shell--public .sms-verify-inline-btn {
+  flex-shrink: 0;
+  border: 1px solid #e6ddc9;
+  border-radius: 10px;
+  padding: 0 16px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  font-family: "Poppins", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #1f8a5f;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.nr-shell--public .sms-verify-inline-btn:hover {
+  background: #eaf3ee;
+  border-color: #1f8a5f;
+}
+
+/* Botão quadrado do CadÚnico "se aplica" — checkbox real escondido (acessível),
+   quadrado verde+check quando marcado, borda creme quando não. Reaproveita o
+   mesmo truque CSS (::after com borda rotacionada) já usado em .doc-check-box. */
+.nr-shell--public .cadunico-square-toggle {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+}
+
+.nr-shell--public .cadunico-square-toggle input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  margin: 0;
+}
+
+.nr-shell--public .cadunico-check-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  border: 1.5px solid #e6ddc9;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.nr-shell--public .cadunico-square-toggle input:checked ~ .cadunico-check-box {
+  background: #1f8a5f;
+  border-color: #1f8a5f;
+}
+
+.nr-shell--public .cadunico-square-toggle input:checked ~ .cadunico-check-box::after {
+  content: "";
+  width: 8px;
+  height: 14px;
+  border: 2px solid #ffffff;
+  border-top: none;
+  border-left: none;
+  transform: rotate(45deg) translate(-1px, -2px);
 }
