@@ -1625,7 +1625,7 @@ button:disabled {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: .07em;
-  color: var(--muted);
+  color: #93887a;
   margin: 0;
 }
 
@@ -1640,8 +1640,8 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 1px solid #e6ddc9;
+  border-radius: 14px;
   background: #fff;
   padding: 10px 14px;
 }
@@ -1665,7 +1665,7 @@ button:disabled {
 
 .consult-adoption-info strong { font-size: 14px; }
 
-.consult-adoption-info span { font-size: 12px; color: var(--muted); }
+.consult-adoption-info span { font-size: 12px; color: #93887a; }
 
 
 .animal-status-chip {
@@ -13680,7 +13680,8 @@ body * {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
-  background: #f6f8fb;
+  background: #f4f1ea;
+  font-family: "Poppins", sans-serif;
 }
 
 .cons-topbar {
@@ -13762,7 +13763,7 @@ body * {
   margin: 0;
   font-size: clamp(1.4rem, 2.5vw, 1.8rem);
   font-weight: 750;
-  color: #0f172a;
+  color: #2b2420;
   line-height: 1.15;
   letter-spacing: -0.02em;
 }
@@ -13770,7 +13771,7 @@ body * {
 .cons-subtitle {
   margin: 0;
   font-size: 0.92rem;
-  color: #6b7280;
+  color: #93887a;
   line-height: 1.55;
   max-width: 520px;
 }
@@ -13827,9 +13828,9 @@ body * {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  padding: 16px 18px;
+  border: 1px solid #e6ddc9;
+  border-radius: 18px;
   background: #ffffff;
   text-align: left;
   cursor: pointer;
@@ -13837,34 +13838,43 @@ body * {
   width: 100%;
 }
 
-.cons-service-card:hover { border-color: #93c5fd; box-shadow: 0 2px 8px rgba(37,99,235,0.08); }
-.cons-service-card.danger:hover { border-color: #fca5a5; box-shadow: 0 2px 8px rgba(220,38,38,0.08); }
+.cons-service-card:hover { border-color: #bfe0cf; box-shadow: 0 2px 8px rgba(31,138,95,0.1); }
+.cons-service-card.danger:hover { border-color: #ddb0a0; box-shadow: 0 2px 8px rgba(181,72,47,0.1); }
 
+/* Verde para os serviços normais; terracota reservado só para "Registrar óbito"
+   (ação destrutiva) — decisão confirmada com o usuário, ver plano
+   alinhar-prontuario-mockup-v4.md. */
 .cons-svc-icon {
   width: 40px; height: 40px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.cons-svc-icon.blue   { background: #eff6ff; color: #2563eb; }
-.cons-svc-icon.indigo { background: #eef2ff; color: #4f46e5; }
-.cons-svc-icon.amber  { background: #fffbeb; color: #d97706; }
-.cons-svc-icon.red    { background: #fef2f2; color: #dc2626; }
+.cons-svc-icon.blue,
+.cons-svc-icon.indigo,
+.cons-svc-icon.amber {
+  background: #eaf3ee;
+  color: #1f8a5f;
+}
+.cons-svc-icon.red {
+  background: #f5e6df;
+  color: #b5482f;
+}
 
 .cons-svc-body { flex: 1; display: grid; gap: 2px; min-width: 0; }
-.cons-svc-body strong { font-size: 0.86rem; color: #111827; }
-.cons-svc-body span   { font-size: 0.75rem; color: #6b7280; }
+.cons-svc-body strong { font-size: 0.86rem; color: #2b2420; }
+.cons-svc-body span   { font-size: 0.75rem; color: #93887a; }
 
-.cons-svc-arrow { color: #d1d5db; flex-shrink: 0; }
+.cons-svc-arrow { color: #b0a894; flex-shrink: 0; }
 
 /* ── Service Modal (GED layout) ────────────────────── */
 .svc-modal {
   background: #ffffff;
-  border-radius: 16px;
+  border-radius: 18px;
   width: min(780px, calc(100vw - 24px));
   max-height: calc(100vh - 48px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  box-shadow: 0 20px 60px rgba(43,36,32,0.18);
 }
 
 .svc-modal-header {
@@ -13873,7 +13883,7 @@ body * {
   justify-content: space-between;
   gap: 16px;
   padding: 20px 24px 18px;
-  border-bottom: 1px solid #f1f3f5;
+  border-bottom: 1px solid #e6ddc9;
   flex-shrink: 0;
 }
 
@@ -13887,13 +13897,13 @@ body * {
 .svc-modal-h {
   font-size: 1rem;
   font-weight: 700;
-  color: #111827;
+  color: #2b2420;
   margin: 0 0 2px;
 }
 
 .svc-modal-sub {
   font-size: 0.78rem;
-  color: #6b7280;
+  color: #93887a;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
@@ -13907,14 +13917,14 @@ body * {
   width: 32px;
   height: 32px;
   border: none;
-  background: #f3f4f6;
+  background: #f1ede3;
   border-radius: 50%;
-  color: #6b7280;
+  color: #93887a;
   cursor: pointer;
   transition: background 0.12s;
   flex-shrink: 0;
 }
-.svc-close-btn:hover { background: #e5e7eb; color: #374151; }
+.svc-close-btn:hover { background: #e6ddc9; color: #2b2420; }
 
 .svc-modal-body {
   padding: 24px;
@@ -13929,7 +13939,7 @@ body * {
 .svc-field > select,
 .svc-field > textarea {
   border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e6ddc9;
   padding: 9px 12px;
   font-size: 0.84rem;
   transition: border-color 0.12s, box-shadow 0.12s;
@@ -13937,14 +13947,14 @@ body * {
 .svc-field > input:focus,
 .svc-field > select:focus,
 .svc-field > textarea:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+  border-color: #1f8a5f;
+  box-shadow: 0 0 0 3px rgba(31,138,95,0.1);
   outline: none;
 }
 .svc-field > span {
   font-size: 0.75rem;
   font-weight: 600;
-  color: #6b7280;
+  color: #93887a;
   text-transform: uppercase;
   letter-spacing: 0.03em;
   margin-bottom: 4px;
@@ -13977,22 +13987,22 @@ body * {
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: #eaf3ee;
+  border: 1px solid #bfe0cf;
   border-radius: 8px;
   font-size: 0.8rem;
-  color: #166534;
+  color: #156b48;
   width: 100%;
 }
 .svc-found-tag strong { font-weight: 600; }
-.svc-found-tag span   { color: #4ade80; }
+.svc-found-tag span   { color: #1f8a5f; }
 
 .svc-modal-footer {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
   padding-top: 8px;
-  border-top: 1px solid #f1f3f5;
+  border-top: 1px solid #e6ddc9;
   margin-top: 4px;
 }
 
@@ -14009,11 +14019,11 @@ body * {
   justify-content: center;
   gap: 6px;
   padding: 8px 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e6ddc9;
   border-radius: 8px;
   font-size: 0.82rem;
   font-weight: 500;
-  color: #374151;
+  color: #2b2420;
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
 }
@@ -14021,9 +14031,9 @@ body * {
 .svc-mode-btn input[type="radio"] { display: none; }
 
 .svc-mode-btn.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
+  border-color: #1f8a5f;
+  background: #eaf3ee;
+  color: #156b48;
 }
 
 .cons-results {
@@ -14134,10 +14144,10 @@ body * {
   height: 52px;
   border: none;
   border-radius: 14px;
-  background: #0a0a0a;
+  background: #2b2420;
   color: #ffffff;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
+  box-shadow: 0 4px 14px rgba(43,36,32,0.18);
   transition: opacity 140ms, transform 140ms;
 }
 
@@ -14314,8 +14324,8 @@ body * {
 
 
 .consultation-results .panel.wide {
-  border: 1px solid var(--border);
-  border-radius: 14px;
+  border: 1px solid #e6ddc9;
+  border-radius: 18px;
   background: #ffffff;
   padding: 0;
   box-shadow: none;
@@ -14330,7 +14340,7 @@ body * {
 
 .consultation-results .panel-header h3,
 .consultation-results .panel-header h2 {
-  color: #07172a;
+  color: #2b2420;
   font-size: 1.22rem;
 }
 
@@ -14347,27 +14357,23 @@ body * {
   grid-template-columns: 1fr auto auto;
   align-items: center;
   gap: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #ffffff;
   padding: 14px 16px;
-  box-shadow: none;
   transition: border-color 160ms ease, background 160ms ease;
 }
 
 
 .consultation-results .empty-state {
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
+  border: 1px solid #e6ddc9;
+  border-radius: 14px;
+  background: #f4f1ea;
   min-height: 140px;
   box-shadow: none;
 }
 
 
 .consultation-results .request-card:hover {
-  border-color: #bfdbfe;
-  background: #f8faff;
+  border-color: #bfe0cf;
+  background: #f7fbf9;
 }
 
 
@@ -14379,21 +14385,21 @@ body * {
 
 
 .consultation-results .request-card-main strong {
-  color: var(--muted);
+  color: #93887a;
   font-size: 0.78rem;
   font-weight: 500;
 }
 
 
 .consultation-results .request-card-main span {
-  color: var(--ink);
+  color: #2b2420;
   font-weight: 600;
   font-size: 0.92rem;
 }
 
 
 .consultation-results .request-card-main small {
-  color: var(--muted);
+  color: #93887a;
   font-size: 0.76rem;
 }
 
@@ -14422,7 +14428,7 @@ body * {
 .consultation-results .status-badge.card-status-plain.status-CANCELADA { color: #dc2626; }
 
 .consultation-results .request-card-date {
-  color: var(--muted);
+  color: #93887a;
   font-size: 0.78rem;
   white-space: nowrap;
 }
@@ -14647,10 +14653,10 @@ body * {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface);
-  color: var(--ink);
+  border: 1px solid #e6ddc9;
+  border-radius: 14px;
+  background: #f4f1ea;
+  color: #2b2420;
   padding: 16px;
 }
 
@@ -14669,35 +14675,35 @@ body * {
   display: grid;
   place-items: center;
   border-radius: 10px;
-  background: #0a0a0a;
+  background: #2b2420;
   color: #ffffff;
 }
 
 
 .animal-record-header .eyebrow {
-  color: var(--muted);
+  color: #93887a;
   font-size: 0.72rem;
 }
 
 
 .animal-record-header h3 {
   margin: 3px 0;
-  color: var(--ink);
+  color: #2b2420;
   font-size: clamp(1.1rem, 1.6vw, 1.45rem);
   line-height: 1.1;
 }
 
 
 .animal-record-header p {
-  color: var(--muted);
+  color: #93887a;
   font-size: 0.84rem;
 }
 
 
 .animal-record-meta span {
-  border-color: var(--border);
-  background: #f3f4f6;
-  color: var(--ink);
+  border-color: #e6ddc9;
+  background: #ffffff;
+  color: #2b2420;
 }
 
 
@@ -14763,7 +14769,7 @@ body * {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: #5d7280;
+  color: #93887a;
   font-size: 0.76rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -14773,7 +14779,7 @@ body * {
 .animal-record-summary-card strong {
   display: block;
   margin-top: 8px;
-  color: #0f3447;
+  color: #2b2420;
   font-size: 1rem;
   overflow-wrap: anywhere;
 }
@@ -14782,7 +14788,7 @@ body * {
 .animal-record-summary-card small {
   display: block;
   margin-top: 4px;
-  color: #6b7f8d;
+  color: #93887a;
   overflow-wrap: anywhere;
 }
 
@@ -14803,12 +14809,13 @@ body * {
   font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
+  color: #93887a;
 }
 
 
 .animal-record-grid .info-tile strong {
   margin-top: 6px;
-  color: #14384a;
+  color: #2b2420;
   font-size: 0.9rem;
 }
 
@@ -14818,7 +14825,7 @@ body * {
   justify-content: space-between;
   gap: 12px;
   align-items: center;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e6ddc9;
   border-radius: 12px;
   background: #ffffff;
   padding: 12px;
@@ -14878,8 +14885,8 @@ body * {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: #eaf3ee;
+  border: 1px solid #bfe0cf;
   border-radius: 8px;
   padding: 8px 12px;
   font-size: 0.82rem;
@@ -14890,12 +14897,12 @@ body * {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #15803d;
+  color: #156b48;
   white-space: nowrap;
 }
 
-.pac-tutor-banner strong { color: #166534; }
-.pac-tutor-cpf { color: #4ade80; font-size: 0.78rem; margin-left: auto; }
+.pac-tutor-banner strong { color: #156b48; }
+.pac-tutor-cpf { color: #1f8a5f; font-size: 0.78rem; margin-left: auto; }
 
 .pac-animal-options {
   display: grid;
@@ -14908,22 +14915,22 @@ body * {
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #e6ddc9;
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.12s, background 0.12s;
 }
 
 .pac-animal-option:has(input:checked) {
-  border-color: #2563eb;
-  background: #eff6ff;
+  border-color: #1f8a5f;
+  background: #eaf3ee;
 }
 
-.pac-animal-option input[type="radio"] { flex-shrink: 0; accent-color: #2563eb; }
+.pac-animal-option input[type="radio"] { flex-shrink: 0; accent-color: #1f8a5f; }
 
 .pac-animal-option-body { display: grid; gap: 1px; }
-.pac-animal-option-body strong { font-size: 0.84rem; color: #111827; }
-.pac-animal-option-body span   { font-size: 0.75rem; color: #6b7280; }
+.pac-animal-option-body strong { font-size: 0.84rem; color: #2b2420; }
+.pac-animal-option-body span   { font-size: 0.75rem; color: #93887a; }
 
 .pac-lookup-row {
   display: flex;
@@ -14938,14 +14945,14 @@ body * {
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
+  background: #eaf3ee;
+  border: 1px solid #bfe0cf;
   border-radius: 8px;
   font-size: 0.82rem;
 }
 
-.pac-found-animal strong { color: #166534; }
-.pac-found-animal span   { color: #4ade80; }
+.pac-found-animal strong { color: #156b48; }
+.pac-found-animal span   { color: #1f8a5f; }
 
 
 .animal-record-actions > div:first-child {
@@ -14955,13 +14962,13 @@ body * {
 
 
 .animal-record-actions > div:first-child strong {
-  color: #12384c;
+  color: #2b2420;
   font-size: 0.92rem;
 }
 
 
 .animal-record-actions > div:first-child span {
-  color: #6b7f8d;
+  color: #93887a;
   font-size: 0.8rem;
 }
 
@@ -16076,7 +16083,6 @@ form textarea:focus,
 
 
 .request-card,
-.consultation-results .request-card,
 .triage-card,
 .ag-list-card,
 .adoption-card,
@@ -16089,14 +16095,24 @@ form textarea:focus,
   box-shadow: var(--ui-shadow-line);
 }
 
-
-.request-card,
 .consultation-results .request-card {
+  border: 1px solid #e6ddc9;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: none;
   overflow: hidden;
 }
 
 
-.request-card-main,
+.request-card {
+  overflow: hidden;
+}
+
+
+.request-card-main {
+  padding-left: 4px;
+}
+
 .consultation-results .request-card-main {
   padding-left: 4px;
 }
@@ -21587,4 +21603,42 @@ form textarea:focus,
 
 .nr-shell--public .cep-status {
   color: #1f8a5f;
+}
+
+
+/* Tela "Prontuário" (ValidationKeyConsultation, uso exclusivo): .animal-record-panel/
+   .animal-record-summary-card/.animal-record-grid .info-tile também aparecem num
+   seletor agrupado do design system do staff (".summary-card, .report-card, ...
+   .animal-record-panel { border: var(--ui-border) ... }"), então sobrepomos aqui em
+   vez de editar aquele grupo compartilhado. */
+.animal-record-panel {
+  border-color: #e6ddc9;
+  border-radius: 18px;
+  box-shadow: 0 8px 22px rgba(43, 36, 32, 0.06);
+}
+
+.animal-record-summary-card,
+.animal-record-grid .info-tile {
+  border-color: #e6ddc9;
+  box-shadow: none;
+}
+
+/* Os 3 modais de ação (procedimento/óbito/troca) reaproveitam .workflow-modal
+   (compartilhado com o staff) — .animal-action-modal é a classe composta exclusiva
+   desta tela, então só o "shell" (borda/raio/sombra) é alinhado ao padrão dos
+   modais de serviço; .field/ModalHeader/botões continuam com o padrão neutro
+   já usado no resto do admin (compartilhados, fora de escopo). */
+.animal-action-modal {
+  border-color: #e6ddc9;
+  border-radius: 18px;
+  box-shadow: 0 20px 60px rgba(43, 36, 32, 0.18);
+}
+
+/* .icon-btn-flat é compartilhado com o admin — só o hover, escopado às duas áreas
+   exclusivas desta tela, migra do azul genérico para o verde v4. */
+.consultation-results .icon-btn-flat:hover,
+.animal-record-panel .icon-btn-flat:hover {
+  color: #1f8a5f;
+  border-color: #bfe0cf;
+  background: #eaf3ee;
 }
