@@ -6508,6 +6508,73 @@ function AgendaKindSelector({ value, onChange }: AnyRecord) {
   );
 }
 
+const documentCriteriaVariants = {
+  required: { label: "Obrigatórios", accent: "green" },
+  rejection: { label: "Recusa", accent: "red" },
+  manual: { label: "Revisão manual", accent: "amber" },
+} as const;
+
+function DocumentCriteriaColumn({ variant, items, draft, onDraftChange, onAdd, onRemove, placeholder }: AnyRecord) {
+  const { label, accent } = documentCriteriaVariants[variant as keyof typeof documentCriteriaVariants];
+  return (
+    <div className={`document-criteria-column document-criteria-column--${accent}`}>
+      <div className="document-criteria-column-header">
+        <span>{label}</span>
+        <span className="document-criteria-count">{items.length}</span>
+      </div>
+      <div className="document-criteria-list">
+        {items.map((item: string, index: number) => (
+          <div className="document-criteria-chip" key={`${item}-${index}`}>
+            <span>{item}</span>
+            <button type="button" onClick={() => onRemove(index)} aria-label={`Remover ${item}`}>×</button>
+          </div>
+        ))}
+      </div>
+      <div className="document-criteria-add">
+        <input
+          value={draft}
+          placeholder={placeholder || "Adicionar"}
+          onChange={(event) => onDraftChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              onAdd();
+            }
+          }}
+        />
+        <button type="button" onClick={onAdd}>+</button>
+      </div>
+    </div>
+  );
+}
+
+function DocumentConfidenceSlider({ value, onChange }: AnyRecord) {
+  return (
+    <div className="document-confidence-slider">
+      <div className="document-confidence-slider-label">
+        <span>Confiança mínima</span>
+        <strong>{value}<small>%</small></strong>
+      </div>
+      <div className="document-confidence-track-wrap">
+        <div className="document-confidence-track">
+          <div className="document-confidence-fill" style={{ width: `${value}%` }} />
+        </div>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          step={1}
+          value={value}
+          onChange={(event) => onChange(Number(event.target.value))}
+          className="document-confidence-range"
+          aria-label="Confiança mínima"
+        />
+      </div>
+      <p>Abaixo deste valor, o documento é enviado para revisão manual em vez de decidido automaticamente.</p>
+    </div>
+  );
+}
+
 function ConfigView({
   requestTypes = initialRequestTypes,
   setRequestTypes,
@@ -6570,8 +6637,22 @@ function ConfigView({
   const [editingSizeId, setEditingSizeId] = useState(null);
   const [newSpecies, setNewSpecies] = useState({ name: "", active: true });
   const [newSize, setNewSize] = useState({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true });
-  const emptyDocumentForm = { name: "", modelHint: "", aiCriteria: "", manualReviewRules: "", rejectionRules: "", minimumConfidence: String(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE).replace(".", ","), allowAutomaticApproval: true, allowAutomaticRejection: false, required: true, active: true };
+  const emptyDocumentForm = {
+    name: "",
+    expectedDocument: "",
+    requiredCriteria: [] as string[],
+    rejectionCriteria: [] as string[],
+    manualReviewCriteria: [] as string[],
+    minimumConfidence: Math.round(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE * 100),
+    allowAutomaticApproval: true,
+    allowAutomaticRejection: false,
+    required: true,
+    active: true,
+  };
   const [newDocument, setNewDocument] = useState(emptyDocumentForm);
+  const [newRequiredCriterion, setNewRequiredCriterion] = useState("");
+  const [newRejectionCriterion, setNewRejectionCriterion] = useState("");
+  const [newManualCriterion, setNewManualCriterion] = useState("");
   const [newSectorName, setNewSectorName] = useState("");
   const [newSectorActive, setNewSectorActive] = useState(true);
   const [editingSectorId, setEditingSectorId] = useState(null);
@@ -6879,7 +6960,9 @@ function ConfigView({
   }
 
   function buildDocumentPayload(payload: AnyRecord = {}, existing: AnyRecord = {}) {
-    const minimumConfidence = String(payload.minimumConfidence || String(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE).replace(".", ",")).replace(",", ".");
+    const minimumConfidencePercent = Number.isFinite(Number(payload.minimumConfidence))
+      ? Number(payload.minimumConfidence)
+      : Math.round(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE * 100);
     return {
       ...existing,
       id: existing.id || `doc_${Date.now()}`,
@@ -6890,11 +6973,11 @@ function ConfigView({
       maxSizeMb: existing.maxSizeMb || 5,
       analysisRules: {
         ...(existing.analysisRules || {}),
-        expectedDocument: payload.modelHint || "",
-        requiredCriteria: payload.aiCriteria || "",
-        manualReviewCriteria: payload.manualReviewRules || "",
-        rejectionCriteria: payload.rejectionRules || "",
-        minimumConfidence,
+        expectedDocument: payload.expectedDocument || "",
+        requiredCriteria: Array.isArray(payload.requiredCriteria) ? payload.requiredCriteria : [],
+        manualReviewCriteria: Array.isArray(payload.manualReviewCriteria) ? payload.manualReviewCriteria : [],
+        rejectionCriteria: Array.isArray(payload.rejectionCriteria) ? payload.rejectionCriteria : [],
+        minimumConfidence: Math.max(0, Math.min(1, minimumConfidencePercent / 100)),
         allowAutomaticApproval: payload.allowAutomaticApproval !== false,
         allowAutomaticRejection: payload.allowAutomaticRejection === true,
       },
@@ -6974,11 +7057,11 @@ function ConfigView({
       setEditingDocumentId(normalized.id);
       setNewDocument({
         name: normalized.name || "",
-        modelHint: rules.expectedDocument || "",
-        aiCriteria: Array.isArray(rules.requiredCriteria) ? rules.requiredCriteria.join("\n") : "",
-        manualReviewRules: Array.isArray(rules.manualReviewCriteria) ? rules.manualReviewCriteria.join("\n") : "",
-        rejectionRules: Array.isArray(rules.rejectionCriteria) ? rules.rejectionCriteria.join("\n") : "",
-        minimumConfidence: String(rules.minimumConfidence ?? DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE).replace(".", ","),
+        expectedDocument: rules.expectedDocument || "",
+        requiredCriteria: Array.isArray(rules.requiredCriteria) ? rules.requiredCriteria : [],
+        rejectionCriteria: Array.isArray(rules.rejectionCriteria) ? rules.rejectionCriteria : [],
+        manualReviewCriteria: Array.isArray(rules.manualReviewCriteria) ? rules.manualReviewCriteria : [],
+        minimumConfidence: Math.round((Number(rules.minimumConfidence ?? DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE)) * 100),
         allowAutomaticApproval: rules.allowAutomaticApproval !== false,
         allowAutomaticRejection: rules.allowAutomaticRejection === true,
         required: normalized.required !== false,
@@ -6988,6 +7071,9 @@ function ConfigView({
       setEditingDocumentId(null);
       setNewDocument(emptyDocumentForm);
     }
+    setNewRequiredCriterion("");
+    setNewRejectionCriterion("");
+    setNewManualCriterion("");
     setConfigModal("document");
   }
   function createSize(payload: AnyRecord = {}) {
@@ -9192,99 +9278,140 @@ function ConfigView({
           >
             <ModalHeader
               title={editingDocumentId ? "Editar documento" : "Criar documento"}
+              subtitle={
+                <span className="document-modal-status">
+                  <span className={`document-modal-status-dot ${newDocument.active !== false ? "is-active" : "is-inactive"}`} />
+                  <span className="document-modal-status-state">{newDocument.active !== false ? "Ativo" : "Inativo"}</span>
+                  {newDocument.name && (
+                    <>
+                      <span className="document-modal-status-sep">•</span>
+                      <span className="document-modal-status-name">{newDocument.name}</span>
+                    </>
+                  )}
+                </span>
+              }
+              actions={
+                <div className="document-modal-switches">
+                  <ConfigActiveToggle
+                    checked={newDocument.required !== false}
+                    onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
+                    onText="Obrigatório"
+                    offText="Opcional"
+                  />
+                  <ConfigActiveToggle
+                    checked={newDocument.active !== false}
+                    onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
+                  />
+                </div>
+              }
               onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); }}
             />
-            <div className="document-modal-statusbar">
-              <span><FileText size={16} /> Documento solicitado</span>
-              <div className="document-modal-switches">
-                <ConfigActiveToggle
-                  checked={newDocument.required !== false}
-                  onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
-                  onText="Obrigatório"
-                  offText="Opcional"
-                />
-                <ConfigActiveToggle
-                  checked={newDocument.active !== false}
-                  onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
-                />
-              </div>
-            </div>
 
             <div className="document-modal-body">
-              <aside className="document-modal-sidebar">
-                <section className="document-modal-panel">
-                  <div className="document-section-heading">
-                    <span><ClipboardCheck size={15} /> Identificação</span>
-                  </div>
+              <section className="document-modal-panel">
+                <div className="document-section-heading">
+                  <span><ClipboardCheck size={15} /> Identificação</span>
+                </div>
+                <div className="document-identity-grid">
                   <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residência" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
                   <label className="field document-expected-field">
                     <span>Documento esperado</span>
                     <textarea
-                      value={newDocument.modelHint}
+                      value={newDocument.expectedDocument}
                       placeholder="Descreva qual documento deve ser enviado e quais informações precisam estar visíveis."
-                      onChange={(event) => setNewDocument((current) => ({ ...current, modelHint: event.target.value }))}
+                      onChange={(event) => setNewDocument((current) => ({ ...current, expectedDocument: event.target.value }))}
                     />
                   </label>
-                </section>
+                </div>
+              </section>
 
-                <section className="document-modal-panel document-modal-panel--decision">
-                  <div className="document-section-heading">
-                    <span><ShieldCheck size={15} /> Decisão automática</span>
-                  </div>
-                  <Field
-                    label="Confiança mínima"
-                    value={newDocument.minimumConfidence}
-                    placeholder="0,55"
-                    onChange={(value) => setNewDocument((current) => ({ ...current, minimumConfidence: value }))}
-                  />
-                  <div className="document-decision-toggles">
-                    <ConfigActiveToggle
-                      checked={newDocument.allowAutomaticApproval !== false}
-                      onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticApproval: checked }))}
-                      onText="Aprovação automática"
-                      offText="Aprovação manual"
-                    />
-                    <ConfigActiveToggle
-                      checked={newDocument.allowAutomaticRejection === true}
-                      onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticRejection: checked }))}
-                      onText="Recusar automaticamente"
-                      offText="Revisar recusa"
-                    />
-                  </div>
-                </section>
-              </aside>
-
-              <section className="document-modal-panel document-modal-panel--criteria">
+              <section className="document-modal-panel">
                 <div className="document-section-heading">
                   <span><ListChecks size={15} /> Critérios de análise</span>
-                  <small>Um critério por linha deixa a conferência mais precisa.</small>
+                  <small>Cada critério é um item independente — adicione quantos precisar.</small>
                 </div>
                 <div className="document-criteria-grid">
-                  <label className="field document-criteria-field">
-                    <span>Obrigatórios</span>
-                    <textarea
-                      value={newDocument.aiCriteria}
-                      placeholder={"Ex: documento legível\nnome do titular visível\nendereço completo"}
-                      onChange={(event) => setNewDocument((current) => ({ ...current, aiCriteria: event.target.value }))}
-                    />
-                  </label>
-                  <label className="field document-criteria-field">
-                    <span>Recusa</span>
-                    <textarea
-                      value={newDocument.rejectionRules}
-                      placeholder={"Ex: documento ilegível\ncidade incompatível\narquivo não corresponde ao solicitado"}
-                      onChange={(event) => setNewDocument((current) => ({ ...current, rejectionRules: event.target.value }))}
-                    />
-                  </label>
-                </div>
-                <label className="field document-review-field">
-                  <span>Revisão manual</span>
-                  <textarea
-                    value={newDocument.manualReviewRules}
-                    placeholder={"Ex: baixa confiança\nnome diferente do solicitante\ndata parcialmente legível"}
-                    onChange={(event) => setNewDocument((current) => ({ ...current, manualReviewRules: event.target.value }))}
+                  <DocumentCriteriaColumn
+                    variant="required"
+                    items={newDocument.requiredCriteria}
+                    draft={newRequiredCriterion}
+                    onDraftChange={setNewRequiredCriterion}
+                    placeholder="Ex: documento legível"
+                    onAdd={() => {
+                      const value = newRequiredCriterion.trim();
+                      if (!value) return;
+                      setNewDocument((current) => ({ ...current, requiredCriteria: [...current.requiredCriteria, value] }));
+                      setNewRequiredCriterion("");
+                    }}
+                    onRemove={(index: number) => setNewDocument((current) => ({ ...current, requiredCriteria: current.requiredCriteria.filter((_: string, i: number) => i !== index) }))}
                   />
-                </label>
+                  <DocumentCriteriaColumn
+                    variant="rejection"
+                    items={newDocument.rejectionCriteria}
+                    draft={newRejectionCriterion}
+                    onDraftChange={setNewRejectionCriterion}
+                    placeholder="Ex: documento ilegível"
+                    onAdd={() => {
+                      const value = newRejectionCriterion.trim();
+                      if (!value) return;
+                      setNewDocument((current) => ({ ...current, rejectionCriteria: [...current.rejectionCriteria, value] }));
+                      setNewRejectionCriterion("");
+                    }}
+                    onRemove={(index: number) => setNewDocument((current) => ({ ...current, rejectionCriteria: current.rejectionCriteria.filter((_: string, i: number) => i !== index) }))}
+                  />
+                  <DocumentCriteriaColumn
+                    variant="manual"
+                    items={newDocument.manualReviewCriteria}
+                    draft={newManualCriterion}
+                    onDraftChange={setNewManualCriterion}
+                    placeholder="Ex: baixa confiança"
+                    onAdd={() => {
+                      const value = newManualCriterion.trim();
+                      if (!value) return;
+                      setNewDocument((current) => ({ ...current, manualReviewCriteria: [...current.manualReviewCriteria, value] }));
+                      setNewManualCriterion("");
+                    }}
+                    onRemove={(index: number) => setNewDocument((current) => ({ ...current, manualReviewCriteria: current.manualReviewCriteria.filter((_: string, i: number) => i !== index) }))}
+                  />
+                </div>
+              </section>
+
+              <section className="document-modal-panel document-modal-panel--decision">
+                <div className="document-section-heading">
+                  <span><ShieldCheck size={15} /> Decisão automática</span>
+                </div>
+                <div className="document-decision-grid">
+                  <DocumentConfidenceSlider
+                    value={newDocument.minimumConfidence}
+                    onChange={(value: number) => setNewDocument((current) => ({ ...current, minimumConfidence: value }))}
+                  />
+                  <div className="document-decision-toggles">
+                    <div className="document-decision-toggle-row">
+                      <div>
+                        <strong>Aprovação automática</strong>
+                        <span>Aprova sem revisão quando a confiança é suficiente.</span>
+                      </div>
+                      <ConfigActiveToggle
+                        checked={newDocument.allowAutomaticApproval !== false}
+                        onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticApproval: checked }))}
+                        onText=""
+                        offText=""
+                      />
+                    </div>
+                    <div className="document-decision-toggle-row">
+                      <div>
+                        <strong>Recusar automaticamente</strong>
+                        <span>Sem isso, recusas automáticas viram conferência manual.</span>
+                      </div>
+                      <ConfigActiveToggle
+                        checked={newDocument.allowAutomaticRejection === true}
+                        onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticRejection: checked }))}
+                        onText=""
+                        offText=""
+                      />
+                    </div>
+                  </div>
+                </div>
               </section>
             </div>
 
