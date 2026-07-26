@@ -39,7 +39,7 @@ router.post("/validate", async (req, res) => {
 });
 
 async function resolveAiSettings(requestSettings = {}) {
-  const { rows } = await pool.query("SELECT value FROM config WHERE key=$1", ["ai"]);
+  const { rows } = await pool.query("SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", ["ai"]);
   const savedSettings = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
   const merged = { ...savedSettings, ...requestSettings };
   const provider = ["OpenAI", "Anthropic", "Gemini"].includes(merged.provider) ? merged.provider : "OpenAI";
@@ -283,6 +283,7 @@ function normalizeAiResult(text, provider, rules = {}) {
   if (normalizedStatus === "approved" && confidence >= minimumConfidence && rules.allowAutomaticApproval !== false) {
     return {
       status: "approved",
+      aiVerdict: normalizedStatus,
       message: message || `Documento aprovado por ${provider} conforme os criterios configurados.`,
       confidence,
       provider,
@@ -295,6 +296,7 @@ function normalizeAiResult(text, provider, rules = {}) {
   if (normalizedStatus === "rejected" && confidence >= minimumConfidence && rules.allowAutomaticRejection === true) {
     return {
       status: "rejected",
+      aiVerdict: normalizedStatus,
       message: message || `Documento recusado por ${provider}: criterio obrigatorio nao atendido.`,
       confidence,
       provider,
@@ -306,6 +308,7 @@ function normalizeAiResult(text, provider, rules = {}) {
 
   return {
     status: "attached",
+    aiVerdict: normalizedStatus,
     message: manualReviewMessage(message, provider, normalizedStatus, confidence, minimumConfidence),
     confidence,
     provider,

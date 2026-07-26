@@ -18,6 +18,14 @@ const GLOBAL_ONLY_CONFIG_KEYS = new Set([
   "platform",
 ]);
 
+// Chaves de configuração global que podem ser lidas publicamente (sem dados
+// sensíveis, graças a publicConfigValue), mas cuja escrita deve ficar restrita
+// à administração global — evita que um admin municipal sobrescreva a config
+// de IA compartilhada por todas as prefeituras.
+const GLOBAL_WRITE_ONLY_CONFIG_KEYS = new Set([
+  "ai",
+]);
+
 // ── Validadores de estrutura para chaves críticas ─────────────────────────
 
 /**
@@ -103,6 +111,11 @@ router.put("/:key", auth, async (req, res) => {
 
   // Chaves globais só podem ser salvas por usuários globais
   if (GLOBAL_ONLY_CONFIG_KEYS.has(key) && !isGlobalUser(req.user)) {
+    return res.status(403).json({ error: "Configuração restrita à administração global." });
+  }
+
+  // Chaves de escrita restrita: leitura pública, mas só usuário global pode salvar
+  if (GLOBAL_WRITE_ONLY_CONFIG_KEYS.has(key) && !isGlobalUser(req.user)) {
     return res.status(403).json({ error: "Configuração restrita à administração global." });
   }
 

@@ -11,7 +11,16 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       if (sessionStorage.getItem("castragestao:sw-refreshing") === "true") return;
       sessionStorage.setItem("castragestao:sw-refreshing", "true");
-      window.location.reload();
+      const reloadWhenHidden = () => {
+        if (!document.hidden) return;
+        document.removeEventListener("visibilitychange", reloadWhenHidden);
+        window.location.reload();
+      };
+      if (document.hidden) {
+        window.location.reload();
+      } else {
+        document.addEventListener("visibilitychange", reloadWhenHidden);
+      }
     });
   });
 }

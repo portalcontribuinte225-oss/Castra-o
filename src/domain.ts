@@ -75,7 +75,7 @@ export const aiProviderOptions: AnyRecord = {
   },
   Anthropic: {
     keyUrl: "https://console.anthropic.com/settings/keys",
-    models: ["claude-sonnet-4-6", "claude-haiku-4-5-20251001", "claude-opus-4-7"],
+    models: ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5", "claude-sonnet-4-6", "claude-opus-4-7"],
   },
   Gemini: {
     keyUrl: "https://aistudio.google.com/app/apikey",
@@ -133,7 +133,7 @@ const DEFAULT_DOCUMENT_MAX_SIZE_MB = 5;
 
 export const DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE = 0.55;
 
-function textToCriteriaList(value: any): string[] {
+export function textToCriteriaList(value: any): string[] {
   if (Array.isArray(value)) {
     return value.map((item) => String(item || "").trim()).filter(Boolean);
   }
@@ -144,7 +144,8 @@ function textToCriteriaList(value: any): string[] {
 }
 
 function parseDocumentConfidence(value: any): number {
-  return Number(String(value ?? "").replace(",", "."));
+  if (value === undefined || value === null || value === "") return NaN;
+  return Number(String(value).replace(",", "."));
 }
 
 export function normalizeDocumentAnalysisRules(rules: AnyRecord = {}, migrationSource: AnyRecord = {}): AnyRecord {

@@ -94,6 +94,7 @@ import {
   statusLabels,
   statuses,
   sumScheduleSlotsVacancies,
+  textToCriteriaList,
   triageStatusTone,
   visibleWorkflowTags,
   workflowTagLabels,
@@ -157,6 +158,7 @@ const configSidebarItems = [
   { id: "users", label: "Criar Usuários", desc: "Acesso e permissões" },
   { id: "sectors", label: "Criar Setores", desc: "Setores e equipes" },
   { id: "permissions", label: "Permissões", desc: "Controle de acesso por perfil" },
+  { id: "ai_settings", label: "Inteligência Artificial", globalOnly: true, desc: "Análise documental por IA" },
 ];
 
 const permissionMenuItems = menu.map(({ id, label }) => ({ id, label }));
@@ -2039,6 +2041,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const [activePublicService, setActivePublicService] = useState<string | null>(null);
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
   const [publicServiceDone, setPublicServiceDone] = useState<AnyRecord | null>(null);
+  const [publicServiceDoneDownloading, setPublicServiceDoneDownloading] = useState(false);
   const [publicServiceScheduleDays, setPublicServiceScheduleDays] = useState(scheduleDays);
   const [publicServiceScheduleRules, setPublicServiceScheduleRules] = useState([]);
   const [publicServiceRequestTypes, setPublicServiceRequestTypes] = useState(requestTypes);
@@ -2165,6 +2168,22 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     setPublicServiceDone(null);
   }
 
+  async function downloadPublicServiceRequerimento() {
+    if (!publicServiceDone || publicServiceDoneDownloading) return;
+    setPublicServiceDoneDownloading(true);
+    try {
+      const dataUrl = await createRequestPdfDataUrl(publicServiceDone);
+      const anchor = window.document.createElement("a");
+      anchor.href = dataUrl;
+      anchor.download = `Requerimento ${publicServiceDone.protocol || ""}.pdf`.trim();
+      anchor.click();
+    } catch (error) {
+      console.error("Erro ao gerar requerimento:", error);
+    } finally {
+      setPublicServiceDoneDownloading(false);
+    }
+  }
+
   function openInlineProcedure(prefill: AnyRecord = {}) {
     setProcedurePrefill(prefill);
     setPublicServiceDone(null);
@@ -2231,7 +2250,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
             />
           </aside>
 
-          <section className="public-service-panel">
+          <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
             <div className="public-service-panel-header">
               <h2>{activePublicServiceDetails?.label || "Serviço"}</h2>
               <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
@@ -2247,7 +2266,12 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                   <strong>{publicServiceDone.validationKey || publicServiceDone.validation_key}</strong>
                   <small>Use CPF + chave de validação para consultar o andamento.</small>
                 </div>
-                <button className="primary-action" type="button" onClick={closePublicService}>Voltar ao início</button>
+                <div className="public-service-success-actions">
+                  <button className="primary-action" type="button" onClick={closePublicService}>Voltar ao início</button>
+                  <button className="ghost-button" type="button" onClick={downloadPublicServiceRequerimento} disabled={publicServiceDoneDownloading}>
+                    {publicServiceDoneDownloading ? "Gerando..." : "Baixar requerimento"}
+                  </button>
+                </div>
               </div>
             ) : activePublicService === "procedure_form" ? (
               <NewRequest
@@ -3113,6 +3137,8 @@ function NewRequest({
   const requiredDocsApproved = selectedTypeDocuments
     .filter((document) => document.required)
     .every((document) => acceptableUploadStatuses.includes(documentUploads[document.id]?.status));
+  const hasUploadNeedingReplacement = Object.values(documentUploads)
+    .some((upload: AnyRecord) => upload?.status === "attached" && upload?.aiVerdict === "rejected");
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
   const formSteps = (internalSimple
@@ -3284,6 +3310,7 @@ function NewRequest({
       if (!animal.breedType) issues.push(`Informe se a raça é definida ou indefinida${label}.`);
     });
     if (!internalSimple && typeStepDocuments && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
+    if (!internalSimple && typeStepDocuments && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
 
     return issues;
   }
@@ -3328,7 +3355,7 @@ function NewRequest({
     }
 
     if (step === 3) {
-      return [typeStepDocuments && !requiredDocsApproved, typeStepDocuments && !accepted].filter(Boolean);
+      return [typeStepDocuments && !requiredDocsApproved, typeStepDocuments && !accepted, typeStepDocuments && hasUploadNeedingReplacement].filter(Boolean);
     }
 
     return [];
@@ -3445,19 +3472,23 @@ function NewRequest({
   async function handleDocumentFile(document: AnyRecord, file?: File) {
     if (!file) return;
 
-    setDocumentUploads((current) => ({
-      ...current,
-      [document.id]: {
-        fileName: file.name,
-        status: "checking",
-        message: "Arquivo anexado para conferência manual...",
-      },
-    }));
-
     try {
       const normalizedDocument = normalizeDocumentType(document);
       const dataUrl = await readFileAsDataUrl(file);
-      const result = await validateDocumentLocally(normalizedDocument, file);
+      setDocumentUploads((current) => ({
+        ...current,
+        [normalizedDocument.id]: {
+          documentId: normalizedDocument.id,
+          documentName: normalizedDocument.name,
+          fileName: file.name,
+          fileType: file.type,
+          fileSize: file.size,
+          dataUrl,
+          status: "checking",
+          message: aiSettings.active ? "Analisando documento e critérios cadastrados..." : "Arquivo anexado para conferência manual...",
+        },
+      }));
+      const result = await validateDocumentWithAI(normalizedDocument, file, aiSettings, dataUrl);
       setDocumentUploads((current) => ({
         ...current,
         [normalizedDocument.id]: {
@@ -4968,6 +4999,15 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
                     {getAiStatusLabel(anexo, decision)}
                   </span>
                   {anexo.message && <p className="attachment-ai-message">{anexo.message}</p>}
+                  <AiAnalysisDetails
+                    show={Boolean(anexo.document?.provider) && !anexo.document?.error}
+                    provider={anexo.document?.provider}
+                    model={anexo.document?.model}
+                    confidence={anexo.document?.confidence}
+                    criteriaResults={anexo.document?.criteriaResults}
+                    metaClassName="attachment-ai-meta"
+                    criteriaClassName="doc-criteria-results attachment-ai-criteria"
+                  />
                 </div>
               </div>
               <div className="process-attachment-actions">
@@ -6514,36 +6554,21 @@ const documentCriteriaVariants = {
   manual: { label: "Revisão manual", accent: "amber" },
 } as const;
 
-function DocumentCriteriaColumn({ variant, items, draft, onDraftChange, onAdd, onRemove, placeholder }: AnyRecord) {
+function DocumentCriteriaColumn({ variant, value, onChange, placeholder }: AnyRecord) {
   const { label, accent } = documentCriteriaVariants[variant as keyof typeof documentCriteriaVariants];
+  const count = textToCriteriaList(value).length;
   return (
     <div className={`document-criteria-column document-criteria-column--${accent}`}>
       <div className="document-criteria-column-header">
         <span>{label}</span>
-        <span className="document-criteria-count">{items.length}</span>
+        <span className="document-criteria-count">{count}</span>
       </div>
-      <div className="document-criteria-list">
-        {items.map((item: string, index: number) => (
-          <div className="document-criteria-chip" key={`${item}-${index}`}>
-            <span>{item}</span>
-            <button type="button" onClick={() => onRemove(index)} aria-label={`Remover ${item}`}>×</button>
-          </div>
-        ))}
-      </div>
-      <div className="document-criteria-add">
-        <input
-          value={draft}
-          placeholder={placeholder || "Adicionar"}
-          onChange={(event) => onDraftChange(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              onAdd();
-            }
-          }}
-        />
-        <button type="button" onClick={onAdd}>+</button>
-      </div>
+      <textarea
+        className="document-criteria-textarea"
+        value={value}
+        placeholder={placeholder || "Um critério por linha…"}
+        onChange={(event) => onChange(event.target.value)}
+      />
     </div>
   );
 }
@@ -6601,6 +6626,8 @@ function ConfigView({
   setConfigTab = (_value: string | ((current: string) => string)) => {},
   environmentTabs = environmentConfigTabs,
   selectedMunicipalityId = "",
+  aiSettings = initialAiSettings,
+  setAiSettings,
 }) {
   const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepTutor: true, stepAgenda: true, stepDocuments: true };
   const emptyAgendaForm = {
@@ -6640,9 +6667,6 @@ function ConfigView({
   const emptyDocumentForm = {
     name: "",
     expectedDocument: "",
-    requiredCriteria: [] as string[],
-    rejectionCriteria: [] as string[],
-    manualReviewCriteria: [] as string[],
     minimumConfidence: Math.round(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE * 100),
     allowAutomaticApproval: true,
     allowAutomaticRejection: false,
@@ -6681,6 +6705,7 @@ function ConfigView({
   const [agendaForm, setAgendaForm] = useState(emptyAgendaForm);
   const [whatsappSettings, setWhatsappSettings] = useState(initialWhatsappSettings);
   const [whatsappSaveStatus, setWhatsappSaveStatus] = useState("");
+  const [aiSaveStatus, setAiSaveStatus] = useState("");
   const initialQuotaSettings = { plan: "", contractStart: "", contractEnd: "" };
   const [quotaSettings, setQuotaSettings] = useState(initialQuotaSettings);
   const [quotaSaveStatus, setQuotaSaveStatus] = useState("");
@@ -6761,6 +6786,45 @@ function ConfigView({
   }, [configModal, newMunicipality.state]);
 
   const configMunicipalityScopeId = selectedMunicipalityId || currentUser?.municipalityId || "";
+
+  const selectedAiProvider = aiSettings.provider || "OpenAI";
+  const selectedAiProviderConfig = aiProviderOptions[selectedAiProvider] || aiProviderOptions.OpenAI;
+  const selectedAiModels = selectedAiProviderConfig.models || [];
+  const selectedAiModel = selectedAiModels.includes(aiSettings.model) ? aiSettings.model : selectedAiModels[0] || "";
+
+  useEffect(() => {
+    if (!setAiSettings || !selectedAiModel) return;
+    if (aiSettings.provider === selectedAiProvider && aiSettings.model === selectedAiModel) return;
+    setAiSettings((current: AnyRecord) => ({
+      ...current,
+      provider: selectedAiProvider,
+      model: selectedAiModel,
+    }));
+  }, [aiSettings.model, aiSettings.provider, selectedAiModel, selectedAiProvider, setAiSettings]);
+
+  async function saveAiCredentials() {
+    const nextSettings = {
+      ...aiSettings,
+      active: Boolean(aiSettings.active),
+      provider: selectedAiProvider,
+      model: selectedAiModel,
+      apiKey: aiSettings.apiKey || "",
+    };
+    setAiSaveStatus("Salvando configuração...");
+    try {
+      const saved = await api.setConfig("ai", nextSettings);
+      const publicSettings = {
+        ...nextSettings,
+        ...(saved?.value || {}),
+        apiKey: "",
+        hasApiKey: Boolean(saved?.value?.hasApiKey || nextSettings.apiKey || aiSettings.hasApiKey),
+      };
+      setAiSettings?.(publicSettings);
+      setAiSaveStatus("Configuração salva com sucesso.");
+    } catch (err: any) {
+      setAiSaveStatus(`Não foi possível salvar: ${err.message}`);
+    }
+  }
 
   useEffect(() => {
     if (configArea !== "environment" || configTab !== "whatsapp") return;
@@ -7058,22 +7122,22 @@ function ConfigView({
       setNewDocument({
         name: normalized.name || "",
         expectedDocument: rules.expectedDocument || "",
-        requiredCriteria: Array.isArray(rules.requiredCriteria) ? rules.requiredCriteria : [],
-        rejectionCriteria: Array.isArray(rules.rejectionCriteria) ? rules.rejectionCriteria : [],
-        manualReviewCriteria: Array.isArray(rules.manualReviewCriteria) ? rules.manualReviewCriteria : [],
         minimumConfidence: Math.round((Number(rules.minimumConfidence ?? DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE)) * 100),
         allowAutomaticApproval: rules.allowAutomaticApproval !== false,
         allowAutomaticRejection: rules.allowAutomaticRejection === true,
         required: normalized.required !== false,
         active: normalized.active !== false,
       });
+      setNewRequiredCriterion((Array.isArray(rules.requiredCriteria) ? rules.requiredCriteria : []).join("\n"));
+      setNewRejectionCriterion((Array.isArray(rules.rejectionCriteria) ? rules.rejectionCriteria : []).join("\n"));
+      setNewManualCriterion((Array.isArray(rules.manualReviewCriteria) ? rules.manualReviewCriteria : []).join("\n"));
     } else {
       setEditingDocumentId(null);
       setNewDocument(emptyDocumentForm);
+      setNewRequiredCriterion("");
+      setNewRejectionCriterion("");
+      setNewManualCriterion("");
     }
-    setNewRequiredCriterion("");
-    setNewRejectionCriterion("");
-    setNewManualCriterion("");
     setConfigModal("document");
   }
   function createSize(payload: AnyRecord = {}) {
@@ -8058,6 +8122,78 @@ function ConfigView({
                 </small>
               </article>
             ))}
+          </div>
+        </div>
+      )}
+
+      {configArea === "ai_settings" && isGlobalRole(currentUser?.role) && (
+        <div className="panel wide">
+          <PanelHeader title="IA externa para documentos" />
+          <div className="ai-settings-layout">
+            <article className="request-type-card ai-settings-card">
+              <div className="config-modal-options">
+                <ConfigActiveToggle
+                  checked={Boolean(aiSettings.active)}
+                  onChange={(checked) => setAiSettings?.((current: AnyRecord) => ({ ...current, active: checked }))}
+                  onText="Ativa"
+                  offText="Inativa"
+                />
+              </div>
+              <label className="field">
+                <span>Provedor</span>
+                <select
+                  value={selectedAiProvider}
+                  onChange={(event) => {
+                    const provider = event.target.value;
+                    setAiSettings?.((current: AnyRecord) => ({
+                      ...current,
+                      provider,
+                      model: aiProviderOptions[provider]?.models?.[0] || "",
+                    }));
+                  }}
+                >
+                  {Object.keys(aiProviderOptions).map((provider) => (
+                    <option key={provider} value={provider}>{provider}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Modelo</span>
+                <select value={selectedAiModel} onChange={(event) => setAiSettings?.((current: AnyRecord) => ({ ...current, model: event.target.value }))}>
+                  {selectedAiModels.map((model: string) => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+              </label>
+            </article>
+            <article className="ai-rules-card">
+              <strong>Como a IA será usada</strong>
+              <p>
+                Ao anexar um documento, a IA usa os critérios cadastrados no tipo de documento (obrigatórios, de recusa
+                e de revisão manual) para decidir se o arquivo condiz com o solicitado.
+              </p>
+              <p>
+                Com a IA inativa, o arquivo fica apenas anexado e segue para conferência manual, sem análise automática.
+              </p>
+              <label className="field">
+                <span>Token / chave API</span>
+                <input
+                  value={aiSettings.apiKey}
+                  type="password"
+                  placeholder={aiSettings.hasApiKey ? `Chave da ${selectedAiProvider} já salva` : `Cole a chave da ${selectedAiProvider}`}
+                  onChange={(event) => setAiSettings?.((current: AnyRecord) => ({ ...current, apiKey: event.target.value }))}
+                />
+              </label>
+              {selectedAiProviderConfig.keyUrl && (
+                <a className="external-provider-link" href={selectedAiProviderConfig.keyUrl} target="_blank" rel="noreferrer">
+                  Criar ou acessar chave da {selectedAiProvider}
+                </a>
+              )}
+              <button className="primary-action ai-save-key-action" type="button" onClick={saveAiCredentials}>
+                Salvar configuração
+              </button>
+              {aiSaveStatus && <p className={aiSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{aiSaveStatus}</p>}
+            </article>
           </div>
         </div>
       )}
@@ -9270,8 +9406,16 @@ function ConfigView({
             className="config-modal document-analysis-modal"
             onSubmit={(event) => {
               event.preventDefault();
-              createDocumentType(newDocument);
+              createDocumentType({
+                ...newDocument,
+                requiredCriteria: textToCriteriaList(newRequiredCriterion),
+                rejectionCriteria: textToCriteriaList(newRejectionCriterion),
+                manualReviewCriteria: textToCriteriaList(newManualCriterion),
+              });
               setNewDocument(emptyDocumentForm);
+              setNewRequiredCriterion("");
+              setNewRejectionCriterion("");
+              setNewManualCriterion("");
               setEditingDocumentId(null);
               setConfigModal(null);
             }}
@@ -9304,7 +9448,7 @@ function ConfigView({
                   />
                 </div>
               }
-              onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); }}
+              onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); setNewManualCriterion(""); }}
             />
 
             <div className="document-modal-body">
@@ -9328,50 +9472,26 @@ function ConfigView({
               <section className="document-modal-panel">
                 <div className="document-section-heading">
                   <span><ListChecks size={15} /> Critérios de análise</span>
-                  <small>Cada critério é um item independente — adicione quantos precisar.</small>
+                  <small>Digite um critério por linha. As alterações são salvas junto com o botão Salvar deste documento.</small>
                 </div>
                 <div className="document-criteria-grid">
                   <DocumentCriteriaColumn
                     variant="required"
-                    items={newDocument.requiredCriteria}
-                    draft={newRequiredCriterion}
-                    onDraftChange={setNewRequiredCriterion}
-                    placeholder="Ex: documento legível"
-                    onAdd={() => {
-                      const value = newRequiredCriterion.trim();
-                      if (!value) return;
-                      setNewDocument((current) => ({ ...current, requiredCriteria: [...current.requiredCriteria, value] }));
-                      setNewRequiredCriterion("");
-                    }}
-                    onRemove={(index: number) => setNewDocument((current) => ({ ...current, requiredCriteria: current.requiredCriteria.filter((_: string, i: number) => i !== index) }))}
+                    value={newRequiredCriterion}
+                    onChange={setNewRequiredCriterion}
+                    placeholder={"Ex: documento legível\nFoto do condutor visível"}
                   />
                   <DocumentCriteriaColumn
                     variant="rejection"
-                    items={newDocument.rejectionCriteria}
-                    draft={newRejectionCriterion}
-                    onDraftChange={setNewRejectionCriterion}
-                    placeholder="Ex: documento ilegível"
-                    onAdd={() => {
-                      const value = newRejectionCriterion.trim();
-                      if (!value) return;
-                      setNewDocument((current) => ({ ...current, rejectionCriteria: [...current.rejectionCriteria, value] }));
-                      setNewRejectionCriterion("");
-                    }}
-                    onRemove={(index: number) => setNewDocument((current) => ({ ...current, rejectionCriteria: current.rejectionCriteria.filter((_: string, i: number) => i !== index) }))}
+                    value={newRejectionCriterion}
+                    onChange={setNewRejectionCriterion}
+                    placeholder={"Ex: documento ilegível\nRasura visível no documento"}
                   />
                   <DocumentCriteriaColumn
                     variant="manual"
-                    items={newDocument.manualReviewCriteria}
-                    draft={newManualCriterion}
-                    onDraftChange={setNewManualCriterion}
-                    placeholder="Ex: baixa confiança"
-                    onAdd={() => {
-                      const value = newManualCriterion.trim();
-                      if (!value) return;
-                      setNewDocument((current) => ({ ...current, manualReviewCriteria: [...current.manualReviewCriteria, value] }));
-                      setNewManualCriterion("");
-                    }}
-                    onRemove={(index: number) => setNewDocument((current) => ({ ...current, manualReviewCriteria: current.manualReviewCriteria.filter((_: string, i: number) => i !== index) }))}
+                    value={newManualCriterion}
+                    onChange={setNewManualCriterion}
+                    placeholder={"Ex: baixa confiança\nDivergência de dados"}
                   />
                 </div>
               </section>
@@ -9416,7 +9536,7 @@ function ConfigView({
             </div>
 
             <div className="form-actions document-modal-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); }}>Cancelar</button>
+              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); setNewManualCriterion(""); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
             </div>
           </form>
@@ -9962,59 +10082,146 @@ function DocumentButtonPicker({ documents, selectedDocuments, onToggle }: AnyRec
 }
 
 function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove }: AnyRecord) {
-  const statusLabel = {
+  const needsReplacement = upload?.status === "attached" && upload?.aiVerdict === "rejected";
+  const statusLabel = needsReplacement ? "Não confirmado" : ({
     checking: aiActive ? "Em análise" : "Conferindo arquivo",
     approved: aiActive ? "Aprovado pela análise" : "Aprovado",
     attached: "Conferência manual",
     rejected: aiActive ? "Recusado pela análise" : "Recusado",
-  }[upload?.status] || "Aguardando arquivo";
-  const conclusionLabel = {
-    checking: "Conclusão: análise em andamento.",
-    approved: "Conclusão: documento aprovado.",
-    attached: aiActive ? "Conclusão: arquivo aceito para conferência manual." : "Conclusão: arquivo anexado.",
-    rejected: "Conclusão: documento recusado.",
-  }[upload?.status] || "Conclusão: aguardando envio.";
-  const confidence = Number(upload?.confidence);
-  const showTechnicalDetails = upload?.status === "approved" || upload?.status === "rejected";
-  const hasConfidence = showTechnicalDetails && Number.isFinite(confidence);
-  const providerLabel = showTechnicalDetails ? [upload?.provider, upload?.model].filter(Boolean).join(" / ") : "";
+  }[upload?.status] || "Aguardando arquivo");
+  const publicMessage = needsReplacement
+    ? "Este arquivo não parece ser o documento solicitado. Anexe o comprovante correto para continuar."
+    : upload?.status === "attached"
+    ? "Arquivo recebido para conferência da nossa equipe."
+    : upload?.status === "approved"
+    ? "Documento confirmado automaticamente."
+    : upload?.status === "rejected"
+    ? "Documento recusado: não atende aos critérios solicitados. Anexe o arquivo correto."
+    : upload?.message;
 
-  const statusIcon = {
+  const statusIcon = needsReplacement ? <AlertCircle size={16} className="doc-status-icon is-err" /> : ({
     approved: <BadgeCheck size={16} className="doc-status-icon is-ok" />,
     rejected: <AlertCircle size={16} className="doc-status-icon is-err" />,
     checking: <RefreshCw size={14} className="doc-status-icon is-spin" />,
     attached: <Paperclip size={15} className="doc-status-icon is-att" />,
-  }[upload?.status] || <FileText size={15} className="doc-status-icon is-empty" />;
+  }[upload?.status] || <FileText size={15} className="doc-status-icon is-empty" />);
 
   return (
-    <article className={`doc-row ${upload?.status || "empty"}`}>
-      <div className="doc-row-icon">{statusIcon}</div>
-      <div className="doc-row-info">
-        <strong>{document.name}{document.required && <span className="doc-required">*</span>}</strong>
-        {upload?.fileName
-          ? <small>{upload.fileName}</small>
-          : <small className="doc-row-hint">{statusLabel}</small>
-        }
-        {upload?.message && <small className="doc-row-msg">{upload.message}</small>}
-      </div>
-      <div className="doc-row-actions">
-        <label className="doc-attach-btn" title={upload ? "Substituir arquivo" : "Anexar arquivo"}>
-          <Paperclip size={15} />
-          <input
-            type="file"
-            accept={(document.accept || []).join(",")}
-            onClick={(event) => { event.currentTarget.value = ""; }}
-            onChange={(event) => onUpload(event.target.files?.[0])}
-          />
-        </label>
-        {upload && (
-          <button className="doc-remove-btn" type="button" onClick={onRemove} title="Remover">
-            <Trash2 size={14} />
-          </button>
-        )}
-      </div>
-    </article>
+    <>
+      <article className={`doc-row ${upload?.status || "empty"}${needsReplacement ? " needs-replacement" : ""}`}>
+        <div className="doc-row-icon">{statusIcon}</div>
+        <div className="doc-row-info">
+          <strong>{document.name}{document.required && <span className="doc-required">*</span>}</strong>
+          {upload?.fileName
+            ? <small>{upload.fileName}</small>
+            : <small className="doc-row-hint">{statusLabel}</small>
+          }
+          {publicMessage && <small className="doc-row-msg">{publicMessage}</small>}
+        </div>
+        <div className="doc-row-actions">
+          <label className="doc-attach-btn" title={upload ? "Substituir arquivo" : "Anexar arquivo"}>
+            <Paperclip size={15} />
+            <input
+              type="file"
+              accept={(document.accept || []).join(",")}
+              onClick={(event) => { event.currentTarget.value = ""; }}
+              onChange={(event) => onUpload(event.target.files?.[0])}
+            />
+          </label>
+          {upload && (
+            <button className="doc-remove-btn" type="button" onClick={onRemove} title="Remover">
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
+      </article>
+      {upload?.status === "checking" && upload?.dataUrl && (
+        <DocumentScanningPreview dataUrl={upload.dataUrl} fileType={upload.fileType} />
+      )}
+    </>
   );
+}
+
+function AiAnalysisDetails({ show, provider, model, confidence, criteriaResults, metaClassName = "doc-row-meta", criteriaClassName = "doc-criteria-results" }: AnyRecord) {
+  if (!show) return null;
+  const numericConfidence = Number(confidence);
+  const hasConfidence = Number.isFinite(numericConfidence);
+  const providerLabel = [provider, model].filter(Boolean).join(" / ");
+  const results = Array.isArray(criteriaResults) ? criteriaResults : [];
+
+  return (
+    <>
+      {(providerLabel || hasConfidence) && (
+        <small className={metaClassName}>
+          {[providerLabel, hasConfidence ? `${Math.round(numericConfidence * 100)}% de confiança` : ""].filter(Boolean).join(" · ")}
+        </small>
+      )}
+      {results.length > 0 && (
+        <div className={criteriaClassName}>
+          {results.map((item: AnyRecord, index: number) => (
+            <span key={`${item.criterion}-${index}`} className={item.met ? "is-met" : "is-missing"} title={item.reason || ""}>
+              {item.criterion}
+            </span>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function DocumentScanningPreview({ dataUrl, fileType }: AnyRecord) {
+  const isImage = String(fileType || "").startsWith("image/");
+  return (
+    <div className="doc-scan-preview">
+      <div className="doc-scan-frame">
+        {isImage ? (
+          <img src={dataUrl} alt="Pré-visualização do documento em análise" />
+        ) : (
+          <div className="doc-scan-generic"><FileText size={26} /></div>
+        )}
+        <span className="doc-scan-line" />
+        <span className="doc-scan-marker doc-scan-marker--1" />
+        <span className="doc-scan-marker doc-scan-marker--2" />
+        <span className="doc-scan-marker doc-scan-marker--3" />
+      </div>
+      <p className="doc-scan-caption">Lendo documento e verificando critérios cadastrados…</p>
+    </div>
+  );
+}
+
+async function validateDocumentWithAI(document: AnyRecord, file: File, aiSettings: AnyRecord = initialAiSettings, dataUrl = ""): Promise<AnyRecord> {
+  const localResult = await validateDocumentLocally(document, file);
+  if (localResult.status === "rejected" || !aiSettings?.active) return localResult;
+
+  try {
+    return await api.validateDocument({
+      document: {
+        id: document.id,
+        name: document.name,
+        analysisRules: document.analysisRules,
+      },
+      file: {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl,
+      },
+      aiSettings: {
+        active: Boolean(aiSettings.active),
+        provider: aiSettings.provider,
+        model: aiSettings.model,
+      },
+    });
+  } catch (err) {
+    console.error("Erro ao validar documento com IA externa:", err);
+    return {
+      status: "attached",
+      message: "Arquivo anexado para conferência manual.",
+      confidence: null,
+      provider: aiSettings.provider || "IA externa",
+      error: true,
+    };
+  }
 }
 
 function validateDocumentLocally(document: AnyRecord, file: File): Promise<AnyRecord> {
@@ -10273,7 +10480,7 @@ const PDF_BASE_STYLES = `
   .animal-card-title { color: #9a3412; font-weight: 800; margin-bottom: 8px; }
   .footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; color: #64748b; font-size: 10px; }
   @page { size: A4; margin: 12mm; }
-  .pdf-page { page-break-after: always; min-height: 267mm; display: flex; flex-direction: column; }
+  .pdf-page { page-break-after: always; min-height: 250mm; display: flex; flex-direction: column; }
   .pdf-page:last-child { page-break-after: auto; }
   .compact-header { padding: 13px 14px; border-radius: 10px; }
   .compact-header h1 { font-size: 18px; }
