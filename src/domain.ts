@@ -131,16 +131,58 @@ export const initialScheduleRules: AnyRecord[] = [];
 const DEFAULT_DOCUMENT_ACCEPT = ["image/jpeg", "image/png", "application/pdf"];
 const DEFAULT_DOCUMENT_MAX_SIZE_MB = 5;
 
-export function normalizeDocumentType(document: AnyRecord = {}): AnyRecord {
+export const DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE = 0.55;
+
+function textToCriteriaList(value: any): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim()).filter(Boolean);
+  }
+  return String(value || "")
+    .split(/\r?\n|;/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function parseDocumentConfidence(value: any): number {
+  return Number(String(value ?? "").replace(",", "."));
+}
+
+export function normalizeDocumentAnalysisRules(rules: AnyRecord = {}, migrationSource: AnyRecord = {}): AnyRecord {
+  const minimumConfidence = parseDocumentConfidence(rules.minimumConfidence);
   return {
-    ...document,
+    expectedDocument: String(rules.expectedDocument || migrationSource.expectedDocument || "").trim(),
+    requiredCriteria: textToCriteriaList(rules.requiredCriteria ?? migrationSource.requiredCriteria),
+    rejectionCriteria: textToCriteriaList(rules.rejectionCriteria ?? migrationSource.rejectionCriteria),
+    manualReviewCriteria: textToCriteriaList(rules.manualReviewCriteria ?? migrationSource.manualReviewCriteria),
+    matchRules: Array.isArray(rules.matchRules) ? rules.matchRules : [],
+    minimumConfidence: Number.isFinite(minimumConfidence)
+      ? Math.max(0, Math.min(1, minimumConfidence))
+      : DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE,
+    allowAutomaticApproval: rules.allowAutomaticApproval !== false,
+    allowAutomaticRejection: rules.allowAutomaticRejection === true,
+  };
+}
+
+export function normalizeDocumentType(document: AnyRecord = {}): AnyRecord {
+  const {
+    modelHint,
+    aiCriteria,
+    rejectionRules,
+    analysisRules,
+    ...rest
+  } = document;
+
+  return {
+    ...rest,
     required: document.required !== false,
     active: document.active !== false,
     accept: Array.isArray(document.accept) && document.accept.length ? document.accept : DEFAULT_DOCUMENT_ACCEPT,
     maxSizeMb: Number(document.maxSizeMb) > 0 ? Number(document.maxSizeMb) : DEFAULT_DOCUMENT_MAX_SIZE_MB,
-    modelHint: document.modelHint || "",
-    aiCriteria: document.aiCriteria || "",
-    rejectionRules: document.rejectionRules || "",
+    analysisRules: normalizeDocumentAnalysisRules(analysisRules, {
+      expectedDocument: modelHint || document.name || "",
+      requiredCriteria: aiCriteria,
+      rejectionCriteria: rejectionRules,
+    }),
   };
 }
 
@@ -177,6 +219,41 @@ function getScheduleWeekdayLabel(date: Date) {
 }
 
 export function generateScheduleDaysFromRule(rule: AnyRecord) {
+  const isMutirao = String(rule.kind || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() === "mutirao";
+  const occurrences = Array.isArray(rule.occurrences) ? rule.occurrences : [];
+
+  if (isMutirao && occurrences.length) {
+    return occurrences
+      .map((occurrence: AnyRecord, index: number) => {
+        const dateText = normalizeScheduleDateText(occurrence.date || occurrence.start || "");
+        if (!dateText) return null;
+        const [day, month, year] = dateText.split("/").map(Number);
+        const date = new Date(year, month - 1, day);
+        const slots = normalizeScheduleSlots(occurrence.slots, occurrence.time || rule.time, occurrence.vacancies || rule.vacancies);
+        const vacancies = sumScheduleSlotsVacancies(slots, occurrence.time || rule.time, occurrence.vacancies || rule.vacancies);
+        return {
+          date: dateText,
+          weekday: getScheduleWeekdayLabel(date),
+          vacancies,
+          slots,
+          active: rule.active !== false && occurrence.active !== false,
+          scheduleRuleId: rule.id,
+          occurrenceId: occurrence.id || `${rule.id}_occ_${index + 1}`,
+          description: rule.description,
+          startTime: slots[0]?.time || occurrence.time || rule.time,
+          kind: rule.kind,
+          municipalityId: rule.municipalityId,
+          municipalityName: rule.municipalityName,
+          locationName: occurrence.locationName || rule.locationName,
+          locationAddress: occurrence.locationAddress || rule.locationAddress,
+          addressUrl: occurrence.addressUrl || rule.addressUrl,
+          latitude: occurrence.latitude || rule.latitude,
+          longitude: occurrence.longitude || rule.longitude,
+        };
+      })
+      .filter(Boolean);
+  }
+
   const [startDay, startMonth, startYear] = rule.start.split("/").map(Number);
   const [endDay, endMonth, endYear] = rule.end.split("/").map(Number);
   const start = new Date(startYear, startMonth - 1, startDay);
@@ -209,7 +286,6 @@ export function generateScheduleDaysFromRule(rule: AnyRecord) {
 
   return days;
 }
-
 export const initialScheduleDays = initialScheduleRules.flatMap(generateScheduleDaysFromRule);
 
 export function formatSizeRange(size: AnyRecord = {}) {

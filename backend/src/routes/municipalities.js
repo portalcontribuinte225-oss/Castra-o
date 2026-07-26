@@ -67,6 +67,10 @@ router.post("/", auth, async (req, res) => {
   const name = String(req.body?.name || "").trim();
   const state = String(req.body?.state || "").trim().toUpperCase().slice(0, 2);
   const active = req.body?.active !== false;
+  const contact = String(req.body?.contact || "").trim();
+  const email = String(req.body?.email || "").trim().toLowerCase();
+  const address = String(req.body?.address || "").trim();
+  const cep = String(req.body?.cep || "").trim();
   const slug = slugify(req.body?.slug || name);
   if (!name || !slug) return res.status(400).json({ error: "Nome do municipio e obrigatorio." });
 
@@ -75,12 +79,20 @@ router.post("/", auth, async (req, res) => {
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `INSERT INTO municipalities (name, state, slug, active)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO municipalities (name, state, slug, contact, email, address, cep, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (slug)
-       DO UPDATE SET name = EXCLUDED.name, state = EXCLUDED.state, active = EXCLUDED.active, updated_at = NOW()
+       DO UPDATE SET
+         name = EXCLUDED.name,
+         state = EXCLUDED.state,
+         contact = EXCLUDED.contact,
+         email = EXCLUDED.email,
+         address = EXCLUDED.address,
+         cep = EXCLUDED.cep,
+         active = EXCLUDED.active,
+         updated_at = NOW()
        RETURNING *`,
-      [name, state, slug, active],
+      [name, state, slug, contact, email, address, cep, active],
     );
     const municipality = rows[0];
 
@@ -166,9 +178,9 @@ router.patch("/:id", auth, async (req, res) => {
   if (!isGlobalUser(req.user)) return res.status(403).json({ error: "Acesso restrito ao suporte." });
   const fields = [];
   const values = [];
-  ["name", "state", "active", "brasao"].forEach((field) => {
+  ["name", "state", "active", "brasao", "contact", "email", "address", "cep"].forEach((field) => {
     if (req.body?.[field] !== undefined) {
-      values.push(field === "state" ? String(req.body[field]).trim().toUpperCase().slice(0, 2) : req.body[field]);
+      values.push(field === "state" ? String(req.body[field]).trim().toUpperCase().slice(0, 2) : field === "email" ? String(req.body[field] || "").trim().toLowerCase() : field === "active" ? req.body[field] : String(req.body[field] || "").trim());
       fields.push(`${field} = $${values.length}`);
     }
   });

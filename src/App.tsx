@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import {
   Activity,
@@ -52,6 +52,7 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import "./styles.css";
+import petHeroImage from "./assets/caogato.avif";
 import type { AnyRecord } from "./types";
 import {
   CONFIG_KEYS,
@@ -59,6 +60,7 @@ import {
   accessRequesterTypes,
   aiProviderOptions,
   brazilStatesFallback,
+  DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE,
   filterByMunicipalityScope,
   generateScheduleDaysFromRule,
   displayText,
@@ -174,7 +176,6 @@ const environmentConfigTabs = [
   { id: "sizes", label: "Portes" },
   { id: "species", label: "Espécies" },
   { id: "documents", label: "Documentos Solicitados" },
-  { id: "ai", label: "IA" },
   { id: "whatsapp", label: "WhatsApp" },
 ];
 
@@ -267,8 +268,6 @@ export default function App() {
   const [accessRequests, setAccessRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [publicForm, setPublicForm] = useState(false);
-  const [publicFormInitialScreen, setPublicFormInitialScreen] = useState("agenda");
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(localStorage.getItem("castragestao:municipalityId") || "");
   const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem("castragestao:globalMunicipalityFilterId") || "");
   const geoTriedRef = useRef(false);
@@ -569,6 +568,7 @@ export default function App() {
       return newRequest;
     } catch (err) {
       console.error("Erro ao criar solicitação:", err);
+      throw err;
     }
   }
 
@@ -650,29 +650,6 @@ export default function App() {
     setSelectedId(null);
   }
 
-  if (publicForm) {
-    return (
-      <>
-        <PublicCastrationForm
-          createRequest={createRequest}
-          onBack={() => setPublicForm(false)}
-          initialScreen={publicFormInitialScreen}
-          initialMunicipalityId={selectedMunicipalityId}
-          onMunicipalitySelect={handleMunicipalitySelect}
-          scheduleDays={scheduleDays}
-          municipalities={municipalities}
-          requestTypes={requestTypes}
-          requests={requests}
-          speciesOptions={speciesOptions}
-          sizeOptions={sizeOptions}
-          aiSettings={aiSettings}
-          onRequestCreated={registerCreatedRequest}
-        />
-        <PwaInstallPrompt />
-      </>
-    );
-  }
-
   function handleInterestSent(updated) {
     setAdoptionAnimals((current) => current.map((a) => a.id === updated.id ? normalizeAdoptionAnimal(updated) : a));
   }
@@ -682,14 +659,21 @@ export default function App() {
       <>
         <LoginView
           onLogin={setCurrentUser}
-          onPublicRequest={() => { setPublicFormInitialScreen("formulario"); setPublicForm(true); }}
-          onPublicConsult={() => { setPublicFormInitialScreen("consulta"); setPublicForm(true); }}
           onAccessRequest={createAccessRequest}
           adoptionAnimals={adoptionAnimals}
           onInterestSent={handleInterestSent}
           municipalities={municipalities}
           selectedMunicipalityId={selectedMunicipalityId}
           onMunicipalitySelect={handleMunicipalitySelect}
+          createRequest={createRequest}
+          requests={requests}
+          scheduleDays={scheduleDays}
+          requestTypes={requestTypes}
+          documentTypes={documentTypes}
+          speciesOptions={speciesOptions}
+          sizeOptions={sizeOptions}
+          aiSettings={aiSettings}
+          onRequestCreated={registerCreatedRequest}
         />
         <PwaInstallPrompt />
       </>
@@ -1148,7 +1132,25 @@ function canManagePublicAnimalFlows(role = "") {
 
 const ADOPTION_STATUS_LABEL = { disponivel: "Disponível", em_processo: "Em processo", adotado: "Adotado" };
 
-function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, municipalityId, onBack, municipalityName = "", municipalityBrasao = "" }: AnyRecord) {
+const publicHomeServices = [
+  { id: "prontuario", label: "Consultar prontuário", icon: PawPrint },
+  { id: "procedure_form", label: "Solicitar procedimento", icon: ClipboardCheck },
+  { id: "transfer", label: "Trocar tutor", icon: RefreshCw },
+  { id: "death", label: "Registrar óbito", icon: AlertCircle, danger: true },
+  { id: "credential", label: "Credenciamento", icon: Shield },
+  { id: "report", label: "Denunciar", icon: AlertCircle, danger: true },
+];
+
+function resolveConfiguredDocument(document: AnyRecord = {}, documentTypes: AnyRecord[] = []): AnyRecord {
+  const documentMunicipalityId = getItemMunicipalityId(document);
+  const configured = (Array.isArray(documentTypes) ? documentTypes : []).find((item) => (
+    item.id === document.id
+    && (!documentMunicipalityId || getItemMunicipalityId(item) === documentMunicipalityId)
+  ));
+  return configured ? { ...document, ...configured } : document;
+}
+
+function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, onRequestProcedure, municipalityId, initialService = null, onCloseService }: AnyRecord) {
   const [microchip, setMicrochip] = useState("");
   const [cpf, setCpf] = useState(formatCpf(currentUser?.cpf || ""));
   const [validationKey, setValidationKey] = useState("");
@@ -1158,7 +1160,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   const [status, setStatus] = useState("");
   const [searchOk, setSearchOk] = useState(false);
   const [isConsulting, setIsConsulting] = useState(false);
-  const [activeServiceModal, setActiveServiceModal] = useState<string | null>(null);
+  const [activeServiceModal, setActiveServiceModal] = useState<string | null>(initialService);
   const [svcStep, setSvcStep] = useState(1);
   const [svcIdForm, setSvcIdForm] = useState({ microchip: "", cpf: "", key: "" });
   const [svcFoundTutor, setSvcFoundTutor] = useState<any>(null);
@@ -1170,6 +1172,18 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   const [svcTransferForm, setSvcTransferForm] = useState({ targetName: "", targetCpf: "", notes: "" });
   const [svcDeathForm, setSvcDeathForm] = useState({ date: "", cause: "", notes: "" });
   const [svcSaving, setSvcSaving] = useState(false);
+
+  useEffect(() => {
+    setActiveServiceModal(initialService);
+    setSvcStep(1);
+    setSvcError("");
+    setSvcResult("");
+  }, [initialService]);
+
+  function closeActiveService() {
+    setActiveServiceModal(null);
+    onCloseService?.();
+  }
 
   const hasSearched = resultRequests !== null;
   const visibleRequests = hasSearched ? resultRequests : fallbackRequests;
@@ -1243,6 +1257,13 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     setSvcDeathForm({ date: "", cause: "", notes: "" });
 
     const alreadyIdentified = type !== "prontuario" && animalRecord?.animal && cpf && validationKey;
+    if (type === "procedure" && alreadyIdentified) {
+      const latestReq = Array.isArray(resultRequests) && resultRequests.length > 0 ? resultRequests[0] : null;
+      onRequestProcedure?.({ tutor: latestReq || { cpf, tutor_name: "" }, animal: animalRecord.animal });
+      closeActiveService();
+      return;
+    }
+
     if (alreadyIdentified) {
       const latestReq = Array.isArray(resultRequests) && resultRequests.length > 0 ? resultRequests[0] : null;
       setSvcFoundTutor(latestReq || { cpf, tutor_name: "" });
@@ -1298,6 +1319,11 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
       }
       const reqs = await api.consultRequestsByCredentials(cleanCpf, key, municipalityId);
       const latestReq = Array.isArray(reqs) && reqs.length > 0 ? reqs[0] : null;
+      if (activeServiceModal === "procedure") {
+        onRequestProcedure?.({ tutor: latestReq || { cpf: cleanCpf }, animal: null });
+        closeActiveService();
+        return;
+      }
       setSvcFoundTutor(latestReq || { cpf: cleanCpf });
       setSvcStep(2);
     } catch (err: any) {
@@ -1409,50 +1435,8 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   }
 
   return (
-    <div className="cons-shell">
-      <button className="consultation-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
-        <Home size={22} />
-      </button>
-
-      <header className="cons-topbar">
-        {municipalityBrasao && (
-          <img src={municipalityBrasao} alt={municipalityName} className="cons-brasao-hero" />
-        )}
-      </header>
-
-      <div className="cons-body">
-        <div className="cons-hero">
-          <h1 className="cons-title">Serviços do prontuário</h1>
-          <p className="cons-subtitle">Selecione o serviço desejado. A identificação é feita dentro de cada fluxo.</p>
-        </div>
-
-        <section className="cons-services">
-          <div className="cons-service-cards">
-            <button type="button" className="cons-service-card" onClick={() => openService("prontuario")}>
-              <div className="cons-svc-icon blue"><PawPrint size={22} /></div>
-              <div className="cons-svc-body"><strong>Prontuário</strong><span>Consulte o histórico completo do animal pelo microchip ou CPF do tutor.</span></div>
-              <ChevronRight size={15} className="cons-svc-arrow" />
-            </button>
-            <button type="button" className="cons-service-card" onClick={() => openService("procedure")}>
-              <div className="cons-svc-icon indigo"><ClipboardCheck size={22} /></div>
-              <div className="cons-svc-body"><strong>Solicitar procedimento</strong><span>Abre nova solicitação vinculada ao tutor identificado.</span></div>
-              <ChevronRight size={15} className="cons-svc-arrow" />
-            </button>
-            <button type="button" className="cons-service-card" onClick={() => openService("transfer")}>
-              <div className="cons-svc-icon amber"><RefreshCw size={22} /></div>
-              <div className="cons-svc-body"><strong>Troca de tutor</strong><span>Vincula o animal a outro responsável.</span></div>
-              <ChevronRight size={15} className="cons-svc-arrow" />
-            </button>
-            <button type="button" className="cons-service-card danger" onClick={() => openService("death")}>
-              <div className="cons-svc-icon red"><AlertCircle size={22} /></div>
-              <div className="cons-svc-body"><strong>Registrar óbito</strong><span>Encerra o prontuário ativo do animal.</span></div>
-              <ChevronRight size={15} className="cons-svc-arrow" />
-            </button>
-          </div>
-        </section>
-      </div>
-
-      <div className="cons-results">
+    <div className="cons-shell cons-shell--embedded">
+      <div className="cons-results cons-results--embedded">
         {animalRecord?.animal && (
           <AnimalRecordPanel
             record={animalRecord}
@@ -1550,8 +1534,8 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         const isDestructive = isDeath && svcStep === 2;
 
         return (
-          <div className="modal-backdrop">
-            <form className="svc-modal" onSubmit={onSubmit} role="dialog" aria-modal="true">
+          <div className="svc-inline-shell">
+            <form className="svc-modal svc-panel--inline" onSubmit={onSubmit} role="region">
 
               {/* ── Header ── */}
               <div className="svc-modal-header">
@@ -1562,7 +1546,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
                     <p className="svc-modal-sub">{subtitleMap[activeServiceModal]}</p>
                   </div>
                 </div>
-                <button type="button" className="svc-close-btn" onClick={() => setActiveServiceModal(null)} aria-label="Fechar"><X size={18} /></button>
               </div>
 
               {/* ── Body ── */}
@@ -1694,7 +1677,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
                   <div className="svc-modal-footer">
                     {svcStep === 2
                       ? <button type="button" className="ghost-button" onClick={() => setSvcStep(1)}>Voltar</button>
-                      : <button type="button" className="ghost-button" onClick={() => setActiveServiceModal(null)}>Cancelar</button>
+                      : <button type="button" className="ghost-button" onClick={closeActiveService}>Cancelar</button>
                     }
                     <button type="submit" className="primary-action" style={isDestructive ? { background: "#dc2626" } : {}} disabled={svcLoading || svcSaving}>
                       {primaryLabel}
@@ -2047,13 +2030,21 @@ function getAnimalMainPhoto(animal) {
   return photos[animal.mainPhotoIndex || 0] || photos[0] || "";
 }
 
-function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect }: AnyRecord) {
+function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [showVetModal, setShowVetModal] = useState(false);
-  const [showAccessModal, setShowAccessModal] = useState(false);
+  const [activePublicService, setActivePublicService] = useState<string | null>(null);
+  const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
+  const [publicServiceDone, setPublicServiceDone] = useState<AnyRecord | null>(null);
+  const [publicServiceScheduleDays, setPublicServiceScheduleDays] = useState(scheduleDays);
+  const [publicServiceScheduleRules, setPublicServiceScheduleRules] = useState([]);
+  const [publicServiceRequestTypes, setPublicServiceRequestTypes] = useState(requestTypes);
+  const [publicServiceDocumentTypes, setPublicServiceDocumentTypes] = useState(documentTypes);
+  const [publicServiceSpeciesOptions, setPublicServiceSpeciesOptions] = useState(speciesOptions);
+  const [publicServiceSizeOptions, setPublicServiceSizeOptions] = useState(sizeOptions);
   const adoptionSectionRef = useRef(null);
   const [resetScreen, setResetScreen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -2133,12 +2124,59 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
     }
   }
 
+  useEffect(() => {
+    setPublicServiceScheduleDays(scheduleDays);
+    setPublicServiceRequestTypes(requestTypes);
+    setPublicServiceDocumentTypes(documentTypes);
+    setPublicServiceSpeciesOptions(speciesOptions);
+    setPublicServiceSizeOptions(sizeOptions);
+  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions]);
+
+  useEffect(() => {
+    if (!selectedMunicipalityId) return;
+    api.getSchedule(selectedMunicipalityId)
+      .then((days) => setPublicServiceScheduleDays(days.map(normalizeScheduleDay).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date))))
+      .catch(console.error);
+    api.getConfig(CONFIG_KEYS.scheduleRules, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceScheduleRules(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.requestTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceRequestTypes(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.documentTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceDocumentTypes(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSpeciesOptions(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSizeOptions(value); }).catch(() => {});
+  }, [selectedMunicipalityId]);
+
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
+  const activePublicServiceDetails = publicHomeServices.find((service) => service.id === activePublicService) || null;
+  const effectivePublicServiceScheduleDays = mergeScheduleDaysWithRules(publicServiceScheduleDays, publicServiceScheduleRules);
 
   function scrollToAdoption() {
+    if (activePublicService) setActivePublicService(null);
     adoptionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  function openPublicService(serviceId: string) {
+    setProcedurePrefill(null);
+    setPublicServiceDone(null);
+    setActivePublicService(serviceId);
+  }
+
+  function closePublicService() {
+    setActivePublicService(null);
+    setProcedurePrefill(null);
+    setPublicServiceDone(null);
+  }
+
+  function openInlineProcedure(prefill: AnyRecord = {}) {
+    setProcedurePrefill(prefill);
+    setPublicServiceDone(null);
+    setActivePublicService("procedure_form");
+  }
+
+  const publicFooterItems = [
+    { label: "Contato", value: activeMunicipality?.contact, icon: Phone },
+    { label: "Email", value: activeMunicipality?.email, icon: Mail },
+    { label: "Endereço", value: activeMunicipality?.address, icon: MapPin },
+    { label: "CEP", value: activeMunicipality?.cep, icon: Navigation },
+  ].filter((item) => String(item.value || "").trim());
   return (
     <main className="login-page">
       <div className="public-topbar">
@@ -2160,11 +2198,22 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
             )}
           </div>
         </div>
-        <nav className="public-topbar-nav">
-          <button type="button" className="public-topbar-link" onClick={onPublicRequest}>Solicitações</button>
-          <button type="button" className="public-topbar-link" onClick={onPublicConsult}>Prontuário</button>
-          <button type="button" className="public-topbar-link" onClick={() => setShowAccessModal(true)}>Credenciamento</button>
-          <span className="public-topbar-link">Denunciar</span>
+        <nav className="public-topbar-nav" aria-label="Serviços públicos">
+          {publicHomeServices.map((service) => {
+            const Icon = service.icon;
+            const active = activePublicService === service.id;
+            return (
+              <button
+                key={service.id}
+                type="button"
+                className={`public-topbar-link${active ? " is-active" : ""}${service.danger ? " is-danger" : ""}`}
+                onClick={() => openPublicService(service.id)}
+              >
+                <Icon size={14} />
+                <span>{service.label}</span>
+              </button>
+            );
+          })}
           <button type="button" className="public-topbar-enter" onClick={() => setShowVetModal(true)}>
             <User size={15} />
             Entrar
@@ -2172,50 +2221,130 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
         </nav>
       </div>
 
-      <PetWelcomeArt
-        onGoToAdoption={scrollToAdoption}
-        onPublicRequest={onPublicRequest}
-      />
+      {activePublicService ? (
+        <section className="public-service-workspace">
+          <aside className="public-service-rail">
+            <PetWelcomeArt
+              className="public-hero--compact"
+              onGoToAdoption={scrollToAdoption}
+              onPublicRequest={() => openPublicService("procedure_form")}
+            />
+          </aside>
 
-      <div className="public-stats-row">
-        <div className="public-stat-card">
-          <HeartHandshake size={20} />
-          <div>
-            <strong>0</strong>
-            <span>adotados</span>
-          </div>
-        </div>
-        <div className="public-stat-card">
-          <ClipboardCheck size={20} />
-          <div>
-            <strong>0</strong>
-            <span>castrações</span>
-          </div>
-        </div>
-        <div className="public-stat-card">
-          <Users size={20} />
-          <div>
-            <strong>0</strong>
-            <span>ONGs parceiras</span>
-          </div>
-        </div>
-      </div>
+          <section className="public-service-panel">
+            <div className="public-service-panel-header">
+              <h2>{activePublicServiceDetails?.label || "Serviço"}</h2>
+              <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
+            </div>
 
-      <section className="public-adoption-section" ref={adoptionSectionRef}>
-        <AdoptionCarousel adoptionAnimals={adoptionAnimals} onInterestSent={onInterestSent} />
-      </section>
+            {publicServiceDone ? (
+              <div className="public-inline-success public-service-success-card">
+                <CheckCircle2 size={52} />
+                <h3>Solicitação enviada!</h3>
+                <p>Protocolo oficial: <strong>{publicServiceDone.protocol}</strong></p>
+                <div className="success-validation-key">
+                  <span>Chave de validação</span>
+                  <strong>{publicServiceDone.validationKey || publicServiceDone.validation_key}</strong>
+                  <small>Use CPF + chave de validação para consultar o andamento.</small>
+                </div>
+                <button className="primary-action" type="button" onClick={closePublicService}>Voltar ao início</button>
+              </div>
+            ) : activePublicService === "procedure_form" ? (
+              <NewRequest
+                createRequest={createRequest}
+                currentUser={GUEST_USER}
+                publicFlow
+                municipalities={municipalities}
+                selectedMunicipalityId={selectedMunicipalityId}
+                onMunicipalitySelect={onMunicipalitySelect}
+                onBack={closePublicService}
+                onDone={(request) => {
+                  const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
+                  setPublicServiceDone(normalized);
+                }}
+                requests={requests}
+                scheduleDays={effectivePublicServiceScheduleDays}
+                initialMunicipalityId={selectedMunicipalityId}
+                requestTypes={publicServiceRequestTypes}
+                documentTypes={publicServiceDocumentTypes}
+                aiSettings={aiSettings}
+                speciesOptions={publicServiceSpeciesOptions}
+                sizeOptions={publicServiceSizeOptions}
+                initialType={procedurePrefill?.requestType || ""}
+              />
+            ) : activePublicService === "credential" ? (
+              <PublicAccessRequestInline onSubmit={onAccessRequest} />
+            ) : activePublicService === "report" ? (
+              <PublicReportPanel municipalityName={activeMunicipality?.name || "Sistema municipal"} />
+            ) : (
+              <ValidationKeyConsultation
+                fallbackRequests={requests}
+                currentUser={GUEST_USER}
+                onRequestCreated={onRequestCreated}
+                onRequestProcedure={openInlineProcedure}
+                municipalityId={selectedMunicipalityId || undefined}
+                initialService={activePublicService}
+                onCloseService={closePublicService}
+              />
+            )}
+          </section>
+        </section>
+      ) : (
+        <>
+          <PetWelcomeArt
+            onGoToAdoption={scrollToAdoption}
+            onPublicRequest={() => openPublicService("procedure_form")}
+          />
 
-      <footer className="public-home-footer">
-        <span>{activeMunicipality ? `Prefeitura Municipal de ${activeMunicipality.name}` : "Sistema Municipal de Proteção Animal"} · Bem-estar animal</span>
+          <div className="public-stats-row">
+            <div className="public-stat-card">
+              <HeartHandshake size={20} />
+              <div>
+                <strong>0</strong>
+                <span>adotados</span>
+              </div>
+            </div>
+            <div className="public-stat-card">
+              <ClipboardCheck size={20} />
+              <div>
+                <strong>0</strong>
+                <span>castrações</span>
+              </div>
+            </div>
+            <div className="public-stat-card">
+              <Users size={20} />
+              <div>
+                <strong>0</strong>
+                <span>ONGs parceiras</span>
+              </div>
+            </div>
+          </div>
+
+          <section className="public-adoption-section" ref={adoptionSectionRef}>
+            <AdoptionCarousel adoptionAnimals={adoptionAnimals} onInterestSent={onInterestSent} />
+          </section>
+        </>
+      )}
+
+      <footer className="public-home-footer" aria-label="Dados do município">
+        <strong>{activeMunicipality ? `Prefeitura Municipal de ${activeMunicipality.name}` : "Sistema Municipal de Proteção Animal"}</strong>
+        {publicFooterItems.length > 0 && (
+          <div className="public-home-footer-info">
+            {publicFooterItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <span key={item.label}>
+                  <Icon size={14} />
+                  <b>{item.label}</b>
+                  {item.value}
+                </span>
+              );
+            })}
+          </div>
+        )}
       </footer>
 
-      {showAccessModal && (
-        <PublicAccessRequestModal
-          onClose={() => setShowAccessModal(false)}
-          onSubmit={onAccessRequest}
-        />
-      )}
-      {showVetModal && (
+{showVetModal && (
         <div className="modal-backdrop">
           {!resetScreen ? (
             <form className="auth-modal compact-auth-modal" onSubmit={submit}>
@@ -2333,7 +2462,7 @@ function LoginView({ onLogin, onPublicRequest, onPublicConsult, onAccessRequest,
   );
 }
 
-function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
+function PublicAccessRequestInline({ onSubmit }: AnyRecord) {
   const [form, setForm] = useState({
     requesterType: "ONG",
     organizationName: "",
@@ -2379,18 +2508,18 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
   }
 
   return (
-    <div className="modal-backdrop">
-      <form className="access-modal" onSubmit={submit}>
+    <div className="public-inline-card public-access-inline">
+      <form className="single-request-form clean-form" onSubmit={submit}>
         {sent ? (
           <div className="access-modal-success">
             <CheckCircle2 size={38} strokeWidth={1.5} />
             <h2>Solicitação enviada!</h2>
             <p>Um usuário interno vai analisar o pedido e liberar o acesso se estiver tudo certo.</p>
-            <button className="primary-action" type="button" onClick={onClose}>Fechar</button>
+
           </div>
         ) : (
           <>
-            <ModalHeader title="Solicitar credenciamento" subtitle="Acesso ao sistema para ONGs e protetores independentes" onClose={onClose} />
+            <div className="public-inline-heading"><span className="public-inline-icon"><Shield size={18} /></span><div><strong>Solicitar credenciamento</strong><span>Acesso ao sistema para ONGs e protetores independentes.</span></div></div>
 
             <div className="access-type-picker">
               {accessRequesterTypes.map((type) => (
@@ -2471,9 +2600,45 @@ function PublicAccessRequestModal({ onClose, onSubmit }: AnyRecord) {
   );
 }
 
+function PublicReportPanel({ municipalityName = "Sistema municipal" }: AnyRecord) {
+  return (
+    <section className="public-inline-card public-report-inline">
+      <div className="public-inline-heading">
+        <span className="public-inline-icon danger"><AlertCircle size={18} /></span>
+        <div>
+          <strong>Denunciar</strong>
+          <span>Registre uma denúncia para análise da equipe responsável.</span>
+        </div>
+      </div>
+      <div className="single-request-form clean-form">
+        <div className="two-column-fields">
+          <label className="access-form-label">
+            <span>Nome</span>
+            <div className="access-field"><input type="text" placeholder="Opcional" /></div>
+          </label>
+          <label className="access-form-label">
+            <span>Contato</span>
+            <div className="access-field"><input type="text" placeholder="Telefone ou email" /></div>
+          </label>
+        </div>
+        <label className="access-form-label">
+          <span>Local</span>
+          <div className="access-field"><input type="text" placeholder={`Endereço ou referência em ${municipalityName}`} /></div>
+        </label>
+        <label className="access-form-label">
+          <span>Descrição</span>
+          <div className="access-field"><textarea placeholder="Descreva a situação observada" rows={6} /></div>
+        </label>
+      </div>
+      <p className="public-inline-note">Este canal ainda precisa ser conectado ao protocolo interno de denúncias.</p>
+      <div className="public-inline-actions"><button className="primary-action" type="button">Enviar denúncia</button></div>
+    </section>
+  );
+}
 function PetWelcomeArt({ className = "", onGoToAdoption, onPublicRequest }: AnyRecord) {
   return (
     <section className={`public-hero ${className}`.trim()}>
+      <div className="hero-art" aria-hidden="true" style={{ backgroundImage: `url(${petHeroImage})` }} />
       <div className="hero-content">
         <h1 className="hero-title">Cuidado e proteção para quem não tem voz</h1>
         <p className="hero-subtitle">Castração gratuita, adoção responsável e bem-estar animal - digital e acessível.</p>
@@ -2567,131 +2732,6 @@ function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSe
 }
 
 const GUEST_USER = { role: "guest", name: "", email: "", neighborhood: "", address: "", cpf: "", cep: "", number: "", city: "", state: "", phone: "" };
-
-function PublicCastrationForm({ createRequest, onBack, initialScreen = "agenda", initialMunicipalityId = "", onMunicipalitySelect, scheduleDays = [], municipalities = [], requestTypes = [], requests = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
-  const [screen, setScreen] = useState(initialScreen === "consulta" ? "consulta" : "formulario");
-  const [done, setDone] = useState(null);
-  const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(initialMunicipalityId);
-  const [publicScheduleDays, setPublicScheduleDays] = useState(scheduleDays);
-  const [publicScheduleRules, setPublicScheduleRules] = useState([]);
-  const [publicRequestTypes, setPublicRequestTypes] = useState(requestTypes);
-  const [publicSpeciesOptions, setPublicSpeciesOptions] = useState(speciesOptions);
-  const [publicSizeOptions, setPublicSizeOptions] = useState(sizeOptions);
-
-  function handleMunicipalitySelect(id) {
-    setSelectedMunicipalityId(id);
-    onMunicipalitySelect?.(id);
-  }
-
-  useEffect(() => {
-    if (!selectedMunicipalityId) return;
-    api.getSchedule(selectedMunicipalityId)
-      .then((days) => setPublicScheduleDays(days.map(normalizeScheduleDay).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date))))
-      .catch(console.error);
-    api.getConfig(CONFIG_KEYS.scheduleRules, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicScheduleRules(value); }).catch(() => {});
-    api.getConfig(CONFIG_KEYS.requestTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicRequestTypes(value); }).catch(() => {});
-    api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicSpeciesOptions(value); }).catch(() => {});
-    api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicSizeOptions(value); }).catch(() => {});
-  }, [selectedMunicipalityId]);
-  const effectivePublicScheduleDays = mergeScheduleDaysWithRules(publicScheduleDays, publicScheduleRules);
-
-  function goToStart() {
-    setScreen("formulario");
-  }
-
-  const simpleHeaderMun = municipalities.find((m) => m.id === selectedMunicipalityId);
-  const simpleHeader = (
-    <header className="public-form-header">
-      <div className="nr-topbar-left">
-        <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início" title="Início">
-          <Home size={18} />
-        </button>
-        {simpleHeaderMun?.brasao && (
-          <img src={simpleHeaderMun.brasao} alt={simpleHeaderMun.name} className="nr-topbar-brasao" />
-        )}
-      </div>
-      <MunicipalitySelectorChip
-        municipalities={municipalities}
-        selectedMunicipalityId={selectedMunicipalityId}
-        onSelect={handleMunicipalitySelect}
-        compact={!!selectedMunicipalityId}
-      />
-      <div><strong>Sistema municipal</strong></div>
-    </header>
-  );
-
-  if (done) {
-    return (
-      <main className="public-form-page">
-        {simpleHeader}
-        <div className="public-form-success">
-          {simpleHeaderMun?.brasao && (
-            <img src={simpleHeaderMun.brasao} alt={simpleHeaderMun?.name || "Município"} className="success-brasao" />
-          )}
-          <CheckCircle2 size={56} />
-          <h2>Solicitação enviada!</h2>
-          <p>Protocolo oficial: <strong>{done.protocol}</strong></p>
-          <div className="success-validation-key">
-            <span>Chave de validação</span>
-            <strong>{done.validationKey || done.validation_key}</strong>
-            <small>Use sempre CPF + chave de validação para consultar solicitações e adoções.</small>
-          </div>
-          <button className="primary-action" onClick={onBack}>Voltar ao início</button>
-        </div>
-      </main>
-    );
-  }
-
-  if (screen === "consulta") {
-    const selectedMunicipality = municipalities.find((m) => m.id === selectedMunicipalityId);
-    return (
-      <main className="public-form-page public-form-page--consultation">
-        <section className="tutor-screen tutor-screen--full">
-          <ValidationKeyConsultation
-            fallbackRequests={requests}
-            currentUser={GUEST_USER}
-            onRequestCreated={onRequestCreated}
-            municipalityId={selectedMunicipalityId || undefined}
-            onBack={onBack}
-            municipalityName={selectedMunicipality?.name || "Sistema municipal"}
-            municipalityBrasao={selectedMunicipality?.brasao || ""}
-          />
-        </section>
-      </main>
-    );
-  }
-
-  return (
-    <main className="public-form-page">
-      {!selectedMunicipalityId ? (
-        <>
-          {simpleHeader}
-          <div className="public-municipality-prompt">
-            <p>Selecione um município para iniciar a solicitação.</p>
-          </div>
-        </>
-      ) : (
-        <NewRequest
-          createRequest={createRequest}
-          currentUser={GUEST_USER}
-          publicFlow
-          municipalities={municipalities}
-          selectedMunicipalityId={selectedMunicipalityId}
-          onMunicipalitySelect={handleMunicipalitySelect}
-          onBack={onBack}
-          onDone={(request) => { setDone(request); }}
-          requests={requests}
-          scheduleDays={effectivePublicScheduleDays}
-          initialMunicipalityId={selectedMunicipalityId}
-          requestTypes={publicRequestTypes}
-          aiSettings={aiSettings}
-          speciesOptions={publicSpeciesOptions}
-          sizeOptions={publicSizeOptions}
-        />
-      )}
-    </main>
-  );
-}
 
 function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf = "", validationKey = "", onRequestCreated, animalRecord = null }: AnyRecord) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
@@ -2959,6 +2999,7 @@ function NewRequest({
   aiSettings = initialAiSettings,
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
+  documentTypes = initialDocumentTypes,
   initialSchedule = "",
   initialType = "",
   initialMunicipalityId = "",
@@ -3065,6 +3106,7 @@ function NewRequest({
   const typeStepAgenda = selectedRequestType?.stepAgenda !== false;
   const typeStepDocuments = selectedRequestType?.stepDocuments !== false;
   const selectedTypeDocuments = (selectedRequestType?.documents || [])
+    .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
     .filter((document) => document.active !== false);
   const acceptableUploadStatuses = ["approved", "attached"];
@@ -3322,13 +3364,28 @@ function NewRequest({
     return Boolean(checks[field]);
   }
 
-  function goToNextStep() {
-    setSubmitAttempted(true);
-    if (getStepIssues(formStep).length > 0) return;
-    setSubmitAttempted(false);
-    setFormStep(formSteps[Math.min(currentStepIndex + 1, formSteps.length - 1)].step);
-  }
+  function navigateToStep(targetStep) {
+    const targetIndex = formSteps.findIndex((item) => item.step === targetStep);
+    if (targetIndex < 0 || targetIndex === currentStepIndex) return;
 
+    if (targetIndex < currentStepIndex) {
+      setSubmitAttempted(false);
+      setFormStep(targetStep);
+      return;
+    }
+
+    for (let index = currentStepIndex; index < targetIndex; index += 1) {
+      const step = formSteps[index].step;
+      if (getStepIssues(step).length > 0) {
+        setSubmitAttempted(true);
+        setFormStep(step);
+        return;
+      }
+    }
+
+    setSubmitAttempted(false);
+    setFormStep(targetStep);
+  }
   function useCurrentLocation() {
     if (!navigator.geolocation) {
       setLocationStatus("Localização atual indisponível neste navegador.");
@@ -3393,14 +3450,14 @@ function NewRequest({
       [document.id]: {
         fileName: file.name,
         status: "checking",
-        message: aiSettings.active ? "IA analisando legibilidade e regras do documento..." : "Arquivo anexado sem análise de IA...",
+        message: "Arquivo anexado para conferência manual...",
       },
     }));
 
     try {
       const normalizedDocument = normalizeDocumentType(document);
       const dataUrl = await readFileAsDataUrl(file);
-      const result = await validateDocumentWithAI(normalizedDocument, file, aiSettings, dataUrl);
+      const result = await validateDocumentLocally(normalizedDocument, file);
       setDocumentUploads((current) => ({
         ...current,
         [normalizedDocument.id]: {
@@ -3463,8 +3520,17 @@ function NewRequest({
 
   async function submit() {
     setSubmitAttempted(true);
+    setSubmissionError("");
     if (submitting) return;
-    if (!canSubmit) return;
+    if (!canSubmit) {
+      const firstInvalidStep = formSteps.find((item) => getStepIssues(item.step).length > 0);
+      const nextMessage = requiredIssues[0] || "Revise os dados obrigatórios antes de enviar.";
+      setSubmissionError(nextMessage);
+      if (firstInvalidStep && firstInvalidStep.step !== formStep) {
+        setFormStep(firstInvalidStep.step);
+      }
+      return;
+    }
     setSubmitting(true);
     try {
       if (internalSimple) {
@@ -3619,27 +3685,18 @@ function NewRequest({
     }
   }
 
-  const publicStepTitles = {
-    0: "Seus dados",
-    1: "Dados do animal",
-    2: "Agendamento",
-    3: internalSimple ? "Finalização" : "Documentos",
-  };
-
-  const progressPct = Math.round(((currentStepIndex + 1) / formSteps.length) * 100);
-
   const stepperNode = (
-    <div className="nr-stepper">
+    <div className="nr-stepper" aria-label="Etapas da solicitação">
       {formSteps.map((item, index) => {
         const isDone = index < currentStepIndex;
         const isCurrent = index === currentStepIndex;
+        const hasIssue = submitAttempted && isCurrent && getStepIssues(item.step).length > 0;
         return (
           <React.Fragment key={item.step}>
             <button
               type="button"
-              className={`nr-step${isCurrent ? " nr-step--current" : ""}${isDone ? " nr-step--done" : ""}`}
-              onClick={() => { if (isDone) setFormStep(item.step); }}
-              disabled={!isDone}
+              className={`nr-step${isCurrent ? " nr-step--current" : ""}${isDone ? " nr-step--done" : ""}${hasIssue ? " nr-step--invalid" : ""}`}
+              disabled
               aria-current={isCurrent ? "step" : undefined}
             >
               <span className="nr-step-circle">
@@ -3653,7 +3710,6 @@ function NewRequest({
       })}
     </div>
   );
-
   const inlineAnimalPhotoUpload = (
     <div className="animal-photo-upload-card animal-photo-upload-card--inline">
       <div>
@@ -3851,43 +3907,25 @@ function NewRequest({
           </FormSection>}
 
           {formStep === 1 && <FormSection title="Dados do animal">
-            {(!publicFlow || animals.length > 1) && configuredRequestTypes.length > 0 && (
-              <div className="form-sub-card">
-                <span className="form-sub-card-title">Tipo de solicitação</span>
-                <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
-                  <div className="anm-type-cards">
-                    {configuredRequestTypes.map((type) => (
-                      <button
-                        key={type.id || type.name}
-                        type="button"
-                        className={`anm-type-card${requestData.type === type.name ? " is-selected" : ""}`}
-                        onClick={() => updateRequestField("type", type.name)}
-                      >
-                        {type.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
 
             {animals.map((animal, index) => {
               const isOpen = animals.length === 1 || expandedAnimal === index;
               const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
-              const showTypeSelector = publicFlow && index === 0 && animals.length === 1 && configuredRequestTypes.length > 0;
+              const showTypeSelector = publicFlow && index === 0 && configuredRequestTypes.length > 0;
               return (
                 <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
                   {animals.length > 1 && (
                     <button
                       type="button"
-                      className="animal-form-header animal-accordion-toggle"
+                      className="animal-form-header animal-accordion-toggle animal-form-header--card"
                       onClick={() => setExpandedAnimal(isOpen ? -1 : index)}
                     >
+                      <div className="animal-title-badge">{index + 1}</div>
                       <div className="animal-accordion-title">
                         <strong>Animal {index + 1}</strong>
-                        {!isOpen && <span className="animal-accordion-summary">{summary}</span>}
+                        <span className="animal-accordion-summary">{summary}</span>
                       </div>
-                      <ChevronRight size={15} className={`animal-accordion-chevron${isOpen ? " is-open" : ""}`} />
+                      <ChevronRight size={17} className={`animal-accordion-chevron${isOpen ? " is-open" : ""}`} />
                     </button>
                   )}
 
@@ -4030,11 +4068,6 @@ function NewRequest({
                   Remover animal
                 </button>
               )}
-              {publicFlow && (
-                <button className="nr-topbar-continue" type="button" onClick={goToNextStep}>
-                  Continuar
-                </button>
-              )}
             </div>
           </FormSection>}
 
@@ -4060,97 +4093,104 @@ function NewRequest({
           </FormSection>}
 
           {!internalSimple && formStep === 3 && <FormSection title="Documentos e termo">
-            <div className="form-sub-card">
-              <span className="form-sub-card-title">Documentos e termo</span>
-              <label className="doc-photo-zone">
-                {documentUploads.animal_photo?.dataUrl ? (
-                  <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
-                ) : (
-                  <div className="doc-photo-placeholder">
-                    <ImagePlus size={28} />
-                    <span>Foto do animal</span>
-                    <small>Opcional</small>
+            <div className="form-sub-card documents-step-card">
+              <div className="documents-step-header">
+                <span className="form-sub-card-title">Documentos e termo</span>
+                <small>Anexe os comprovantes solicitados e confirme a declaração.</small>
+              </div>
+
+              <div className="documents-step-grid">
+                <aside className="documents-photo-column">
+                  <label className="doc-photo-zone doc-photo-zone--compact">
+                    {documentUploads.animal_photo?.dataUrl ? (
+                      <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
+                    ) : (
+                      <div className="doc-photo-placeholder">
+                        <ImagePlus size={22} />
+                        <span>Foto do animal</span>
+                        <small>Opcional</small>
+                      </div>
+                    )}
+                    <input type="file" accept="image/*" onClick={(e) => { e.currentTarget.value = ""; }} onChange={(e) => handleAnimalPhotoFile(e.target.files?.[0])} />
+                    {documentUploads.animal_photo && (
+                      <button className="doc-photo-remove" type="button" onClick={(e) => { e.preventDefault(); removeDocumentFile("animal_photo"); }}>
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </label>
+                </aside>
+
+                <div className="documents-main-column">
+                  <div className="documents-list-card">
+                    {!selectedRequestType && (
+                      <div className="doc-empty-note">
+                        <BadgeCheck size={16} />
+                        <span>Nenhum documento obrigatório para este cadastro.</span>
+                      </div>
+                    )}
+                    {selectedTypeDocuments.map((document) => {
+                      const upload = documentUploads[document.id];
+                      return (
+                        <DocumentScannerUpload
+                          key={document.id}
+                          document={document}
+                          upload={upload}
+                          aiActive={aiSettings.active}
+                          onUpload={(file) => handleDocumentFile(document, file)}
+                          onRemove={() => removeDocumentFile(document.id)}
+                        />
+                      );
+                    })}
                   </div>
-                )}
-                <input type="file" accept="image/*" onClick={(e) => { e.currentTarget.value = ""; }} onChange={(e) => handleAnimalPhotoFile(e.target.files?.[0])} />
-                {documentUploads.animal_photo && (
-                  <button className="doc-photo-remove" type="button" onClick={(e) => { e.preventDefault(); removeDocumentFile("animal_photo"); }}>
-                    <Trash2 size={13} />
-                  </button>
-                )}
-              </label>
 
-              {!selectedRequestType && (
-                <div className="doc-empty-note">
-                  <BadgeCheck size={16} />
-                  <span>Nenhum documento obrigatório para este cadastro.</span>
+                  <div className="doc-declaration">
+                    <p>
+                      O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.{" "}
+                      <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
+                    </p>
+                    <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
+                      <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
+                      <span className="doc-check-box" />
+                      <span>Li e concordo com os termos</span>
+                    </label>
+                  </div>
                 </div>
-              )}
-              {selectedTypeDocuments.map((document) => {
-                const upload = documentUploads[document.id];
-                return (
-                  <DocumentScannerUpload
-                    key={document.id}
-                    document={document}
-                    upload={upload}
-                    aiActive={aiSettings.active}
-                    onUpload={(file) => handleDocumentFile(document, file)}
-                    onRemove={() => removeDocumentFile(document.id)}
-                  />
-                );
-              })}
-
-              <div className="doc-declaration">
-                <p>
-                  O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.{" "}
-                  <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
-                </p>
-                <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
-                  <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-                  <span className="doc-check-box" />
-                  <span>Li e concordo com os termos</span>
-                </label>
               </div>
             </div>
           </FormSection>}
-
           </div>
-
-          {!(publicFlow && formStep === 1) && <>
-            {submissionError && <p className="nr-bottom-error">{submissionError}</p>}
-            <div className="nr-nav-row">
-              {currentStepIndex > 0 && (
-                <button
-                  className="nr-back-btn"
-                  type="button"
-                  onClick={() => setFormStep(formSteps[currentStepIndex - 1].step)}
-                >
-                  Voltar
-                </button>
-              )}
-              {currentStepIndex < formSteps.length - 1 ? (
-                <button
-                  className="nr-topbar-continue"
-                  type="button"
-                  disabled={!internalSimple && formStep === 0 && !skipTutorStep && !smsConfirmed}
-                  onClick={goToNextStep}
-                >
-                  Continuar
-                  {publicFlow && <ChevronRight size={15} />}
-                </button>
-              ) : (
-                <button
-                  className="nr-topbar-continue"
-                  type="button"
-                  disabled={!canSubmit || submitting}
-                  onClick={submit}
-                >
-                  {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
-                  {publicFlow && <ChevronRight size={15} />}
-                </button>
-              )}
-            </div>
-          </>}
+          {submissionError && <p className="form-error nr-bottom-error">{submissionError}</p>}
+          <div className={`nr-nav-row${currentStepIndex === formSteps.length - 1 ? " nr-nav-row--final" : ""}`}>
+            {currentStepIndex > 0 && (
+              <button
+                className="nr-back-btn"
+                type="button"
+                onClick={() => navigateToStep(formSteps[currentStepIndex - 1].step)}
+              >
+                Voltar
+              </button>
+            )}
+            {currentStepIndex < formSteps.length - 1 ? (
+              <button
+                className="nr-topbar-continue"
+                type="button"
+                onClick={() => navigateToStep(formSteps[currentStepIndex + 1].step)}
+              >
+                Próximo
+                {publicFlow && <ChevronRight size={15} />}
+              </button>
+            ) : (
+              <button
+                className="nr-topbar-continue"
+                type="button"
+                disabled={submitting}
+                onClick={submit}
+              >
+                {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
+                {publicFlow && <ChevronRight size={15} />}
+              </button>
+            )}
+          </div>
         </div>
 
         {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
@@ -4158,18 +4198,76 @@ function NewRequest({
   );
 }
 
+const REQUEST_DECLARATION_ITEMS = [
+  "A total responsabilidade pela realização da captura e acondicionamento dos animais até a condução para o centro de castração onde serão realizados os procedimentos operatórios de castração.",
+  "Para fins de ordem legal, autorizo a prática dos procedimentos veterinário e declaro que estou ciente dos riscos inerentes a qualquer prática Anestésico-Cirúrgica Médico Veterinária, a ser procedida em meu animal.",
+  "A total responsabilidade pela realização dos cuidados pré e pós-operatório dos procedimentos de castração.",
+  "A total responsabilidade pela realização exames pré e pós-operatório dos procedimentos de castração que forem julgados como necessários pelos médicos veterinários do centro de castração, sem ônus para a FUNDAI.",
+  "Que não utilizarei os encaminhamentos para procedimentos cirúrgicos para favorecer animais de terceiros ou não pertencentes ao município de Içara, assim como não cobrarei pelos serviços de encaminhamento.",
+  "Que tenho como residência fixa o endereço acima informado.",
+  "As informações descritas na solicitação serão conferidas com o animal no dia da cirurgia, caso essas informações não descrevam o animal, ele não passará pelo procedimento cirúrgico.",
+  "Da solicitação cirúrgica para animais de raça de agricultores será realizado o procedimento após pagamento da taxa.",
+  "Declaro que todas as informações prestadas e documentos anexos são verdadeiros e assumo a responsabilidade pelos mesmos sob as penas da lei e afirmo ter conhecimento da legislação pertinente ao objetivo deste requerimento.",
+  "Declaro ainda, a inteira responsabilidade pelas informações contidas nessa declaração, estando ciente de que a omissão ou a apresentação de informações e/ou documentos falsos ou divergentes implicam na infração do art. 299 do Código Penal, além das medidas judiciais cabíveis.",
+];
+
+const REQUEST_RECOMMENDATION_ITEMS = [
+  "Jejum hídrico e alimentar de 8 horas;",
+  "Felinos levar em caixa de transporte;",
+  "Levar roupinha cirúrgica se tiver ou colar Elizabetano.",
+];
+
 function buildDeclarationPdfHtml(requestData, animals = []) {
-  const animalRows = animals.map((animal, index) => `
+  const value = (input) => escapeHtml(String(input ?? "-"));
+  const yesNo = (input) => input === true ? "Sim" : input === false ? "Não" : String(input || "-");
+  const renderDataItem = (label, input) => `<div class="data-item"><span>${escapeHtml(label)}</span><strong>${value(input || "-")}</strong></div>`;
+  const tutorFields = [
+    ["Nome completo", requestData.tutor],
+    ["CPF", requestData.cpf],
+    ["Celular", requestData.phone],
+    ["Email", requestData.email],
+    ["CEP", requestData.cep],
+    ["Endereço", requestData.address],
+    ["Número", requestData.number],
+    ["Bairro", requestData.neighborhood],
+    ["Cidade", requestData.city],
+    ["UF", requestData.state],
+    ["CadÚnico", requestData.cadUnicoNotApplicable ? "Não se aplica" : requestData.cadUnico],
+    ["Agricultor", yesNo(requestData.isFarmer)],
+    ["Tipo de solicitação", requestData.type],
+    ["Data da agenda", requestData.schedule],
+    ["Observações", requestData.notes],
+  ];
+  const animalFieldLabels = [
+    ["Nome", "name"],
+    ["Espécie", "species"],
+    ["Procedimento", "procedureType"],
+    ["Sexo", "sex"],
+    ["Raça", "breedType"],
+    ["Descrição da raça", "breedDescription"],
+    ["Porte", "size"],
+    ["Peso", "weight"],
+    ["Idade", "age"],
+    ["Data de nascimento", "birthDate"],
+    ["Pelagem", "coat"],
+    ["Possui microchip", "hasChip"],
+    ["Microchip", "microchip"],
+    ["Vermifugado", "dewormed"],
+    ["Vacinas em dia", "vaccinated"],
+    ["Já teve cria", "hadLitter"],
+    ["Histórico de doenças", "illnessHistory"],
+    ["Alimentação", "food"],
+  ];
+  const animalRows = (animals.length ? animals : [{}]).map((animal, index) => `
     <div class="animal-card">
-      <div class="animal-card-title">Animal ${index + 1}${animal.name ? ` - ${escapeHtml(animal.name)}` : ""}</div>
-      <div class="data-grid three">
-        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "-")}</strong></div>
-        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "-")}</strong></div>
-        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "-")}</strong></div>
-        <div class="data-item"><span>Procedimento</span><strong>${escapeHtml(animal.procedure || "-")}</strong></div>
+      <div class="animal-card-title">Animal ${index + 1}</div>
+      <div class="data-grid compact-four">
+        ${animalFieldLabels.map(([label, key]) => renderDataItem(label, animal?.[key])).join("")}
       </div>
     </div>
   `).join("");
+  const declarationItems = REQUEST_DECLARATION_ITEMS;
+  const recommendationItems = REQUEST_RECOMMENDATION_ITEMS;
 
   return `<!doctype html>
 <html>
@@ -4179,37 +4277,47 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     <style>${PDF_BASE_STYLES}</style>
   </head>
   <body>
-    <header class="pdf-header">
-      <div>
-        <span class="kicker">Declaração do tutor</span>
-        <h1>Solicitação de castração animal</h1>
-      </div>
-      <div class="header-box"><span>Data</span><strong>${new Date().toLocaleDateString("pt-BR")}</strong></div>
-    </header>
-    <section class="section">
-      <div class="section-title">Dados do tutor</div>
-      <div class="data-grid two">
-        <div class="data-item"><span>Nome</span><strong>${escapeHtml(requestData.tutor || "-")}</strong></div>
-        <div class="data-item"><span>CPF</span><strong>${escapeHtml(requestData.cpf || "-")}</strong></div>
-      </div>
-    </section>
-    <section class="section">
-      <div class="section-title">Animais</div>
-      ${animalRows || "<p>Nenhum animal informado.</p>"}
-    </section>
-    <section class="section">
-      <div class="section-title">Declaração</div>
-      <div class="declaration-card">
-        <p>Declaro que as informações prestadas são verdadeiras e autorizo o uso dos dados para triagem, agendamento e acompanhamento da solicitação de castração animal.</p>
-        <p>Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal e da necessidade de cumprir as orientações fornecidas pela equipe responsável.</p>
-        <p>Ao marcar o aceite no sistema, confirmo que li e concordo com esta declaração.</p>
-      </div>
-    </section>
-    <footer class="footer"><span>Sistema municipal de castração animal</span><span>Gerado em ${new Date().toLocaleString("pt-BR")}</span></footer>
+    <main class="pdf-page pdf-page--compact">
+      <header class="pdf-header compact-header">
+        <div>
+          <span class="kicker">Cadastro da solicitação</span>
+          <h1>Dados informados para castração animal</h1>
+        </div>
+        <div class="header-box"><span>Data</span><strong>${new Date().toLocaleDateString("pt-BR")}</strong></div>
+      </header>
+      <section class="section compact-section">
+        <div class="section-title">Dados do tutor</div>
+        <div class="data-grid compact-four">
+          ${tutorFields.map(([label, input]) => renderDataItem(label, input)).join("")}
+        </div>
+      </section>
+      <section class="section compact-section">
+        <div class="section-title">Dados do animal</div>
+        ${animalRows}
+      </section>
+      <footer class="footer"><span>Sistema municipal de castração animal</span><span>Página 1 de 2</span></footer>
+    </main>
+
+    <main class="pdf-page declaration-page">
+      <section class="declaration-document">
+        <h1>DECLARAÇÃO DE RESPONSABILIDADES</h1>
+        <h2>CASTRAÇÃO ANIMAL</h2>
+        <p class="declaration-lead">Declaro para fins civis, penais e administrativos:</p>
+        <ul class="responsibility-list">
+          ${declarationItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+          <li>
+            Recomendações:
+            <ul class="recommendation-list">
+              ${recommendationItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+            </ul>
+          </li>
+        </ul>
+      </section>
+      <footer class="footer"><span>Sistema municipal de castração animal</span><span>Página 2 de 2</span></footer>
+    </main>
   </body>
 </html>`;
 }
-
 function DocumentPreviewModal({ document, onClose }: AnyRecord) {
   const dataUrl = getDocumentPreviewSource(document);
   const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
@@ -4582,7 +4690,6 @@ function AdminDashboard({
         <RequestPreviewModal
           request={previewRequest}
           requestTypes={requestTypes}
-          aiSettings={aiSettings}
           scheduleDays={activeScheduleDays}
           sectors={activeSectors}
           users={activeUsers}
@@ -4634,7 +4741,7 @@ function AdminDashboard({
   );
 }
 
-function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], aiSettings = initialAiSettings }: AnyRecord) {
+function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -4752,13 +4859,13 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   }
 
   function getAiStatusLabel(anexo, decision) {
-    if (decision === "approved") return "IA: aprovado manual";
-    if (decision === "rejected") return "IA: recusado manual";
-    if (anexo.status === "Aprovado") return "IA: aprovado";
-    if (anexo.status === "Recusado") return "IA: recusado";
+    if (decision === "approved") return "Documento: aprovado manual";
+    if (decision === "rejected") return "Documento: recusado manual";
+    if (anexo.status === "Aprovado") return "Análise: aprovado";
+    if (anexo.status === "Recusado") return "Análise: recusado";
     if (anexo.status === "Gerado") return "Sistema";
     if (anexo.status === "Não enviado") return "Pendente";
-    return aiSettings.active ? "IA: aguardando" : "Aguardando";
+    return "Aguardando";
   }
 
   async function handlePreview(item) {
@@ -6412,8 +6519,6 @@ function ConfigView({
   setSizeOptions,
   municipalities = initialMunicipalities,
   setMunicipalities,
-  aiSettings = initialAiSettings,
-  setAiSettings,
   scheduleDays = [],
   setScheduleDays,
   scheduleRules = [],
@@ -6450,6 +6555,7 @@ function ConfigView({
     addressUrl: "",
     latitude: "",
     longitude: "",
+    occurrences: [{ id: "occ_1", date: "", locationName: "", locationAddress: "", addressUrl: "", latitude: "", longitude: "", slots: [{ time: "08:00", vacancies: "10" }] }],
   };
   const [configModal, setConfigModal] = useState(null);
   const [configStatusFilters, setConfigStatusFilters] = useState({});
@@ -6464,7 +6570,8 @@ function ConfigView({
   const [editingSizeId, setEditingSizeId] = useState(null);
   const [newSpecies, setNewSpecies] = useState({ name: "", active: true });
   const [newSize, setNewSize] = useState({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true });
-  const [newDocument, setNewDocument] = useState({ name: "", modelHint: "", aiCriteria: "", rejectionRules: "", required: true, active: true });
+  const emptyDocumentForm = { name: "", modelHint: "", aiCriteria: "", manualReviewRules: "", rejectionRules: "", minimumConfidence: String(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE).replace(".", ","), allowAutomaticApproval: true, allowAutomaticRejection: false, required: true, active: true };
+  const [newDocument, setNewDocument] = useState(emptyDocumentForm);
   const [newSectorName, setNewSectorName] = useState("");
   const [newSectorActive, setNewSectorActive] = useState(true);
   const [editingSectorId, setEditingSectorId] = useState(null);
@@ -6477,7 +6584,8 @@ function ConfigView({
   const [permissionModal, setPermissionModal] = useState(false);
   const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
   const [newTeamUser, setNewTeamUser] = useState(emptyTeamUser);
-  const [newMunicipality, setNewMunicipality] = useState({ name: "", state: "", active: true, brasao: "" });
+  const emptyMunicipalityForm = { name: "", state: "", active: true, brasao: "", contact: "", email: "", address: "", cep: "" };
+  const [newMunicipality, setNewMunicipality] = useState(emptyMunicipalityForm);
   const [editingMunicipalityId, setEditingMunicipalityId] = useState(null);
   const [municipalitySaving, setMunicipalitySaving] = useState(false);
   const [municipalitySaveStatus, setMunicipalitySaveStatus] = useState("");
@@ -6490,7 +6598,6 @@ function ConfigView({
   const [municipalityStateFilter, setMunicipalityStateFilter] = useState("");
   const [userSaveError, setUserSaveError] = useState("");
   const [agendaForm, setAgendaForm] = useState(emptyAgendaForm);
-  const [aiSaveStatus, setAiSaveStatus] = useState("");
   const [whatsappSettings, setWhatsappSettings] = useState(initialWhatsappSettings);
   const [whatsappSaveStatus, setWhatsappSaveStatus] = useState("");
   const initialQuotaSettings = { plan: "", contractStart: "", contractEnd: "" };
@@ -6572,10 +6679,6 @@ function ConfigView({
     return () => { cancelled = true; };
   }, [configModal, newMunicipality.state]);
 
-  const selectedAiProvider = aiSettings.provider || "OpenAI";
-  const selectedAiProviderConfig = aiProviderOptions[selectedAiProvider] || aiProviderOptions.OpenAI;
-  const selectedAiModels = selectedAiProviderConfig.models || [];
-  const selectedAiModel = selectedAiModels.includes(aiSettings.model) ? aiSettings.model : selectedAiModels[0] || "";
   const configMunicipalityScopeId = selectedMunicipalityId || currentUser?.municipalityId || "";
 
   useEffect(() => {
@@ -6616,41 +6719,6 @@ function ConfigView({
     if (item.id !== itemId) return false;
     if (!configMunicipalityScopeId) return true;
     return getItemMunicipalityId(item) === configMunicipalityScopeId;
-  }
-
-  useEffect(() => {
-    if (!setAiSettings || !selectedAiModel) return;
-    if (aiSettings.provider === selectedAiProvider && aiSettings.model === selectedAiModel) return;
-    setAiSettings((current) => ({
-      ...current,
-      provider: selectedAiProvider,
-      model: selectedAiModel,
-    }));
-  }, [aiSettings.model, aiSettings.provider, selectedAiModel, selectedAiProvider, setAiSettings]);
-
-  async function saveAiCredentials() {
-    const nextSettings = {
-      ...aiSettings,
-      active: Boolean(aiSettings.active),
-      provider: selectedAiProvider,
-      model: selectedAiModel,
-      endpoint: aiSettings.endpoint || "",
-      apiKey: aiSettings.apiKey || "",
-    };
-    setAiSaveStatus("Salvando configuração...");
-    try {
-      const saved = await api.setConfig("ai", nextSettings);
-      const publicSettings = {
-        ...nextSettings,
-        ...(saved?.value || {}),
-        apiKey: "",
-        hasApiKey: Boolean(saved?.value?.hasApiKey || nextSettings.apiKey || aiSettings.hasApiKey),
-      };
-      setAiSettings?.(publicSettings);
-      setAiSaveStatus("Chave salva com sucesso.");
-    } catch (err) {
-      setAiSaveStatus(`Não foi possível salvar: ${err.message}`);
-    }
   }
 
   const currentConfigKey = configArea === "environment" ? configTab : configArea;
@@ -6810,37 +6878,52 @@ function ConfigView({
     );
   }
 
-  function createDocumentType(payload: AnyRecord = {}) {
-    const nextDocument = {
-      id: `doc_${Date.now()}`,
+  function buildDocumentPayload(payload: AnyRecord = {}, existing: AnyRecord = {}) {
+    const minimumConfidence = String(payload.minimumConfidence || String(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE).replace(".", ",")).replace(",", ".");
+    return {
+      ...existing,
+      id: existing.id || `doc_${Date.now()}`,
       name: payload.name || "",
       required: payload.required !== false,
       active: payload.active !== false,
-      accept: ["image/jpeg", "image/png", "application/pdf"],
-      maxSizeMb: 5,
-      modelHint: payload.modelHint || "",
-      aiCriteria: payload.aiCriteria || "",
-      rejectionRules: payload.rejectionRules || "",
-      municipalityId: payload.municipalityId || configMunicipalityScopeId,
+      accept: existing.accept || ["image/jpeg", "image/png", "application/pdf"],
+      maxSizeMb: existing.maxSizeMb || 5,
+      analysisRules: {
+        ...(existing.analysisRules || {}),
+        expectedDocument: payload.modelHint || "",
+        requiredCriteria: payload.aiCriteria || "",
+        manualReviewCriteria: payload.manualReviewRules || "",
+        rejectionCriteria: payload.rejectionRules || "",
+        minimumConfidence,
+        allowAutomaticApproval: payload.allowAutomaticApproval !== false,
+        allowAutomaticRejection: payload.allowAutomaticRejection === true,
+      },
+      municipalityId: payload.municipalityId || existing.municipalityId || configMunicipalityScopeId,
     };
-    const normalizedDocument = normalizeDocumentType(nextDocument);
+  }
+
+  function createDocumentType(payload: AnyRecord = {}) {
     if (editingDocumentId) {
       setDocumentTypes?.((current) =>
-        current.map((document) => (matchesScopedConfigItem(document, editingDocumentId) ? { ...document, ...normalizedDocument, id: document.id } : document)),
+        current.map((document) => {
+          if (!matchesScopedConfigItem(document, editingDocumentId)) return document;
+          return normalizeDocumentType(buildDocumentPayload(payload, document));
+        }),
       );
       setRequestTypes?.((current) =>
         current.map((type) => ({
           ...type,
           documents: (type.documents || []).map((document) =>
-            matchesScopedConfigItem(document, editingDocumentId) ? { ...document, ...normalizedDocument, id: document.id } : document,
+            matchesScopedConfigItem(document, editingDocumentId)
+              ? normalizeDocumentType(buildDocumentPayload(payload, document))
+              : document,
           ),
         })),
       );
       return;
     }
-    setDocumentTypes?.((current) => [...current, normalizedDocument]);
+    setDocumentTypes?.((current) => [...current, normalizeDocumentType(buildDocumentPayload(payload))]);
   }
-
   function patchDocumentType(documentId, patch) {
     setDocumentTypes?.((current) => current.map((document) => (matchesScopedConfigItem(document, documentId) ? normalizeDocumentType({ ...document, ...patch }) : document)));
     setRequestTypes?.((current) =>
@@ -6886,22 +6969,27 @@ function ConfigView({
 
   function openDocumentModal(document = null) {
     if (document) {
-      setEditingDocumentId(document.id);
+      const normalized = normalizeDocumentType(document);
+      const rules = normalized.analysisRules || {};
+      setEditingDocumentId(normalized.id);
       setNewDocument({
-        name: document.name || "",
-        modelHint: document.modelHint || "",
-        aiCriteria: document.aiCriteria || "",
-        rejectionRules: document.rejectionRules || "",
-        required: document.required !== false,
-        active: document.active !== false,
+        name: normalized.name || "",
+        modelHint: rules.expectedDocument || "",
+        aiCriteria: Array.isArray(rules.requiredCriteria) ? rules.requiredCriteria.join("\n") : "",
+        manualReviewRules: Array.isArray(rules.manualReviewCriteria) ? rules.manualReviewCriteria.join("\n") : "",
+        rejectionRules: Array.isArray(rules.rejectionCriteria) ? rules.rejectionCriteria.join("\n") : "",
+        minimumConfidence: String(rules.minimumConfidence ?? DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE).replace(".", ","),
+        allowAutomaticApproval: rules.allowAutomaticApproval !== false,
+        allowAutomaticRejection: rules.allowAutomaticRejection === true,
+        required: normalized.required !== false,
+        active: normalized.active !== false,
       });
     } else {
       setEditingDocumentId(null);
-      setNewDocument({ name: "", modelHint: "", aiCriteria: "", rejectionRules: "", required: true, active: true });
+      setNewDocument(emptyDocumentForm);
     }
     setConfigModal("document");
   }
-
   function createSize(payload: AnyRecord = {}) {
     const nextSize = {
       id: `porte_${Date.now()}`,
@@ -6970,10 +7058,14 @@ function ConfigView({
         state: municipality.state || "",
         active: municipality.active !== false,
         brasao: municipality.brasao || "",
+        contact: municipality.contact || "",
+        email: municipality.email || "",
+        address: municipality.address || "",
+        cep: municipality.cep || "",
       });
     } else {
       setEditingMunicipalityId(null);
-      setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
+      setNewMunicipality(emptyMunicipalityForm);
     }
     setConfigModal("municipality");
   }
@@ -6990,7 +7082,7 @@ function ConfigView({
       if (editingMunicipalityId) {
         await patchMunicipality(editingMunicipalityId, newMunicipality);
         setEditingMunicipalityId(null);
-        setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
+        setNewMunicipality(emptyMunicipalityForm);
         setMunicipalitySaveStatus("");
         setConfigModal(null);
         return;
@@ -7071,7 +7163,7 @@ function ConfigView({
           });
         return mergeScopedConfigItems(current, scopedRules, created.id);
       });
-      setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
+      setNewMunicipality(emptyMunicipalityForm);
       setMunicipalitySaveStatus("");
       setConfigModal(null);
     } catch (err) {
@@ -7338,12 +7430,19 @@ function ConfigView({
 
   function toInputDate(dateText) {
     if (!dateText) return "";
-    const [day, month, year] = dateText.split("/");
+    const value = String(dateText);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+    const [day, month, year] = value.split("/");
+    if (!day || !month || !year) return "";
     return `${year}-${month}-${day}`;
   }
 
   function toScheduleDate(dateValue) {
-    const [year, month, day] = dateValue.split("-");
+    if (!dateValue) return "";
+    const value = String(dateValue);
+    if (value.includes("/")) return normalizeScheduleDateText(value);
+    const [year, month, day] = value.split("-");
+    if (!year || !month || !day) return "";
     return `${day}/${month}/${year}`;
   }
 
@@ -7415,8 +7514,44 @@ function ConfigView({
     });
   }
 
+  function normalizeAgendaOccurrenceForForm(occurrence: AnyRecord = {}, fallback: AnyRecord = agendaForm) {
+    const rawDate = occurrence.date || occurrence.start || fallback.start || "";
+    const rawSlots = Array.isArray(occurrence.slots) && occurrence.slots.length
+      ? occurrence.slots
+      : Array.isArray(fallback.slots) && fallback.slots.length ? fallback.slots : [{ time: "08:00", vacancies: "10" }];
+    const slots = rawSlots.map((slot) => ({
+      time: String(slot?.time || ""),
+      vacancies: String(slot?.vacancies ?? ""),
+    }));
+
+    return {
+      id: occurrence.id || `occ_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      date: toInputDate(rawDate) || "",
+      locationName: occurrence.locationName || fallback.locationName || "",
+      locationAddress: occurrence.locationAddress || fallback.locationAddress || "",
+      addressUrl: occurrence.addressUrl || fallback.addressUrl || "",
+      latitude: occurrence.latitude || fallback.latitude || "",
+      longitude: occurrence.longitude || fallback.longitude || "",
+      slots: slots.length ? slots : [{ time: "08:00", vacancies: "10" }],
+    };
+  }
+
+  function getAgendaOccurrenceList(source: AnyRecord = agendaForm) {
+    const sourceList = Array.isArray(source.occurrences) && source.occurrences.length ? source.occurrences : [source];
+    return sourceList.map((occurrence) => normalizeAgendaOccurrenceForForm(occurrence, source));
+  }
+
   function patchAgendaForm(field, value) {
-    setAgendaForm((current) => ({ ...current, [field]: value }));
+    setAgendaForm((current) => {
+      if (field === "kind") {
+        const next = { ...current, kind: value };
+        if (normalizeText(value) === "mutirao") {
+          return { ...next, type: "Dia específico", occurrences: getAgendaOccurrenceList(current) };
+        }
+        return next;
+      }
+      return { ...current, [field]: value };
+    });
   }
 
   function patchAgendaSlot(index, field, value) {
@@ -7442,6 +7577,68 @@ function ConfigView({
     });
   }
 
+  function patchAgendaOccurrence(index, field, value) {
+    setAgendaForm((current) => ({
+      ...current,
+      occurrences: getAgendaOccurrenceList(current).map((occurrence, occurrenceIndex) => (
+        occurrenceIndex === index ? { ...occurrence, [field]: value } : occurrence
+      )),
+    }));
+  }
+
+  function patchAgendaOccurrenceSlot(occurrenceIndex, slotIndex, field, value) {
+    setAgendaForm((current) => ({
+      ...current,
+      occurrences: getAgendaOccurrenceList(current).map((occurrence, currentOccurrenceIndex) => {
+        if (currentOccurrenceIndex !== occurrenceIndex) return occurrence;
+        return {
+          ...occurrence,
+          slots: (occurrence.slots || []).map((slot, currentSlotIndex) => (
+            currentSlotIndex === slotIndex ? { ...slot, [field]: value } : slot
+          )),
+        };
+      }),
+    }));
+  }
+
+  function addAgendaOccurrenceSlot(occurrenceIndex) {
+    setAgendaForm((current) => ({
+      ...current,
+      occurrences: getAgendaOccurrenceList(current).map((occurrence, currentOccurrenceIndex) => (
+        currentOccurrenceIndex === occurrenceIndex
+          ? { ...occurrence, slots: [...(occurrence.slots || []), { time: "", vacancies: "" }] }
+          : occurrence
+      )),
+    }));
+  }
+
+  function removeAgendaOccurrenceSlot(occurrenceIndex, slotIndex) {
+    setAgendaForm((current) => ({
+      ...current,
+      occurrences: getAgendaOccurrenceList(current).map((occurrence, currentOccurrenceIndex) => {
+        if (currentOccurrenceIndex !== occurrenceIndex) return occurrence;
+        const nextSlots = (occurrence.slots || []).filter((_, currentSlotIndex) => currentSlotIndex !== slotIndex);
+        return { ...occurrence, slots: nextSlots.length ? nextSlots : [{ time: "08:00", vacancies: "10" }] };
+      }),
+    }));
+  }
+
+  function addAgendaOccurrence() {
+    setAgendaForm((current) => ({
+      ...current,
+      occurrences: [
+        ...getAgendaOccurrenceList(current),
+        normalizeAgendaOccurrenceForForm({ id: `occ_${Date.now()}`, date: "", locationName: "", locationAddress: "", addressUrl: "" }, current),
+      ],
+    }));
+  }
+
+  function removeAgendaOccurrence(index) {
+    setAgendaForm((current) => {
+      const nextOccurrences = getAgendaOccurrenceList(current).filter((_, occurrenceIndex) => occurrenceIndex !== index);
+      return { ...current, occurrences: nextOccurrences.length ? nextOccurrences : [normalizeAgendaOccurrenceForForm({}, current)] };
+    });
+  }
   function useAgendaCurrentLocation() {
     if (!navigator.geolocation) {
       setAgendaLocationStatus("Localização atual indisponível neste navegador.");
@@ -7468,6 +7665,10 @@ function ConfigView({
     if (rule) {
       const startDate = toInputDate(rule.start);
       const fallbackWeekday = startDate ? new Date(`${startDate}T12:00:00`).getDay() : 1;
+      const isRuleMutirao = normalizeText(rule.kind || "") === "mutirao";
+      const ruleOccurrences = Array.isArray(rule.occurrences) && rule.occurrences.length
+        ? rule.occurrences
+        : [{ ...rule, date: rule.start }];
       setEditingScheduleRuleId(rule.id);
       setAgendaForm({
         ...emptyAgendaForm,
@@ -7475,7 +7676,7 @@ function ConfigView({
         active: rule.active !== false,
         unavailable: rule.unavailable || false,
         kind: rule.kind || "Agenda",
-        type: rule.type || "Recorrência",
+        type: isRuleMutirao ? "Dia específico" : rule.type || "Recorrência",
         repeatEvery: String(rule.repeatEvery || "1"),
         weekdays: Array.isArray(rule.weekdays) && rule.weekdays.length ? rule.weekdays : [fallbackWeekday],
         start: startDate,
@@ -7489,10 +7690,16 @@ function ConfigView({
         addressUrl: rule.addressUrl || "",
         latitude: rule.latitude || "",
         longitude: rule.longitude || "",
+        occurrences: ruleOccurrences.map((occurrence) => normalizeAgendaOccurrenceForForm(occurrence, rule)),
       });
     } else {
       setEditingScheduleRuleId(null);
-      setAgendaForm({ ...emptyAgendaForm, municipalityId: currentUser?.municipalityId || municipalities[0]?.id || "" });
+      const municipalityId = currentUser?.municipalityId || municipalities[0]?.id || "";
+      setAgendaForm({
+        ...emptyAgendaForm,
+        municipalityId,
+        occurrences: emptyAgendaForm.occurrences.map((occurrence) => ({ ...occurrence, id: `occ_${Date.now()}` })),
+      });
     }
     setAgendaSaveStatus("");
     setConfigModal("agenda");
@@ -7501,75 +7708,145 @@ function ConfigView({
   async function createScheduleFromModal(event) {
     event.preventDefault();
     if (agendaSaving) return;
-    const isRecurring = normalizeText(agendaForm.type) === "recorrencia";
-    if (!agendaForm.description.trim() || !agendaForm.start || !agendaForm.municipalityId || (isRecurring && (!agendaForm.end || agendaForm.weekdays.length === 0))) {
+
+    const isMutirao = normalizeText(agendaForm.kind) === "mutirao";
+    const isRecurring = !isMutirao && normalizeText(agendaForm.type) === "recorrencia";
+    const mutiraoOccurrencesForForm = isMutirao ? getAgendaOccurrenceList(agendaForm) : [];
+
+    if (!agendaForm.description.trim() || !agendaForm.municipalityId) {
+      setAgendaSaveStatus("Informe a descrição e o município da agenda.");
+      return;
+    }
+
+    if (isMutirao) {
+      const invalidOccurrence = mutiraoOccurrencesForForm.some((occurrence) => !occurrence.date || !String(occurrence.locationName || "").trim());
+      if (!mutiraoOccurrencesForForm.length || invalidOccurrence) {
+        setAgendaSaveStatus("Para mutirão, informe data e local de atendimento em cada ocorrência.");
+        return;
+      }
+      const occurrenceDates = mutiraoOccurrencesForForm.map((occurrence) => toScheduleDate(occurrence.date)).filter(Boolean);
+      if (new Set(occurrenceDates).size !== occurrenceDates.length) {
+        setAgendaSaveStatus("Cada ocorrência do mutirão precisa ter uma data diferente.");
+        return;
+      }
+    } else if (!agendaForm.start || (isRecurring && (!agendaForm.end || agendaForm.weekdays.length === 0))) {
       setAgendaSaveStatus("Preencha os dados obrigatórios da agenda antes de salvar.");
       return;
     }
 
     setAgendaSaving(true);
     setAgendaSaveStatus("Salvando agenda...");
-    const start = new Date(`${agendaForm.start}T12:00:00`);
-    const end = new Date(`${isRecurring ? agendaForm.end : agendaForm.start}T12:00:00`);
-    const repeatEvery = Math.max(Number(agendaForm.repeatEvery) || 1, 1);
-    const slots = normalizeScheduleSlots(agendaForm.slots, agendaForm.time, agendaForm.vacancies);
-    const vacancies = sumScheduleSlotsVacancies(slots);
-    const startTime = slots[0]?.time || agendaForm.time;
     const municipality = municipalities.find((item) => item.id === agendaForm.municipalityId);
     const currentEditingRuleId = editingScheduleRuleId;
     const scheduleRuleId = currentEditingRuleId || `agenda_${Date.now()}`;
     const existingRule = scheduleRules.find((rule) => rule.id === scheduleRuleId);
+    const slots = normalizeScheduleSlots(agendaForm.slots, agendaForm.time, agendaForm.vacancies);
+    const vacancies = sumScheduleSlotsVacancies(slots);
+    const startTime = slots[0]?.time || agendaForm.time;
+    const repeatEvery = Math.max(Number(agendaForm.repeatEvery) || 1, 1);
     const nextDays = [];
 
-    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      const weekDistance = Math.floor((date.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000));
-      const matchesRepeat = weekDistance % repeatEvery === 0;
-      const matchesWeekday = isRecurring ? agendaForm.weekdays.includes(date.getDay()) : true;
-      if (matchesRepeat && matchesWeekday) {
-        const value = date.toISOString().slice(0, 10);
-        nextDays.push({
-          date: toScheduleDate(value),
-          weekday: getWeekdayLabel(value),
-          vacancies,
-          slots,
+    const mutiraoOccurrences = mutiraoOccurrencesForForm
+      .map((occurrence, index) => {
+        const occurrenceSlots = normalizeScheduleSlots(occurrence.slots, agendaForm.time, agendaForm.vacancies);
+        const occurrenceVacancies = sumScheduleSlotsVacancies(occurrenceSlots, agendaForm.time, agendaForm.vacancies);
+        return {
+          id: occurrence.id || `${scheduleRuleId}_occ_${index + 1}`,
+          date: toScheduleDate(occurrence.date),
+          start: toScheduleDate(occurrence.date),
+          time: occurrenceSlots[0]?.time || agendaForm.time,
+          vacancies: occurrenceVacancies,
+          slots: occurrenceSlots,
           active: agendaForm.active && !agendaForm.unavailable,
+          locationName: String(occurrence.locationName || "").trim(),
+          locationAddress: String(occurrence.locationAddress || "").trim(),
+          addressUrl: String(occurrence.addressUrl || "").trim(),
+          latitude: occurrence.latitude || "",
+          longitude: occurrence.longitude || "",
+        };
+      })
+      .sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date));
+
+    if (isMutirao) {
+      mutiraoOccurrences.forEach((occurrence) => {
+        nextDays.push({
+          date: occurrence.date,
+          weekday: getWeekdayLabel(toInputDate(occurrence.date)),
+          vacancies: occurrence.vacancies,
+          slots: occurrence.slots,
+          active: occurrence.active,
           scheduleRuleId,
+          occurrenceId: occurrence.id,
           description: agendaForm.description.trim(),
-          startTime,
+          startTime: occurrence.time,
           kind: agendaForm.kind,
           municipalityId: agendaForm.municipalityId,
           municipalityName: municipality ? `${municipality.name}/${municipality.state}` : "",
-          locationName: agendaForm.locationName,
-          locationAddress: agendaForm.locationAddress,
-          addressUrl: agendaForm.addressUrl,
-          latitude: agendaForm.latitude,
-          longitude: agendaForm.longitude,
+          locationName: occurrence.locationName,
+          locationAddress: occurrence.locationAddress,
+          addressUrl: occurrence.addressUrl,
+          latitude: occurrence.latitude,
+          longitude: occurrence.longitude,
         });
+      });
+    } else {
+      const start = new Date(`${agendaForm.start}T12:00:00`);
+      const end = new Date(`${isRecurring ? agendaForm.end : agendaForm.start}T12:00:00`);
+      for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+        const weekDistance = Math.floor((date.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000));
+        const matchesRepeat = weekDistance % repeatEvery === 0;
+        const matchesWeekday = isRecurring ? agendaForm.weekdays.includes(date.getDay()) : true;
+        if (matchesRepeat && matchesWeekday) {
+          const value = date.toISOString().slice(0, 10);
+          nextDays.push({
+            date: toScheduleDate(value),
+            weekday: getWeekdayLabel(value),
+            vacancies,
+            slots,
+            active: agendaForm.active && !agendaForm.unavailable,
+            scheduleRuleId,
+            description: agendaForm.description.trim(),
+            startTime,
+            kind: agendaForm.kind,
+            municipalityId: agendaForm.municipalityId,
+            municipalityName: municipality ? `${municipality.name}/${municipality.state}` : "",
+            locationName: agendaForm.locationName,
+            locationAddress: agendaForm.locationAddress,
+            addressUrl: agendaForm.addressUrl,
+            latitude: agendaForm.latitude,
+            longitude: agendaForm.longitude,
+          });
+        }
       }
     }
 
+    const firstMutiraoOccurrence = mutiraoOccurrences[0] || null;
+    const lastMutiraoOccurrence = mutiraoOccurrences[mutiraoOccurrences.length - 1] || firstMutiraoOccurrence;
     const nextRule = {
       id: scheduleRuleId,
       description: agendaForm.description.trim(),
       createdAt: existingRule?.createdAt || new Date().toLocaleString("pt-BR"),
       active: agendaForm.active && !agendaForm.unavailable,
       unavailable: agendaForm.unavailable,
-      type: agendaForm.type,
+      type: isMutirao ? "Dia específico" : agendaForm.type,
       kind: agendaForm.kind,
       repeatEvery,
-      weekdays: isRecurring ? agendaForm.weekdays : [start.getDay()],
-      start: toScheduleDate(agendaForm.start),
-      end: toScheduleDate(isRecurring ? agendaForm.end : agendaForm.start),
-      time: startTime,
-      vacancies,
-      slots,
+      weekdays: isMutirao
+        ? mutiraoOccurrences.map((occurrence) => new Date(`${toInputDate(occurrence.date)}T12:00:00`).getDay())
+        : isRecurring ? agendaForm.weekdays : [new Date(`${agendaForm.start}T12:00:00`).getDay()],
+      start: isMutirao ? firstMutiraoOccurrence?.date || "" : toScheduleDate(agendaForm.start),
+      end: isMutirao ? lastMutiraoOccurrence?.date || "" : toScheduleDate(isRecurring ? agendaForm.end : agendaForm.start),
+      time: isMutirao ? firstMutiraoOccurrence?.time || startTime : startTime,
+      vacancies: isMutirao ? mutiraoOccurrences.reduce((sum, occurrence) => sum + occurrence.vacancies, 0) : vacancies,
+      slots: isMutirao ? firstMutiraoOccurrence?.slots || slots : slots,
+      occurrences: isMutirao ? mutiraoOccurrences : [],
       municipalityId: agendaForm.municipalityId,
       municipalityName: municipality ? `${municipality.name}/${municipality.state}` : "",
-      locationName: agendaForm.locationName,
-      locationAddress: agendaForm.locationAddress,
-      addressUrl: agendaForm.addressUrl,
-      latitude: agendaForm.latitude,
-      longitude: agendaForm.longitude,
+      locationName: isMutirao ? firstMutiraoOccurrence?.locationName || "" : agendaForm.locationName,
+      locationAddress: isMutirao ? firstMutiraoOccurrence?.locationAddress || "" : agendaForm.locationAddress,
+      addressUrl: isMutirao ? firstMutiraoOccurrence?.addressUrl || "" : agendaForm.addressUrl,
+      latitude: isMutirao ? firstMutiraoOccurrence?.latitude || "" : agendaForm.latitude,
+      longitude: isMutirao ? firstMutiraoOccurrence?.longitude || "" : agendaForm.longitude,
     };
 
     const nextScheduleRules = currentEditingRuleId
@@ -7607,12 +7884,25 @@ function ConfigView({
     setAgendaSaving(false);
     setAgendaSaveStatus("");
   }
-
   function formatScheduleWeekdays(weekdays) {
     const names = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
     return weekdays.map((weekday) => names[weekday]).join(", ");
   }
 
+  function formatAgendaRuleSummary(rule: AnyRecord = {}) {
+    const isMutirao = normalizeText(rule.kind || "") === "mutirao";
+    if (isMutirao) {
+      const occurrences = Array.isArray(rule.occurrences) ? rule.occurrences : [];
+      const totalVacancies = occurrences.length
+        ? occurrences.reduce((sum, occurrence) => sum + sumScheduleSlotsVacancies(occurrence.slots, occurrence.time, occurrence.vacancies), 0)
+        : Number(rule.vacancies) || 0;
+      const datesLabel = occurrences.length === 1 ? "1 data" : `${occurrences.length || 1} datas`;
+      return `${datesLabel} de mutirão · ${totalVacancies} vagas totais${rule.municipalityName ? ` · ${rule.municipalityName}` : ""}`;
+    }
+    return `${rule.start} a ${rule.end} · ${sumScheduleSlotsVacancies(rule.slots, rule.time, rule.vacancies)} vagas/dia${rule.municipalityName ? ` · ${rule.municipalityName}` : ""}`;
+  }
+
+  const agendaFormIsMutirao = normalizeText(agendaForm.kind) === "mutirao";
   const filteredRequestTypes = filterByConfigStatus(requestTypes);
   const filteredMunicipalities = filterByConfigStatus(municipalities);
   const filteredScheduleRules = filterByConfigStatus(scheduleRules);
@@ -7631,7 +7921,6 @@ function ConfigView({
     users: teams.users || [],
     sectors: teams.sectors || [],
     permissions: permissionGroups,
-    ai: [{ id: "ai", active: Boolean(aiSettings.active) }],
     documents: documentTypes,
   }[currentConfigKey] || [];
   const activeMunicipalities = municipalities.filter((municipality) => municipality.active !== false);
@@ -7736,7 +8025,7 @@ function ConfigView({
                 <span className="config-list-index">{index + 1}</span>
                 <div className="config-list-main">
                   <strong>{rule.description}</strong>
-                  <span>{rule.start} a {rule.end} · {sumScheduleSlotsVacancies(rule.slots, rule.time, rule.vacancies)} vagas/dia{rule.municipalityName ? ` · ${rule.municipalityName}` : ""}</span>
+                  <span>{formatAgendaRuleSummary(rule)}</span>
                 </div>
                 <small className={rule.active ? "schedule-status active" : "schedule-status inactive"}>
                   {rule.active ? "Ativo" : "Inativo"}
@@ -8081,79 +8370,6 @@ function ConfigView({
         </div>
       )}
 
-      {configArea === "environment" && configTab === "ai" && (
-        <div className="panel wide">
-          <PanelHeader title="IA externa para documentos" />
-          <div className="ai-settings-layout">
-            <article className="request-type-card ai-settings-card">
-              <div className="config-modal-options">
-                <ConfigActiveToggle
-                  checked={Boolean(aiSettings.active)}
-                  onChange={(checked) => setAiSettings?.((current) => ({ ...current, active: checked }))}
-                  onText="Ativa"
-                  offText="Inativa"
-                />
-              </div>
-              <label className="field">
-                <span>Provedor</span>
-                <select
-                  value={selectedAiProvider}
-                  onChange={(event) => {
-                    const provider = event.target.value;
-                    setAiSettings?.((current) => ({
-                      ...current,
-                      provider,
-                      model: aiProviderOptions[provider]?.models?.[0] || "",
-                    }));
-                  }}
-                >
-                  {Object.keys(aiProviderOptions).map((provider) => (
-                    <option key={provider} value={provider}>{provider}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>Modelo</span>
-                <select value={selectedAiModel} onChange={(event) => setAiSettings?.((current) => ({ ...current, model: event.target.value }))}>
-                  {selectedAiModels.map((model) => (
-                    <option key={model} value={model}>{model}</option>
-                  ))}
-                </select>
-              </label>
-              <Field label="Endpoint customizado" value={aiSettings.endpoint} placeholder="Opcional para proxy/backend proprio" onChange={(value) => setAiSettings?.((current) => ({ ...current, endpoint: value }))} />
-            </article>
-            <article className="ai-rules-card">
-              <strong>Como a IA será usada</strong>
-              <p>
-                Ao anexar um documento, a IA usa a descrição/instrução do tipo de documento como regra. Se o comprovante
-                exigir residência em uma cidade, por exemplo, a análise recusa arquivos que indiquem outra cidade.
-              </p>
-              <p>
-                Com a IA inativa, o arquivo fica apenas anexado e não passa por análise automática.
-              </p>
-              <label className="field">
-                <span>Token / chave API</span>
-                <input
-                  value={aiSettings.apiKey}
-                  type="password"
-                  placeholder={aiSettings.hasApiKey ? `Chave da ${selectedAiProvider} já salva` : `Cole a chave da ${selectedAiProvider}`}
-                  onChange={(event) => setAiSettings?.((current) => ({ ...current, apiKey: event.target.value }))}
-                />
-              </label>
-              {selectedAiProviderConfig.keyUrl && (
-                <a className="external-provider-link" href={selectedAiProviderConfig.keyUrl} target="_blank" rel="noreferrer">
-                  Criar ou acessar chave da {selectedAiProvider}
-                </a>
-              )}
-              <button className="primary-action ai-save-key-action" type="button" onClick={saveAiCredentials}>
-                Salvar chave
-              </button>
-              {aiSaveStatus && <p className={aiSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{aiSaveStatus}</p>}
-            </article>
-          </div>
-        </div>
-      )}
-
       {configArea === "environment" && configTab === "whatsapp" && (() => {
         const templateVars: string[] = Array.isArray(whatsappSettings.templateVariables)
           ? whatsappSettings.templateVariables
@@ -8396,8 +8612,8 @@ function ConfigView({
                   <strong>{document.name || "Documento sem nome"}</strong>
                   <span>
                     {document.required === false ? "Opcional" : "Obrigatório"}
-                    {document.modelHint ? ` · ${document.modelHint}` : ""}
-                    {document.aiCriteria ? " · Critérios de IA configurados" : ""}
+                    {document.analysisRules?.expectedDocument ? ` · ${document.analysisRules.expectedDocument}` : ""}
+                    {document.analysisRules?.requiredCriteria?.length ? " · Critérios configurados" : ""}
                   </span>
                 </div>
                 <small className={document.active === false ? "schedule-status inactive" : "schedule-status active"}>
@@ -8424,7 +8640,7 @@ function ConfigView({
                 setConfigModal(null);
                 setEditingMunicipalityId(null);
                 setMunicipalitySaveStatus("");
-                setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
+                setNewMunicipality(emptyMunicipalityForm);
               }}
             />
             <div className="config-modal-options">
@@ -8485,6 +8701,15 @@ function ConfigView({
             )}
             {brazilLocationStatus && <p className="helper-text">{brazilLocationStatus}</p>}
 
+            <div className="modal-form-grid">
+              <Field label="Contato" value={newMunicipality.contact} placeholder="Telefone, WhatsApp ou setor responsável" onChange={(value) => setNewMunicipality((current) => ({ ...current, contact: value }))} />
+              <label className="field">
+                <span>Email</span>
+                <input type="email" value={newMunicipality.email} placeholder="contato@municipio.gov.br" onChange={(event) => setNewMunicipality((current) => ({ ...current, email: event.target.value }))} />
+              </label>
+              <Field label="Endereço" value={newMunicipality.address} placeholder="Rua, número, bairro" onChange={(value) => setNewMunicipality((current) => ({ ...current, address: value }))} />
+              <Field label="CEP" value={newMunicipality.cep} placeholder="00000-000" onChange={(value) => setNewMunicipality((current) => ({ ...current, cep: value }))} />
+            </div>
             <div className="field">
               <span>Brasão do município</span>
               <label className="brasao-upload-label">
@@ -8536,7 +8761,7 @@ function ConfigView({
                   setConfigModal(null);
                   setEditingMunicipalityId(null);
                   setMunicipalitySaveStatus("");
-                  setNewMunicipality({ name: "", state: "", active: true, brasao: "" });
+                  setNewMunicipality(emptyMunicipalityForm);
                 }}
               >
                 Cancelar
@@ -8551,77 +8776,32 @@ function ConfigView({
 
       {configModal === "agenda" && (
         <div className="modal-backdrop">
-          <form className="config-modal" onSubmit={createScheduleFromModal} role="dialog" aria-modal="true">
+          <form className="config-modal agenda-config-modal" onSubmit={createScheduleFromModal} role="dialog" aria-modal="true">
             <ModalHeader
               title={editingScheduleRuleId ? "Editar agenda" : "Criar agenda"}
               onClose={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); setAgendaSaving(false); setAgendaSaveStatus(""); }}
             />
-            <div className="config-modal-options">
+
+            <div className="agenda-modal-head">
+              <div>
+                <span>{agendaFormIsMutirao ? "Mutirão" : "Agenda"}</span>
+                <strong>{agendaForm.description || "Nova agenda"}</strong>
+              </div>
               <ConfigActiveToggle
                 checked={agendaForm.active}
                 onChange={(checked) => patchAgendaForm("active", checked)}
               />
             </div>
-            <div className="agenda-modal-layout">
-              <section className="agenda-modal-block">
-                <div className="agenda-block-title">
-                  <strong>Dados</strong>
-                </div>
-                <Field label="Descrição" value={agendaForm.description} placeholder="Ex: Agenda padrão de castração" onChange={(value) => patchAgendaForm("description", value)} />
-                <div className="modal-form-grid">
-                  <label className="field">
-                    <span>Tipo de agenda</span>
-                    <select value={agendaForm.type} onChange={(event) => patchAgendaForm("type", event.target.value)}>
-                      <option value="Recorrência">Recorrência</option>
-                      <option value="Dia específico">Dia específico</option>
-                    </select>
-                  </label>
-                  {normalizeText(agendaForm.type) === "recorrencia" && (
-                    <Field label="Repetir a cada semana(s)" value={agendaForm.repeatEvery} onChange={(value) => patchAgendaForm("repeatEvery", value)} />
-                  )}
-                </div>
-                <AgendaKindSelector value={agendaForm.kind} onChange={(value) => patchAgendaForm("kind", value)} />
-                {normalizeText(agendaForm.type) === "recorrencia" && (
-                  <div className="agenda-weekday-field">
-                    <div>
-                      <span>Dias da semana</span>
-                      <small>Selecione quando esta agenda abre vagas.</small>
-                    </div>
-                    <div className="weekday-picker">
-                    {[
-                      { label: "Dom", name: "Domingo" },
-                      { label: "Seg", name: "Segunda-feira" },
-                      { label: "Ter", name: "Terça-feira" },
-                      { label: "Qua", name: "Quarta-feira" },
-                      { label: "Qui", name: "Quinta-feira" },
-                      { label: "Sex", name: "Sexta-feira" },
-                      { label: "Sáb", name: "Sábado" },
-                    ].map((weekday, index) => (
-                      <button
-                        key={weekday.name}
-                        type="button"
-                        aria-label={weekday.name}
-                        title={weekday.name}
-                        className={agendaForm.weekdays.includes(index) ? "selected" : ""}
-                        onClick={() =>
-                          patchAgendaForm(
-                            "weekdays",
-                            agendaForm.weekdays.includes(index)
-                              ? agendaForm.weekdays.filter((item) => item !== index)
-                              : [...agendaForm.weekdays, index],
-                          )
-                        }
-                      >
-                        {weekday.label}
-                      </button>
-                    ))}
-                    </div>
-                  </div>
-                )}
-              </section>
 
-              <section className="agenda-modal-block">
-                <strong>Local</strong>
+            <div className="agenda-modal-layout agenda-modal-layout--modern">
+              <section className="agenda-modal-block agenda-modal-block--identity">
+                <div className="agenda-block-title">
+                  <div>
+                    <strong>Identificação</strong>
+                    <small>Nome, município e tipo de agenda.</small>
+                  </div>
+                </div>
+                <Field label="Descrição" value={agendaForm.description} placeholder="Ex: Mutirão bairro Centro" onChange={(value) => patchAgendaForm("description", value)} />
                 <div className="modal-form-grid">
                   <label className="field">
                     <span>Município</span>
@@ -8634,55 +8814,203 @@ function ConfigView({
                       ))}
                     </select>
                   </label>
-                  <Field label="Local de atendimento" value={agendaForm.locationName} placeholder="Ex: Centro de zoonoses" onChange={(value) => patchAgendaForm("locationName", value)} />
-                  <Field label="Endereço do local" value={agendaForm.locationAddress} placeholder="Ex: Rua Araranguá, 333 - Centro" onChange={(value) => patchAgendaForm("locationAddress", value)} />
-                  <Field label="Link do endereço" value={agendaForm.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaForm("addressUrl", value)} />
-                </div>
-              </section>
-
-
-              <section className="agenda-modal-block">
-                <strong>Período e capacidade</strong>
-                <div className="modal-form-grid">
-                  <label className="field">
-                    <span>Início da agenda</span>
-                    <input type="date" value={agendaForm.start} onChange={(event) => patchAgendaForm("start", event.target.value)} />
-                  </label>
-                  {normalizeText(agendaForm.type) === "recorrencia" && (
+                  {!agendaFormIsMutirao && (
                     <label className="field">
-                      <span>Fim da agenda</span>
-                      <input type="date" value={agendaForm.end} onChange={(event) => patchAgendaForm("end", event.target.value)} />
+                      <span>Tipo de período</span>
+                      <select value={agendaForm.type} onChange={(event) => patchAgendaForm("type", event.target.value)}>
+                        <option value="Recorrência">Recorrência</option>
+                        <option value="Dia específico">Dia específico</option>
+                      </select>
                     </label>
                   )}
                 </div>
-                <div className="agenda-slots-field">
-                  <div className="agenda-slots-header">
-                    <div>
-                      <span>Faixas de horário</span>
-                      <small>Total diário: {sumScheduleSlotsVacancies(agendaForm.slots)} vagas</small>
+                <AgendaKindSelector value={agendaForm.kind} onChange={(value) => patchAgendaForm("kind", value)} />
+                {agendaFormIsMutirao && (
+                  <p className="agenda-mode-note">Mutirão usa datas específicas. Cadastre cada data com seu local e suas faixas de horário.</p>
+                )}
+              </section>
+
+              {!agendaFormIsMutirao && (
+                <>
+                  <section className="agenda-modal-block">
+                    <div className="agenda-block-title">
+                      <div>
+                        <strong>Local</strong>
+                        <small>Dados exibidos para o tutor no agendamento.</small>
+                      </div>
                     </div>
-                    <button className="secondary-action" type="button" onClick={addAgendaSlot}>
-                      <Plus size={16} />
-                      Adicionar faixa
-                    </button>
-                  </div>
-                  <div className="agenda-slots-list">
-                    {(agendaForm.slots || []).map((slot, index) => (
-                      <div className="agenda-slot-row" key={`${index}-${slot.time}`}>
+                    <div className="modal-form-grid">
+                      <Field label="Local de atendimento" value={agendaForm.locationName} placeholder="Ex: Centro de zoonoses" onChange={(value) => patchAgendaForm("locationName", value)} />
+                      <Field label="Endereço do local" value={agendaForm.locationAddress} placeholder="Ex: Rua Araranguá, 333 - Centro" onChange={(value) => patchAgendaForm("locationAddress", value)} />
+                      <Field label="Link do endereço" value={agendaForm.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaForm("addressUrl", value)} />
+                    </div>
+                  </section>
+
+                  <section className="agenda-modal-block">
+                    <div className="agenda-block-title">
+                      <div>
+                        <strong>Período e capacidade</strong>
+                        <small>Defina datas e vagas disponíveis.</small>
+                      </div>
+                    </div>
+                    <div className="modal-form-grid">
+                      <label className="field">
+                        <span>Início da agenda</span>
+                        <input type="date" value={agendaForm.start} onChange={(event) => patchAgendaForm("start", event.target.value)} />
+                      </label>
+                      {normalizeText(agendaForm.type) === "recorrencia" && (
                         <label className="field">
-                          <span>Hora de início</span>
-                          <input type="time" value={slot.time} onChange={(event) => patchAgendaSlot(index, "time", event.target.value)} />
+                          <span>Fim da agenda</span>
+                          <input type="date" value={agendaForm.end} onChange={(event) => patchAgendaForm("end", event.target.value)} />
                         </label>
-                        <Field label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaSlot(index, "vacancies", value)} />
-                        <button className="icon-button danger-action" type="button" onClick={() => removeAgendaSlot(index)} aria-label="Remover faixa" title="Remover faixa">
-                          <X size={16} />
+                      )}
+                      {normalizeText(agendaForm.type) === "recorrencia" && (
+                        <Field label="Repetir a cada semana(s)" value={agendaForm.repeatEvery} onChange={(value) => patchAgendaForm("repeatEvery", value)} />
+                      )}
+                    </div>
+                    {normalizeText(agendaForm.type) === "recorrencia" && (
+                      <div className="agenda-weekday-field">
+                        <div>
+                          <span>Dias da semana</span>
+                          <small>Selecione quando esta agenda abre vagas.</small>
+                        </div>
+                        <div className="weekday-picker">
+                          {[
+                            { label: "Dom", name: "Domingo" },
+                            { label: "Seg", name: "Segunda-feira" },
+                            { label: "Ter", name: "Terça-feira" },
+                            { label: "Qua", name: "Quarta-feira" },
+                            { label: "Qui", name: "Quinta-feira" },
+                            { label: "Sex", name: "Sexta-feira" },
+                            { label: "Sáb", name: "Sábado" },
+                          ].map((weekday, index) => (
+                            <button
+                              key={weekday.name}
+                              type="button"
+                              aria-label={weekday.name}
+                              title={weekday.name}
+                              className={agendaForm.weekdays.includes(index) ? "selected" : ""}
+                              onClick={() =>
+                                patchAgendaForm(
+                                  "weekdays",
+                                  agendaForm.weekdays.includes(index)
+                                    ? agendaForm.weekdays.filter((item) => item !== index)
+                                    : [...agendaForm.weekdays, index],
+                                )
+                              }
+                            >
+                              {weekday.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="agenda-slots-field">
+                      <div className="agenda-slots-header">
+                        <div>
+                          <span>Faixas de horário</span>
+                          <small>Total diário: {sumScheduleSlotsVacancies(agendaForm.slots)} vagas</small>
+                        </div>
+                        <button className="secondary-action" type="button" onClick={addAgendaSlot}>
+                          <Plus size={16} />
+                          Adicionar faixa
                         </button>
                       </div>
+                      <div className="agenda-slots-list">
+                        {(agendaForm.slots || []).map((slot, index) => (
+                          <div className="agenda-slot-row" key={`${index}-${slot.time}`}>
+                            <label className="field">
+                              <span>Hora de início</span>
+                              <input type="time" value={slot.time} onChange={(event) => patchAgendaSlot(index, "time", event.target.value)} />
+                            </label>
+                            <Field label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaSlot(index, "vacancies", value)} />
+                            <button className="icon-button danger-action" type="button" onClick={() => removeAgendaSlot(index)} aria-label="Remover faixa" title="Remover faixa">
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </section>
+                </>
+              )}
+
+              {agendaFormIsMutirao && (
+                <section className="agenda-modal-block agenda-mutirao-block">
+                  <div className="agenda-block-title">
+                    <div>
+                      <strong>Datas e locais do mutirão</strong>
+                      <small>Adicione uma ocorrência para cada dia de atendimento.</small>
+                    </div>
+                    <button className="secondary-action" type="button" onClick={addAgendaOccurrence}>
+                      <Plus size={16} />
+                      Adicionar data
+                    </button>
+                  </div>
+
+                  <div className="agenda-occurrence-list">
+                    {getAgendaOccurrenceList(agendaForm).map((occurrence, occurrenceIndex) => (
+                      <article className="agenda-occurrence-card" key={occurrence.id || occurrenceIndex}>
+                        <div className="agenda-occurrence-header">
+                          <div>
+                            <span>Ocorrência {occurrenceIndex + 1}</span>
+                            <strong>{occurrence.date ? toScheduleDate(occurrence.date) : "Nova data"}</strong>
+                          </div>
+                          <button
+                            className="icon-button danger-action"
+                            type="button"
+                            onClick={() => removeAgendaOccurrence(occurrenceIndex)}
+                            disabled={getAgendaOccurrenceList(agendaForm).length === 1}
+                            aria-label="Remover data do mutirão"
+                            title="Remover data"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+
+                        <div className="modal-form-grid">
+                          <label className="field">
+                            <span>Data do mutirão</span>
+                            <input type="date" value={occurrence.date} onChange={(event) => patchAgendaOccurrence(occurrenceIndex, "date", event.target.value)} />
+                          </label>
+                          <Field label="Local de atendimento" value={occurrence.locationName} placeholder="Ex: Escola municipal do bairro" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "locationName", value)} />
+                          <Field label="Endereço do local" value={occurrence.locationAddress} placeholder="Rua, número e bairro" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "locationAddress", value)} />
+                          <Field label="Link do endereço" value={occurrence.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "addressUrl", value)} />
+                        </div>
+
+                        <div className="agenda-slots-field agenda-slots-field--compact">
+                          <div className="agenda-slots-header">
+                            <div>
+                              <span>Faixas de horário</span>
+                              <small>Total: {sumScheduleSlotsVacancies(occurrence.slots)} vagas</small>
+                            </div>
+                            <button className="secondary-action" type="button" onClick={() => addAgendaOccurrenceSlot(occurrenceIndex)}>
+                              <Plus size={16} />
+                              Adicionar faixa
+                            </button>
+                          </div>
+                          <div className="agenda-slots-list">
+                            {(occurrence.slots || []).map((slot, slotIndex) => (
+                              <div className="agenda-slot-row" key={`${occurrence.id}-${slotIndex}-${slot.time}`}>
+                                <label className="field">
+                                  <span>Hora de início</span>
+                                  <input type="time" value={slot.time} onChange={(event) => patchAgendaOccurrenceSlot(occurrenceIndex, slotIndex, "time", event.target.value)} />
+                                </label>
+                                <Field label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaOccurrenceSlot(occurrenceIndex, slotIndex, "vacancies", value)} />
+                                <button className="icon-button danger-action" type="button" onClick={() => removeAgendaOccurrenceSlot(occurrenceIndex, slotIndex)} aria-label="Remover faixa" title="Remover faixa">
+                                  <X size={16} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </article>
                     ))}
                   </div>
-                </div>
-              </section>
+                </section>
+              )}
             </div>
+
             <div className="form-actions">
               <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); setAgendaSaving(false); setAgendaSaveStatus(""); }}>
                 Cancelar
@@ -8695,7 +9023,6 @@ function ConfigView({
           </form>
         </div>
       )}
-
       {configModal === "requestType" && (
         <div className="modal-backdrop">
           <form
@@ -8853,38 +9180,116 @@ function ConfigView({
 
       {configModal === "document" && (
         <div className="modal-backdrop">
-          <form className="config-modal compact" onSubmit={(event) => { event.preventDefault(); createDocumentType(newDocument); setNewDocument({ name: "", modelHint: "", aiCriteria: "", rejectionRules: "", required: true, active: true }); setEditingDocumentId(null); setConfigModal(null); }}>
+          <form
+            className="config-modal document-analysis-modal"
+            onSubmit={(event) => {
+              event.preventDefault();
+              createDocumentType(newDocument);
+              setNewDocument(emptyDocumentForm);
+              setEditingDocumentId(null);
+              setConfigModal(null);
+            }}
+          >
             <ModalHeader
               title={editingDocumentId ? "Editar documento" : "Criar documento"}
-              onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument({ name: "", modelHint: "", aiCriteria: "", rejectionRules: "", required: true, active: true }); }}
+              onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); }}
             />
-            <div className="config-modal-options">
-              <ConfigActiveToggle
-                checked={newDocument.required !== false}
-                onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
-                onText="Obrigatório"
-                offText="Opcional"
-              />
-              <ConfigActiveToggle
-                checked={newDocument.active !== false}
-                onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
-              />
+            <div className="document-modal-statusbar">
+              <span><FileText size={16} /> Documento solicitado</span>
+              <div className="document-modal-switches">
+                <ConfigActiveToggle
+                  checked={newDocument.required !== false}
+                  onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
+                  onText="Obrigatório"
+                  offText="Opcional"
+                />
+                <ConfigActiveToggle
+                  checked={newDocument.active !== false}
+                  onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
+                />
+              </div>
             </div>
-            <Field label="Nome" value={newDocument.name} placeholder="Ex: RG ou CNH" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
-            <label className="field">
-              <span>Descrição/instrução para IA</span>
-              <textarea value={newDocument.modelHint} onChange={(event) => setNewDocument((current) => ({ ...current, modelHint: event.target.value }))} />
-            </label>
-            <label className="field">
-              <span>Critérios obrigatórios</span>
-              <textarea value={newDocument.aiCriteria} placeholder="Ex: nome, CPF, endereço completo, data recente" onChange={(event) => setNewDocument((current) => ({ ...current, aiCriteria: event.target.value }))} />
-            </label>
-            <label className="field">
-              <span>Regras de recusa</span>
-              <textarea value={newDocument.rejectionRules} placeholder="Ex: imagem borrada, documento vencido, cidade divergente" onChange={(event) => setNewDocument((current) => ({ ...current, rejectionRules: event.target.value }))} />
-            </label>
-            <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument({ name: "", modelHint: "", aiCriteria: "", rejectionRules: "", required: true, active: true }); }}>Cancelar</button>
+
+            <div className="document-modal-body">
+              <aside className="document-modal-sidebar">
+                <section className="document-modal-panel">
+                  <div className="document-section-heading">
+                    <span><ClipboardCheck size={15} /> Identificação</span>
+                  </div>
+                  <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residência" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
+                  <label className="field document-expected-field">
+                    <span>Documento esperado</span>
+                    <textarea
+                      value={newDocument.modelHint}
+                      placeholder="Descreva qual documento deve ser enviado e quais informações precisam estar visíveis."
+                      onChange={(event) => setNewDocument((current) => ({ ...current, modelHint: event.target.value }))}
+                    />
+                  </label>
+                </section>
+
+                <section className="document-modal-panel document-modal-panel--decision">
+                  <div className="document-section-heading">
+                    <span><ShieldCheck size={15} /> Decisão automática</span>
+                  </div>
+                  <Field
+                    label="Confiança mínima"
+                    value={newDocument.minimumConfidence}
+                    placeholder="0,55"
+                    onChange={(value) => setNewDocument((current) => ({ ...current, minimumConfidence: value }))}
+                  />
+                  <div className="document-decision-toggles">
+                    <ConfigActiveToggle
+                      checked={newDocument.allowAutomaticApproval !== false}
+                      onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticApproval: checked }))}
+                      onText="Aprovação automática"
+                      offText="Aprovação manual"
+                    />
+                    <ConfigActiveToggle
+                      checked={newDocument.allowAutomaticRejection === true}
+                      onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticRejection: checked }))}
+                      onText="Recusar automaticamente"
+                      offText="Revisar recusa"
+                    />
+                  </div>
+                </section>
+              </aside>
+
+              <section className="document-modal-panel document-modal-panel--criteria">
+                <div className="document-section-heading">
+                  <span><ListChecks size={15} /> Critérios de análise</span>
+                  <small>Um critério por linha deixa a conferência mais precisa.</small>
+                </div>
+                <div className="document-criteria-grid">
+                  <label className="field document-criteria-field">
+                    <span>Obrigatórios</span>
+                    <textarea
+                      value={newDocument.aiCriteria}
+                      placeholder={"Ex: documento legível\nnome do titular visível\nendereço completo"}
+                      onChange={(event) => setNewDocument((current) => ({ ...current, aiCriteria: event.target.value }))}
+                    />
+                  </label>
+                  <label className="field document-criteria-field">
+                    <span>Recusa</span>
+                    <textarea
+                      value={newDocument.rejectionRules}
+                      placeholder={"Ex: documento ilegível\ncidade incompatível\narquivo não corresponde ao solicitado"}
+                      onChange={(event) => setNewDocument((current) => ({ ...current, rejectionRules: event.target.value }))}
+                    />
+                  </label>
+                </div>
+                <label className="field document-review-field">
+                  <span>Revisão manual</span>
+                  <textarea
+                    value={newDocument.manualReviewRules}
+                    placeholder={"Ex: baixa confiança\nnome diferente do solicitante\ndata parcialmente legível"}
+                    onChange={(event) => setNewDocument((current) => ({ ...current, manualReviewRules: event.target.value }))}
+                  />
+                </label>
+              </section>
+            </div>
+
+            <div className="form-actions document-modal-actions">
+              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
             </div>
           </form>
@@ -9432,9 +9837,9 @@ function DocumentButtonPicker({ documents, selectedDocuments, onToggle }: AnyRec
 function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove }: AnyRecord) {
   const statusLabel = {
     checking: aiActive ? "Em análise" : "Conferindo arquivo",
-    approved: aiActive ? "Aprovado pela IA" : "Aprovado",
-    attached: aiActive ? "Conferência manual" : "Anexado sem IA",
-    rejected: aiActive ? "Recusado pela IA" : "Recusado",
+    approved: aiActive ? "Aprovado pela análise" : "Aprovado",
+    attached: "Conferência manual",
+    rejected: aiActive ? "Recusado pela análise" : "Recusado",
   }[upload?.status] || "Aguardando arquivo";
   const conclusionLabel = {
     checking: "Conclusão: análise em andamento.",
@@ -9485,46 +9890,7 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
   );
 }
 
-async function validateDocumentWithAI(document: AnyRecord, file: File, aiSettings: AnyRecord = initialAiSettings, dataUrl = ""): Promise<AnyRecord> {
-  const localResult = await validateDocumentLocally(document, file, aiSettings);
-  if (localResult.status === "rejected" || !aiSettings.active) return localResult;
-
-  try {
-    return await api.validateDocument({
-      document: {
-        id: document.id,
-        name: document.name,
-        modelHint: document.modelHint,
-        aiCriteria: document.aiCriteria,
-        rejectionRules: document.rejectionRules,
-      },
-      file: {
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        dataUrl,
-      },
-      aiSettings: {
-        active: Boolean(aiSettings.active),
-        provider: aiSettings.provider,
-        model: aiSettings.model,
-        endpoint: aiSettings.endpoint || "",
-      },
-    });
-  } catch (err) {
-    console.error("Erro ao validar documento com IA externa:", err);
-    return {
-      status: "attached",
-      message: "Arquivo anexado para conferência manual.",
-      confidence: null,
-      provider: aiSettings.provider || "IA externa",
-      model: aiSettings.model || "",
-      error: true,
-    };
-  }
-}
-
-function validateDocumentLocally(document: AnyRecord, file: File, aiSettings: AnyRecord = initialAiSettings): Promise<AnyRecord> {
+function validateDocumentLocally(document: AnyRecord, file: File): Promise<AnyRecord> {
   return new Promise((resolve) => {
     const safeDocument = normalizeDocumentType(document);
     const maxBytes = safeDocument.maxSizeMb * 1024 * 1024;
@@ -9547,19 +9913,10 @@ function validateDocumentLocally(document: AnyRecord, file: File, aiSettings: An
       return;
     }
 
-    if (!aiSettings.active) {
-      resolve({
-        status: "attached",
-        message: "Arquivo anexado. A validação por IA está desativada nas configurações.",
-        confidence: 0,
-      });
-      return;
-    }
-
     resolve({
       status: "attached",
-      message: "Arquivo anexado. Aguardando validação.",
-      confidence: 0.6,
+      message: "Arquivo anexado para conferência manual conforme critérios configurados.",
+      confidence: 0,
     });
   });
 }
@@ -9788,6 +10145,29 @@ const PDF_BASE_STYLES = `
   .animal-card { margin-top: 10px; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px; background: #fff7ed; }
   .animal-card-title { color: #9a3412; font-weight: 800; margin-bottom: 8px; }
   .footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; color: #64748b; font-size: 10px; }
+  @page { size: A4; margin: 12mm; }
+  .pdf-page { page-break-after: always; min-height: 267mm; display: flex; flex-direction: column; }
+  .pdf-page:last-child { page-break-after: auto; }
+  .compact-header { padding: 13px 14px; border-radius: 10px; }
+  .compact-header h1 { font-size: 18px; }
+  .compact-header .header-box { padding: 8px; }
+  .compact-section { margin-top: 8px; padding: 9px; border-radius: 9px; }
+  .compact-four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
+  .compact-four .data-item { min-height: 36px; padding: 5px 6px; border-radius: 6px; }
+  .compact-four .data-item span { margin-bottom: 2px; font-size: 7px; }
+  .compact-four .data-item strong { font-size: 9px; line-height: 1.18; word-break: break-word; }
+  .pdf-page--compact .animal-card { margin-top: 6px; padding: 7px; border-radius: 8px; }
+  .pdf-page--compact .animal-card-title { margin-bottom: 5px; font-size: 10px; }
+  .declaration-page { justify-content: space-between; }
+  .declaration-document { color: #111827; font-size: 12px; line-height: 1.45; }
+  .declaration-document h1, .declaration-document h2 { margin: 0; text-align: center; font-weight: 800; letter-spacing: .02em; }
+  .declaration-document h1 { margin-top: 12px; font-size: 18px; }
+  .declaration-document h2 { margin-top: 4px; font-size: 16px; }
+  .declaration-lead { margin: 28px 0 14px; font-weight: 700; }
+  .responsibility-list { margin: 0; padding-left: 22px; }
+  .responsibility-list > li { margin-bottom: 8px; }
+  .recommendation-list { margin-top: 7px; padding-left: 18px; }
+  .recommendation-list > li { margin-bottom: 4px; }
 `;
 
 async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord) {
@@ -10632,6 +11012,7 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
   const contentW = 595.28 - margin * 2;
 
   const req = normalizeRequest(request);
+  const workflowData = req.workflowData || req.workflow_data || {};
   const animals = Array.isArray(req.animals) ? req.animals : [];
   const validationKey = req.validationKey || req.validation_key || "A definir";
   const signedAt = req.signedAt || req.signed_at || req.createdAt || req.created_at || new Date().toISOString();
@@ -10642,7 +11023,7 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
   ].filter(Boolean).join(" - ");
   const scheduleMapUrl = req.scheduleAddressUrl || req.schedule_address_url || "";
   const fullAddr = [
-    [req.address, req.number].filter(Boolean).join(", "),
+    [req.address, req.number || workflowData.number].filter(Boolean).join(", "),
     req.neighborhood,
     req.city && req.state ? `${req.city}/${req.state}` : (req.city || req.state || ""),
     req.cep ? `CEP ${req.cep}` : "",
@@ -10657,19 +11038,26 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
   );
   y -= 10;
 
-  y = drawProntuarioSectionTitle(page1, "AGENDAMENTO", y, ctx);
+  y = drawProntuarioSectionTitle(page1, "DADOS DA SOLICITAÇÃO", y, ctx);
   y -= 6;
   y = drawProntuarioFields(page1, [
     [
+      { label: "TIPO DE SOLICITAÇÃO", value: requestTypeLabel(req) || req.type || "-" },
       { label: "DATA DA AGENDA", value: req.preferredSchedule || req.appointment || "-" },
-      { label: "PROCEDIMENTO", value: requestTypeLabel(req) || "-" },
-      { label: "ABERTURA", value: req.createdAt ? formatDateTime(req.createdAt) : new Date().toLocaleDateString("pt-BR") },
-      { label: "MUNICIPIO", value: req.scheduleMunicipality || req.municipalityName || "-" },
+      { label: "HORÁRIO", value: workflowData.scheduleSlotTime || workflowData.scheduleTime || req.scheduleSlotTime || req.scheduleTime || "-" },
+      { label: "MUNICÍPIO", value: req.scheduleMunicipality || req.municipalityName || req.city || "-" },
     ],
-    [{ label: "LOCAL / POSTO DE ATENDIMENTO", value: scheduleAddress || "A confirmar" }],
-    ...(scheduleMapUrl ? [[{ label: "LINK DO MAPA", value: pdfText(scheduleMapUrl) }]] : []),
+    [
+      { label: "LOCAL / POSTO", value: scheduleAddress || "A confirmar" },
+      { label: "UNIDADE RESPONSÁVEL", value: req.responsibleUnit || "-" },
+      { label: "VETERINÁRIO", value: req.veterinarian || "-" },
+    ],
+    [
+      { label: "LINK DO MAPA", value: scheduleMapUrl || "-" },
+      { label: "OBSERVAÇÕES", value: req.notes || "-" },
+    ],
   ], y, ctx);
-  y -= 14;
+  y -= 10;
   page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
@@ -10679,105 +11067,132 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
     [
       { label: "NOME COMPLETO", value: req.tutor || "-" },
       { label: "CPF", value: req.cpf || "-" },
-      { label: "CADUNICO", value: req.cadUnicoNotApplicable ? "Nao se aplica" : req.cadUnico || "-" },
-      { label: "AGRICULTOR", value: req.isFarmer ? "Sim" : "Nao" },
-    ],
-    [
       { label: "CELULAR", value: req.phone || "-" },
       { label: "EMAIL", value: req.email || "-" },
     ],
-    [{ label: "ENDERECO COMPLETO", value: fullAddr || "-" }],
+    [
+      { label: "CEP", value: req.cep || "-" },
+      { label: "ENDEREÇO", value: req.address || "-" },
+      { label: "NÚMERO", value: req.number || workflowData.number || "-" },
+      { label: "BAIRRO", value: req.neighborhood || "-" },
+    ],
+    [
+      { label: "CIDADE", value: req.city || "-" },
+      { label: "UF", value: req.state || "-" },
+      { label: "CADÚNICO", value: workflowData.cadUnicoNotApplicable || req.cadUnicoNotApplicable ? "Não se aplica" : workflowData.cadUnico || req.cadUnico || "-" },
+      { label: "AGRICULTOR", value: workflowData.isFarmer || req.isFarmer ? "Sim" : "Não" },
+    ],
   ], y, ctx);
-  y -= 14;
+  y -= 10;
   page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
-  y = drawProntuarioSectionTitle(page1, `ANIMAIS (${animals.length})`, y, ctx);
+  y = drawProntuarioSectionTitle(page1, `DADOS DO ANIMAL (${Math.max(animals.length, 1)})`, y, ctx);
   y -= 6;
-  for (const animal of animals.slice(0, 2)) {
+  for (const animal of (animals.length ? animals : [{}]).slice(0, 2)) {
     const animalBreed = animal.breedType === "Definida"
       ? (animal.breedDescription || "Definida") : (animal.breedType || "-");
     y = drawProntuarioFields(page1, [
       [
         { label: "NOME", value: animal.name || "-" },
-        { label: "ESPECIE", value: animal.species || "-" },
+        { label: "ESPÉCIE", value: animal.species || "-" },
+        { label: "PROCEDIMENTO", value: animal.procedureType || animal.procedure || requestTypeLabel(req) || "-" },
         { label: "SEXO", value: animal.sex || "-" },
-        { label: "PORTE", value: animal.size || "-" },
       ],
       [
-        { label: "RACA", value: animalBreed },
-        { label: "NASCIMENTO / IDADE", value: animal.birthDate || animal.age || "-" },
-        { label: "COR / PELAGEM", value: animal.color || "-" },
+        { label: "RAÇA", value: animalBreed },
+        { label: "PORTE", value: animal.size || "-" },
+        { label: "PESO", value: animal.weight || "-" },
+        { label: "IDADE", value: animal.age || "-" },
+      ],
+      [
+        { label: "DATA DE NASCIMENTO", value: animal.birthDate || "-" },
+        { label: "PELAGEM", value: animal.coat || animal.color || "-" },
+        { label: "POSSUI MICROCHIP", value: animal.hasChip || (animal.microchip ? "Sim" : "-") },
         { label: "MICROCHIP", value: animal.microchip || "-" },
       ],
       [
-        { label: "VACINAS", value: animal.vaccines || animal.vacinas || "-" },
-        { label: "VERMIFUGADO", value: animal.dewormed || animal.vermifugado || "-" },
-        { label: "JA TEVE CRIAS", value: animal.teveCrias ? "Sim" : "Nao" },
-        { label: "PROCEDIMENTO", value: animal.procedure || requestTypeLabel(req) || "-" },
+        { label: "VERMIFUGADO", value: animal.dewormed || "-" },
+        { label: "VACINAS EM DIA", value: animal.vaccinated || animal.vaccines || animal.vacinas || "-" },
+        { label: "JÁ TEVE CRIA", value: animal.hadLitter || (animal.teveCrias ? "Sim" : "-") },
+        { label: "ALIMENTAÇÃO", value: animal.food || "-" },
+      ],
+      [
+        { label: "HISTÓRICO DE DOENÇAS", value: animal.illnessHistory || "-" },
       ],
     ], y, ctx);
-    y -= 10;
+    y -= 8;
   }
 
-  y -= 4;
+  if (animals.length > 2) {
+    page1.drawText(pdfText(`+ ${animals.length - 2} animal(is) adicional(is) vinculado(s) ao processo.`), { x: margin, y, size: 8, font, color: colors.muted });
+    y -= 14;
+  }
+
+  y -= 2;
   page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
-  y = drawProntuarioSectionTitle(page1, "VALIDACAO", y, ctx);
+  y = drawProntuarioSectionTitle(page1, "VALIDAÇÃO", y, ctx);
   y -= 8;
-  page1.drawText("CHAVE DE VALIDACAO DIGITAL", { x: margin + 9, y, size: 7, font: bold, color: colors.muted });
+  page1.drawText("CHAVE DE VALIDAÇÃO DIGITAL", { x: margin + 9, y, size: 7, font: bold, color: colors.muted });
   y -= 18;
   page1.drawText(pdfText(validationKey), { x: margin + 9, y, size: 18, font: bold, color: colors.blue });
   y -= 14;
   page1.drawText(
-    pdfText(`Aceite eletronico registrado em ${formatDateTime(signedAt)}`),
+    pdfText(`Aceite eletrônico registrado em ${formatDateTime(signedAt)}`),
     { x: margin + 9, y, size: 8, font, color: colors.muted }
   );
-
   drawRequestPdfFooter(page1, "Requerimento municipal", "Pagina 1 de 2", ctx);
 
   // ── PÁGINA 2: declaração ─────────────────────────────────────────
   const page2 = pdf.addPage(pageSize);
   let y2 = drawProntuarioHeader(
     page2, req.protocol, "Declaracao", rgb(0.05, 0.45, 0.69), ctx, "",
-    "DECLARACAO DE RESPONSABILIDADE",
+    "DECLARAÇÃO DE RESPONSABILIDADES",
     pdfText(`Protocolo: #${req.protocol || "-"}`)
   );
   y2 -= 14;
 
-  y2 = drawProntuarioSectionTitle(page2, "DECLARACAO DO TUTOR", y2, ctx);
-  y2 -= 10;
-
-  const paragraphs = [
-    `Eu, ${req.tutor || "-"}, inscrito(a) no CPF ${req.cpf || "-"}, declaro que as informacoes prestadas neste requerimento sao verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.`,
-    "Declaro ciencia dos cuidados pre e pos-cirurgicos, das responsabilidades de acompanhamento do animal, da necessidade de cumprir as orientacoes fornecidas pela equipe responsavel e de manter os contatos informados disponiveis para comunicacoes sobre a solicitacao.",
-    "Estou ciente de que a solicitacao podera passar por analise documental, validacao das informacoes, confirmacao de agenda e eventuais solicitacoes de complementacao antes da realizacao do atendimento.",
-  ];
-  for (const paragraph of paragraphs) {
-    const lines = wrapPdfText(pdfText(paragraph), 90);
-    for (const line of lines) {
-      page2.drawText(line, { x: margin + 9, y: y2, size: 10, font, color: colors.ink });
-      y2 -= 15;
-    }
-    y2 -= 8;
-  }
-
-  y2 -= 10;
-  page2.drawLine({ start: { x: margin, y: y2 }, end: { x: margin + contentW, y: y2 }, thickness: 0.4, color: colors.line });
+  y2 = drawProntuarioSectionTitle(page2, "DECLARAÇÃO DE RESPONSABILIDADES - CASTRAÇÃO ANIMAL", y2, ctx);
+  y2 -= 8;
+  page2.drawText("Declaro para fins civis, penais e administrativos:", { x: margin + 9, y: y2, size: 9, font: bold, color: colors.ink });
   y2 -= 18;
 
-  y2 = drawProntuarioSectionTitle(page2, "ACEITE ELETRONICO DO TUTOR", y2, ctx);
+  const declarationItems = REQUEST_DECLARATION_ITEMS;
+  const recommendationItems = REQUEST_RECOMMENDATION_ITEMS;
+
+  for (const paragraph of declarationItems) {
+    const lines = wrapPdfText(pdfText(paragraph), 110);
+    page2.drawText("-", { x: margin + 9, y: y2, size: 8, font: bold, color: colors.ink });
+    for (const line of lines) {
+      page2.drawText(line, { x: margin + 20, y: y2, size: 8, font, color: colors.ink });
+      y2 -= 10;
+    }
+    y2 -= 4;
+  }
+
+  page2.drawText("- Recomendações:", { x: margin + 9, y: y2, size: 8, font: bold, color: colors.ink });
+  y2 -= 12;
+  for (const item of recommendationItems) {
+    page2.drawText(`  - ${pdfText(item)}`, { x: margin + 20, y: y2, size: 8, font, color: colors.ink });
+    y2 -= 10;
+  }
+
+  y2 -= 8;
+  page2.drawLine({ start: { x: margin, y: y2 }, end: { x: margin + contentW, y: y2 }, thickness: 0.4, color: colors.line });
+  y2 -= 16;
+
+  y2 = drawProntuarioSectionTitle(page2, "ACEITE ELETRÔNICO DO TUTOR", y2, ctx);
   y2 -= 6;
   drawProntuarioFields(page2, [
     [
       { label: "ACEITE REGISTRADO POR", value: req.tutor || "-" },
       { label: "CPF", value: maskCpf(req.cpf || "") || "-" },
       { label: "DATA / HORA", value: formatDateTime(signedAt) },
-      { label: "METODO", value: "Li e aceito" },
+      { label: "MÉTODO", value: "Li e aceito" },
     ],
   ], y2, ctx);
-
   drawRequestPdfFooter(page2, "Requerimento municipal", "Pagina 2 de 2", ctx);
 
   return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");

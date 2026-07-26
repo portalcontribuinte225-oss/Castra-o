@@ -38,7 +38,18 @@ app.use("/api/audit", auditRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
-app.use(express.static(distPath));
+app.use("/assets", express.static(path.join(distPath, "assets"), {
+  immutable: true,
+  maxAge: "1y",
+}));
+app.use("/assets", (_req, res) => res.status(404).type("text/plain").send("Asset not found"));
+app.use(express.static(distPath, {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith("index.html") || filePath.endsWith("sw.js")) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    }
+  },
+}));
 app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
 
 const PORT = process.env.PORT || 3002;

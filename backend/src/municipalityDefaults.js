@@ -1,3 +1,5 @@
+import { DEFAULT_MINIMUM_CONFIDENCE } from "./routes/ai.js";
+
 export const DEFAULT_MUNICIPALITY_SECTOR_ID = "setor_gestao_municipal";
 export const DEFAULT_MUNICIPALITY_SECTOR_NAME = "Gestão Municipal";
 export const DEFAULT_PERMISSION_GROUP_ID = "grupo_acesso_total";
@@ -90,9 +92,15 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
         active: true,
         accept: ["image/jpeg", "image/png", "application/pdf"],
         maxSizeMb: 5,
-        modelHint: "Comprovante recente com nome, endereço completo, cidade e data de emissão legíveis.",
-        aiCriteria: "Nome; endereço completo; cidade; data de emissão recente; documento legível.",
-        rejectionRules: "Endereço incompleto; cidade divergente; imagem ilegível; comprovante antigo.",
+        analysisRules: {
+          expectedDocument: "Comprovante recente com nome, endere\u00e7o completo, cidade e data de emiss\u00e3o leg\u00edveis.",
+          requiredCriteria: ["Nome", "endere\u00e7o completo", "cidade", "data de emiss\u00e3o recente", "documento leg\u00edvel"],
+          rejectionCriteria: ["Endere\u00e7o incompleto", "cidade divergente", "imagem ileg\u00edvel", "comprovante antigo"],
+          manualReviewCriteria: [],
+          minimumConfidence: DEFAULT_MINIMUM_CONFIDENCE,
+          allowAutomaticApproval: true,
+          allowAutomaticRejection: false,
+        },
       },
     ],
     "castragestao:request-types": [

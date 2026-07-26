@@ -8,6 +8,10 @@ export async function runMigrations() {
       name TEXT NOT NULL,
       state TEXT,
       slug TEXT UNIQUE,
+      contact TEXT,
+      email TEXT,
+      address TEXT,
+      cep TEXT,
       active BOOLEAN NOT NULL DEFAULT TRUE,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -336,6 +340,10 @@ export async function runMigrations() {
 
   await pool.query(`
     ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS brasao TEXT;
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS contact TEXT;
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS email TEXT;
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS address TEXT;
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS cep TEXT;
   `);
 
   /* ── Refatoração de status: EM_ANALISE/AGUARDANDO_CIRURGIA/ARQUIVADA → NOVA/AGENDADA/REALIZADA/CANCELADA ── */

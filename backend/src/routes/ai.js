@@ -9,6 +9,8 @@ const providerEnvKeys = {
   Gemini: "GEMINI_API_KEY",
 };
 
+export const DEFAULT_MINIMUM_CONFIDENCE = 0.55;
+
 router.post("/validate", async (req, res) => {
   try {
     const { document = {}, file = {}, aiSettings = {} } = req.body || {};
@@ -24,14 +26,15 @@ router.post("/validate", async (req, res) => {
       return res.status(400).json({ error: `Informe o modelo para ${provider}.` });
     }
     if (!file.dataUrl || !file.type) {
-      return res.status(400).json({ error: "Arquivo inválido para análise." });
+      return res.status(400).json({ error: "Arquivo invalido para analise." });
     }
 
-    const result = await validateWithProvider(provider, { apiKey, model, document, file });
+    const normalizedDocument = normalizeDocumentPayload(document);
+    const result = await validateWithProvider(provider, { apiKey, model, document: normalizedDocument, file });
     res.json({ ...result, model });
   } catch (err) {
-    console.error("Erro na validação por IA:", err);
-    res.status(err.status || 502).json({ error: err.message || "Não foi possível validar o documento com IA." });
+    console.error("Erro na validacao por IA:", safeErrorMessage(err));
+    res.status(err.status || 502).json({ error: safeErrorMessage(err) || "Nao foi possivel validar o documento com IA." });
   }
 });
 
@@ -53,28 +56,81 @@ async function validateWithProvider(provider, payload) {
   return validateWithOpenAI(payload);
 }
 
+function normalizeDocumentPayload(document = {}) {
+  return {
+    id: String(document.id || "").trim(),
+    name: String(document.name || "Documento").trim() || "Documento",
+    analysisRules: normalizeAnalysisRules(document.analysisRules, document),
+  };
+}
+
+function normalizeAnalysisRules(rules = {}, document = {}) {
+  const minimumConfidence = Number(rules.minimumConfidence);
+  return {
+    expectedDocument: String(rules.expectedDocument || document.name || "Documento solicitado").trim(),
+    requiredCriteria: toStringList(rules.requiredCriteria),
+    rejectionCriteria: toStringList(rules.rejectionCriteria),
+    manualReviewCriteria: toStringList(rules.manualReviewCriteria),
+    matchRules: Array.isArray(rules.matchRules) ? rules.matchRules : [],
+    minimumConfidence: Number.isFinite(minimumConfidence)
+      ? Math.max(0, Math.min(1, minimumConfidence))
+      : DEFAULT_MINIMUM_CONFIDENCE,
+    allowAutomaticApproval: rules.allowAutomaticApproval !== false,
+    allowAutomaticRejection: rules.allowAutomaticRejection === true,
+  };
+}
+
+function toStringList(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean);
+  return String(value || "")
+    .split(/\r?\n|;/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatRuleList(title, items) {
+  if (!items.length) return `${title}: nenhum criterio especifico cadastrado.`;
+  return `${title}:\n${items.map((item, index) => `${index + 1}. ${item}`).join("\n")}`;
+}
+
 function buildPrompt(document = {}, file = {}) {
-  const rules = [
-    document.modelHint && `Descrição esperada: ${document.modelHint}`,
-    document.aiCriteria && `Critérios cadastrados pelo administrador: ${document.aiCriteria}`,
-    document.rejectionRules && `Recuse apenas nestes casos ou em falhas equivalentes: ${document.rejectionRules}`,
-  ].filter(Boolean).join("\n");
+  const rules = normalizeAnalysisRules(document.analysisRules, document);
 
   return `
-Você é um validador documental para um sistema municipal de castração animal.
-Analise o arquivo anexado e responda somente em JSON válido.
-Use os critérios cadastrados como fonte principal da decisão.
-Considere o documento aprovado quando o conteúdo visível atende aos critérios exigidos, mesmo que a digitalização esteja rotacionada, tenha fundo simples, seja PDF escaneado ou tenha pequenas imperfeições que não impeçam a leitura.
-Não recuse por excesso de rigor, por ausência de campos que não foram exigidos, por diferença de formatação, ou por não conseguir validar autenticidade oficial do documento.
-Recuse somente quando houver evidência clara de documento errado, ilegível, cortado de forma crítica, vencido quando validade for exigida, ou sem uma informação obrigatória cadastrada.
-Se o arquivo estiver legível mas você não conseguir confirmar todos os critérios com segurança, use status "needs_review" em vez de "rejected".
+Voce e um validador documental para um sistema municipal de bem-estar animal.
+Analise o arquivo anexado e responda somente em JSON valido.
+Use exclusivamente o modelo de analise abaixo como fonte da decisao.
+
+Privacidade obrigatoria:
+- Nao retorne nome, CPF, RG, endereco, telefone, e-mail, assinatura, numero de documento ou qualquer dado pessoal lido no arquivo.
+- Retorne apenas flags, checklist, motivos genericos e confianca.
+- Se precisar mencionar divergencia, descreva de forma generica, sem copiar o dado encontrado.
 
 Documento solicitado: ${document.name || "Documento"}
 Arquivo: ${file.name || "arquivo"} (${file.type || "tipo desconhecido"})
-${rules || "Regra: validar se o arquivo parece legível e compatível com o documento solicitado."}
+Documento esperado: ${rules.expectedDocument || document.name || "Documento compatível com a solicitacao"}
+Confianca minima configurada: ${rules.minimumConfidence}
+Aprovacao automatica permitida: ${rules.allowAutomaticApproval ? "sim" : "nao"}
+Recusa automatica permitida: ${rules.allowAutomaticRejection ? "sim" : "nao"}
 
-Formato obrigatório:
-{"status":"approved|rejected|needs_review","message":"explicação curta em português","confidence":0.0}
+${formatRuleList("Criterios obrigatorios", rules.requiredCriteria)}
+${formatRuleList("Criterios de revisao manual", rules.manualReviewCriteria)}
+${formatRuleList("Regras de recusa", rules.rejectionCriteria)}
+
+Decida assim:
+- Use "approved" apenas quando o documento condiz com os criterios obrigatorios e nao ha sinal relevante de recusa ou revisao.
+- Use "needs_review" quando estiver legivel, mas houver duvida, baixa confianca, criterio parcialmente verificavel ou situacao prevista para revisao manual.
+- Use "rejected" apenas quando houver evidencia clara de regra de recusa ou falta de criterio obrigatorio essencial.
+
+Formato obrigatorio sem dados pessoais:
+{
+  "status":"approved|rejected|needs_review",
+  "message":"explicacao curta em portugues, sem dados pessoais",
+  "confidence":0.0,
+  "criteriaResults":[{"criterion":"nome do criterio","met":true,"reason":"motivo generico"}],
+  "rejectionReasons":["motivo generico"],
+  "manualReviewReasons":["motivo generico"]
+}
 `.trim();
 }
 
@@ -85,8 +141,23 @@ const validationSchema = {
     status: { type: "string", enum: ["approved", "rejected", "needs_review"] },
     message: { type: "string" },
     confidence: { type: "number", minimum: 0, maximum: 1 },
+    criteriaResults: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          criterion: { type: "string" },
+          met: { type: "boolean" },
+          reason: { type: "string" },
+        },
+        required: ["criterion", "met", "reason"],
+      },
+    },
+    rejectionReasons: { type: "array", items: { type: "string" } },
+    manualReviewReasons: { type: "array", items: { type: "string" } },
   },
-  required: ["status", "message", "confidence"],
+  required: ["status", "message", "confidence", "criteriaResults", "rejectionReasons", "manualReviewReasons"],
 };
 
 function splitDataUrl(dataUrl = "") {
@@ -116,7 +187,7 @@ async function validateWithGemini({ apiKey, model, document, file }) {
   });
   const data = await readProviderResponse(response);
   const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("\n") || "";
-  return normalizeAiResult(text, "Gemini");
+  return normalizeAiResult(text, "Gemini", document.analysisRules);
 }
 
 async function validateWithOpenAI({ apiKey, model, document, file }) {
@@ -153,7 +224,7 @@ async function validateWithOpenAI({ apiKey, model, document, file }) {
   });
   const data = await readProviderResponse(response);
   const text = data.output_text || data.output?.flatMap((item) => item.content || []).map((item) => item.text || "").join("\n") || "";
-  return normalizeAiResult(text, "OpenAI");
+  return normalizeAiResult(text, "OpenAI", document.analysisRules);
 }
 
 async function validateWithAnthropic({ apiKey, model, document, file }) {
@@ -172,7 +243,7 @@ async function validateWithAnthropic({ apiKey, model, document, file }) {
     },
     body: JSON.stringify({
       model,
-      max_tokens: 600,
+      max_tokens: 900,
       temperature: 0,
       messages: [{
         role: "user",
@@ -185,7 +256,7 @@ async function validateWithAnthropic({ apiKey, model, document, file }) {
   });
   const data = await readProviderResponse(response);
   const text = data.content?.map((item) => item.text || "").join("\n") || "";
-  return normalizeAiResult(text, "Anthropic");
+  return normalizeAiResult(text, "Anthropic", document.analysisRules);
 }
 
 async function readProviderResponse(response) {
@@ -199,41 +270,94 @@ async function readProviderResponse(response) {
   return data;
 }
 
-function normalizeAiResult(text, provider) {
+function normalizeAiResult(text, provider, rules = {}) {
   const parsed = parseJsonFromText(text);
   const normalizedStatus = normalizeStatus(parsed.status);
   const confidence = clampConfidence(parsed.confidence);
-  if (normalizedStatus === "approved") {
+  const minimumConfidence = Number.isFinite(Number(rules.minimumConfidence)) ? Number(rules.minimumConfidence) : DEFAULT_MINIMUM_CONFIDENCE;
+  const criteriaResults = normalizeCriteriaResults(parsed.criteriaResults);
+  const rejectionReasons = toSanitizedList(parsed.rejectionReasons);
+  const manualReviewReasons = toSanitizedList(parsed.manualReviewReasons);
+  const message = sanitizeText(parsed.message || "Documento analisado pela IA.");
+
+  if (normalizedStatus === "approved" && confidence >= minimumConfidence && rules.allowAutomaticApproval !== false) {
     return {
       status: "approved",
-      message: parsed.message || `Documento aprovado por ${provider}.`,
+      message: message || `Documento aprovado por ${provider} conforme os criterios configurados.`,
       confidence,
       provider,
+      criteriaResults,
+      rejectionReasons: [],
+      manualReviewReasons,
     };
   }
 
-  if (normalizedStatus === "needs_review" || confidence < 0.55) {
+  if (normalizedStatus === "rejected" && confidence >= minimumConfidence && rules.allowAutomaticRejection === true) {
     return {
-      status: "attached",
-      message: parsed.message || `O ${provider} não confirmou todos os critérios com segurança. Documento encaminhado para conferência manual.`,
+      status: "rejected",
+      message: message || `Documento recusado por ${provider}: criterio obrigatorio nao atendido.`,
       confidence,
       provider,
+      criteriaResults,
+      rejectionReasons,
+      manualReviewReasons,
     };
   }
 
   return {
-    status: "rejected",
-    message: parsed.message || `Documento recusado por ${provider}: critério obrigatório não atendido.`,
+    status: "attached",
+    message: manualReviewMessage(message, provider, normalizedStatus, confidence, minimumConfidence),
     confidence,
     provider,
+    criteriaResults,
+    rejectionReasons,
+    manualReviewReasons: manualReviewReasons.length ? manualReviewReasons : defaultManualReviewReasons(normalizedStatus, confidence, minimumConfidence),
   };
+}
+
+function manualReviewMessage(message, provider, status, confidence, minimumConfidence) {
+  if (status === "rejected") return "Documento encaminhado para conferencia manual antes de recusa definitiva.";
+  if (confidence < minimumConfidence) return `O ${provider} nao confirmou todos os criterios com seguranca. Documento encaminhado para conferencia manual.`;
+  return message || `O ${provider} recomendou conferencia manual do documento.`;
+}
+
+function defaultManualReviewReasons(status, confidence, minimumConfidence) {
+  if (confidence < minimumConfidence) return ["Confianca abaixo do minimo configurado."];
+  if (status === "rejected") return ["Recusa automatica desativada para este documento."];
+  return ["Analise automatica inconclusiva."];
+}
+
+function normalizeCriteriaResults(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => ({
+    criterion: sanitizeText(item?.criterion || "Criterio avaliado"),
+    met: Boolean(item?.met),
+    reason: sanitizeText(item?.reason || ""),
+  })).filter((item) => item.criterion);
+}
+
+function toSanitizedList(value) {
+  return toStringList(value).map(sanitizeText).filter(Boolean);
+}
+
+function sanitizeText(value = "") {
+  return String(value || "")
+    .replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, "[cpf]")
+    .replace(/\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, "[cnpj]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[email]")
+    .replace(/\+?\d[\d\s().-]{8,}\d/g, "[numero]")
+    .slice(0, 260);
+}
+
+function safeErrorMessage(err = {}) {
+  return sanitizeText(err.message || "Erro desconhecido");
 }
 
 function normalizeStatus(status = "") {
   const value = String(status).trim().toLowerCase();
-  if (["approved", "approve", "aprovado", "aprovada", "valid", "válido", "valido"].includes(value)) return "approved";
-  if (["needs_review", "review", "manual_review", "inconclusive", "inconclusivo", "revisao", "revisão"].includes(value)) return "needs_review";
-  if (["rejected", "reject", "recusado", "recusada", "invalid", "inválido", "invalido"].includes(value)) return "rejected";
+  if (["approved", "approve", "aprovado", "aprovada", "valid", "valido"].includes(value)) return "approved";
+  if (["needs_review", "review", "manual_review", "inconclusive", "inconclusivo", "revisao"].includes(value)) return "needs_review";
+  if (["rejected", "reject", "recusado", "recusada", "invalid", "invalido"].includes(value)) return "rejected";
   return "needs_review";
 }
 

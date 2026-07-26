@@ -1,5 +1,5 @@
-const CACHE_NAME = "castragestao-v4";
-const STATIC_ASSETS = ["/", "/index.html", "/manifest.webmanifest", "/pwa-icon.svg"];
+const CACHE_NAME = "castragestao-v5";
+const STATIC_ASSETS = ["/manifest.webmanifest", "/pwa-icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
@@ -20,27 +20,27 @@ self.addEventListener("fetch", (event) => {
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
 
+  if (requestUrl.pathname.startsWith("/api/")) return;
+
+  if (requestUrl.pathname.startsWith("/assets/")) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match("/")),
-    );
+    event.respondWith(fetch(event.request).catch(() => caches.match("/index.html")));
     return;
   }
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((response) => {
-          if (!response || response.status !== 200 || response.type !== "basic") {
-            return response;
-          }
+    fetch(event.request)
+      .then((response) => {
+        if (response && response.status === 200 && response.type === "basic") {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
-          return response;
-        })
-        .catch(() => cached);
-
-      return cached || network;
-    }),
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request)),
   );
 });
