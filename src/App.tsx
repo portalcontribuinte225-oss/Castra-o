@@ -7074,6 +7074,19 @@ function ConfigView({
     }
   }
 
+  async function clearAiCredentials() {
+    setAiSaveStatus("Removendo chave...");
+    try {
+      await api.setConfig("ai", { provider: selectedAiProvider, model: selectedAiModel, apiKey: "", clearApiKey: true }, configMunicipalityScopeId);
+      const reloaded = await api.getConfig("ai", configMunicipalityScopeId);
+      const safeReloaded = reloaded && typeof reloaded === "object" ? reloaded : {};
+      setAiSettings?.({ ...initialAiSettings, ...safeReloaded, active: Boolean(safeReloaded.active) });
+      setAiSaveStatus("Chave removida.");
+    } catch (err: any) {
+      setAiSaveStatus(`Não foi possível remover a chave: ${err.message}`);
+    }
+  }
+
   useEffect(() => {
     if (configArea !== "integrations" || configTab !== "whatsapp") return;
     setTestPhone("");
@@ -8464,10 +8477,17 @@ function ConfigView({
                   Criar ou acessar chave da {selectedAiProvider}
                 </a>
               )}
-              <button className="primary-action ai-save-key-action" type="button" onClick={saveAiCredentials}>
-                Salvar configuração
-              </button>
-              {aiSaveStatus && <p className={aiSaveStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{aiSaveStatus}</p>}
+              <div className="ai-settings-actions">
+                <button className="primary-action ai-save-key-action" type="button" onClick={saveAiCredentials}>
+                  Salvar configuração
+                </button>
+                {aiSettings.hasApiKey && (
+                  <button className="ghost-button" type="button" onClick={clearAiCredentials}>
+                    Remover chave
+                  </button>
+                )}
+              </div>
+              {aiSaveStatus && <p className={aiSaveStatus.includes("sucesso") || aiSaveStatus === "Chave removida." ? "sms-status confirmed" : "sms-status"}>{aiSaveStatus}</p>}
             </article>
           </div>
         </div>

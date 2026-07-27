@@ -248,8 +248,15 @@ async function prepareConfigValue(key, value = {}, municipalityId = null, client
     };
   }
   const nextApiKey = String(value.apiKey || "").trim();
-  const resolvedApiKey = nextApiKey || decryptSecret(current.apiKey || "");
-  return { ...current, ...value, apiKey: encryptSecret(resolvedApiKey) };
+  const resolvedApiKey = value.clearApiKey ? "" : nextApiKey || decryptSecret(current.apiKey || "");
+  const { clearApiKey, ...rest } = value;
+  const merged = { ...current, ...rest, apiKey: encryptSecret(resolvedApiKey) };
+  if (value.clearApiKey) {
+    merged.active = false;
+    merged.keyValid = null;
+    merged.lastValidatedAt = "";
+  }
+  return merged;
 }
 
 export default router;
