@@ -6202,18 +6202,20 @@ function AdoptionView({
     <section className="content-grid adoption-workspace">
       <div className="adoption-shell">
         <div className="page-toolbar adoption-command-controls">
-            <div className="adoption-command-stats">
-              <span>{availableAnimals.length} disponíveis</span>
-              <span>{inProgressAnimals.length} em triagem</span>
-              <span>{adoptedAnimals.length} adotados</span>
-              <span>{totalInterests} interessados</span>
-            </div>
-            {canManageAdoptions && (
+          {canManageAdoptions && (
+            <div className="page-actions adoption-command-actions">
               <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
                 <Plus size={16} />
                 Cadastrar animal
               </button>
-            )}
+            </div>
+          )}
+          <div className="adoption-command-stats">
+            <span>{availableAnimals.length} disponíveis</span>
+            <span>{inProgressAnimals.length} em triagem</span>
+            <span>{adoptedAnimals.length} adotados</span>
+            <span>{totalInterests} interessados</span>
+          </div>
         </div>
 
         {canManageAdoptions && isFormOpen && (
@@ -6319,12 +6321,6 @@ function AdoptionView({
               <ListChecks size={15} />
             </button>
           </div>
-          {canManageAdoptions && (
-            <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
-              <Plus size={16} />
-              Cadastrar
-            </button>
-          )}
         </div>
 
         {canManageAdoptions && (
@@ -8468,7 +8464,7 @@ function ConfigView({
                   data-lpignore="true"
                   data-1p-ignore="true"
                   data-bwignore="true"
-                  placeholder={aiSettings.hasApiKey ? `Chave da ${selectedAiProvider} já salva` : `Cole a chave da ${selectedAiProvider}`}
+                  placeholder={`Cole a chave da ${selectedAiProvider}`}
                   onChange={(event) => setAiSettings?.((current: AnyRecord) => ({ ...current, apiKey: event.target.value }))}
                 />
               </label>
