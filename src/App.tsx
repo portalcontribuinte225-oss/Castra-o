@@ -7065,7 +7065,7 @@ function ConfigView({
         ...nextSettings,
         ...(saved?.value || {}),
         apiKey: "",
-        hasApiKey: Boolean(saved?.value?.hasApiKey || nextSettings.apiKey || aiSettings.hasApiKey),
+        hasApiKey: Boolean(saved?.value?.hasApiKey),
       };
       setAiSettings?.(publicSettings);
       setAiSaveStatus("Configuração salva com sucesso.");
