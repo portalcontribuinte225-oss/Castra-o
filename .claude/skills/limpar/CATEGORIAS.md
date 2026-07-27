@@ -158,3 +158,34 @@ function buscarContribuinte() { ... }
 ```
 
 Não reportar identificadores em português que já existiam antes do escopo revisado (legado aceito) — só os que aparecem como parte da mudança atual, a menos que o usuário peça auditoria explícita de nomenclatura de um módulo inteiro.
+
+---
+
+## 13. Remoção incompleta virou sobreposição (CSS/lógica "vencendo na marra")
+
+Quando uma remoção anterior (de elemento, feature ou estilo) não apagou **todas** as ocorrências da classe/regra envolvida, e a fonte que sobrou foi resolvida empilhando prioridade (`!important`, seletor mais específico, regra duplicada mais abaixo no arquivo) em vez de tirar a referência da fonte antiga. O sintoma visual "some, mas volta com outra aparência" ou "borda que não sai mesmo removendo a classe" é o sinal mais comum disso.
+
+```css
+/* Ruim: a classe X foi removida do componente A, mas continua num seletor
+   combinado compartilhado com B/C/D — resolvido com !important em vez de
+   tirar X da lista */
+.componente-a-classe-x {
+  border: 0 !important; /* patch por cima */
+}
+
+.workspace-heading .toolbar,
+.componente-a-classe-x,   /* deveria ter sido removida daqui */
+.componente-b,
+.componente-c {
+  border: 1px solid var(--ui-border); /* ainda aplica a borda que devia sumir */
+}
+```
+
+Sinais:
+- Regra com `!important` cujo comentário explica que está "sobrepondo" ou "vencendo" outra regra, em vez de simplesmente não haver conflito.
+- A mesma classe aparece em múltiplos seletores combinados (`.x, .y, .z { ... }`) espalhados pelo arquivo, alguns dos quais deveriam ter parado de incluir aquela classe após uma remoção/refatoração.
+- Comentário tipo `/* sobrepõe X, fora de escopo */` apontando para uma regra que, na verdade, está dentro do mesmo módulo/escopo que acabou de ser alterado (não é de fato "fora de escopo" — é resíduo da própria mudança).
+
+Verificar: `grep` o nome da classe no arquivo inteiro. Se ela aparece dentro de um seletor combinado compartilhado com classes de outros componentes que **continuam precisando** daquele estilo — a correção é remover só o nome da classe daquele seletor, preservando o resto da regra para quem ainda usa. Só manter `!important`/especificidade maior quando a regra concorrente pertence a um componente genuinamente fora do escopo da tarefa atual e não pode ser tocada — e mesmo assim, com comentário explicando por quê (ver seção "Eliminar código antigo, duplicado e obsoleto" da skill `implementar`).
+
+Isso não é uma categoria "suspeita" — quando confirmado que a classe removida ainda aparece em outro seletor compartilhado e a solução aplicada foi prioridade/`!important`, reportar como confirmado, com a recomendação de remover a classe do seletor compartilhado (não de apagar a regra inteira).

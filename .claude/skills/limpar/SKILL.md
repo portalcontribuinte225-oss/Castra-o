@@ -64,6 +64,10 @@ Antes de marcar algo como "morto" ou "duplicado":
 - Duas funções parecidas só contam como "duplicadas" se fizerem a mesma coisa — validar a lógica antes de propor merge.
 - Se não tiver certeza, reportar com confiança "suspeita" em vez de "confirmado", e explicar a dúvida.
 
+## Buscar especificamente remoções incompletas resolvidas com `!important`
+
+Categoria de alto valor neste projeto (`styles.css` tem ~26 mil linhas com muita duplicação entre módulos `ag-`, `cr-`, `reports-`, etc.): `grep` por `!important` no diff/escopo revisado e, para cada ocorrência, verificar se o comentário ao lado (quando existir) menciona "sobrepor", "vencer" ou "fora de escopo" uma regra específica. Se a regra "vencida" pertence ao mesmo módulo/componente que está sendo limpo (não é de fato de outro componente inalcançável), isso é resíduo de remoção incompleta — ver categoria 13 em [CATEGORIAS.md](CATEGORIAS.md). A correção correta quase sempre é remover a classe do seletor combinado compartilhado, não manter as duas regras competindo.
+
 ---
 
 # Revisão de banco de dados

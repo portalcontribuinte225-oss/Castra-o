@@ -95,14 +95,10 @@ export function AccessRequestsView({
   return (
     <section className="cr-root">
       <div className="page-toolbar cr-controls-row">
-          <div className="cr-stats-row">
-            <span><ClipboardList size={12} /> {accessRequests.length} total</span>
-            {pendingCount > 0 && <span className="cr-stat-warn">{pendingCount} pendentes</span>}
-            {approvedCount > 0 && <span className="cr-stat-ok">{approvedCount} aprovados</span>}
-            {rejectedCount > 0 && <span>{rejectedCount} recusados</span>}
-          </div>
-
           <nav className="request-nav cr-nav" aria-label="Filtros de credenciamento">
+            <div className="cr-stats-row" aria-label="Total de credenciamentos">
+              <span><ClipboardList size={12} /> {accessRequests.length} total</span>
+            </div>
             <div className="request-filter-tabs">
               {FILTERS.map((item) => {
                 const count =
@@ -122,11 +118,6 @@ export function AccessRequestsView({
                   </button>
                 );
               })}
-            </div>
-            <div className="request-today-segment cr-result-segment">
-              <span className="cr-result-label">
-                {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
-              </span>
             </div>
           </nav>
       </div>

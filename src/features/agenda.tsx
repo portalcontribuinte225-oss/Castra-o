@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import {
-  CalendarCheck2, CalendarDays, ChevronLeft, ChevronRight,
-  Clock, MapPin, Search, SlidersHorizontal, X,
+  CalendarDays, ChevronLeft, ChevronRight,
+  Clock, MapPin, X,
 } from "lucide-react";
 import type { AnyRecord } from "../types";
 import {
@@ -85,14 +85,6 @@ function initials(name: string): string {
   return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
 }
 
-const LEGEND_ITEMS = [
-  { label: "Confirmado", tone: "pending" },
-  { label: "Pendente", tone: "neutral" },
-  { label: "Realizado", tone: "success" },
-  { label: "Cancelado", tone: "danger" },
-];
-
-
 function statusTone(request: AnyRecord): "success" | "danger" | "info" | "pending" | "neutral" {
   if (request.status === "REALIZADA") return "success";
   if (request.status === "CANCELADA") return "danger";
@@ -133,7 +125,6 @@ export function AgendaView({
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [filterType, setFilterType] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
-  const [search, setSearch] = useState("");
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
@@ -170,17 +161,8 @@ export function AgendaView({
     else if (filterStatus === "agendada") list = list.filter((r) => r.status === "AGENDADA");
     else if (filterStatus === "realizada") list = list.filter((r) => r.status === "REALIZADA");
     else if (filterStatus === "analise") list = list.filter((r) => r.status === "NOVA");
-    if (search) {
-      const key = search.toLowerCase();
-      list = list.filter((r) =>
-        (r.tutor || "").toLowerCase().includes(key) ||
-        (r.cpf || "").includes(key) ||
-        (r.protocol || "").toLowerCase().includes(key) ||
-        (r.animals || []).some((a: AnyRecord) => (a.name || "").toLowerCase().includes(key))
-      );
-    }
     return list;
-  }, [normalized, filterType, filterStatus, search]);
+  }, [normalized, filterType, filterStatus]);
 
   const scheduleDaysByDate = useMemo(() => {
     const map: Record<string, AnyRecord[]> = {};
@@ -235,22 +217,6 @@ export function AgendaView({
 
   const todayStr = dateToStr(new Date());
 
-  function periodLabel(): string {
-    if (view === "year") return String(currentDate.getFullYear());
-    if (view === "day") {
-      return `${WEEKDAYS[currentDate.getDay()]}, ${String(currentDate.getDate()).padStart(2, "0")} de ${MONTHS_FULL[currentDate.getMonth()]} de ${currentDate.getFullYear()}`;
-    }
-    if (view === "week") {
-      const start = startOfWeek(currentDate);
-      const end = addDays(start, 6);
-      if (start.getMonth() === end.getMonth()) {
-        return `${start.getDate()}–${end.getDate()} de ${MONTHS_FULL[start.getMonth()]} de ${start.getFullYear()}`;
-      }
-      return `${start.getDate()} ${MONTHS_SHORT[start.getMonth()]} – ${end.getDate()} ${MONTHS_SHORT[end.getMonth()]} ${end.getFullYear()}`;
-    }
-    return `${MONTHS_FULL[currentDate.getMonth()]} de ${currentDate.getFullYear()}`;
-  }
-
   const summaryStats = useMemo(() => {
     const now = new Date();
     const todayS = dateToStr(now);
@@ -283,14 +249,45 @@ export function AgendaView({
     { id: "list", label: "Lista" },
   ];
 
-  const hasFilters = filterType || filterStatus || search;
+  const currentYear = currentDate.getFullYear();
+  const yearOptions = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
+
+  function goToMonth(month: number, year: number) {
+    setCurrentDate(new Date(year, month, 1));
+  }
 
   return (
     <section className="ag-root">
       <div className="page-toolbar ag-header-row">
-        <div className="ag-nav">
+        <div className="ag-filter-stack">
+          <select className="ag-select ag-select--borderless" value={filterType} onChange={(e) => setFilterType(e.target.value)} aria-label="Tipo de atendimento">
+            <option value="">Todos os tipos</option>
+            {allTypes.map((t) => (
+              <option key={t} value={t}>{requestTypeLabel({ type: t })}</option>
+            ))}
+          </select>
+
+          <select className="ag-select ag-select--borderless" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Status operacional">
+            <option value="">Todos os status</option>
+            <option value="analise">Nova</option>
+            <option value="agendada">Agendada</option>
+            <option value="realizada">Realizada</option>
+            <option value="cancelada">Cancelada</option>
+          </select>
+        </div>
+
+        <div className="ag-month-jump">
+          <select className="ag-select" value={currentDate.getMonth()} onChange={(e) => goToMonth(Number(e.target.value), currentYear)}>
+            {MONTHS_FULL.map((label, index) => (
+              <option key={label} value={index}>{label}</option>
+            ))}
+          </select>
+          <select className="ag-select" value={currentYear} onChange={(e) => goToMonth(currentDate.getMonth(), Number(e.target.value))}>
+            {yearOptions.map((year) => (
+              <option key={year} value={year}>{year}</option>
+            ))}
+          </select>
           <button className="ag-nav-btn" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} /></button>
-          <button className="ag-nav-today" onClick={() => setCurrentDate(new Date())}>Hoje</button>
           <button className="ag-nav-btn" onClick={next} aria-label="Próximo"><ChevronRight size={13} /></button>
         </div>
 
@@ -309,74 +306,14 @@ export function AgendaView({
         </div>
       </div>
 
-      <div className="ag-legend">
-        {LEGEND_ITEMS.map((item) => (
-          <span key={item.tone} className="ag-legend-item">
-            <span className={`ag-legend-dot ag-legend-dot--${item.tone}`} />
-            {item.label}
-          </span>
-        ))}
-        <span className="ag-legend-sep">·</span>
-        <span className="ag-legend-note">Capacidade de acordo com a agenda configurada</span>
+      <div className="ag-summary-row">
+        <div className="ag-side-stat"><strong>{summaryStats.todayReqs}</strong><span>hoje</span></div>
+        <div className="ag-side-stat"><strong>{summaryStats.weekReqs}</strong><span>semana</span></div>
+        <div className="ag-side-stat is-ok"><strong>{summaryStats.compareceram}</strong><span>realizados</span></div>
+        <div className="ag-side-stat is-warn"><strong>{summaryStats.canceladas}</strong><span>cancelados</span></div>
       </div>
 
-      <div className="ag-workspace">
-        <aside className="ag-side">
-          <div className="ag-side-controls">
-            <div className="ag-side-head">
-              <span><SlidersHorizontal size={15} /> Controle</span>
-              {hasFilters && <button onClick={() => { setFilterType(""); setFilterStatus(""); setSearch(""); }}>Resetar</button>}
-            </div>
-
-            <label className="ag-search">
-              <Search size={15} className="ag-search-icon" />
-              <input
-                type="search"
-                placeholder="Buscar tutor, CPF, animal..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button className="ag-search-clear" onClick={() => setSearch("")} aria-label="Limpar">
-                  <X size={13} />
-                </button>
-              )}
-            </label>
-
-            <div className="ag-filter-stack">
-              <label className="ag-filter">
-                <span>Tipo de atendimento</span>
-                <select className="ag-select" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                  <option value="">Todos os tipos</option>
-                  {allTypes.map((t) => (
-                    <option key={t} value={t}>{requestTypeLabel({ type: t })}</option>
-                  ))}
-                </select>
-              </label>
-
-              <label className="ag-filter">
-                <span>Status operacional</span>
-                <select className="ag-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                  <option value="">Todos os status</option>
-                  <option value="analise">Nova</option>
-                  <option value="agendada">Agendada</option>
-                  <option value="realizada">Realizada</option>
-                  <option value="cancelada">Cancelada</option>
-                </select>
-              </label>
-            </div>
-          </div>
-
-          <div className="ag-side-summary">
-            <div className="ag-side-stat"><strong>{summaryStats.todayReqs}</strong><span>hoje</span></div>
-            <div className="ag-side-stat"><strong>{summaryStats.weekReqs}</strong><span>semana</span></div>
-            <div className="ag-side-stat is-ok"><strong>{summaryStats.compareceram}</strong><span>realizados</span></div>
-            <div className="ag-side-stat is-warn"><strong>{summaryStats.canceladas}</strong><span>cancelados</span></div>
-          </div>
-
-        </aside>
-
-        <div className="ag-canvas">
+      <div className="ag-canvas">
         {view === "month" && (
           <MonthView currentDate={currentDate} todayStr={todayStr} selectedDay={selectedDay} getDayInfo={getDayInfo} onDayClick={setSelectedDay} />
         )}
@@ -401,7 +338,6 @@ export function AgendaView({
         {view === "list" && (
           <ListView filtered={filtered} onOpenRequest={openRequest} />
         )}
-        </div>
       </div>
 
       {selectedDay && (

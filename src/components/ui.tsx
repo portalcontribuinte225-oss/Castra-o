@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import type { AnyRecord } from "../types";
 import { statusLabels } from "../domain";
 
@@ -24,11 +24,18 @@ export function InfoTile({ label, value }: AnyRecord) {
 export function ConfigSectionHeader({ title, createLabel, onCreate, children }: AnyRecord) {
   return (
     <div className="config-section-header">
-      <div>
+      <div className="config-section-heading">
         <h2>{title}</h2>
-        {children}
       </div>
-      {createLabel && <button className="primary-action config-create-action" type="button" onClick={onCreate}>+ {createLabel}</button>}
+      <div className="config-section-tools">
+        {children}
+        {createLabel && (
+          <button className="primary-action config-create-action" type="button" onClick={onCreate}>
+            <Plus size={15} />
+            {createLabel}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

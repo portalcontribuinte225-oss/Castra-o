@@ -200,12 +200,16 @@ const permissionConfigItems: ConfigTabItem[] = [
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
   { id: "whatsapp_settings", label: "Aba WhatsApp" },
+  { id: "ai_settings", label: "Configurar IA" },
 ];
 
 function filterVisibleConfigTabs(tabs: ConfigTabItem[] = [], currentUser: AnyRecord, canUsePermissions: boolean, currentPermissionGroup: AnyRecord): ConfigTabItem[] {
   return tabs.filter((tab) => {
     if (tab.globalOnly && !isGlobalRole(currentUser?.role)) return false;
-    if (tab.aiSettingsOnly && !canManageAiSettings(currentUser?.role)) return false;
+    if (tab.aiSettingsOnly) {
+      if (canUsePermissions) return Boolean(currentPermissionGroup?.allowedConfigItems?.includes("ai_settings"));
+      return canManageAiSettings(currentUser?.role);
+    }
     if (tab.id === "whatsapp" && canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("whatsapp_settings")) return false;
     return true;
   });
@@ -3943,8 +3947,9 @@ function NewRequest({
     internalCompact ? "nr-shell--internal" : "",
     publicFlow ? "nr-shell--public" : "",
   ].filter(Boolean).join(" ");
-  const HealthField = publicFlow ? YesNoToggleField : YesNoField;
-  const FoodField = publicFlow ? ToggleChoiceField : CompactChoiceField;
+  const externalLikeRegistration = publicFlow || internalSimple;
+  const HealthField = externalLikeRegistration ? YesNoToggleField : YesNoField;
+  const FoodField = externalLikeRegistration ? ToggleChoiceField : CompactChoiceField;
 
   return (
       <div className={requestShellClassName}>
@@ -4109,7 +4114,7 @@ function NewRequest({
             {animals.map((animal, index) => {
               const isOpen = animals.length === 1 || expandedAnimal === index;
               const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
-              const showTypeSelector = publicFlow && index === 0 && configuredRequestTypes.length > 0;
+              const showTypeSelector = externalLikeRegistration && index === 0 && configuredRequestTypes.length > 0;
               return (
                 <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
                   {animals.length > 1 && (
@@ -4149,7 +4154,7 @@ function NewRequest({
                         </div>
                       )}
 
-                      {publicFlow && (
+                      {externalLikeRegistration && (
                         <div className="access-field" data-label="Nome">
                           <input type="text" placeholder="Ex: Bidu" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
                         </div>
@@ -4165,7 +4170,7 @@ function NewRequest({
                           <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
                         </div>
                       )}
-                      {publicFlow ? (
+                      {externalLikeRegistration ? (
                         <>
                           <CompactChoiceField label="Porte" value={animal.size} options={sizeChoiceOptions} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} />
                           <div className="animal-choice-grid two-col">
@@ -4232,15 +4237,15 @@ function NewRequest({
                     <div className="form-sub-card">
                       <span className="form-sub-card-title">Saúde e cuidados</span>
                       <div className="health-grid">
-                        <HealthField label={publicFlow ? "Vermifugado" : "Vermifugado?"} value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
-                        <HealthField label={publicFlow ? "Vacinas em dia" : "Vacinas em dia?"} value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
-                        <HealthField label={publicFlow ? "Já teve cria" : "Já teve cria?"} value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
-                        <HealthField label={publicFlow ? "Histórico de doenças" : "Histórico de doenças?"} value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
-                        <FoodField label={publicFlow ? "Alimentação exclusiva com ração" : "Alimentação"} value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
+                        <HealthField label={externalLikeRegistration ? "Vermifugado" : "Vermifugado?"} value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
+                        <HealthField label={externalLikeRegistration ? "Vacinas em dia" : "Vacinas em dia?"} value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
+                        <HealthField label={externalLikeRegistration ? "Já teve cria" : "Já teve cria?"} value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
+                        <HealthField label={externalLikeRegistration ? "Histórico de doenças" : "Histórico de doenças?"} value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
+                        <FoodField label={externalLikeRegistration ? "Alimentação exclusiva com ração" : "Alimentação"} value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
                       </div>
                     </div>
                     {internalSimple && inlineAnimalPhotoUpload}
-                    {!publicFlow && animals.length > 1 && (
+                    {!externalLikeRegistration && animals.length > 1 && (
                       <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
                         Remover animal {index + 1}
                       </button>
@@ -4249,11 +4254,11 @@ function NewRequest({
                 </div>
               );
             })}
-            <div className={publicFlow ? "anm-actions-row" : undefined}>
+            <div className={externalLikeRegistration ? "anm-actions-row" : undefined}>
               <button className="anm-add-btn" type="button" onClick={addAnimal}>
                 Adicionar animal
               </button>
-              {publicFlow && animals.length > 1 && (
+              {externalLikeRegistration && animals.length > 1 && (
                 <button
                   className="animal-remove-inline"
                   type="button"
@@ -5846,7 +5851,6 @@ function AdoptionView({
   const [animalForm, setAnimalForm] = useState(emptyAnimalForm);
   const [formError, setFormError] = useState("");
   const [isSavingAnimal, setIsSavingAnimal] = useState(false);
-  const [adoptionSearch, setAdoptionSearch] = useState("");
   const [adoptionStatusFilter, setAdoptionStatusFilter] = useState(ADOPTION_STATUS_AVAILABLE);
   const [adoptionFilters, setAdoptionFilters] = useState({ species: "", sex: "" });
   const [adoptionViewMode, setAdoptionViewMode] = useState("grid");
@@ -5874,13 +5878,11 @@ function AdoptionView({
       return animal.status === adoptionStatusFilter;
     })
     .filter((animal) => !adoptionFilters.species || animal.species === adoptionFilters.species)
-    .filter((animal) => !adoptionFilters.sex || animal.sex === adoptionFilters.sex)
-    .filter((animal) => matchesAdoptionSearch(animal, adoptionSearch));
+    .filter((animal) => !adoptionFilters.sex || animal.sex === adoptionFilters.sex);
   const activeFilterCount =
     Number(adoptionStatusFilter !== ADOPTION_STATUS_AVAILABLE) +
     Number(Boolean(adoptionFilters.species)) +
-    Number(Boolean(adoptionFilters.sex)) +
-    Number(Boolean(adoptionSearch.trim()));
+    Number(Boolean(adoptionFilters.sex));
   const statusQuickFilters = [
     { value: ADOPTION_STATUS_AVAILABLE, label: `Disponiveis (${availableAnimals.length})`, icon: HeartHandshake },
     { value: ADOPTION_STATUS_IN_PROGRESS, label: `Triagem (${inProgressAnimals.length})`, icon: Clock },
@@ -5898,9 +5900,6 @@ function AdoptionView({
     { value: "", label: "Todos", icon: Users },
     ...sexFilterOptions.map((sex) => ({ value: sex, label: sex, icon: Users })),
   ];
-  const totalInterests = adoptionAnimals.reduce(
-    (sum, animal) => sum + getAdoptionInterestList(animal).length, 0
-  );
   const recentInterestItems = adoptionAnimals
     .flatMap((animal) => getAdoptionInterestList(animal).map((interest, index) => ({ animal, interest, index })))
     .sort((left, right) => new Date(right.interest.created_at || 0).getTime() - new Date(left.interest.created_at || 0).getTime())
@@ -6203,18 +6202,67 @@ function AdoptionView({
       <div className="adoption-shell">
         <div className="page-toolbar adoption-command-controls">
           {canManageAdoptions && (
-            <div className="page-actions adoption-command-actions">
-              <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
-                <Plus size={16} />
-                Cadastrar animal
+            <nav className="adoption-nav adoption-nav-modern" aria-label="Filtros de adocao">
+              <div className="adoption-filter-group" aria-label="Filtrar por status">
+                {statusQuickFilters.map((filter) => {
+                  const Icon = filter.icon;
+                  return (
+                    <button key={filter.value} className={adoptionStatusFilter === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionStatusFilter(filter.value)}>
+                      <Icon size={15} />
+                      <span>{filter.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="adoption-filter-sep" />
+              <div className="adoption-filter-group" aria-label="Filtrar por especie">
+                {speciesQuickFilters.map((filter) => {
+                  const Icon = filter.icon;
+                  return (
+                    <button key={`species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}>
+                      <Icon size={15} />
+                      <span>{filter.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="adoption-filter-sep" />
+              <div className="adoption-filter-group" aria-label="Filtrar por sexo">
+                {sexQuickFilters.map((filter) => {
+                  const Icon = filter.icon;
+                  return (
+                    <button key={`sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}>
+                      <Icon size={15} />
+                      <span>{filter.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {activeFilterCount > 0 && (
+                <button className="ghost-button adoption-clear-btn" type="button" onClick={() => { setAdoptionStatusFilter(ADOPTION_STATUS_AVAILABLE); setAdoptionFilters({ species: "", sex: "" }); }}>
+                  Limpar filtros
+                </button>
+              )}
+            </nav>
+          )}
+
+          <div className="adoption-toolbar-actions">
+            <div className="adoption-view-toggle" aria-label="Modo de visualizacao">
+              <button className={adoptionViewMode === "grid" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("grid")} title="Grade" aria-label="Grade">
+                <LayoutDashboard size={15} />
+              </button>
+              <button className={adoptionViewMode === "list" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("list")} title="Lista" aria-label="Lista">
+                <ListChecks size={15} />
               </button>
             </div>
-          )}
-          <div className="adoption-command-stats">
-            <span>{availableAnimals.length} disponíveis</span>
-            <span>{inProgressAnimals.length} em triagem</span>
-            <span>{adoptedAnimals.length} adotados</span>
-            <span>{totalInterests} interessados</span>
+            {canManageAdoptions && (
+              <div className="page-actions adoption-command-actions">
+                <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
+                  <Plus size={16} />
+                  Cadastrar animal
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -6304,76 +6352,12 @@ function AdoptionView({
           </div>
         )}
 
-        <div className="adoption-control-panel">
-          <label className="adoption-search-box">
-            <Search size={16} />
-            <input
-              value={adoptionSearch}
-              onChange={(event) => setAdoptionSearch(event.target.value)}
-              placeholder="Buscar por nome, espécie, descrição ou microchip"
-            />
-          </label>
-          <div className="adoption-view-toggle" aria-label="Modo de visualizacao">
-            <button className={adoptionViewMode === "grid" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("grid")} title="Grade" aria-label="Grade">
-              <LayoutDashboard size={15} />
-            </button>
-            <button className={adoptionViewMode === "list" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("list")} title="Lista" aria-label="Lista">
-              <ListChecks size={15} />
-            </button>
-          </div>
-        </div>
-
-        {canManageAdoptions && (
-          <nav className="adoption-nav adoption-nav-modern" aria-label="Filtros de adoção">
-            <div className="adoption-filter-group" aria-label="Filtrar por status">
-              {statusQuickFilters.map((filter) => {
-                const Icon = filter.icon;
-                return (
-                  <button key={filter.value} className={adoptionStatusFilter === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionStatusFilter(filter.value)}>
-                    <Icon size={15} />
-                    <span>{filter.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="adoption-filter-sep" />
-            <div className="adoption-filter-group" aria-label="Filtrar por especie">
-              {speciesQuickFilters.map((filter) => {
-                const Icon = filter.icon;
-                return (
-                  <button key={`species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}>
-                    <Icon size={15} />
-                    <span>{filter.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <div className="adoption-filter-sep" />
-            <div className="adoption-filter-group" aria-label="Filtrar por sexo">
-              {sexQuickFilters.map((filter) => {
-                const Icon = filter.icon;
-                return (
-                  <button key={`sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}>
-                    <Icon size={15} />
-                    <span>{filter.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {activeFilterCount > 0 && (
-              <button className="ghost-button adoption-clear-btn" type="button" onClick={() => { setAdoptionSearch(""); setAdoptionStatusFilter(ADOPTION_STATUS_AVAILABLE); setAdoptionFilters({ species: "", sex: "" }); }}>
-                Limpar filtros
-              </button>
-            )}
-          </nav>
-        )}
-
         <div className="adoption-board-layout">
           <div className="adoption-results-panel">
             {displayedAnimals.length === 0 && (
               <EmptyState
                 title={adoptionStatusFilter === ADOPTION_STATUS_ADOPTED ? "Nenhum animal adotado" : "Nenhum animal encontrado"}
-                text={activeFilterCount > 0 ? "Ajuste os filtros ou limpe a busca para ver os animais do programa." : "Cadastre o primeiro animal para liberar a galeria publica."}
+                text={activeFilterCount > 0 ? "Ajuste ou limpe os filtros para ver os animais do programa." : "Cadastre o primeiro animal para liberar a galeria publica."}
               />
             )}
 
@@ -8393,7 +8377,7 @@ function ConfigView({
         );
       })()}
 
-      {configArea === "integrations" && configTab === "ai_settings" && canManageAiSettings(currentUser?.role) && (
+      {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
         <div className="panel wide">
           <PanelHeader title="IA externa para documentos" />
           <div className="ai-settings-layout">
