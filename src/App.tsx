@@ -60,6 +60,8 @@ import {
   accessRequesterTypes,
   aiProviderOptions,
   brazilStatesFallback,
+  countRequestAnimals,
+  countUsedVacancies,
   DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE,
   filterByMunicipalityScope,
   generateScheduleDaysFromRule,
@@ -79,6 +81,7 @@ import {
   initialTeams,
   initialWhatsappSettings,
   WHATSAPP_TEMPLATE_VARS,
+  isPastScheduleDay,
   isRequestOnScheduleDate,
   mergeTags,
   normalizeDocumentType,
@@ -87,6 +90,7 @@ import {
   normalizeScheduleDateText,
   normalizeScheduleDay,
   normalizeScheduleSlots,
+  parseScheduleDate,
   requestHasTag,
   requestResultLabel,
   requestResultTag,
@@ -140,6 +144,7 @@ import {
 } from "./utils";
 import { AccessRequestsView, accessStatusLabel } from "./features/accessRequests";
 import { AgendaView } from "./features/agenda";
+import { useRequestActions } from "./features/request-actions";
 import { DashboardView } from "./features/dashboard";
 import { ReportsView } from "./features/reports";
 const menu = [
@@ -153,12 +158,12 @@ const menu = [
 ];
 
 const configSidebarItems = [
-  { id: "environment", label: "Configurar Ambiente", desc: "Parâmetros gerais do sistema" },
-  { id: "municipalities", label: "Criar Municípios", globalOnly: true, desc: "Gestão de municípios" },
-  { id: "users", label: "Criar Usuários", desc: "Acesso e permissões" },
-  { id: "sectors", label: "Criar Setores", desc: "Setores e equipes" },
-  { id: "permissions", label: "Permissões", desc: "Controle de acesso por perfil" },
-  { id: "ai_settings", label: "Inteligência Artificial", globalOnly: true, desc: "Análise documental por IA" },
+  { id: "environment", label: "Configurar Ambiente" },
+  { id: "municipalities", label: "Criar Municípios", globalOnly: true },
+  { id: "users", label: "Criar Usuários" },
+  { id: "sectors", label: "Criar Setores" },
+  { id: "permissions", label: "Permissões" },
+  { id: "ai_settings", label: "Inteligência Artificial", globalOnly: true },
 ];
 
 const permissionMenuItems = menu.map(({ id, label }) => ({ id, label }));
@@ -253,7 +258,7 @@ export default function App() {
     setCurrentUserRaw(user);
   }
   const [active, setActive] = useState("admin");
-  const [configArea, setConfigArea] = useState("environment");
+  const [configArea, setConfigArea] = useState("");
   const [configTab, setConfigTab] = useState("agenda");
   const [requests, setRequests] = useState([]);
   const [adoptionAnimals, setAdoptionAnimals] = useState([]);
@@ -275,7 +280,7 @@ export default function App() {
   const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [topbarWhatsappQuota, setTopbarWhatsappQuota] = useState<AnyRecord | null>(null);
-  const [configMenuOpen, setConfigMenuOpen] = useState(true);
+  const [configMenuOpen, setConfigMenuOpen] = useState(false);
   const [tenantConfigReady, setTenantConfigReady] = useState(false);
   const [loadedConfigKeys, setLoadedConfigKeys] = useState({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
@@ -746,7 +751,6 @@ export default function App() {
                 ? municipalities.find((m) => m.id === currentUser.municipalityId)?.name || "Sistema municipal"
                 : "Plataforma"}
             </strong>
-            <span>{userRoleLabel(currentUser.role)}</span>
           </div>
           <button
             className="sidebar-toggle-btn"
@@ -768,10 +772,17 @@ export default function App() {
                   title={sidebarCollapsed ? item.label : undefined}
                   onClick={() => {
                     if (item.id === "config") {
-                      setConfigMenuOpen((current) => (active === "config" ? !current : true));
+                      if (active === "config" && configMenuOpen) {
+                        setConfigMenuOpen(false);
+                        setConfigArea("");
+                      } else {
+                        setConfigMenuOpen(true);
+                      }
                       setActive("config");
                       return;
                     }
+                    setConfigMenuOpen(false);
+                    setConfigArea("");
                     setActive(item.id);
                     setMobileOpen(false);
                   }}
@@ -798,7 +809,6 @@ export default function App() {
                           <span className="config-nav-dot" />
                           <span className="config-nav-text">
                             <span className="config-nav-label">{subitem.label}</span>
-                            {subitem.desc && <span className="config-nav-desc">{subitem.desc}</span>}
                           </span>
                           <ChevronRight size={13} className={`config-nav-chevron${subitem.id === "environment" && configArea === "environment" ? " open" : ""}`} />
                         </button>
@@ -863,7 +873,6 @@ export default function App() {
           </button>
           <div className="main-reader">
             <div className="topbar-context-chip">
-              <span>Secretaria</span>
               <strong>
                 {!isGlobalRole(currentUser.role)
                   ? municipalities.find((m) => m.id === currentUser.municipalityId)?.name || "Bem-estar animal"
@@ -1111,6 +1120,10 @@ function userRoleLabel(role = "") {
     protetor: "Protetor",
     servidor_publico: "Servidor público",
   }[role] || role || "Usuário";
+}
+
+function canManageAiSettings(role = "") {
+  return isGlobalRole(role) || role === "admin_municipal";
 }
 
 function canManagePublicAnimalFlows(role = "") {
@@ -1807,7 +1820,7 @@ function PublicSchedulePicker({
 }
 
 function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRecord) {
-  const availableAnimals = adoptionAnimals.filter((animal) => animal.status !== "adotado");
+  const availableAnimals = sortAdoptionsForHighlight(adoptionAnimals.filter((animal) => animal.status !== ADOPTION_STATUS_ADOPTED));
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [selectedAnimal, setSelectedAnimal] = useState(null);
   const [showInterestForm, setShowInterestForm] = useState(false);
@@ -1877,14 +1890,16 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
         )}
         {filteredAnimals.map((animal) => {
           const displayName = String(animal.name || animal.animal_name || "Animal").trim();
-          const interestCount = Array.isArray(animal.interests) ? animal.interests.length : 0;
+          const interestCount = getAdoptionInterestList(animal).length;
+          const highlighted = isAdoptionHighlighted(animal);
           return (
             <article
-              className="public-animal-card"
+              className={`public-animal-card${highlighted ? " is-highlighted" : ""}`}
               key={animal.id || animal.name}
             >
               <button className="public-animal-open-area" type="button" onClick={() => openAnimalModal(animal)}>
                 <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
+                  {highlighted && <span className="public-adoption-highlight-badge"><BadgeCheck size={12} /> Destaque</span>}
                   {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={24} />}
                 </div>
               </button>
@@ -2032,6 +2047,71 @@ function getAnimalMainPhoto(animal) {
   return photos[animal.mainPhotoIndex || 0] || photos[0] || "";
 }
 
+const ADOPTION_STATUS_AVAILABLE = "disponivel";
+const ADOPTION_STATUS_IN_PROGRESS = "em_processo";
+const ADOPTION_STATUS_ADOPTED = "adotado";
+const ADOPTION_HIGHLIGHT_DAYS = 15;
+
+function getAdoptionDaysInProgram(animal: AnyRecord = {}) {
+  const createdAt = animal.created_at || animal.createdAt;
+  if (!createdAt) return null;
+  const createdDate = new Date(createdAt);
+  if (Number.isNaN(createdDate.getTime())) return null;
+  const diff = Date.now() - createdDate.getTime();
+  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+}
+
+function isAdoptionHighlighted(animal: AnyRecord = {}) {
+  const days = getAdoptionDaysInProgram(animal);
+  return animal.status !== ADOPTION_STATUS_ADOPTED && days !== null && days >= ADOPTION_HIGHLIGHT_DAYS;
+}
+
+function sortAdoptionsForHighlight(animals: AnyRecord[] = []) {
+  return [...animals].sort((left, right) => {
+    const rightHighlight = Number(isAdoptionHighlighted(right));
+    const leftHighlight = Number(isAdoptionHighlighted(left));
+    if (rightHighlight !== leftHighlight) return rightHighlight - leftHighlight;
+    return (getAdoptionDaysInProgram(right) || 0) - (getAdoptionDaysInProgram(left) || 0);
+  });
+}
+
+function getAdoptionStatusView(animal: AnyRecord = {}) {
+  if (animal.status === ADOPTION_STATUS_ADOPTED) {
+    return { label: "Adotado", className: "is-adopted" };
+  }
+  if (animal.status === ADOPTION_STATUS_IN_PROGRESS) {
+    return { label: "Em triagem", className: "is-progress" };
+  }
+  return { label: "Disponivel", className: "is-available" };
+}
+
+function getAdoptionInterestList(animal: AnyRecord = {}) {
+  return Array.isArray(animal.interests) ? animal.interests : [];
+}
+
+function formatAdoptionDate(value = "") {
+  if (!value) return "";
+  const parsed = new Date(String(value).includes("T") ? value : `${value}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toLocaleDateString("pt-BR");
+}
+
+function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
+  const normalizedQuery = normalizeText(query.trim());
+  if (!normalizedQuery) return true;
+  const searchable = [
+    animal.name,
+    animal.animal_name,
+    animal.species,
+    animal.sex,
+    animal.age,
+    animal.tone,
+    animal.description,
+    animal.animal_microchip,
+    animal.microchip,
+  ];
+  return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
+}
 function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -2042,6 +2122,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
   const [publicServiceDone, setPublicServiceDone] = useState<AnyRecord | null>(null);
   const [publicServiceDoneDownloading, setPublicServiceDoneDownloading] = useState(false);
+  const [publicServiceDoneDownloadError, setPublicServiceDoneDownloadError] = useState("");
   const [publicServiceScheduleDays, setPublicServiceScheduleDays] = useState(scheduleDays);
   const [publicServiceScheduleRules, setPublicServiceScheduleRules] = useState([]);
   const [publicServiceRequestTypes, setPublicServiceRequestTypes] = useState(requestTypes);
@@ -2171,6 +2252,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   async function downloadPublicServiceRequerimento() {
     if (!publicServiceDone || publicServiceDoneDownloading) return;
     setPublicServiceDoneDownloading(true);
+    setPublicServiceDoneDownloadError("");
     try {
       const dataUrl = await createRequestPdfDataUrl(publicServiceDone);
       const anchor = window.document.createElement("a");
@@ -2179,6 +2261,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
       anchor.click();
     } catch (error) {
       console.error("Erro ao gerar requerimento:", error);
+      setPublicServiceDoneDownloadError("Não foi possível gerar o requerimento agora. Tente novamente em instantes.");
     } finally {
       setPublicServiceDoneDownloading(false);
     }
@@ -2272,6 +2355,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                     {publicServiceDoneDownloading ? "Gerando..." : "Baixar requerimento"}
                   </button>
                 </div>
+                {publicServiceDoneDownloadError && <p className="form-error">{publicServiceDoneDownloadError}</p>}
               </div>
             ) : activePublicService === "procedure_form" ? (
               <NewRequest
@@ -4376,7 +4460,7 @@ function DocumentPreviewModal({ document, onClose }: AnyRecord) {
   );
 }
 
-function ToastContainer({ toasts, onDismiss }: AnyRecord) {
+export function ToastContainer({ toasts, onDismiss }: AnyRecord) {
   if (!toasts.length) return null;
   return (
     <div className="toast-container" role="region" aria-live="polite">
@@ -4405,7 +4489,6 @@ function AdminDashboard({
   globalSearch = "",
 }) {
   const [requestFilter, setRequestFilter] = useState("inbox");
-  const [previewRequest, setPreviewRequest] = useState(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   const [todayOnly, setTodayOnly] = useState(false);
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
@@ -4416,13 +4499,20 @@ function AdminDashboard({
     setTimeout(() => setToasts((current) => current.filter((t) => t.id !== id)), type === "error" ? 6000 : 4000);
   }
 
-  function checkWhatsappToast(updated: AnyRecord) {
-    const history: AnyRecord[] = Array.isArray(updated?.history) ? updated.history : [];
-    const last = [...history].reverse().find((h) => String(h.notes || "").includes("WhatsApp:"));
-    if (!last) return;
-    if (String(last.notes).includes("enviado")) showToast(`WhatsApp enviado com sucesso`, "success");
-    else if (String(last.notes).includes("falha")) showToast(`WhatsApp: falha no envio. Verifique as configurações.`, "error");
-  }
+  const {
+    previewRequest,
+    openRequest: openRequestPreview,
+    closePreview: closeRequestPreview,
+    activeSectors,
+    activeUsers,
+    activeScheduleDays,
+    approveRequest,
+    archiveWithTag,
+    rescheduleFromPreview,
+    assignFromPreview,
+    rejectRequestFromProcess,
+    confirmAttendanceFromProcess,
+  } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
 
   const visibleRequests = useMemo(
     () => (Array.isArray(requests) ? requests : [])
@@ -4479,11 +4569,6 @@ function AdminDashboard({
   const todayRequests = visibleRequests.filter((r) => isRequestOnScheduleDate(r, today));
   const activeTab = filterTabs.find((tab) => tab.id === requestFilter) || filterTabs[0];
   const activeRequests = todayOnly ? todayRequests : activeTab.requests;
-  const activeScheduleDays = scheduleDays
-    .filter((day) => day.active !== false && !isPastScheduleDay(day.date))
-    .map((day) => ({ ...day, remaining: Math.max((day.vacancies || 0) - countUsedVacancies(requests, day.date), 0) }));
-  const activeUsers = teams.users?.filter((user) => user.active !== false) || [];
-  const activeSectors = teams.sectors?.filter((sector) => sector.active !== false) || [];
   const currentTeamUser = activeUsers.find((user) => user.email && currentUser.email && user.email.toLowerCase() === currentUser.email.toLowerCase())
     || activeUsers.find((user) => user.id === currentUser.id);
   const currentUserSector = activeSectors.find((sector) => getUserSectorIds(currentTeamUser).includes(sector.id));
@@ -4506,117 +4591,12 @@ function AdminDashboard({
     } catch { showToast("Erro ao assumir processo", "error"); }
   }
 
-  async function approveRequest(request) {
-    const patch = { status: "AGENDADA" };
-    try {
-      const updated = await patchRequest?.(request.id, patch, `Agenda confirmada por ${currentUser.name}`);
-      showToast("Agenda confirmada com sucesso", "success");
-      checkWhatsappToast(updated);
-    } catch { showToast("Erro ao confirmar agenda", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
-  }
-
   async function notAttendedRequest(request) {
     const patch = { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Não compareceu" } };
     try {
       await patchRequest?.(request.id, patch, `Não comparecimento registrado por ${currentUser.name}`);
       showToast("Não comparecimento registrado", "info");
     } catch { showToast("Erro ao registrar não comparecimento", "error"); }
-  }
-
-  async function archiveWithTag(request, tag, note) {
-    const cancelReason = tag === "NAO_COMPARECEU" ? "Não compareceu" : tag === "CANCELADA" ? "Cancelado" : "";
-    const patch = cancelReason
-      ? { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason } }
-      : { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: tag } };
-    try {
-      await patchRequest?.(request.id, patch, note);
-      showToast("Processo cancelado", "info");
-    } catch { showToast("Erro ao cancelar processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
-  }
-
-  async function rescheduleFromPreview(request, date, reason = "") {
-    if (!request || !date) return;
-    const note = String(reason || "").trim();
-    const patch = {
-      status: request.status,
-      tags: mergeTags(request.tags, ["REAGENDADA"]),
-      previousSchedule: request.preferredSchedule || request.appointment || "Não informado",
-      preferredSchedule: date,
-      appointment: date,
-    };
-    try {
-      const updated = await patchRequest?.(request.id, patch, `Reagendada por ${currentUser.name}: ${request.preferredSchedule || "sem data"} -> ${date}${note ? `. Motivo: ${note}` : ""}`);
-      showToast(`Processo reagendado para ${date}`, "success");
-      checkWhatsappToast(updated);
-    } catch { showToast("Erro ao reagendar processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
-  }
-
-  async function assignFromPreview(request, assignment: AnyRecord = {}) {
-    if (!request) return;
-    const sector = activeSectors.find((item) => item.id === assignment.sectorId);
-    const user = activeUsers.find((item) => item.id === assignment.userId);
-    if (!sector || !user) return;
-    const patch = {
-      status: request.status,
-      assignedSectorId: sector.id,
-      assignedSectorName: sector.name,
-      assignedUserId: user.id,
-      responsible: user.name || sector.name || "Equipe",
-      tags: mergeTags(request.tags, ["ATRIBUIDA"]),
-    };
-    try {
-      await patchRequest?.(request.id, patch, `Atribuída para ${sector.name} / ${user.name}`);
-      showToast(`Atribuído para ${user.name} — ${sector.name}`, "success");
-    } catch { showToast("Erro ao atribuir processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
-  }
-
-  async function rejectRequestFromProcess(request, data: AnyRecord = {}) {
-    if (!request) return;
-    const note = String(data.note || "").trim();
-    const patch = {
-      status: "CANCELADA",
-      rejectionReason: data.category || note || "Indeferido",
-      rejectionNote: note,
-      workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Indeferido" },
-    };
-    try {
-      await patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
-      showToast("Processo indeferido", "warning");
-    } catch { showToast("Erro ao indeferir processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
-  }
-
-  async function confirmAttendanceFromProcess(request, data: AnyRecord = {}) {
-    if (!request) return;
-    const normalized = normalizeRequest(request);
-    const microchip = String(data.microchip || "").trim();
-    const note = String(data.note || "").trim();
-    const receita = String(data.receita || "").trim();
-    const performedProcedures = getPerformedProceduresLabel(normalized);
-    const currentAnimals = Array.isArray(normalized.animals) ? normalized.animals : [];
-    const animals = microchip
-      ? currentAnimals.map((animal, index) => index === 0 ? { ...animal, hasChip: "Sim", microchip } : animal)
-      : currentAnimals;
-    const patch = {
-      status: "REALIZADA",
-      animalMicrochip: microchip,
-      animals,
-      workflow_data: { performedProcedures, attendanceMicrochip: microchip, attendanceNote: note, attendancePrescription: receita },
-    };
-    try {
-      await patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${receita ? `. Receita registrada` : ""}${note ? `. Observação: ${note}` : ""}`);
-      showToast("Comparecimento confirmado — procedimento realizado", "success");
-    } catch { showToast("Erro ao confirmar comparecimento", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
-  }
-
-  function openRequestPreview(request) {
-    setSelectedId?.(request.id);
-    setPreviewRequest(request);
   }
 
   return (
@@ -4724,7 +4704,7 @@ function AdminDashboard({
           scheduleDays={activeScheduleDays}
           sectors={activeSectors}
           users={activeUsers}
-          onClose={() => setPreviewRequest(null)}
+          onClose={closeRequestPreview}
           onApprove={approveRequest}
           onReject={rejectRequestFromProcess}
           onArchive={archiveWithTag}
@@ -4772,7 +4752,7 @@ function AdminDashboard({
   );
 }
 
-function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [] }: AnyRecord) {
+export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -4782,7 +4762,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
   const [docDecisions, setDocDecisions] = useState({});
-  const [modalTab, setModalTab] = useState<"procedimento" | "animal">("procedimento");
+  const [modalTab, setModalTab] = useState<"procedimento" | "anexos">("procedimento");
   const [savingAnimalData, setSavingAnimalData] = useState(false);
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [selectedRescheduleDate, setSelectedRescheduleDate] = useState("");
@@ -4820,6 +4800,8 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     available: true,
   };
 
+  const isAnimalPhotoDocument = (d: AnyRecord) => d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
+
   const requiredRows = requiredDocTypes.map((dt) => {
     const uploaded = uploadedDocs.find(
       (d) => d.documentName === dt.name || d.documentId === dt.id,
@@ -4846,8 +4828,20 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     };
   });
 
+  const animalPhotoUpload = uploadedDocs.find(isAnimalPhotoDocument);
+  const animalPhotoRow = animalPhotoUpload ? {
+    id: animalPhotoUpload.documentId || animalPhotoUpload.fileName || "animal_photo",
+    kind: "photo",
+    nome: animalPhotoUpload.fileName || animalPhotoUpload.documentName || "Foto de registro animal",
+    tipo: animalPhotoUpload.documentName || "Foto de registro animal",
+    status: "Anexado",
+    message: "Foto de identificação do animal — usada como identidade 3x4 nos documentos de prontuário. Não requer validação.",
+    available: true,
+    document: animalPhotoUpload,
+  } : null;
+
   const extraDocs = uploadedDocs
-    .filter((d) => !requiredDocTypes.find((dt) => d.documentName === dt.name || d.documentId === dt.id))
+    .filter((d) => !isAnimalPhotoDocument(d) && !requiredDocTypes.find((dt) => d.documentName === dt.name || d.documentId === dt.id))
     .map((d, index) => ({
       id: d.documentId || d.fileName || `extra-${index}`,
       kind: "attachment",
@@ -4859,7 +4853,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
       document: d,
     }));
 
-  const anexos = [requerimento, ...requiredRows, ...extraDocs];
+  const anexos = [requerimento, ...(animalPhotoRow ? [animalPhotoRow] : []), ...requiredRows, ...extraDocs];
 
   const rejectionReasons = [
     "Documentação incompleta",
@@ -4871,7 +4865,6 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   ];
 
   const principalAnimal = normalizedRequest.animals?.[0] || {};
-  const animalSummary = [principalAnimal.name, principalAnimal.species, principalAnimal.sex].filter(Boolean).join(" · ");
   const wf = normalizedRequest.workflowData || normalizedRequest.workflow_data || {};
   const [animalData, setAnimalData] = useState({
     doencas: principalAnimal.doencas || wf.doencas || "",
@@ -4885,7 +4878,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     if (status === "Aprovado") return "approved";
     if (status === "Recusado") return "rejected";
     if (status === "Não enviado") return "missing";
-    if (status === "Gerado") return "generated";
+    if (status === "Gerado" || status === "Anexado") return "generated";
     return "pending";
   }
 
@@ -4895,6 +4888,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
     if (anexo.status === "Aprovado") return "Análise: aprovado";
     if (anexo.status === "Recusado") return "Análise: recusado";
     if (anexo.status === "Gerado") return "Sistema";
+    if (anexo.status === "Anexado") return "Sem validação necessária";
     if (anexo.status === "Não enviado") return "Pendente";
     return "Aguardando";
   }
@@ -4984,34 +4978,35 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
   function renderAttachments() {
     return (
       <div className="process-attachments-list">
-        {anexos.map((anexo, index) => {
+        {anexos.map((anexo) => {
           const decision = docDecisions[anexo.id];
           return (
             <article className="process-attachment-row" key={`${anexo.kind}-${anexo.id}`}>
               <div className="process-attachment-main">
-                <span className="process-attachment-number">{index + 1}</span>
-                <FileText size={18} className="process-attachment-icon" />
+                <span className="process-attachment-icon-box">
+                  <FileText size={15} className="process-attachment-icon" />
+                </span>
                 <div className="process-attachment-info">
                   <strong>{anexo.tipo}</strong>
-                </div>
-                <div className="attachment-ai-status">
-                  <span className={`attachment-status attachment-status--${decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : statusClass(anexo.status)}`}>
-                    {getAiStatusLabel(anexo, decision)}
-                  </span>
-                  {anexo.message && <p className="attachment-ai-message">{anexo.message}</p>}
-                  <AiAnalysisDetails
-                    show={Boolean(anexo.document?.provider) && !anexo.document?.error}
-                    provider={anexo.document?.provider}
-                    model={anexo.document?.model}
-                    confidence={anexo.document?.confidence}
-                    criteriaResults={anexo.document?.criteriaResults}
-                    metaClassName="attachment-ai-meta"
-                    criteriaClassName="doc-criteria-results attachment-ai-criteria"
-                  />
+                  <div className="attachment-ai-status">
+                    <span className={`attachment-status attachment-status--${decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : statusClass(anexo.status)}`}>
+                      {getAiStatusLabel(anexo, decision)}
+                    </span>
+                    {anexo.message && <p className="attachment-ai-message">{anexo.message}</p>}
+                    <AiAnalysisDetails
+                      show={Boolean(anexo.document?.provider) && !anexo.document?.error}
+                      provider={anexo.document?.provider}
+                      model={anexo.document?.model}
+                      confidence={anexo.document?.confidence}
+                      criteriaResults={anexo.document?.criteriaResults}
+                      metaClassName="attachment-ai-meta"
+                      criteriaClassName="doc-criteria-results attachment-ai-criteria"
+                    />
+                  </div>
                 </div>
               </div>
               <div className="process-attachment-actions">
-                {anexo.available && anexo.kind !== "request" && canAnalyze ? (
+                {anexo.available && anexo.kind !== "request" && anexo.kind !== "photo" && canAnalyze ? (
                   <>
                     <button
                       className={`doc-decision-btn${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
@@ -5167,8 +5162,11 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
           <div className="prm-header-identity">
             <div className="prm-header-identity-text">
               <span className="prm-eyebrow">Processo #{normalizedRequest.protocol || request.protocol || "-"}</span>
-              <h2 className="prm-tutor-name">{displayText(normalizedRequest.tutor)}</h2>
-              {animalSummary && <p className="prm-animal-summary">{animalSummary}</p>}
+              <h2 className="prm-headline-name">{principalAnimal.name || "Animal sem nome"}</h2>
+              <p className="prm-animal-summary">
+                {[principalAnimal.species, principalAnimal.sex].filter(Boolean).join(" · ") || "Espécie não informada"}
+                <span className="prm-tutor-inline"> · Tutor: {displayText(normalizedRequest.tutor)}</span>
+              </p>
             </div>
             <div className="prm-header-actions">
               <StatusBadge status={normalizedRequest.status} />
@@ -5217,74 +5215,59 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
             <div className="prm-inline-panel-wrap">{renderInlineReschedule()}</div>
           )}
 
-          {!isRescheduleMode && !isRescheduleMode && (
+          {!isRescheduleMode && (
             <div className="prm-tabs">
               <button
                 type="button"
                 className={`prm-tab${modalTab === "procedimento" ? " prm-tab--active" : ""}`}
                 onClick={() => setModalTab("procedimento")}
               >
-                <ClipboardList size={13} /> Procedimento
+                <FileText size={13} /> Procedimento
               </button>
               <button
                 type="button"
-                className={`prm-tab${modalTab === "animal" ? " prm-tab--active" : ""}`}
-                onClick={() => setModalTab("animal")}
+                className={`prm-tab${modalTab === "anexos" ? " prm-tab--active" : ""}`}
+                onClick={() => setModalTab("anexos")}
               >
-                <PawPrint size={13} /> Dados do Animal
+                <Paperclip size={13} /> Anexos
               </button>
             </div>
           )}
 
           {!isRescheduleMode && modalTab === "procedimento" && (
-            <>
-              {anexos.length > 0 && (
-                <div className="prm-section prm-section--documents">
-                  <div className="prm-section-head">
-                    <p className="prm-section-label"><FileText size={13} /> Documentos</p>
-                    <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
-                  </div>
-                  {renderAttachments()}
-                </div>
-              )}
-
+            <div className="prm-section prm-section--procedure">
               {canRecordAttendance && (
-                <div className="prm-section prm-section--procedure">
-                  <div className="prm-section-head">
-                    <p className="prm-section-label"><ClipboardList size={13} /> Procedimento</p>
-                    <span className="prm-section-count">Atendimento</span>
+                <>
+                  <div className="prm-section-block">
+                    <p className="prm-section-title">Procedimento</p>
+                    <div className="prm-procedure-fields">
+                      <label className="field">
+                        <span>Microchip</span>
+                        <input
+                          value={attendanceData.microchip}
+                          onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+                          placeholder="Código aplicado ou lido"
+                        />
+                      </label>
+                      <label className="field">
+                        <span>Observação</span>
+                        <input
+                          type="text"
+                          value={attendanceData.note}
+                          onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
+                          placeholder="Observações do atendimento"
+                        />
+                      </label>
+                    </div>
                   </div>
-                  <div className="prm-procedure-fields">
-                    <label className="field">
-                      <span>Microchip</span>
-                      <input
-                        value={attendanceData.microchip}
-                        onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
-                        placeholder="Código aplicado ou lido"
-                      />
-                    </label>
-                    <label className="field">
-                      <span>Observação</span>
-                      <textarea
-                        value={attendanceData.note}
-                        onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
-                        rows={2}
-                      />
-                    </label>
-                  </div>
-                </div>
+                  <div className="prm-section-divider" />
+                </>
               )}
 
-              {!canAnalyze && !canRecordAttendance && anexos.length === 0 && (
-                <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
-              )}
-            </>
-          )}
-
-          {!isRescheduleMode && modalTab === "animal" && (
-            <div className="prm-section prm-section--animal-data">
-              <div className="prm-animal-data-grid">
-                <label className="field prm-animal-field--full">
+              <div className="prm-section-block">
+                <p className="prm-section-title">Histórico de saúde</p>
+                <div className="prm-animal-data-grid">
+                <label className="field">
                   <span>Doenças pré-existentes</span>
                   <textarea
                     value={animalData.doencas}
@@ -5293,7 +5276,7 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
                     rows={2}
                   />
                 </label>
-                <label className="field prm-animal-field--full">
+                <label className="field">
                   <span>Alergias conhecidas</span>
                   <textarea
                     value={animalData.alergias}
@@ -5363,7 +5346,9 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
                     rows={2}
                   />
                 </label>
+                </div>
               </div>
+
               {patchRequest && (
                 <div className="prm-animal-save-row">
                   <button
@@ -5378,30 +5363,48 @@ function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive,
               )}
             </div>
           )}
+
+          {!isRescheduleMode && modalTab === "anexos" && (
+            <div className="prm-section prm-section--documents">
+              {anexos.length > 0 ? (
+                <>
+                  <div className="prm-section-head">
+                    <p className="prm-section-label">Documentos</p>
+                    <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
+                  </div>
+                  {renderAttachments()}
+                </>
+              ) : (
+                <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
+              )}
+            </div>
+          )}
         </div>
 
         {!isRescheduleMode && (
           <footer className="prm-footer">
           {canAnalyze && (
             <>
-              <button
-                className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
-                type="button"
-                onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
-              >
-                <ClipboardList size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
-              </button>
-              {activePanel !== "reject" && (
+              <div className="prm-footer-start">
                 <button
-                  className="prm-action-btn prm-action-btn--ghost-danger"
+                  className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
                   type="button"
-                  disabled={blockWithoutAssignment}
-                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
-                  onClick={() => setActivePanel("reject")}
+                  onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
                 >
-                  Indeferir
+                  <User size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
                 </button>
-              )}
+                {activePanel !== "reject" && (
+                  <button
+                    className="prm-action-btn prm-action-btn--ghost-danger"
+                    type="button"
+                    disabled={blockWithoutAssignment}
+                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
+                    onClick={() => setActivePanel("reject")}
+                  >
+                    Indeferir
+                  </button>
+                )}
+              </div>
               {activePanel !== "reject" && (
                 <button
                   className="prm-action-btn prm-action-btn--primary"
@@ -5555,13 +5558,6 @@ function PwaInstallPrompt() {
 }
 
 
-function getPerformedProceduresLabel(request: AnyRecord = {}) {
-  const animals = Array.isArray(request.animals) ? request.animals : [];
-  const procedures = animals.map((animal) => animal.procedure).filter(Boolean);
-  const uniqueProcedures = [...new Set(procedures)];
-  return uniqueProcedures.length ? uniqueProcedures.join(", ") : request.type || request.request_type || "Procedimento realizado";
-}
-
 function PrescriptionModal({ request, initialText, onSave, onClose }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const principalAnimal = normalizedRequest.animals?.[0] || {};
@@ -5662,7 +5658,7 @@ function PrescriptionModal({ request, initialText, onSave, onClose }: AnyRecord)
 }
 
 async function generatePrescriptionPdf(request: AnyRecord = {}, prescriptionText: string = "") {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -5770,10 +5766,12 @@ function AdoptionView({
   const [animalForm, setAnimalForm] = useState(emptyAnimalForm);
   const [formError, setFormError] = useState("");
   const [isSavingAnimal, setIsSavingAnimal] = useState(false);
-  const [adoptionTab, setAdoptionTab] = useState("available");
+  const [adoptionSearch, setAdoptionSearch] = useState("");
+  const [adoptionStatusFilter, setAdoptionStatusFilter] = useState(ADOPTION_STATUS_AVAILABLE);
   const [adoptionFilters, setAdoptionFilters] = useState({ species: "", sex: "" });
+  const [adoptionViewMode, setAdoptionViewMode] = useState("grid");
   const [editingAnimalId, setEditingAnimalId] = useState(null);
-  const [interestsModal, setInterestsModal] = useState(null);
+  const [selectedAdoptionAnimal, setSelectedAdoptionAnimal] = useState<AnyRecord | null>(null);
   const emptyAdoptionModalForm = {
     tutor: "", cpf: "", cep: "", number: "", address: "", neighborhood: "", city: "", state: "", email: "", phone: "",
     procedimentos: "", adopted_at: new Date().toISOString().slice(0, 10),
@@ -5785,32 +5783,54 @@ function AdoptionView({
   const [adoptionModalCepStatus, setAdoptionModalCepStatus] = useState("");
   const [isSavingAdoption, setIsSavingAdoption] = useState(false);
   const canManageAdoptions = canManagePublicAnimalFlows(currentUser.role);
-  const availableAnimals = adoptionAnimals.filter((animal) => animal.status !== "adotado");
-  const adoptedAnimals = adoptionAnimals.filter((animal) => animal.status === "adotado");
-  const baseDisplayedAnimals = canManageAdoptions && adoptionTab === "adopted" ? adoptedAnimals : availableAnimals;
-  const displayedAnimals = baseDisplayedAnimals
-    .filter((animal) => !adoptionFilters.species || animal.species === adoptionFilters.species)
-    .filter((animal) => !adoptionFilters.sex || animal.sex === adoptionFilters.sex);
+  const availableAnimals = adoptionAnimals.filter((animal) => !animal.status || animal.status === ADOPTION_STATUS_AVAILABLE);
+  const inProgressAnimals = adoptionAnimals.filter((animal) => animal.status === ADOPTION_STATUS_IN_PROGRESS);
+  const adoptedAnimals = adoptionAnimals.filter((animal) => animal.status === ADOPTION_STATUS_ADOPTED);
   const speciesFilterOptions = [...new Set(["Felino", "Canino", ...adoptionAnimals.map((animal) => animal.species).filter(Boolean)])];
   const sexFilterOptions = [...new Set(["Femea", "Macho", ...adoptionAnimals.map((animal) => animal.sex).filter(Boolean)])];
-  const activeFilterCount = Number(Boolean(adoptionFilters.species)) + Number(Boolean(adoptionFilters.sex));
+  const displayedAnimals = sortAdoptionsForHighlight(adoptionAnimals)
+    .filter((animal) => {
+      if (adoptionStatusFilter === ADOPTION_STATUS_AVAILABLE) return !animal.status || animal.status === ADOPTION_STATUS_AVAILABLE;
+      return animal.status === adoptionStatusFilter;
+    })
+    .filter((animal) => !adoptionFilters.species || animal.species === adoptionFilters.species)
+    .filter((animal) => !adoptionFilters.sex || animal.sex === adoptionFilters.sex)
+    .filter((animal) => matchesAdoptionSearch(animal, adoptionSearch));
+  const activeFilterCount =
+    Number(adoptionStatusFilter !== ADOPTION_STATUS_AVAILABLE) +
+    Number(Boolean(adoptionFilters.species)) +
+    Number(Boolean(adoptionFilters.sex)) +
+    Number(Boolean(adoptionSearch.trim()));
   const statusQuickFilters = [
-    { value: "available", label: `Disponíveis (${availableAnimals.length})`, icon: HeartHandshake },
-    { value: "adopted", label: `Adotados (${adoptedAnimals.length})`, icon: CheckCircle2 },
+    { value: ADOPTION_STATUS_AVAILABLE, label: `Disponiveis (${availableAnimals.length})`, icon: HeartHandshake },
+    { value: ADOPTION_STATUS_IN_PROGRESS, label: `Triagem (${inProgressAnimals.length})`, icon: Clock },
+    { value: ADOPTION_STATUS_ADOPTED, label: `Adotados (${adoptedAnimals.length})`, icon: CheckCircle2 },
   ];
   const speciesQuickFilters = [
-    { value: "", label: "Todos os pets", icon: PawPrint },
+    { value: "", label: "Todas", icon: PawPrint },
     ...speciesFilterOptions.map((species) => ({
       value: species,
-      label: species,
+      label: normalizeText(species).includes("fel") ? "Gatos" : normalizeText(species).includes("can") ? "Caes" : species,
       icon: normalizeText(species).includes("fel") ? Cat : normalizeText(species).includes("can") ? Dog : PawPrint,
     })),
   ];
   const sexQuickFilters = [
-    { value: "", label: "Todos os sexos", icon: HeartHandshake },
+    { value: "", label: "Todos", icon: Users },
     ...sexFilterOptions.map((sex) => ({ value: sex, label: sex, icon: Users })),
   ];
-
+  const totalInterests = adoptionAnimals.reduce(
+    (sum, animal) => sum + getAdoptionInterestList(animal).length, 0
+  );
+  const recentInterestItems = adoptionAnimals
+    .flatMap((animal) => getAdoptionInterestList(animal).map((interest, index) => ({ animal, interest, index })))
+    .sort((left, right) => new Date(right.interest.created_at || 0).getTime() - new Date(left.interest.created_at || 0).getTime())
+    .slice(0, 4);
+  const visitItems = adoptionAnimals
+    .flatMap((animal) => getAdoptionInterestList(animal).map((interest, index) => ({ animal, interest, index })))
+    .filter((item) => item.interest.visit_date)
+    .sort((left, right) => new Date(`${left.interest.visit_date}T12:00:00`).getTime() - new Date(`${right.interest.visit_date}T12:00:00`).getTime())
+    .slice(0, 3);
+  const highlightedAnimal = sortAdoptionsForHighlight(availableAnimals).find(isAdoptionHighlighted);
   function getAnimalKey(animal) {
     return animal.id || animal.name;
   }
@@ -5885,7 +5905,7 @@ function AdoptionView({
 
     const oversized = files.find((file) => file.size > MAX_ADOPTION_PHOTO_BYTES);
     if (oversized) {
-      setFormError(`Cada imagem pode ter no máximo ${Math.floor(MAX_ADOPTION_PHOTO_BYTES / (1024 * 1024))}MB.`);
+      setFormError(`Cada imagem pode ter no máximo ${Math.floor(MAX_ADOPTION_PHOTO_BYTES / (1024 * 1024))} MB.`);
       selectedInput.value = "";
       return;
     }
@@ -5893,7 +5913,7 @@ function AdoptionView({
     const currentTotalBytes = animalForm.photos.reduce((total, photo) => total + estimatePhotoBytes(photo), 0);
     const incomingBytes = files.reduce((total, file) => total + file.size, 0);
     if (currentTotalBytes + incomingBytes > MAX_ADOPTION_TOTAL_BYTES) {
-      setFormError(`Total de imagens excedido. Limite: ${Math.floor(MAX_ADOPTION_TOTAL_BYTES / (1024 * 1024))}MB.`);
+      setFormError(`Total de imagens excedido. Limite: ${Math.floor(MAX_ADOPTION_TOTAL_BYTES / (1024 * 1024))} MB.`);
       selectedInput.value = "";
       return;
     }
@@ -5938,7 +5958,7 @@ function AdoptionView({
     if (isSavingAnimal) return;
 
     if (!animalForm.name.trim() || !animalForm.age.trim() || !animalForm.species || !animalForm.sex || !animalForm.tone.trim()) {
-      setFormError("Preencha nome, idade, especie, sexo e descricao antes de publicar.");
+      setFormError("Preencha nome, idade, espécie, sexo e descrição antes de publicar.");
       return;
     }
 
@@ -5982,7 +6002,9 @@ function AdoptionView({
     try {
       const patch = status === "adotado" ? { status, adopted_at: new Date().toISOString() } : { status };
       const updated = await api.updateAdoption(animal.id, patch);
-      setAdoptionAnimals((current) => current.map((item) => item.id === animal.id ? { ...item, ...updated } : item));
+      const normalized = normalizeAdoptionAnimal(updated);
+      setAdoptionAnimals((current) => current.map((item) => item.id === animal.id ? { ...item, ...normalized } : item));
+      setSelectedAdoptionAnimal((current) => current && current.id === animal.id ? { ...current, ...normalized } : current);
     } catch (err) {
       console.error("Erro ao atualizar status:", err);
     }
@@ -5992,6 +6014,7 @@ function AdoptionView({
     try {
       await api.deleteAdoption(animal.id);
       setAdoptionAnimals((current) => current.filter((item) => item.id !== animal.id));
+      setSelectedAdoptionAnimal((current) => current && current.id === animal.id ? null : current);
     } catch (err) {
       console.error("Erro ao excluir animal:", err);
     }
@@ -6000,9 +6023,10 @@ function AdoptionView({
   async function openInterestsModal(animal) {
     try {
       const list = await api.getInterests(animal.id);
-      setInterestsModal({ animal, list });
+      setSelectedAdoptionAnimal({ ...animal, interests: list });
     } catch (err) {
       console.error("Erro ao carregar interessados:", err);
+      setSelectedAdoptionAnimal(animal);
     }
   }
 
@@ -6011,7 +6035,7 @@ function AdoptionView({
       const updated = await api.removeInterest(animalId, index);
       const normalized = normalizeAdoptionAnimal(updated);
       setAdoptionAnimals((current) => current.map((a) => a.id === animalId ? normalized : a));
-      setInterestsModal((current) => current ? { ...current, animal: normalized, list: normalized.interests } : null);
+      setSelectedAdoptionAnimal((current) => current && current.id === animalId ? { ...current, ...normalized } : current);
     } catch (err) {
       console.error("Erro ao remover interesse:", err);
     }
@@ -6083,7 +6107,9 @@ function AdoptionView({
         adoption_notes: adoptionModalForm.procedimentos,
       };
       const updated = await api.updateAdoption(adoptionConfirmModal.id, patch);
-      setAdoptionAnimals((current) => current.map((item) => item.id === adoptionConfirmModal.id ? { ...item, ...updated } : item));
+      const normalized = normalizeAdoptionAnimal(updated);
+      setAdoptionAnimals((current) => current.map((item) => item.id === adoptionConfirmModal.id ? { ...item, ...normalized } : item));
+      setSelectedAdoptionAnimal((current) => current && current.id === adoptionConfirmModal.id ? { ...current, ...normalized } : current);
       setAdoptionConfirmModal(null);
     } catch (err) {
       console.error("Erro ao confirmar adoção:", err);
@@ -6092,256 +6118,397 @@ function AdoptionView({
     }
   }
 
-  const totalInterests = adoptionAnimals.reduce(
-    (sum, animal) => sum + (Array.isArray(animal.interests) ? animal.interests.length : 0), 0
-  );
-
   return (
     <section className="content-grid adoption-workspace">
-      <div className="adoption-toolbar">
-        <div className="adoption-toolbar-left">
-          <span className="cr-title-kicker">
-            <HeartHandshake size={13} /> Adoção responsável
-          </span>
-          <h2 className="cr-title">Galeria de adoção</h2>
-          <div className="cr-stats-row" style={{ marginTop: 4 }}>
-            <span>{availableAnimals.length} disponíveis</span>
-            {adoptedAnimals.length > 0 && <span className="cr-stat-ok">{adoptedAnimals.length} adotados</span>}
-            {totalInterests > 0 && <span>{totalInterests} interessados</span>}
+      <div className="adoption-shell">
+        <header className="adoption-command-header">
+          <div className="adoption-command-copy">
+            <span className="adoption-command-kicker"><HeartHandshake size={14} /> Adocao responsavel</span>
+            <h2>Painel de adocao</h2>
+            <div className="adoption-command-stats">
+              <span>{availableAnimals.length} disponiveis</span>
+              <span>{inProgressAnimals.length} em triagem</span>
+              <span>{adoptedAnimals.length} adotados</span>
+              <span>{totalInterests} interessados</span>
+            </div>
           </div>
-        </div>
-        {canManageAdoptions && (
-          <button className="primary-action" type="button" onClick={openAnimalForm}>
-            <Plus size={16} />
-            Cadastrar animal
-          </button>
+          {canManageAdoptions && (
+            <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
+              <Plus size={16} />
+              Cadastrar animal
+            </button>
+          )}
+        </header>
+
+        {canManageAdoptions && isFormOpen && (
+          <div
+            className="modal-backdrop"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) closeAnimalForm();
+            }}
+          >
+            <form className="adoption-form-modal" onSubmit={publishAnimal} role="dialog" aria-modal="true">
+              <ModalHeader title={editingAnimalId ? "Editar animal para adoção" : "Cadastrar animal para adoção"} onClose={closeAnimalForm} />
+              <div className="adoption-editor-grid">
+                <div className="adoption-photo-column">
+                  <label className="animal-photo-uploader">
+                    {animalForm.photos.length > 0 ? (
+                      <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Previa principal do animal" />
+                    ) : (
+                      <span>
+                        <UploadCloud size={28} />
+                        Fotos do animal
+                      </span>
+                    )}
+                    <input type="file" accept="image/*" multiple onChange={handlePhotoChange} />
+                  </label>
+                  <small>Máximo: 5 imagens, 2 MB por imagem, 8 MB no total.</small>
+                  {animalForm.photos.length > 0 && (
+                    <div className="animal-photo-picker">
+                      {animalForm.photos.map((photo, index) => (
+                        <div className="animal-photo-option" key={`${photo}-${index}`}>
+                          <button
+                            className={animalForm.mainPhotoIndex === index ? "selected" : ""}
+                            type="button"
+                            onClick={() => updateAnimalForm("mainPhotoIndex", index)}
+                          >
+                            <img src={photo} alt={`Foto ${index + 1}`} />
+                            <span>{animalForm.mainPhotoIndex === index ? "Principal" : "Usar principal"}</span>
+                          </button>
+                          <button className="animal-photo-remove" type="button" onClick={() => removeAnimalPhoto(index)} aria-label="Excluir foto">
+                            <X size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="adoption-editor-fields">
+                  <div className="animal-main-grid">
+                    <Field label="Nome" value={animalForm.name} onChange={(value) => updateAnimalForm("name", value)} />
+                    <Field label="Idade aproximada" value={animalForm.age} onChange={(value) => updateAnimalForm("age", value)} />
+                  </div>
+                  <div className="animal-choice-grid">
+                    <CompactChoiceField
+                      label="Espécie"
+                      value={animalForm.species}
+                      options={activeSpecies}
+                      onChange={(value) => updateAnimalForm("species", value)}
+                    />
+                    <CompactChoiceField
+                      label="Sexo"
+                      value={animalForm.sex}
+                      options={["Femea", "Macho"]}
+                      onChange={(value) => updateAnimalForm("sex", value)}
+                    />
+                  </div>
+                  <label className="field">
+                    <span>Descrição para a página pública</span>
+                    <textarea
+                      value={animalForm.tone}
+                      placeholder="Temperamento, história, cuidados e perfil do adotante indicado"
+                      onChange={(event) => updateAnimalForm("tone", event.target.value)}
+                    />
+                  </label>
+                </div>
+              </div>
+              {formError && <p className="form-error">{formError}</p>}
+              <div className="form-actions">
+                <button className="ghost-button" type="button" onClick={() => closeAnimalForm()}>
+                  Cancelar
+                </button>
+                <button className="primary-action" type="submit" disabled={isSavingAnimal}>
+                  {isSavingAnimal ? "Salvando..." : editingAnimalId ? "Salvar alterações" : "Publicar na galeria"}
+                </button>
+              </div>
+            </form>
+          </div>
         )}
+
+        <div className="adoption-control-panel">
+          <label className="adoption-search-box">
+            <Search size={16} />
+            <input
+              value={adoptionSearch}
+              onChange={(event) => setAdoptionSearch(event.target.value)}
+              placeholder="Buscar por nome, espécie, descrição ou microchip"
+            />
+          </label>
+          <div className="adoption-view-toggle" aria-label="Modo de visualizacao">
+            <button className={adoptionViewMode === "grid" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("grid")} title="Grade" aria-label="Grade">
+              <LayoutDashboard size={15} />
+            </button>
+            <button className={adoptionViewMode === "list" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("list")} title="Lista" aria-label="Lista">
+              <ListChecks size={15} />
+            </button>
+          </div>
+          {canManageAdoptions && (
+            <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
+              <Plus size={16} />
+              Cadastrar
+            </button>
+          )}
+        </div>
+
+        {canManageAdoptions && (
+          <nav className="adoption-nav adoption-nav-modern" aria-label="Filtros de adocao">
+            <div className="adoption-filter-group" aria-label="Filtrar por status">
+              {statusQuickFilters.map((filter) => {
+                const Icon = filter.icon;
+                return (
+                  <button key={filter.value} className={adoptionStatusFilter === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionStatusFilter(filter.value)}>
+                    <Icon size={15} />
+                    <span>{filter.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="adoption-filter-sep" />
+            <div className="adoption-filter-group" aria-label="Filtrar por especie">
+              {speciesQuickFilters.map((filter) => {
+                const Icon = filter.icon;
+                return (
+                  <button key={`species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}>
+                    <Icon size={15} />
+                    <span>{filter.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="adoption-filter-sep" />
+            <div className="adoption-filter-group" aria-label="Filtrar por sexo">
+              {sexQuickFilters.map((filter) => {
+                const Icon = filter.icon;
+                return (
+                  <button key={`sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}>
+                    <Icon size={15} />
+                    <span>{filter.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {activeFilterCount > 0 && (
+              <button className="ghost-button adoption-clear-btn" type="button" onClick={() => { setAdoptionSearch(""); setAdoptionStatusFilter(ADOPTION_STATUS_AVAILABLE); setAdoptionFilters({ species: "", sex: "" }); }}>
+                Limpar filtros
+              </button>
+            )}
+          </nav>
+        )}
+
+        <div className="adoption-board-layout">
+          <div className="adoption-results-panel">
+            {displayedAnimals.length === 0 && (
+              <EmptyState
+                title={adoptionStatusFilter === ADOPTION_STATUS_ADOPTED ? "Nenhum animal adotado" : "Nenhum animal encontrado"}
+                text={activeFilterCount > 0 ? "Ajuste os filtros ou limpe a busca para ver os animais do programa." : "Cadastre o primeiro animal para liberar a galeria publica."}
+              />
+            )}
+
+            {displayedAnimals.length > 0 && adoptionViewMode === "grid" && (
+              <div className="adoption-grid adoption-grid-modern">
+                {displayedAnimals.map((animal) => {
+                  const statusView = getAdoptionStatusView(animal);
+                  const interestCount = getAdoptionInterestList(animal).length;
+                  const daysInProgram = getAdoptionDaysInProgram(animal);
+                  const highlighted = isAdoptionHighlighted(animal);
+                  const displayName = animal.name || animal.animal_name || "Animal";
+                  return (
+                    <article className={`adoption-card adoption-card-modern${highlighted ? " is-highlighted" : ""}`} key={animal.id || animal.name}>
+                      <div className={`animal-photo ${getAnimalGradient(animal)}`}>
+                        {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={44} />}
+                        <span className={`adoption-card-status ${statusView.className}`}>{statusView.label}</span>
+                        {highlighted && <span className="adoption-highlight-badge"><BadgeCheck size={12} /> Destaque</span>}
+                      </div>
+                      <div className="adoption-card-body">
+                        <h3>{displayName}</h3>
+                        <p>{[animal.species, animal.sex, animal.age].filter(Boolean).join(" - ") || "Dados basicos nao informados"}</p>
+                        {animal.animal_microchip && <small>chip {animal.animal_microchip}</small>}
+                        {daysInProgram !== null && <small>{daysInProgram} dias no programa</small>}
+                      </div>
+                      {canManageAdoptions && (
+                        <div className="adoption-card-actions">
+                          <button className={interestCount > 0 ? "adoption-interest-indicator has-interest interest-button" : "adoption-interest-indicator interest-button"} type="button" onClick={() => openInterestsModal(animal)}>
+                            <Users size={13} />
+                            <span>{interestCount}</span>
+                          </button>
+                          <button className="ghost-button" type="button" onClick={() => setSelectedAdoptionAnimal(animal)} title="Ver ficha" aria-label="Ver ficha">
+                            <Eye size={16} />
+                          </button>
+                          <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar">
+                            <Edit3 size={16} />
+                          </button>
+                          {animal.status === ADOPTION_STATUS_ADOPTED ? (
+                            <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar">
+                              <RefreshCw size={16} />
+                            </button>
+                          ) : (
+                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adocao" aria-label="Concluir adocao">
+                              <CheckCircle2 size={16} />
+                            </button>
+                          )}
+                          <button className="adoption-card-delete-top" type="button" aria-label="Excluir" onClick={() => deleteAnimal(animal)}>
+                            <X size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            {displayedAnimals.length > 0 && adoptionViewMode === "list" && (
+              <div className="adoption-list-modern">
+                {displayedAnimals.map((animal) => {
+                  const statusView = getAdoptionStatusView(animal);
+                  const interestCount = getAdoptionInterestList(animal).length;
+                  const daysInProgram = getAdoptionDaysInProgram(animal);
+                  const displayName = animal.name || animal.animal_name || "Animal";
+                  return (
+                    <article className="adoption-list-row" key={animal.id || animal.name}>
+                      <button className={`adoption-list-thumb ${getAnimalGradient(animal)}`} type="button" onClick={() => setSelectedAdoptionAnimal(animal)} aria-label={`Abrir ficha de ${displayName}`}>
+                        {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={22} />}
+                      </button>
+                      <div className="adoption-list-info">
+                        <strong>{displayName}</strong>
+                        <span>{[animal.species, animal.sex, animal.age].filter(Boolean).join(" - ") || "Dados basicos nao informados"}</span>
+                      </div>
+                      <span className={`adoption-card-status ${statusView.className}`}>{statusView.label}</span>
+                      <span className="adoption-list-muted"><Users size={13} /> {interestCount}</span>
+                      <span className="adoption-list-muted">{daysInProgram !== null ? `${daysInProgram} dias` : "Sem data"}</span>
+                      {canManageAdoptions && (
+                        <div className="adoption-list-actions">
+                          <button className="ghost-button" type="button" onClick={() => setSelectedAdoptionAnimal(animal)} title="Ver ficha" aria-label="Ver ficha"><Eye size={15} /></button>
+                          <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar"><Edit3 size={15} /></button>
+                          {animal.status === ADOPTION_STATUS_ADOPTED ? (
+                            <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar"><RefreshCw size={15} /></button>
+                          ) : (
+                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adocao" aria-label="Concluir adocao"><CheckCircle2 size={15} /></button>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {canManageAdoptions && (
+            <aside className="adoption-rail" aria-label="Resumo operacional da adocao">
+              <div className="adoption-rail-card">
+                <h3>Aguardando triagem</h3>
+                <div className="adoption-rail-list">
+                  {recentInterestItems.length === 0 && <p className="adoption-rail-empty">Nenhum interessado recente.</p>}
+                  {recentInterestItems.map((item) => (
+                    <button className="adoption-rail-person" type="button" key={`${item.animal.id}-${item.index}`} onClick={() => openInterestsModal(item.animal)}>
+                      <span>{String(item.interest.name || "?").slice(0, 2).toUpperCase()}</span>
+                      <strong>{item.interest.name || "Interessado"}</strong>
+                      <small>{item.animal.name || item.animal.animal_name || "Animal"} - {formatAdoptionDate(item.interest.created_at) || "sem data"}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="adoption-rail-card">
+                <h3>Visitas agendadas</h3>
+                <div className="adoption-rail-list">
+                  {visitItems.length === 0 && <p className="adoption-rail-empty">Nenhuma visita agendada.</p>}
+                  {visitItems.map((item) => (
+                    <button className="adoption-visit-item" type="button" key={`visit-${item.animal.id}-${item.index}`} onClick={() => openInterestsModal(item.animal)}>
+                      <span>{formatAdoptionDate(item.interest.visit_date) || "--"}</span>
+                      <strong>{item.animal.name || item.animal.animal_name || "Animal"}</strong>
+                      <small>{item.interest.name || "Interessado"}</small>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="adoption-rail-card adoption-rail-highlight">
+                <div>
+                  <BadgeCheck size={16} />
+                  <h3>Destaque automatico</h3>
+                </div>
+                {highlightedAnimal ? (
+                  <>
+                    <p>{highlightedAnimal.name || highlightedAnimal.animal_name || "Animal"} esta ha {getAdoptionDaysInProgram(highlightedAnimal)} dias no programa e tambem aparece em destaque na home.</p>
+                    <button type="button" onClick={() => setSelectedAdoptionAnimal(highlightedAnimal)}>Ver ficha</button>
+                  </>
+                ) : (
+                  <p>Nenhum animal disponivel passou de {ADOPTION_HIGHLIGHT_DAYS} dias no programa.</p>
+                )}
+              </div>
+            </aside>
+          )}
+        </div>
       </div>
 
-      {canManageAdoptions && isFormOpen && (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeAnimalForm();
-          }}
-        >
-          <form className="adoption-form-modal" onSubmit={publishAnimal} role="dialog" aria-modal="true">
-            <ModalHeader title={editingAnimalId ? "Editar animal para adoção" : "Cadastrar animal para adoção"} onClose={closeAnimalForm} />
-            <div className="adoption-editor-grid">
-              <div className="adoption-photo-column">
-                <label className="animal-photo-uploader">
-                  {animalForm.photos.length > 0 ? (
-                    <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Previa principal do animal" />
-                  ) : (
-                    <span>
-                      <UploadCloud size={28} />
-                      Fotos do animal
-                    </span>
-                  )}
-                  <input type="file" accept="image/*" multiple onChange={handlePhotoChange} />
-                </label>
-                <small>Maximo: 5 imagens, 2MB por imagem, 8MB no total.</small>
-                {animalForm.photos.length > 0 && (
-                  <div className="animal-photo-picker">
-                    {animalForm.photos.map((photo, index) => (
-                      <div className="animal-photo-option" key={`${photo}-${index}`}>
-                        <button
-                          className={animalForm.mainPhotoIndex === index ? "selected" : ""}
-                          type="button"
-                          onClick={() => updateAnimalForm("mainPhotoIndex", index)}
-                        >
-                          <img src={photo} alt={`Foto ${index + 1}`} />
-                          <span>{animalForm.mainPhotoIndex === index ? "Principal" : "Usar principal"}</span>
-                        </button>
-                        <button className="animal-photo-remove" type="button" onClick={() => removeAnimalPhoto(index)} aria-label="Excluir foto">
-                          <X size={14} />
-                        </button>
+      {selectedAdoptionAnimal && (() => {
+        const statusView = getAdoptionStatusView(selectedAdoptionAnimal);
+        const interestList = getAdoptionInterestList(selectedAdoptionAnimal);
+        const daysInProgram = getAdoptionDaysInProgram(selectedAdoptionAnimal);
+        const displayName = selectedAdoptionAnimal.name || selectedAdoptionAnimal.animal_name || "Animal";
+        return (
+          <div className="adoption-drawer-layer">
+            <button className="adoption-drawer-scrim" type="button" aria-label="Fechar ficha" onClick={() => setSelectedAdoptionAnimal(null)} />
+            <aside className="adoption-drawer" role="dialog" aria-modal="true" aria-label={`Ficha de ${displayName}`}>
+              <div className={`adoption-drawer-photo ${getAnimalGradient(selectedAdoptionAnimal)}`}>
+                {getAnimalMainPhoto(selectedAdoptionAnimal) ? <img src={getAnimalMainPhoto(selectedAdoptionAnimal)} alt={displayName} /> : <PawPrint size={48} />}
+                <button type="button" onClick={() => setSelectedAdoptionAnimal(null)} aria-label="Fechar ficha"><X size={16} /></button>
+                <span className={`adoption-card-status ${statusView.className}`}>{statusView.label}</span>
+              </div>
+              <div className="adoption-drawer-body">
+                <h2>{displayName}</h2>
+                <p>{[selectedAdoptionAnimal.species, selectedAdoptionAnimal.sex, selectedAdoptionAnimal.age].filter(Boolean).join(" - ") || "Dados basicos nao informados"}</p>
+                <div className="adoption-drawer-facts">
+                  <span><small>Interesses</small><strong>{interestList.length}</strong></span>
+                  <span><small>No programa</small><strong>{daysInProgram !== null ? `${daysInProgram} dias` : "--"}</strong></span>
+                  <span><small>Microchip</small><strong>{selectedAdoptionAnimal.animal_microchip || selectedAdoptionAnimal.microchip || "--"}</strong></span>
+                  <span><small>Status</small><strong>{statusView.label}</strong></span>
+                </div>
+                {(selectedAdoptionAnimal.tone || selectedAdoptionAnimal.description) && (
+                  <div className="adoption-drawer-section">
+                    <h3>Perfil</h3>
+                    <p>{selectedAdoptionAnimal.tone || selectedAdoptionAnimal.description}</p>
+                  </div>
+                )}
+                <div className="adoption-drawer-section">
+                  <div className="adoption-drawer-section-header">
+                    <h3>Interessados</h3>
+                    <span>{interestList.length}</span>
+                  </div>
+                  <div className="adoption-drawer-interests">
+                    {interestList.length === 0 && <p>Nenhum interessado ainda.</p>}
+                    {interestList.map((item, index) => (
+                      <div className="adoption-drawer-interest" key={`${item.name || "interest"}-${index}`}>
+                        <strong>{item.name || "Interessado"}</strong>
+                        <span>{item.phone || "Telefone nao informado"}</span>
+                        {item.visit_date && <small>Visita: {formatAdoptionDate(item.visit_date)}</small>}
+                        {canManageAdoptions && (
+                          <button className="ghost-button danger-action" type="button" onClick={() => removeInterest(selectedAdoptionAnimal.id, index)}>
+                            Remover
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
-                )}
-              </div>
-
-              <div className="adoption-editor-fields">
-                <div className="animal-main-grid">
-                  <Field label="Nome" value={animalForm.name} onChange={(value) => updateAnimalForm("name", value)} />
-                  <Field label="Idade aproximada" value={animalForm.age} onChange={(value) => updateAnimalForm("age", value)} />
                 </div>
-                <div className="animal-choice-grid">
-                  <CompactChoiceField
-                    label="Especie"
-                    value={animalForm.species}
-                    options={activeSpecies}
-                    onChange={(value) => updateAnimalForm("species", value)}
-                  />
-                  <CompactChoiceField
-                    label="Sexo"
-                    value={animalForm.sex}
-                    options={["Femea", "Macho"]}
-                    onChange={(value) => updateAnimalForm("sex", value)}
-                  />
-                </div>
-                <label className="field">
-                  <span>Descricao para a pagina publica</span>
-                  <textarea
-                    value={animalForm.tone}
-                    placeholder="Temperamento, história, cuidados e perfil do adotante indicado"
-                    onChange={(event) => updateAnimalForm("tone", event.target.value)}
-                  />
-                </label>
               </div>
-            </div>
-            {formError && <p className="form-error">{formError}</p>}
-            <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => closeAnimalForm()}>
-                Cancelar
-              </button>
-              <button className="primary-action" type="submit" disabled={isSavingAnimal}>
-                {isSavingAnimal ? "Salvando..." : editingAnimalId ? "Salvar alteracoes" : "Publicar na galeria"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {canManageAdoptions && (
-        <nav className="adoption-nav" aria-label="Filtros de adoção">
-          <div className="adoption-filter-group" aria-label="Filtrar por status">
-            {statusQuickFilters.map((filter) => {
-              const Icon = filter.icon;
-              return (
-                <button key={filter.value} className={adoptionTab === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionTab(filter.value)}>
-                  <Icon size={15} />
-                  <span>{filter.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="adoption-filter-sep" />
-          <div className="adoption-filter-group" aria-label="Filtrar por espécie">
-            {speciesQuickFilters.map((filter) => {
-              const Icon = filter.icon;
-              return (
-                <button key={`species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((c) => ({ ...c, species: filter.value }))}>
-                  <Icon size={15} />
-                  <span>{filter.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="adoption-filter-sep" />
-          <div className="adoption-filter-group" aria-label="Filtrar por sexo">
-            {sexQuickFilters.map((filter) => {
-              const Icon = filter.icon;
-              return (
-                <button key={`sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((c) => ({ ...c, sex: filter.value }))}>
-                  <Icon size={15} />
-                  <span>{filter.label}</span>
-                </button>
-              );
-            })}
-          </div>
-          {activeFilterCount > 0 && (
-            <button className="ghost-button adoption-clear-btn" type="button" onClick={() => setAdoptionFilters({ species: "", sex: "" })}>
-              Limpar filtros
-            </button>
-          )}
-        </nav>
-      )}
-
-      <div className="adoption-grid">
-        {displayedAnimals.length === 0 && (
-          <EmptyState
-            title={adoptionTab === "adopted" ? "Nenhum animal adotado" : "Nenhum animal para adocao"}
-            text={
-              canManagePublicAnimalFlows(currentUser.role)
-                ? activeFilterCount > 0
-                  ? "Nenhum animal encontrado com estes filtros."
-                  : adoptionTab === "adopted"
-                  ? "Animais marcados como adotados ficarão aqui como histórico interno."
-                  : "Cadastre o primeiro animal para liberar a galeria pública."
-                : "A galeria pública ainda não possui animais cadastrados."
-            }
-          />
-        )}
-        {displayedAnimals.map((animal) => {
-          const interestCount = Array.isArray(animal.interests) ? animal.interests.length : 0;
-          return (
-          <article className="adoption-card" key={animal.id || animal.name}>
-            <div className="adoption-card-header strong">
-              <h3>{animal.name || animal.animal_name}</h3>
-              <span className={`adoption-card-status ${animal.status === "adotado" ? "is-adopted" : "is-available"}`}>
-                {animal.status === "adotado" ? "Adotado" : "Disponível"}
-              </span>
               {canManageAdoptions && (
-                <button
-                  className="adoption-card-delete-top"
-                  type="button"
-                  aria-label="Excluir"
-                  onClick={() => deleteAnimal(animal)}
-                >
-                  <X size={14} />
-                </button>
+                <div className="adoption-drawer-actions">
+                  <button className="ghost-button" type="button" onClick={() => editAnimal(selectedAdoptionAnimal)}><Edit3 size={15} /> Editar ficha</button>
+                  {selectedAdoptionAnimal.status === ADOPTION_STATUS_ADOPTED ? (
+                    <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(selectedAdoptionAnimal, ADOPTION_STATUS_AVAILABLE)}><RefreshCw size={15} /> Reativar</button>
+                  ) : (
+                    <button className="primary-action" type="button" onClick={() => openAdoptionConfirmModal(selectedAdoptionAnimal)}><CheckCircle2 size={15} /> Concluir adocao</button>
+                  )}
+                </div>
               )}
-            </div>
-            <div className={`animal-photo ${getAnimalGradient(animal)}`}>
-              {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={animal.name} /> : <PawPrint size={44} />}
-            </div>
-            {canManageAdoptions && (
-              <div className="adoption-card-actions">
-                <button
-                  className={interestCount > 0 ? "adoption-interest-indicator has-interest interest-button" : "adoption-interest-indicator interest-button"}
-                  type="button"
-                  onClick={() => openInterestsModal(animal)}
-                >
-                  <Users size={13} />
-                  <span>{interestCount > 0 ? `${interestCount}` : "0"}</span>
-                </button>
-                <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar">
-                  <Edit3 size={16} />
-                </button>
-                {animal.status === "adotado" ? (
-                  <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, "disponivel")} title="Reativar" aria-label="Reativar">
-                    <RefreshCw size={16} />
-                  </button>
-                ) : (
-                  <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Marcar adotado" aria-label="Marcar adotado">
-                    <CheckCircle2 size={16} />
-                  </button>
-                )}
-              </div>
-            )}
-          </article>
-        );})}
-      </div>
-
-      {interestsModal && (
-        <div className="modal-backdrop">
-          <div className="auth-modal" style={{ maxWidth: 520 }}>
-            <ModalHeader title={`Interessados em ${interestsModal.animal.name || interestsModal.animal.animal_name}`} onClose={() => setInterestsModal(null)} />
-            {interestsModal.list.length === 0 ? (
-              <EmptyState title="Nenhum interesse ainda" text="Quando alguém manifestar interesse, aparecerá aqui." />
-            ) : (
-              <div className="interests-list">
-                {interestsModal.list.map((item, i) => (
-                  <div className="interest-item" key={i}>
-                    <div className="interest-item-header">
-                      <strong>{item.name}</strong>
-                      <span>{new Date(item.created_at).toLocaleDateString("pt-BR")}</span>
-                    </div>
-                    <p><span>Telefone:</span> {item.phone}</p>
-                    {item.visit_date && <p><span>Data para visita:</span> {new Date(item.visit_date + "T12:00:00").toLocaleDateString("pt-BR")}</p>}
-                    <button className="ghost-button danger-action" type="button" onClick={() => removeInterest(interestsModal.animal.id, i)}>
-                      Remover
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+            </aside>
           </div>
-        </div>
-      )}
-
+        );
+      })()}
       {adoptionConfirmModal && (
         <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) closeAdoptionConfirmModal(); }}>
           <div className="auth-modal adoption-confirm-modal" role="dialog" aria-modal="true">
@@ -10584,10 +10751,10 @@ function drawProntuarioSectionTitle(page, title, y, ctx) {
   return y - 22;
 }
 
-function drawProntuarioFields(page, rows, y, ctx) {
+function drawProntuarioFields(page, rows, y, ctx, contentWidthOverride = 0) {
   // rows: array of { label, value }[] — each inner array is one row of columns
   const { font, bold, colors, margin } = ctx;
-  const contentW = page.getWidth() - margin * 2;
+  const contentW = contentWidthOverride || (page.getWidth() - margin * 2);
   const rowH = 30;
   rows.forEach((cols, ri) => {
     const colW = contentW / cols.length;
@@ -10662,7 +10829,7 @@ const prmHistoryEventLabel = (type: string) => ({
 } as AnyRecord)[type] || type || "Evento";
 
 async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const req = normalizeRequest(request);
   const wf: AnyRecord = request.workflowData || request.workflow_data || {};
   const output = await PDFDocument.create();
@@ -10727,6 +10894,11 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
   const animalMicrochip = (fullHistory?.animal?.microchip || req.animalMicrochip || animal.microchip || "").trim();
 
+  const animalPhotoDoc = getUserUploadedProcessDocuments(req.documents).find(
+    (d) => d.documentId === "animal_photo" || d.documentName === "Foto de registro animal",
+  );
+  const animalPhotoDataUrl = getDocumentPreviewSource(animalPhotoDoc || {});
+
   const page = output.addPage(pageSize);
   let y = drawProntuarioHeader(page, req.protocol, statusLabel, statusColor, ctx, animalMicrochip);
   y -= 10;
@@ -10734,6 +10906,11 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   // ── ANIMAL ──────────────────────────────────────────────────────
   y = drawProntuarioSectionTitle(page, "IDENTIFICACAO DO ANIMAL", y, ctx);
   y -= 6;
+  const photoBoxW = 72;
+  const photoBoxH = 96;
+  const photoGap = 14;
+  const identificationFieldsW = animalPhotoDataUrl ? contentW - photoBoxW - photoGap : contentW;
+  const identificationTopY = y;
   y = drawProntuarioFields(page, [
     [
       { label: "NOME", value: animal.name || "-" },
@@ -10753,7 +10930,10 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
       { label: "TIPO DE ANIMAL", value: req.type || "-" },
       { label: "SETOR RESPONSAVEL", value: req.assignedSectorName || "-" },
     ],
-  ], y, ctx);
+  ], y, ctx, identificationFieldsW);
+  if (animalPhotoDataUrl) {
+    await drawProntuarioPhotoBox(output, page, animalPhotoDataUrl, margin + identificationFieldsW + photoGap, identificationTopY + 4, photoBoxW, photoBoxH, ctx);
+  }
   y -= 14;
   page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
@@ -11131,7 +11311,7 @@ function drawProcessBubble(page, bubble: AnyRecord, y: number, ctx: AnyRecord): 
 }
 
 async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const req = normalizeRequest(request);
   const output = await PDFDocument.create();
   const font = await output.embedFont(StandardFonts.Helvetica);
@@ -11252,7 +11432,7 @@ async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
 }
 
 async function generateDocumentBundlePdf(request: AnyRecord = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const output = await PDFDocument.create();
   try {
     const requestDataUrl = await createRequestPdfDataUrl(request);
@@ -11310,7 +11490,7 @@ async function generateDocumentBundlePdf(request: AnyRecord = {}) {
 }
 
 async function generateFallbackBundlePdf(request: AnyRecord = {}, error = null) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const output = await PDFDocument.create();
   await appendUnsupportedAttachmentPage(output, {
     title: "Juntada do processo",
@@ -11329,7 +11509,7 @@ async function generateFallbackBundlePdf(request: AnyRecord = {}, error = null) 
 }
 
 async function createRequestPdfDataUrl(request: AnyRecord = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
+  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -11665,6 +11845,23 @@ function drawRequestPdfDeclaration(page, request, y, ctx) {
   return y - 170;
 }
 
+async function drawProntuarioPhotoBox(pdf, page, dataUrl, x, topY, width, height, ctx) {
+  const { colors, rgb } = ctx;
+  const boxY = topY - height;
+  page.drawRectangle({ x, y: boxY, width, height, color: rgb(0.97, 0.98, 0.99), borderColor: colors.line, borderWidth: 1 });
+  if (!dataUrl) return;
+  try {
+    const mimeType = getDataUrlMimeType(dataUrl);
+    const bytes = dataUrlToUint8Array(dataUrl);
+    const image = mimeType.includes("png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
+    const pad = 3;
+    const scale = Math.min((width - pad * 2) / image.width, (height - pad * 2) / image.height);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    page.drawImage(image, { x: x + (width - drawW) / 2, y: boxY + (height - drawH) / 2, width: drawW, height: drawH });
+  } catch {}
+}
+
 async function drawRequestPdfSignatureImage(pdf, page, dataUrl, y, ctx) {
   if (!dataUrl) return;
   const { colors, rgb, margin } = ctx;
@@ -11706,8 +11903,21 @@ function pdfText(value = "") {
   return String(value).replace(/[^\x20-\x7E\u00A0-\u00FF]/g, "-");
 }
 
+// Lazy chunk for pdf-lib can 404 if a new deploy replaced dist/assets after this
+// page was loaded (stale index.html referencing an old chunk hash). Reload once
+// to pick up the fresh build instead of leaving download buttons silently broken.
+function importPdfLib(): Promise<typeof import("pdf-lib")> {
+  return import("pdf-lib").catch((err) => {
+    const message = String(err?.message || "");
+    if (/failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed/i.test(message)) {
+      window.location.reload();
+    }
+    throw err;
+  });
+}
+
 async function appendPdfDataUrl(targetPdf, dataUrl) {
-  const { PDFDocument } = await import("pdf-lib");
+  const { PDFDocument } = await importPdfLib();
   const sourcePdf = await PDFDocument.load(dataUrlToUint8Array(dataUrl));
   const pages = await targetPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
   pages.forEach((page) => targetPdf.addPage(page));
@@ -11760,22 +11970,6 @@ function getScheduleMonthKey(dateText) {
   return `${month}/${year}`;
 }
 
-function parseScheduleDate(dateText) {
-  const [day, month, year] = normalizeScheduleDateText(dateText).split("/").map(Number);
-  return new Date(year, month - 1, day).getTime();
-}
-
-function countRequestAnimals(request) {
-  return Array.isArray(request.animals) && request.animals.length > 0 ? request.animals.length : 1;
-}
-
-function countUsedVacancies(requests, date) {
-  return requests
-    .map(normalizeRequest)
-    .filter((request) => (request.preferredSchedule || request.appointment || request.schedule_date) === date)
-    .reduce((sum, request) => sum + countRequestAnimals(request), 0);
-}
-
 function getScheduleSlotUsage(requests, date, slots = []) {
   const usage = new Map(normalizeScheduleSlots(slots).map((slot) => [slot.time, 0]));
   let unassigned = 0;
@@ -11808,13 +12002,6 @@ function getOfferedScheduleSlot(day, requests, requiredVacancies = 1) {
   const slots = normalizeScheduleSlots(day?.slots, day?.startTime || day?.time, day?.vacancies);
   const usage = getScheduleSlotUsage(requests, day?.date, slots);
   return slots.find((slot) => Math.max(slot.vacancies - (usage.get(slot.time) || 0), 0) >= requiredVacancies) || null;
-}
-
-function isPastScheduleDay(dateText) {
-  const date = parseScheduleDate(dateText);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return date < today.getTime();
 }
 
 function buildScheduleMonths(days) {
