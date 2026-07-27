@@ -17,11 +17,7 @@ const SENSITIVE_CONFIG_KEYS = new Set([
 
 // Keys cujas alterações são registradas em audit_logs (nunca inclui o valor de secrets).
 // Separada de SENSITIVE_CONFIG_KEYS porque esta não deve exigir autenticação para leitura.
-const AUDITED_CONFIG_KEYS = new Set([
-  "castragestao:teams",
-  "permission_groups",
-  "ai",
-]);
+const AUDITED_CONFIG_KEYS = new Set([...SENSITIVE_CONFIG_KEYS, "ai"]);
 
 // Keys de configuração restritas a usuários globais (configurações de plataforma)
 const GLOBAL_ONLY_CONFIG_KEYS = new Set([
@@ -162,11 +158,7 @@ router.put("/:key", auth, async (req, res) => {
     // O teste só roda quando algo relevante mudou (chave/provider/model ou active passou a true),
     // para não gerar uma chamada paga ao provedor a cada salvamento de config não relacionada.
     if (key === "ai" && value.active) {
-      const currentRow = await client.query(
-        "SELECT value FROM config WHERE key='ai' AND municipality_id=$1",
-        [municipalityId],
-      );
-      const previous = currentRow.rows[0]?.value && typeof currentRow.rows[0].value === "object" ? currentRow.rows[0].value : {};
+      const previous = value.__previous || {};
       const previousApiKey = decryptSecret(previous.apiKey || "");
       const nextApiKey = decryptSecret(value.apiKey || "");
       const needsTest = !previous.active || previousApiKey !== nextApiKey || previous.provider !== value.provider || previous.model !== value.model;
@@ -256,6 +248,9 @@ async function prepareConfigValue(key, value = {}, municipalityId = null, client
     merged.keyValid = null;
     merged.lastValidatedAt = "";
   }
+  // Expõe o valor já lido do banco sem entrar no JSON persistido, para
+  // quem chamou não precisar refazer o mesmo SELECT logo em seguida.
+  Object.defineProperty(merged, "__previous", { value: current, enumerable: false });
   return merged;
 }
 

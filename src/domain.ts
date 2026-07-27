@@ -88,7 +88,6 @@ export const initialAiSettings: AnyRecord = {
   provider: "OpenAI",
   model: "gpt-4o",
   apiKey: "",
-  endpoint: "",
   keyValid: null,
   lastValidatedAt: "",
   callCount: 0,
