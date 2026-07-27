@@ -161,13 +161,14 @@ export function ReportsView({
 
   return (
     <section className="content-grid">
-      <header className="page-header reports-toolbar wide">
-        <div className="page-header-main">
-          <h2 className="page-title">Relatórios</h2>
-          <p className="page-subtitle">Consulte solicitações, filtros e prontuários por período.</p>
+      <header className="page-heading wide">
+        <div className="page-heading-main">
+          <h2 className="page-heading-title">Relatórios</h2>
+          <p className="page-heading-subtitle">Consulte solicitações, filtros e prontuários por período.</p>
         </div>
+      </header>
 
-        <div className="page-controls reports-controls">
+      <div className="page-toolbar reports-controls wide">
           <div className="reports-search-row">
             <div className="reports-search-wrap">
               <Search size={15} className="reports-search-icon" />
@@ -259,8 +260,7 @@ export function ReportsView({
           {prmError && (
             <p className="reports-prm-error">{prmError}</p>
           )}
-        </div>
-      </header>
+      </div>
       <div className="panel wide">
         {!appliedFilters ? (
           <EmptyState

@@ -4651,13 +4651,14 @@ function AdminDashboard({
   return (
     <section className="request-workspace triage-workspace clean-requests-workspace">
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
-      <header className="page-header request-page-head">
-        <div className="page-header-main workspace-heading-main">
-          <h2 className="page-title">Solicitações</h2>
-          <p className="page-subtitle">Acompanhe triagem, agenda e atendimento.</p>
+      <header className="page-heading">
+        <div className="page-heading-main">
+          <h2 className="page-heading-title">Solicitações</h2>
+          <p className="page-heading-subtitle">Acompanhe triagem, agenda e atendimento.</p>
         </div>
+      </header>
 
-        <div className="page-controls request-page-controls">
+      <div className="page-toolbar request-page-controls">
           <div className="page-actions workspace-heading-actions">
             <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
               <Plus size={18} />
@@ -4666,14 +4667,14 @@ function AdminDashboard({
           </div>
 
           <nav className="request-nav" aria-label="Filtros de solicitações">
-            <div className="page-tabs request-filter-tabs">
+            <div className="request-filter-tabs">
               {filterTabs.map((tab) => (
                 <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
                   {tab.label}<span>{tab.requests.length}</span>
                 </button>
               ))}
             </div>
-            <div className="page-segment request-today-segment">
+            <div className="request-today-segment">
               <button
                 type="button"
                 className={todayOnly ? "selected" : ""}
@@ -4686,8 +4687,7 @@ function AdminDashboard({
               </button>
             </div>
           </nav>
-        </div>
-      </header>
+      </div>
       <div className="triage-card-grid">
         {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui."} />}
         {activeRequests.map((request) => (
@@ -6175,13 +6175,14 @@ function AdoptionView({
   return (
     <section className="content-grid adoption-workspace">
       <div className="adoption-shell">
-        <header className="page-header adoption-command-header">
-          <div className="page-header-main adoption-command-copy">
-            <h2 className="page-title">Painel de adoção</h2>
-            <p className="page-subtitle">Acompanhe animais disponíveis, triagens, adoções e interessados.</p>
+        <header className="page-heading">
+          <div className="page-heading-main">
+            <h2 className="page-heading-title">Painel de adoção</h2>
+            <p className="page-heading-subtitle">Acompanhe animais disponíveis, triagens, adoções e interessados.</p>
           </div>
+        </header>
 
-          <div className="page-controls adoption-command-controls">
+        <div className="page-toolbar adoption-command-controls">
             <div className="adoption-command-stats">
               <span>{availableAnimals.length} disponíveis</span>
               <span>{inProgressAnimals.length} em triagem</span>
@@ -6194,8 +6195,7 @@ function AdoptionView({
                 Cadastrar animal
               </button>
             )}
-          </div>
-        </header>
+        </div>
 
         {canManageAdoptions && isFormOpen && (
           <div

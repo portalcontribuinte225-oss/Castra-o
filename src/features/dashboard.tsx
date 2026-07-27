@@ -536,34 +536,34 @@ export function DashboardView({
 
   return (
     <section className={`opdash-root is-${activeTab}`}>
-      <header className="page-header opdash-header">
-        <div className="page-header-main opdash-heading-main">
-          <h2 className="page-title opdash-title">Dashboard de gestão</h2>
-          <p className="page-subtitle opdash-header-note">Leitura geral de solicitações, agenda, castrações, adoções e território.</p>
-        </div>
-
-        <div className="page-controls opdash-controls-row">
-          <nav className="page-tabs opdash-tabs" aria-label="Navegação do BI">
-            {DASHBOARD_TABS.map((tab) => (
-              <button key={tab.id} type="button" className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="opdash-header-fill" />
-
-          <div className="opdash-period-group" aria-label="Filtro de período">
-            <div className="page-segment opdash-segment">
-              {PERIOD_OPTIONS.map((item) => (
-                <button key={item.id} type="button" className={period === item.id ? "is-active" : ""} onClick={() => setPeriod(item.id)}>
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          </div>
+      <header className="page-heading">
+        <div className="page-heading-main">
+          <h2 className="page-heading-title">Dashboard de gestão</h2>
+          <p className="page-heading-subtitle">Leitura geral de solicitações, agenda, castrações, adoções e território.</p>
         </div>
       </header>
+
+      <div className="page-toolbar opdash-controls-row">
+        <nav className="opdash-tabs" aria-label="Navegação do BI">
+          {DASHBOARD_TABS.map((tab) => (
+            <button key={tab.id} type="button" className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="opdash-header-fill" />
+
+        <div className="opdash-period-group" aria-label="Filtro de período">
+          <div className="opdash-segment">
+            {PERIOD_OPTIONS.map((item) => (
+              <button key={item.id} type="button" className={period === item.id ? "is-active" : ""} onClick={() => setPeriod(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
 
       <div className="opdash-kpis">
         {kpis.map((item) => <KpiCard key={item.label} item={item} />)}

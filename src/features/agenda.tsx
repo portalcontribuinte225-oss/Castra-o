@@ -288,46 +288,45 @@ export function AgendaView({
   return (
     <section className="ag-root">
 
-      <header className="page-header ag-header">
-        <div className="page-header-main ag-title-block">
-          <h2 className="page-title ag-period">Agenda</h2>
-          <p className="page-subtitle">{periodLabel()}</p>
+      <header className="page-heading">
+        <div className="page-heading-main">
+          <h2 className="page-heading-title">Agenda</h2>
+          <p className="page-heading-subtitle">{periodLabel()}</p>
         </div>
-
-        <div className="page-controls ag-header-row">
-          <div className="page-segment ag-nav">
-            <button className="ag-nav-btn" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} /></button>
-            <button className="ag-nav-today" onClick={() => setCurrentDate(new Date())}>Hoje</button>
-            <button className="ag-nav-btn" onClick={next} aria-label="Próximo"><ChevronRight size={13} /></button>
-          </div>
-
-          <div className="ag-header-fill" />
-
-          <div className="page-tabs ag-views">
-            {viewTabs.map((tab) => (
-              <button
-                key={tab.id}
-                className={`ag-view-btn${view === tab.id ? " is-active" : ""}`}
-                onClick={() => setView(tab.id)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="ag-legend">
-          {LEGEND_ITEMS.map((item) => (
-            <span key={item.tone} className="ag-legend-item">
-              <span className={`ag-legend-dot ag-legend-dot--${item.tone}`} />
-              {item.label}
-            </span>
-          ))}
-          <span className="ag-legend-sep">·</span>
-          <span className="ag-legend-note">Capacidade de acordo com a agenda configurada</span>
-        </div>
-
       </header>
+
+      <div className="page-toolbar ag-header-row">
+        <div className="ag-nav">
+          <button className="ag-nav-btn" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} /></button>
+          <button className="ag-nav-today" onClick={() => setCurrentDate(new Date())}>Hoje</button>
+          <button className="ag-nav-btn" onClick={next} aria-label="Próximo"><ChevronRight size={13} /></button>
+        </div>
+
+        <div className="ag-header-fill" />
+
+        <div className="ag-views">
+          {viewTabs.map((tab) => (
+            <button
+              key={tab.id}
+              className={`ag-view-btn${view === tab.id ? " is-active" : ""}`}
+              onClick={() => setView(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="ag-legend">
+        {LEGEND_ITEMS.map((item) => (
+          <span key={item.tone} className="ag-legend-item">
+            <span className={`ag-legend-dot ag-legend-dot--${item.tone}`} />
+            {item.label}
+          </span>
+        ))}
+        <span className="ag-legend-sep">·</span>
+        <span className="ag-legend-note">Capacidade de acordo com a agenda configurada</span>
+      </div>
 
       <div className="ag-workspace">
         <aside className="ag-side">

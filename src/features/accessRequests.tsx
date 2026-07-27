@@ -94,13 +94,14 @@ export function AccessRequestsView({
 
   return (
     <section className="cr-root">
-      <header className="page-header cr-toolbar">
-        <div className="page-header-main cr-toolbar-left">
-          <h2 className="page-title cr-title">Credenciamentos</h2>
-          <p className="page-subtitle">Gerencie solicitações de acesso de organizações e responsáveis.</p>
+      <header className="page-heading">
+        <div className="page-heading-main">
+          <h2 className="page-heading-title">Credenciamentos</h2>
+          <p className="page-heading-subtitle">Gerencie solicitações de acesso de organizações e responsáveis.</p>
         </div>
+      </header>
 
-        <div className="page-controls cr-controls-row">
+      <div className="page-toolbar cr-controls-row">
           <div className="cr-stats-row">
             <span><ClipboardList size={12} /> {accessRequests.length} total</span>
             {pendingCount > 0 && <span className="cr-stat-warn">{pendingCount} pendentes</span>}
@@ -109,7 +110,7 @@ export function AccessRequestsView({
           </div>
 
           <nav className="request-nav cr-nav" aria-label="Filtros de credenciamento">
-            <div className="page-tabs request-filter-tabs">
+            <div className="request-filter-tabs">
               {FILTERS.map((item) => {
                 const count =
                   item.id === "PENDENTE" ? pendingCount :
@@ -129,14 +130,13 @@ export function AccessRequestsView({
                 );
               })}
             </div>
-            <div className="page-segment request-today-segment cr-result-segment">
+            <div className="request-today-segment cr-result-segment">
               <span className="cr-result-label">
                 {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
               </span>
             </div>
           </nav>
-        </div>
-      </header>
+      </div>
       {feedback && (
         <div className={`cr-feedback ${feedback.includes("sucesso") || feedback.includes("Senha") ? "is-ok" : "is-error"}`}>
           {feedback.includes("sucesso") || feedback.includes("Senha")
