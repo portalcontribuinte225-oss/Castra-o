@@ -8397,13 +8397,13 @@ function ConfigView({
                   offText="Inativa"
                 />
               </div>
-              {aiSettings.hasApiKey && (
-                <p className={aiSettings.keyValid ? "sms-status confirmed" : "sms-status"}>
-                  {aiSettings.keyValid && aiSettings.lastValidatedAt
+              <p className={aiSettings.hasApiKey && aiSettings.keyValid ? "sms-status confirmed" : "sms-status"}>
+                {!aiSettings.hasApiKey
+                  ? "Token não configurado."
+                  : aiSettings.keyValid && aiSettings.lastValidatedAt
                     ? `Chave válida — testada em ${new Date(aiSettings.lastValidatedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
                     : "Chave ainda não testada."}
-                </p>
-              )}
+              </p>
               {Boolean(aiSettings.callCount) && aiSettings.lastUsedAt && (
                 <p className="sms-status">
                   {aiSettings.callCount} validações realizadas — última em {new Date(aiSettings.lastUsedAt).toLocaleDateString("pt-BR")}
@@ -8450,7 +8450,11 @@ function ConfigView({
                 <input
                   value={aiSettings.apiKey}
                   type="password"
-                  autoComplete="off"
+                  name="ai-provider-api-key"
+                  autoComplete="new-password"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-bwignore="true"
                   placeholder={aiSettings.hasApiKey ? `Chave da ${selectedAiProvider} já salva` : `Cole a chave da ${selectedAiProvider}`}
                   onChange={(event) => setAiSettings?.((current: AnyRecord) => ({ ...current, apiKey: event.target.value }))}
                 />
