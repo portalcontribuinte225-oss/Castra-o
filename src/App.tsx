@@ -774,6 +774,41 @@ export default function App() {
     config: ConfigView,
   }[active];
 
+  const pageHeadings: Record<string, { title: string; subtitle: string }> = {
+    admin: {
+      title: "Solicita\u00e7\u00f5es",
+      subtitle: "Acompanhe triagem, agenda e atendimento.",
+    },
+    adocao: {
+      title: "Painel de ado\u00e7\u00e3o",
+      subtitle: "Acompanhe animais dispon\u00edveis, triagens, ado\u00e7\u00f5es e interessados.",
+    },
+    agenda: {
+      title: "Agenda",
+      subtitle: "Organize datas, vagas e visualiza\u00e7\u00f5es do calend\u00e1rio.",
+    },
+    credenciamento: {
+      title: "Credenciamentos",
+      subtitle: "Gerencie solicita\u00e7\u00f5es de acesso de organiza\u00e7\u00f5es e respons\u00e1veis.",
+    },
+    dashboard: {
+      title: "Dashboard de gest\u00e3o",
+      subtitle: "Leitura geral de solicita\u00e7\u00f5es, agenda, castra\u00e7\u00f5es, ado\u00e7\u00f5es e territ\u00f3rio.",
+    },
+    relatorios: {
+      title: "Relat\u00f3rios",
+      subtitle: "Consulte solicita\u00e7\u00f5es, filtros e prontu\u00e1rios por per\u00edodo.",
+    },
+    config: {
+      title: "Configura\u00e7\u00f5es",
+      subtitle: "Ajuste ambiente, usu\u00e1rios, permiss\u00f5es e integra\u00e7\u00f5es.",
+    },
+  };
+  const activePageHeading = pageHeadings[active] || {
+    title: "Sistema de castra\u00e7\u00e3o",
+    subtitle: "Gest\u00e3o operacional de atendimento animal.",
+  };
+
   return (
     <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
       <aside className={`sidebar${mobileOpen ? " open" : ""}${sidebarCollapsed ? " collapsed" : ""}`}>
@@ -923,12 +958,10 @@ export default function App() {
             <Menu size={20} />
           </button>
           <div className="main-reader">
-            {isGlobalRole(currentUser.role) && (
-              <div className="topbar-context-chip">
-                <strong>Bem-estar animal</strong>
-                <i aria-hidden="true" />
-              </div>
-            )}
+            <div className="topbar-page-heading">
+              <h1>{activePageHeading.title}</h1>
+              <p>{activePageHeading.subtitle}</p>
+            </div>
           </div>
           <div className="topbar-actions">
             {isGlobalRole(currentUser?.role) && municipalities.length > 0 && (
@@ -4651,13 +4684,6 @@ function AdminDashboard({
   return (
     <section className="request-workspace triage-workspace clean-requests-workspace">
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
-      <header className="page-heading">
-        <div className="page-heading-main">
-          <h2 className="page-heading-title">Solicitações</h2>
-          <p className="page-heading-subtitle">Acompanhe triagem, agenda e atendimento.</p>
-        </div>
-      </header>
-
       <div className="page-toolbar request-page-controls">
           <div className="page-actions workspace-heading-actions">
             <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
@@ -6175,13 +6201,6 @@ function AdoptionView({
   return (
     <section className="content-grid adoption-workspace">
       <div className="adoption-shell">
-        <header className="page-heading">
-          <div className="page-heading-main">
-            <h2 className="page-heading-title">Painel de adoção</h2>
-            <p className="page-heading-subtitle">Acompanhe animais disponíveis, triagens, adoções e interessados.</p>
-          </div>
-        </header>
-
         <div className="page-toolbar adoption-command-controls">
             <div className="adoption-command-stats">
               <span>{availableAnimals.length} disponíveis</span>
@@ -7039,7 +7058,7 @@ function ConfigView({
       model: selectedAiModel,
       apiKey: aiSettings.apiKey || "",
     };
-    setAiSaveStatus("Salvando configuração...");
+    setAiSaveStatus(nextSettings.active ? "Testando chave e salvando configuração..." : "Salvando configuração...");
     try {
       const saved = await api.setConfig("ai", nextSettings, configMunicipalityScopeId);
       const publicSettings = {
@@ -8378,6 +8397,18 @@ function ConfigView({
                   offText="Inativa"
                 />
               </div>
+              {aiSettings.hasApiKey && (
+                <p className={aiSettings.keyValid ? "sms-status confirmed" : "sms-status"}>
+                  {aiSettings.keyValid && aiSettings.lastValidatedAt
+                    ? `Chave válida — testada em ${new Date(aiSettings.lastValidatedAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}`
+                    : "Chave ainda não testada."}
+                </p>
+              )}
+              {Boolean(aiSettings.callCount) && aiSettings.lastUsedAt && (
+                <p className="sms-status">
+                  {aiSettings.callCount} validações realizadas — última em {new Date(aiSettings.lastUsedAt).toLocaleDateString("pt-BR")}
+                </p>
+              )}
               <label className="field">
                 <span>Provedor</span>
                 <select
@@ -8419,6 +8450,7 @@ function ConfigView({
                 <input
                   value={aiSettings.apiKey}
                   type="password"
+                  autoComplete="off"
                   placeholder={aiSettings.hasApiKey ? `Chave da ${selectedAiProvider} já salva` : `Cole a chave da ${selectedAiProvider}`}
                   onChange={(event) => setAiSettings?.((current: AnyRecord) => ({ ...current, apiKey: event.target.value }))}
                 />

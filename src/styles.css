@@ -24293,42 +24293,44 @@ main:has(.adoption-workspace) .adoption-workspace {
 .topbar-context-chip {
   gap: 8px !important;
 }
-/* Shared page heading pattern */
-.page-heading {
-  display: grid;
-  gap: 6px;
+/* Shared page action pattern */
+.main-reader {
+  display: flex;
+  align-items: center;
   min-width: 0;
-  padding: 0 2px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  flex: 1 1 auto;
 }
 
-.page-heading.wide,
-.page-toolbar.wide {
-  grid-column: 1 / -1;
-}
-
-.page-heading-main {
+.topbar-page-heading {
   display: grid;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
 
-.page-heading-title {
+.topbar-page-heading h1 {
   margin: 0;
-  color: var(--ui-ink, #0f172a);
-  font-size: clamp(1.15rem, 2vw, 1.7rem);
+  color: var(--ui-ink, #020817);
+  font-size: clamp(1.15rem, 2vw, 1.65rem);
   font-weight: 760;
   line-height: 1.1;
   letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.page-heading-subtitle {
+.topbar-page-heading p {
   margin: 0;
   color: var(--ui-ink-soft, #64748b);
-  font-size: 0.88rem;
+  font-size: 0.86rem;
   line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-toolbar.wide {
+  grid-column: 1 / -1;
 }
 
 .page-toolbar {
@@ -24392,16 +24394,16 @@ main:has(.adoption-workspace) .adoption-workspace {
 }
 
 @media (max-width: 640px) {
-  .page-heading {
-    gap: 5px;
+  .topbar-page-heading {
+    gap: 2px;
   }
 
-  .page-heading-title {
-    font-size: 1.18rem;
+  .topbar-page-heading h1 {
+    font-size: 1.02rem;
   }
 
-  .page-heading-subtitle {
-    font-size: 0.84rem;
+  .topbar-page-heading p {
+    display: none;
   }
 
   .page-toolbar,

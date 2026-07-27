@@ -161,13 +161,6 @@ export function ReportsView({
 
   return (
     <section className="content-grid">
-      <header className="page-heading wide">
-        <div className="page-heading-main">
-          <h2 className="page-heading-title">Relatórios</h2>
-          <p className="page-heading-subtitle">Consulte solicitações, filtros e prontuários por período.</p>
-        </div>
-      </header>
-
       <div className="page-toolbar reports-controls wide">
           <div className="reports-search-row">
             <div className="reports-search-wrap">

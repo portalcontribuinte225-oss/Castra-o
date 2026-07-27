@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../db/index.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
+import { decryptSecret } from "../services/config-secret-cipher.js";
 
 const router = Router();
 
@@ -34,6 +35,7 @@ router.post("/validate", optionalAuth, async (req, res) => {
 
     const normalizedDocument = normalizeDocumentPayload(document);
     const result = await validateWithProvider(provider, { apiKey, model, document: normalizedDocument, file });
+    if (municipalityId) await recordAiUsage(municipalityId);
     res.json({ ...result, model });
   } catch (err) {
     console.error("Erro na validacao por IA:", safeErrorMessage(err));
@@ -50,20 +52,66 @@ async function resolveAiSettings(requestSettings = {}, municipalityId = null) {
     : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: ["ai"] };
   const { rows } = await pool.query(query.text, query.values);
   const savedSettings = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
+  const savedApiKey = decryptSecret(savedSettings.apiKey || "");
   const merged = { ...savedSettings, ...requestSettings };
   const provider = ["OpenAI", "Anthropic", "Gemini"].includes(merged.provider) ? merged.provider : "OpenAI";
   const envFallback = municipalityId ? "" : process.env[providerEnvKeys[provider]] || "";
   return {
     provider,
-    apiKey: String(requestSettings.apiKey || savedSettings.apiKey || envFallback || "").trim(),
+    apiKey: String(requestSettings.apiKey || savedApiKey || envFallback || "").trim(),
     model: String(merged.model || "").trim(),
   };
+}
+
+/** Incrementa o contador de uso da IA do município via UPDATE atômico (sem round-trip leitura+escrita). */
+async function recordAiUsage(municipalityId) {
+  try {
+    await pool.query(
+      `UPDATE config
+         SET value = jsonb_set(
+               jsonb_set(value, '{callCount}', to_jsonb(COALESCE((value->>'callCount')::int, 0) + 1)),
+               '{lastUsedAt}', to_jsonb(NOW()::text)
+             ),
+             updated_at = NOW()
+       WHERE key = 'ai' AND municipality_id = $1`,
+      [municipalityId],
+    );
+  } catch (err) {
+    console.warn("[ai] Falha ao registrar uso:", err.message);
+  }
 }
 
 async function validateWithProvider(provider, payload) {
   if (provider === "Gemini") return validateWithGemini(payload);
   if (provider === "Anthropic") return validateWithAnthropic(payload);
   return validateWithOpenAI(payload);
+}
+
+// 1x1 PNG transparente — usado apenas para o teste de chave (payload mínimo, sem depender de arquivo real).
+const TEST_KEY_IMAGE_DATA_URL = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+
+/**
+ * Faz uma chamada mínima ao provedor para confirmar que a chave/modelo são aceitos.
+ * Reaproveita os mesmos adapters de validação de documento, com um documento
+ * de teste trivial (menor custo possível) em vez do arquivo real do usuário.
+ */
+export async function testProviderKey(provider, { apiKey, model }) {
+  if (!apiKey) throw Object.assign(new Error(`Informe a chave API para ${provider}.`), { status: 400 });
+  if (!model) throw Object.assign(new Error(`Informe o modelo para ${provider}.`), { status: 400 });
+
+  const testDocument = normalizeDocumentPayload({
+    id: "test-key",
+    name: "Teste de chave",
+    analysisRules: { requiredCriteria: [], rejectionCriteria: [], manualReviewCriteria: [] },
+  });
+  const testFile = { name: "teste.png", type: "image/png", dataUrl: TEST_KEY_IMAGE_DATA_URL };
+
+  try {
+    await validateWithProvider(provider, { apiKey, model, document: testDocument, file: testFile });
+    return { valid: true };
+  } catch (err) {
+    return { valid: false, error: safeErrorMessage(err) || "Nao foi possivel validar a chave." };
+  }
 }
 
 function normalizeDocumentPayload(document = {}) {

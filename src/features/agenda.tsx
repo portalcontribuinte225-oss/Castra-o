@@ -287,14 +287,6 @@ export function AgendaView({
 
   return (
     <section className="ag-root">
-
-      <header className="page-heading">
-        <div className="page-heading-main">
-          <h2 className="page-heading-title">Agenda</h2>
-          <p className="page-heading-subtitle">{periodLabel()}</p>
-        </div>
-      </header>
-
       <div className="page-toolbar ag-header-row">
         <div className="ag-nav">
           <button className="ag-nav-btn" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} /></button>

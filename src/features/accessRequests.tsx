@@ -94,13 +94,6 @@ export function AccessRequestsView({
 
   return (
     <section className="cr-root">
-      <header className="page-heading">
-        <div className="page-heading-main">
-          <h2 className="page-heading-title">Credenciamentos</h2>
-          <p className="page-heading-subtitle">Gerencie solicitações de acesso de organizações e responsáveis.</p>
-        </div>
-      </header>
-
       <div className="page-toolbar cr-controls-row">
           <div className="cr-stats-row">
             <span><ClipboardList size={12} /> {accessRequests.length} total</span>

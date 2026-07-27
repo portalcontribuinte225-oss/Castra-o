@@ -3,6 +3,8 @@ import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
 import { isGlobalUser, isMunicipalAdmin, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
+import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
+import { testProviderKey } from "./ai.js";
 
 const router = Router();
 
@@ -11,6 +13,14 @@ const router = Router();
 const SENSITIVE_CONFIG_KEYS = new Set([
   "castragestao:teams",
   "permission_groups",
+]);
+
+// Keys cujas alterações são registradas em audit_logs (nunca inclui o valor de secrets).
+// Separada de SENSITIVE_CONFIG_KEYS porque esta não deve exigir autenticação para leitura.
+const AUDITED_CONFIG_KEYS = new Set([
+  "castragestao:teams",
+  "permission_groups",
+  "ai",
 ]);
 
 // Keys de configuração restritas a usuários globais (configurações de plataforma)
@@ -134,6 +144,35 @@ router.put("/:key", auth, async (req, res) => {
   const client = await pool.connect();
   try {
     const value = await prepareConfigValue(key, req.body, municipalityId, client);
+
+    // A IA só pode ficar ativa com uma chave testada e aceita pelo provedor.
+    // O teste só roda quando algo relevante mudou (chave/provider/model ou active passou a true),
+    // para não gerar uma chamada paga ao provedor a cada salvamento de config não relacionada.
+    if (key === "ai" && value.active) {
+      const currentRow = await client.query(
+        municipalityId
+          ? "SELECT value FROM config WHERE key='ai' AND municipality_id=$1"
+          : "SELECT value FROM config WHERE key='ai' AND municipality_id IS NULL",
+        municipalityId ? [municipalityId] : [],
+      );
+      const previous = currentRow.rows[0]?.value && typeof currentRow.rows[0].value === "object" ? currentRow.rows[0].value : {};
+      const previousApiKey = decryptSecret(previous.apiKey || "");
+      const nextApiKey = decryptSecret(value.apiKey || "");
+      const needsTest = !previous.active || previousApiKey !== nextApiKey || previous.provider !== value.provider || previous.model !== value.model;
+
+      if (needsTest) {
+        const testResult = await testProviderKey(value.provider, { apiKey: nextApiKey, model: value.model });
+        if (!testResult.valid) {
+          return res.status(400).json({ error: testResult.error || "Chave de IA invalida para o provedor selecionado." });
+        }
+        value.keyValid = true;
+        value.lastValidatedAt = new Date().toISOString();
+      } else {
+        value.keyValid = previous.keyValid ?? true;
+        value.lastValidatedAt = previous.lastValidatedAt || "";
+      }
+    }
+
     const { rows } = await client.query(
       `INSERT INTO config (key, municipality_id, value, updated_at) VALUES ($1, $2, $3, NOW())
        ON CONFLICT (key, (COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid)))
@@ -141,21 +180,23 @@ router.put("/:key", auth, async (req, res) => {
       [key, municipalityId, JSON.stringify(value)],
     );
 
-    // Auditoria para chaves sensíveis de permissão e time
-    if (SENSITIVE_CONFIG_KEYS.has(key)) {
+    // Auditoria para chaves sensíveis/críticas — nunca inclui o valor de secrets
+    if (AUDITED_CONFIG_KEYS.has(key)) {
       await logAudit(client, {
         ...auditCtx(req),
         municipalityId,
         action: AUDIT_ACTIONS.CONFIG_UPDATE,
         entityType: "config",
         entityId: key,
-        changes: { key, municipalityId },
+        changes: key === "ai"
+          ? { key, municipalityId, provider: value.provider, model: value.model, active: Boolean(value.active) }
+          : { key, municipalityId },
       });
     }
 
     res.json({ ...rows[0], value: publicConfigValue(key, rows[0].value) });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -196,7 +237,8 @@ async function prepareConfigValue(key, value = {}, municipalityId = null, client
     };
   }
   const nextApiKey = String(value.apiKey || "").trim();
-  return { ...current, ...value, apiKey: nextApiKey || current.apiKey || "" };
+  const resolvedApiKey = nextApiKey || decryptSecret(current.apiKey || "");
+  return { ...current, ...value, apiKey: encryptSecret(resolvedApiKey) };
 }
 
 export default router;

@@ -83,7 +83,17 @@ export const aiProviderOptions: AnyRecord = {
   },
 };
 
-export const initialAiSettings: AnyRecord = { active: false, provider: "OpenAI", model: "gpt-4o", apiKey: "", endpoint: "" };
+export const initialAiSettings: AnyRecord = {
+  active: false,
+  provider: "OpenAI",
+  model: "gpt-4o",
+  apiKey: "",
+  endpoint: "",
+  keyValid: null,
+  lastValidatedAt: "",
+  callCount: 0,
+  lastUsedAt: "",
+};
 
 export const initialWhatsappSettings: AnyRecord = {
   active: false,

@@ -536,13 +536,6 @@ export function DashboardView({
 
   return (
     <section className={`opdash-root is-${activeTab}`}>
-      <header className="page-heading">
-        <div className="page-heading-main">
-          <h2 className="page-heading-title">Dashboard de gestão</h2>
-          <p className="page-heading-subtitle">Leitura geral de solicitações, agenda, castrações, adoções e território.</p>
-        </div>
-      </header>
-
       <div className="page-toolbar opdash-controls-row">
         <nav className="opdash-tabs" aria-label="Navegação do BI">
           {DASHBOARD_TABS.map((tab) => (
