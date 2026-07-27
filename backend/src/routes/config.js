@@ -100,6 +100,13 @@ router.get("/:key", optionalAuth, async (req, res) => {
   }
 
   const municipalityId = pickMunicipalityId(req);
+
+  // A config de IA nunca tem uma linha de plataforma compartilhada — cada
+  // município só pode ler a própria chave. Sem município, não há nada a ler.
+  if (key === "ai" && !municipalityId) {
+    return res.json(null);
+  }
+
   const query = municipalityId
     ? { text: "SELECT value FROM config WHERE key=$1 AND municipality_id=$2", values: [key, municipalityId] }
     : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: [key] };
@@ -131,6 +138,12 @@ router.put("/:key", auth, async (req, res) => {
     ? (req.query?.municipalityId || req.query?.municipality_id || req.body?.municipalityId || req.body?.municipality_id || null)
     : req.user.municipalityId;
 
+  // A config de IA nunca tem uma linha de plataforma compartilhada — exige
+  // sempre um município real, tanto para master/suporte quanto admin municipal.
+  if (key === "ai" && !municipalityId) {
+    return res.status(400).json({ error: "Selecione um município para configurar a IA." });
+  }
+
   // Valida estrutura para chaves críticas de permissão
   if (key === "permission_groups") {
     const validationError = validatePermissionGroups(req.body);
@@ -150,10 +163,8 @@ router.put("/:key", auth, async (req, res) => {
     // para não gerar uma chamada paga ao provedor a cada salvamento de config não relacionada.
     if (key === "ai" && value.active) {
       const currentRow = await client.query(
-        municipalityId
-          ? "SELECT value FROM config WHERE key='ai' AND municipality_id=$1"
-          : "SELECT value FROM config WHERE key='ai' AND municipality_id IS NULL",
-        municipalityId ? [municipalityId] : [],
+        "SELECT value FROM config WHERE key='ai' AND municipality_id=$1",
+        [municipalityId],
       );
       const previous = currentRow.rows[0]?.value && typeof currentRow.rows[0].value === "object" ? currentRow.rows[0].value : {};
       const previousApiKey = decryptSecret(previous.apiKey || "");

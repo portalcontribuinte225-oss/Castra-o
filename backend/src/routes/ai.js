@@ -6,18 +6,15 @@ import { decryptSecret } from "../services/config-secret-cipher.js";
 
 const router = Router();
 
-const providerEnvKeys = {
-  OpenAI: "OPENAI_API_KEY",
-  Anthropic: "ANTHROPIC_API_KEY",
-  Gemini: "GEMINI_API_KEY",
-};
-
 export const DEFAULT_MINIMUM_CONFIDENCE = 0.55;
 
 router.post("/validate", optionalAuth, async (req, res) => {
   try {
     const { document = {}, file = {}, aiSettings = {} } = req.body || {};
     const municipalityId = pickMunicipalityId(req);
+    if (!municipalityId) {
+      return res.status(400).json({ error: "Municipio obrigatorio para validacao por IA." });
+    }
     const settings = await resolveAiSettings(aiSettings, municipalityId);
     const provider = settings.provider;
     const apiKey = settings.apiKey;
@@ -35,7 +32,7 @@ router.post("/validate", optionalAuth, async (req, res) => {
 
     const normalizedDocument = normalizeDocumentPayload(document);
     const result = await validateWithProvider(provider, { apiKey, model, document: normalizedDocument, file });
-    if (municipalityId) await recordAiUsage(municipalityId);
+    await recordAiUsage(municipalityId);
     res.json({ ...result, model });
   } catch (err) {
     console.error("Erro na validacao por IA:", safeErrorMessage(err));
@@ -43,22 +40,20 @@ router.post("/validate", optionalAuth, async (req, res) => {
   }
 });
 
-// Each municipality is an isolated customer: municipality-scoped requests use
-// only that municipality's AI config. The platform env fallback is reserved for
-// the internal global path used by master/support.
-async function resolveAiSettings(requestSettings = {}, municipalityId = null) {
-  const query = municipalityId
-    ? { text: "SELECT value FROM config WHERE key=$1 AND municipality_id=$2", values: ["ai", municipalityId] }
-    : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: ["ai"] };
-  const { rows } = await pool.query(query.text, query.values);
+// Cada município é um cliente isolado: nunca existe chave de plataforma
+// compartilhada. Cada município só pode usar a chave que ele mesmo salvou.
+async function resolveAiSettings(requestSettings = {}, municipalityId) {
+  const { rows } = await pool.query(
+    "SELECT value FROM config WHERE key=$1 AND municipality_id=$2",
+    ["ai", municipalityId],
+  );
   const savedSettings = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
   const savedApiKey = decryptSecret(savedSettings.apiKey || "");
   const merged = { ...savedSettings, ...requestSettings };
   const provider = ["OpenAI", "Anthropic", "Gemini"].includes(merged.provider) ? merged.provider : "OpenAI";
-  const envFallback = municipalityId ? "" : process.env[providerEnvKeys[provider]] || "";
   return {
     provider,
-    apiKey: String(requestSettings.apiKey || savedApiKey || envFallback || "").trim(),
+    apiKey: String(requestSettings.apiKey || savedApiKey || "").trim(),
     model: String(merged.model || "").trim(),
   };
 }
