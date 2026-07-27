@@ -507,6 +507,29 @@ export function normalizeScheduleDay(day: AnyRecord = {}) {
   };
 }
 
+export function parseScheduleDate(dateText: string) {
+  const [day, month, year] = normalizeScheduleDateText(dateText).split("/").map(Number);
+  return new Date(year, month - 1, day).getTime();
+}
+
+export function isPastScheduleDay(dateText: string) {
+  const date = parseScheduleDate(dateText);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date < today.getTime();
+}
+
+export function countRequestAnimals(request: AnyRecord = {}) {
+  return Array.isArray(request.animals) && request.animals.length > 0 ? request.animals.length : 1;
+}
+
+export function countUsedVacancies(requests: AnyRecord[] = [], date: string) {
+  return requests
+    .map(normalizeRequest)
+    .filter((request) => (request.preferredSchedule || request.appointment || request.schedule_date) === date)
+    .reduce((sum, request) => sum + countRequestAnimals(request), 0);
+}
+
 export function mergeTags(current: any[] = [], next: any[] = []) {
   return [...new Set([...(Array.isArray(current) ? current : []), ...next].filter(Boolean))];
 }

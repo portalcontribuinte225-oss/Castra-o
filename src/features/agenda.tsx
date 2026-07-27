@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CalendarCheck2, CalendarDays, ChevronLeft, ChevronRight,
   Clock, MapPin, Search, SlidersHorizontal, X,
@@ -11,6 +11,8 @@ import {
   requestResultLabel,
   requestTypeLabel,
 } from "../domain";
+import { RequestPreviewModal, ToastContainer } from "../App";
+import { useRequestActions } from "./request-actions";
 
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -22,18 +24,6 @@ const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "S
 const HOURS = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 
 type ViewMode = "month" | "week" | "day" | "year" | "list";
-
-const TYPE_COLORS: Record<string, string> = {
-  castracao: "#6366f1",
-  Castracao: "#6366f1",
-  "Castração": "#6366f1",
-  Ambos: "#2563EB",
-  Consulta: "#059669",
-  "Vacinação": "#7C3AED",
-  Retorno: "#D97706",
-  Microchipagem: "#0891B2",
-};
-
 
 function dateToStr(date: Date): string {
   return [
@@ -79,10 +69,6 @@ function buildMonthGrid(year: number, month: number): Date[] {
   return days;
 }
 
-function typeColor(type: string): string {
-  return TYPE_COLORS[type] || "#6B7280";
-}
-
 function requestDateStr(r: AnyRecord): string {
   return normalizeScheduleDateText(r.appointment || r.preferredSchedule || r.schedule_date || "");
 }
@@ -94,15 +80,42 @@ function occupancyLevel(pct: number): "low" | "mid" | "high" | "full" {
   return "low";
 }
 
+function initials(name: string): string {
+  const parts = String(name || "").trim().split(/\s+/);
+  return ((parts[0]?.[0] || "") + (parts[1]?.[0] || "")).toUpperCase();
+}
+
+const LEGEND_ITEMS = [
+  { label: "Confirmado", tone: "pending" },
+  { label: "Pendente", tone: "neutral" },
+  { label: "Realizado", tone: "success" },
+  { label: "Cancelado", tone: "danger" },
+];
+
+
+function statusTone(request: AnyRecord): "success" | "danger" | "info" | "pending" | "neutral" {
+  if (request.status === "REALIZADA") return "success";
+  if (request.status === "CANCELADA") return "danger";
+  if (requestHasTag(request, "REAGENDADA")) return "info";
+  if (request.status === "AGENDADA") return "pending";
+  return "neutral";
+}
+
+const STATUS_TONE_COLORS: Record<string, { bg: string; color: string; dot: string }> = {
+  pending: { bg: "#ccfbf1", color: "#0f766e", dot: "#14b8a6" },
+  neutral: { bg: "#fef3c7", color: "#b45309", dot: "#f59e0b" },
+  success: { bg: "#f1f5f9", color: "#475569", dot: "#94a3b8" },
+  danger: { bg: "#ffe4e6", color: "#be123c", dot: "#f43f5e" },
+  info: { bg: "#dbeafe", color: "#1d4ed8", dot: "#3b82f6" },
+};
+
+function statusColors(request: AnyRecord) {
+  return STATUS_TONE_COLORS[statusTone(request)] || STATUS_TONE_COLORS.neutral;
+}
 
 function AgendaStatusBadge({ request }: { request: AnyRecord }) {
   const label = requestResultLabel(request);
-  const tone = request.status === "REALIZADA" ? "success"
-    : request.status === "CANCELADA" ? "danger"
-    : requestHasTag(request, "REAGENDADA") ? "info"
-    : request.status === "AGENDADA" ? "pending"
-    : "neutral";
-  return <span className={`ag-badge ag-badge--${tone}`}>{label}</span>;
+  return <span className={`ag-badge ag-badge--${statusTone(request)}`}>{label}</span>;
 }
 
 
@@ -111,6 +124,9 @@ export function AgendaView({
   scheduleDays = [],
   requestTypes = [],
   setSelectedId,
+  patchRequest,
+  currentUser,
+  teams = { sectors: [], users: [] },
 }: AnyRecord) {
   const [view, setView] = useState<ViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -118,6 +134,28 @@ export function AgendaView({
   const [filterType, setFilterType] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [toasts, setToasts] = useState<AnyRecord[]>([]);
+
+  function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
+    const id = Date.now() + Math.random();
+    setToasts((current) => [...current, { id, message, type }]);
+    setTimeout(() => setToasts((current) => current.filter((t) => t.id !== id)), type === "error" ? 6000 : 4000);
+  }
+
+  const {
+    previewRequest,
+    openRequest,
+    closePreview,
+    activeSectors,
+    activeUsers,
+    activeScheduleDays,
+    approveRequest,
+    archiveWithTag,
+    rescheduleFromPreview,
+    assignFromPreview,
+    rejectRequestFromProcess,
+    confirmAttendanceFromProcess,
+  } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
 
   const normalized = useMemo(() => requests.map(normalizeRequest), [requests]);
 
@@ -250,13 +288,14 @@ export function AgendaView({
   return (
     <section className="ag-root">
 
-      <header className="ag-header">
-        <div className="ag-header-row">
-          <div className="ag-title-block">
-            <span className="ag-title-kicker"><CalendarCheck2 size={14} /> Operação de agenda</span>
-            <h2 className="ag-period">{periodLabel()}</h2>
-          </div>
-          <div className="ag-nav">
+      <header className="page-header ag-header">
+        <div className="page-header-main ag-title-block">
+          <h2 className="page-title ag-period">Agenda</h2>
+          <p className="page-subtitle">{periodLabel()}</p>
+        </div>
+
+        <div className="page-controls ag-header-row">
+          <div className="page-segment ag-nav">
             <button className="ag-nav-btn" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} /></button>
             <button className="ag-nav-today" onClick={() => setCurrentDate(new Date())}>Hoje</button>
             <button className="ag-nav-btn" onClick={next} aria-label="Próximo"><ChevronRight size={13} /></button>
@@ -264,7 +303,7 @@ export function AgendaView({
 
           <div className="ag-header-fill" />
 
-          <div className="ag-views">
+          <div className="page-tabs ag-views">
             {viewTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -277,51 +316,64 @@ export function AgendaView({
           </div>
         </div>
 
+        <div className="ag-legend">
+          {LEGEND_ITEMS.map((item) => (
+            <span key={item.tone} className="ag-legend-item">
+              <span className={`ag-legend-dot ag-legend-dot--${item.tone}`} />
+              {item.label}
+            </span>
+          ))}
+          <span className="ag-legend-sep">·</span>
+          <span className="ag-legend-note">Capacidade de acordo com a agenda configurada</span>
+        </div>
+
       </header>
 
       <div className="ag-workspace">
         <aside className="ag-side">
-          <div className="ag-side-head">
-            <span><SlidersHorizontal size={15} /> Controle</span>
-            {hasFilters && <button onClick={() => { setFilterType(""); setFilterStatus(""); setSearch(""); }}>Resetar</button>}
-          </div>
+          <div className="ag-side-controls">
+            <div className="ag-side-head">
+              <span><SlidersHorizontal size={15} /> Controle</span>
+              {hasFilters && <button onClick={() => { setFilterType(""); setFilterStatus(""); setSearch(""); }}>Resetar</button>}
+            </div>
 
-          <label className="ag-search">
-            <Search size={15} className="ag-search-icon" />
-            <input
-              type="search"
-              placeholder="Buscar tutor, CPF, animal..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            {search && (
-              <button className="ag-search-clear" onClick={() => setSearch("")} aria-label="Limpar">
-                <X size={13} />
-              </button>
-            )}
-          </label>
-
-          <div className="ag-filter-stack">
-            <label className="ag-filter">
-              <span>Tipo de atendimento</span>
-              <select className="ag-select" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-                <option value="">Todos os tipos</option>
-                {allTypes.map((t) => (
-                  <option key={t} value={t}>{requestTypeLabel({ type: t })}</option>
-                ))}
-              </select>
+            <label className="ag-search">
+              <Search size={15} className="ag-search-icon" />
+              <input
+                type="search"
+                placeholder="Buscar tutor, CPF, animal..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button className="ag-search-clear" onClick={() => setSearch("")} aria-label="Limpar">
+                  <X size={13} />
+                </button>
+              )}
             </label>
 
-            <label className="ag-filter">
-              <span>Status operacional</span>
-              <select className="ag-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
-                <option value="">Todos os status</option>
-                <option value="analise">Nova</option>
-                <option value="agendada">Agendada</option>
-                <option value="realizada">Realizada</option>
-                <option value="cancelada">Cancelada</option>
-              </select>
-            </label>
+            <div className="ag-filter-stack">
+              <label className="ag-filter">
+                <span>Tipo de atendimento</span>
+                <select className="ag-select" value={filterType} onChange={(e) => setFilterType(e.target.value)}>
+                  <option value="">Todos os tipos</option>
+                  {allTypes.map((t) => (
+                    <option key={t} value={t}>{requestTypeLabel({ type: t })}</option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="ag-filter">
+                <span>Status operacional</span>
+                <select className="ag-select" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
+                  <option value="">Todos os status</option>
+                  <option value="analise">Nova</option>
+                  <option value="agendada">Agendada</option>
+                  <option value="realizada">Realizada</option>
+                  <option value="cancelada">Cancelada</option>
+                </select>
+              </label>
+            </div>
           </div>
 
           <div className="ag-side-summary">
@@ -335,13 +387,13 @@ export function AgendaView({
 
         <div className="ag-canvas">
         {view === "month" && (
-          <MonthView currentDate={currentDate} todayStr={todayStr} getDayInfo={getDayInfo} onDayClick={setSelectedDay} />
+          <MonthView currentDate={currentDate} todayStr={todayStr} selectedDay={selectedDay} getDayInfo={getDayInfo} onDayClick={setSelectedDay} />
         )}
         {view === "week" && (
           <WeekView currentDate={currentDate} todayStr={todayStr} getDayInfo={getDayInfo} onDayClick={setSelectedDay} />
         )}
         {view === "day" && (
-          <DayView currentDate={currentDate} getDayInfo={getDayInfo} setSelectedId={setSelectedId} />
+          <DayView currentDate={currentDate} getDayInfo={getDayInfo} onOpenRequest={openRequest} />
         )}
         {view === "year" && (
           <YearView
@@ -356,7 +408,7 @@ export function AgendaView({
           />
         )}
         {view === "list" && (
-          <ListView filtered={filtered} setSelectedId={setSelectedId} />
+          <ListView filtered={filtered} onOpenRequest={openRequest} />
         )}
         </div>
       </div>
@@ -366,15 +418,35 @@ export function AgendaView({
           dateStr={selectedDay}
           getDayInfo={getDayInfo}
           onClose={() => setSelectedDay(null)}
-          setSelectedId={(id: string) => { setSelectedDay(null); setSelectedId(id); }}
+          onOpenRequest={(r: AnyRecord) => { setSelectedDay(null); openRequest(r); }}
         />
       )}
+
+      {previewRequest && (
+        <RequestPreviewModal
+          request={previewRequest}
+          requestTypes={requestTypes}
+          scheduleDays={activeScheduleDays}
+          sectors={activeSectors}
+          users={activeUsers}
+          onClose={closePreview}
+          onApprove={approveRequest}
+          onReject={rejectRequestFromProcess}
+          onArchive={archiveWithTag}
+          onAttendance={confirmAttendanceFromProcess}
+          onReschedule={rescheduleFromPreview}
+          onAssign={assignFromPreview}
+          patchRequest={patchRequest}
+        />
+      )}
+
+      <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t: AnyRecord) => t.id !== id))} />
     </section>
   );
 }
 
 
-function MonthView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) {
+function MonthView({ currentDate, todayStr, selectedDay, getDayInfo, onDayClick }: AnyRecord) {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const days = buildMonthGrid(year, month);
@@ -403,10 +475,10 @@ function MonthView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord)
               className={[
                 "ag-cell",
                 !inMonth && "is-other",
-                isToday && "is-today",
                 isWeekend && inMonth && "is-weekend",
                 isLotado && inMonth && "is-full",
                 isQuase && inMonth && "is-busy",
+                str === selectedDay && "is-selected",
               ].filter(Boolean).join(" ")}
               onClick={() => onDayClick(str)}
             >
@@ -423,7 +495,7 @@ function MonthView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord)
                     className="ag-cell-fill"
                     style={{
                       width: `${Math.min(pct, 100)}%`,
-                      background: pct >= 100 ? "#ef4444" : pct >= 80 ? "#f97316" : pct >= 50 ? "#f59e0b" : "#10b981",
+                      background: pct >= 80 ? "#f43f5e" : pct >= 50 ? "#f59e0b" : "#14b8a6",
                     }}
                   />
                 </div>
@@ -435,7 +507,7 @@ function MonthView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord)
                     <div
                       key={r.id}
                       className="ag-ev"
-                      style={{ "--c": typeColor(r.type || r.requestTypeId || "") } as React.CSSProperties}
+                      style={{ "--c": statusColors(r).dot } as React.CSSProperties}
                     >
                       {(r.scheduleSlotTime || r.scheduleTime) && (
                         <span className="ag-ev-time">{(r.scheduleSlotTime || r.scheduleTime).slice(0, 5)}</span>
@@ -512,7 +584,7 @@ function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
                     <div
                       key={r.id}
                       className="ag-wev"
-                      style={{ "--c": typeColor(r.type || "") } as React.CSSProperties}
+                      style={{ "--c": statusColors(r).dot } as React.CSSProperties}
                     >
                       {r.tutor || "Tutor"}
                     </div>
@@ -528,7 +600,7 @@ function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
 }
 
 
-function DayView({ currentDate, getDayInfo, setSelectedId }: AnyRecord) {
+function DayView({ currentDate, getDayInfo, onOpenRequest }: AnyRecord) {
   const str = dateToStr(currentDate);
   const { reqs, totalVacancies, occupied, available, pct, sdays } = getDayInfo(str);
   const locationName = sdays[0]?.locationName || sdays[0]?.location_name || "";
@@ -574,7 +646,7 @@ function DayView({ currentDate, getDayInfo, setSelectedId }: AnyRecord) {
               <div className="ag-tl-hour">{hour}</div>
               <div className="ag-tl-events">
                 {hourReqs.map((r: AnyRecord) => (
-                  <DayCard key={r.id} request={r} onClick={() => setSelectedId(r.id)} />
+                  <DayCard key={r.id} request={r} onClick={() => onOpenRequest(r)} />
                 ))}
               </div>
             </div>
@@ -585,7 +657,7 @@ function DayView({ currentDate, getDayInfo, setSelectedId }: AnyRecord) {
             <div className="ag-tl-hour ag-tl-hour--muted">—</div>
             <div className="ag-tl-events">
               {unscheduled.map((r: AnyRecord) => (
-                <DayCard key={r.id} request={r} onClick={() => setSelectedId(r.id)} />
+                <DayCard key={r.id} request={r} onClick={() => onOpenRequest(r)} />
               ))}
             </div>
           </div>
@@ -602,7 +674,7 @@ function DayView({ currentDate, getDayInfo, setSelectedId }: AnyRecord) {
 }
 
 function DayCard({ request, onClick }: { request: AnyRecord; onClick: () => void }) {
-  const color = typeColor(request.type || "");
+  const color = statusColors(request).dot;
   return (
     <div className="ag-day-card" style={{ "--c": color } as React.CSSProperties} onClick={onClick}>
       <div className="ag-day-card-accent" />
@@ -685,7 +757,13 @@ function YearView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
 }
 
 
-function ListView({ filtered, setSelectedId }: AnyRecord) {
+function formatListGroupLabel(dateStr: string): string {
+  const date = strToDate(dateStr);
+  if (!date) return dateStr;
+  return `${WEEKDAYS[date.getDay()]}, ${date.getDate()} de ${MONTHS_FULL[date.getMonth()]}`;
+}
+
+function ListView({ filtered, onOpenRequest }: AnyRecord) {
   const sorted = [...filtered].sort((a, b) =>
     requestDateStr(a).localeCompare(requestDateStr(b))
   );
@@ -699,61 +777,49 @@ function ListView({ filtered, setSelectedId }: AnyRecord) {
     );
   }
 
+  const groups: { date: string; items: AnyRecord[] }[] = [];
+  for (const r of sorted) {
+    const ds = requestDateStr(r) || "—";
+    const last = groups[groups.length - 1];
+    if (last && last.date === ds) last.items.push(r);
+    else groups.push({ date: ds, items: [r] });
+  }
+
   return (
     <div className="ag-list">
-      <table className="ag-list-table">
-        <thead>
-          <tr>
-            <th>Data</th>
-            <th>Horário</th>
-            <th>Tipo</th>
-            <th>Tutor</th>
-            <th>Animal</th>
-            <th>Status</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.map((r) => (
-            <tr key={r.id} className="ag-list-row" onClick={() => setSelectedId(r.id)}>
-              <td className="ag-list-date">{requestDateStr(r) || "—"}</td>
-              <td>{r.scheduleSlotTime || r.scheduleTime || "—"}</td>
-              <td>
-                <span
-                  className="ag-type-chip"
-                  style={{ background: typeColor(r.type || "") + "18", color: typeColor(r.type || "") }}
-                >
-                  {requestTypeLabel(r)}
-                </span>
-              </td>
-              <td>{r.tutor || "—"}</td>
-              <td>{(r.animals || []).map((a: AnyRecord) => a.name).filter(Boolean).join(", ") || "—"}</td>
-              <td><AgendaStatusBadge request={r} /></td>
-              <td>
-                <button
-                  className="ag-list-btn"
-                  onClick={(e) => { e.stopPropagation(); setSelectedId(r.id); }}
-                >
-                  Abrir
-                </button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      {groups.map((group) => (
+        <div key={group.date} className="ag-list-group">
+          <div className="ag-list-group-label">{formatListGroupLabel(group.date)}</div>
+          <div className="ag-list-box">
+            {group.items.map((r) => (
+              <div key={r.id} className="ag-list-row" onClick={() => onOpenRequest(r)}>
+                <div className="ag-list-row-main">
+                  <span className="ag-list-time">{r.scheduleSlotTime || r.scheduleTime || "—"}</span>
+                  <span className="ag-list-name">{r.tutor || "—"}</span>
+                  <span className="ag-list-sub">
+                    {(r.animals || []).map((a: AnyRecord) => a.name).filter(Boolean).join(", ") || "—"}
+                  </span>
+                  <span className="ag-type-chip">{requestTypeLabel(r)}</span>
+                </div>
+                <AgendaStatusBadge request={r} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
 
 
-function DayPanel({ dateStr, getDayInfo, onClose, setSelectedId }: AnyRecord) {
-  const { reqs, sdays, totalVacancies, occupied, available, pct } = getDayInfo(dateStr);
+function DayPanel({ dateStr, getDayInfo, onClose, onOpenRequest }: AnyRecord) {
+  const { reqs, sdays, totalVacancies, occupied, pct } = getDayInfo(dateStr);
   const locationName = sdays[0]?.locationName || sdays[0]?.location_name || "";
   const date = strToDate(dateStr);
-  const label = date
-    ? `${WEEKDAYS[date.getDay()]}, ${date.getDate()} de ${MONTHS_FULL[date.getMonth()]}`
+  const weekday = date ? WEEKDAYS[date.getDay()] : "";
+  const dateLabel = date
+    ? `${date.getDate()} de ${MONTHS_FULL[date.getMonth()]} de ${date.getFullYear()}`
     : dateStr;
-  const level = occupancyLevel(pct);
 
   return (
     <>
@@ -761,7 +827,8 @@ function DayPanel({ dateStr, getDayInfo, onClose, setSelectedId }: AnyRecord) {
       <aside className="ag-drawer">
         <div className="ag-drawer-head">
           <div className="ag-drawer-head-info">
-            <h3 className="ag-drawer-date">{label}</h3>
+            <span className="ag-drawer-kicker">{weekday}</span>
+            <h3 className="ag-drawer-date">{dateLabel}</h3>
             {locationName && (
               <span className="ag-drawer-loc"><MapPin size={11} /> {locationName}</span>
             )}
@@ -780,10 +847,7 @@ function DayPanel({ dateStr, getDayInfo, onClose, setSelectedId }: AnyRecord) {
                 }}
               />
             </div>
-            <div className="ag-drawer-occ-row">
-              <span>{occupied} de {totalVacancies} vagas</span>
-              <span className={`ag-occ-tag is-${level}`}>{pct}%</span>
-            </div>
+            <span className="ag-drawer-occ-label">{occupied}/{totalVacancies} vagas</span>
           </div>
         )}
 
@@ -791,33 +855,35 @@ function DayPanel({ dateStr, getDayInfo, onClose, setSelectedId }: AnyRecord) {
           {reqs.length === 0 && (
             <div className="ag-empty">
               <CalendarDays size={22} strokeWidth={1.2} />
-              <span>Sem agendamentos neste dia.</span>
+              <span>Nenhum agendamento neste dia.</span>
             </div>
           )}
           {reqs.map((r: AnyRecord) => (
             <div
               key={r.id}
               className="ag-drawer-card"
-              style={{ "--c": typeColor(r.type || "") } as React.CSSProperties}
-              onClick={() => setSelectedId(r.id)}
+              onClick={() => onOpenRequest(r)}
             >
-              <div className="ag-drawer-card-accent" />
+              <span
+                className="ag-drawer-card-avatar"
+                style={{ background: statusColors(r).bg, color: statusColors(r).color }}
+              >
+                {initials(r.tutor) || "?"}
+              </span>
               <div className="ag-drawer-card-body">
                 <div className="ag-drawer-card-top">
                   <span className="ag-drawer-card-name">{r.tutor || "Tutor"}</span>
-                  <AgendaStatusBadge request={r} />
+                  {(r.scheduleSlotTime || r.scheduleTime) && (
+                    <span className="ag-drawer-card-time">{r.scheduleSlotTime || r.scheduleTime}</span>
+                  )}
                 </div>
                 <div className="ag-drawer-card-meta">
                   {(r.animals || []).map((a: AnyRecord) => a.name).filter(Boolean).join(", ") || "Animal"}
                   {" · "}
                   {requestTypeLabel(r)}
-                  {(r.scheduleSlotTime || r.scheduleTime) && (
-                    <span className="ag-drawer-time">
-                      <Clock size={10} /> {r.scheduleSlotTime || r.scheduleTime}
-                    </span>
-                  )}
                 </div>
               </div>
+              <AgendaStatusBadge request={r} />
             </div>
           ))}
         </div>

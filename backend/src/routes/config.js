@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
-import { isGlobalUser, pickMunicipalityId } from "../tenant.js";
+import { isGlobalUser, isMunicipalAdmin, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 
 const router = Router();
@@ -18,11 +18,10 @@ const GLOBAL_ONLY_CONFIG_KEYS = new Set([
   "platform",
 ]);
 
-// Chaves de configuração global que podem ser lidas publicamente (sem dados
-// sensíveis, graças a publicConfigValue), mas cuja escrita deve ficar restrita
-// à administração global — evita que um admin municipal sobrescreva a config
-// de IA compartilhada por todas as prefeituras.
-const GLOBAL_WRITE_ONLY_CONFIG_KEYS = new Set([
+// Config keys that are publicly readable after publicConfigValue sanitization,
+// but writable only by municipal or global admins. Each municipality stores its
+// own row through municipality_id; operational roles cannot write here.
+const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "ai",
 ]);
 
@@ -113,10 +112,9 @@ router.put("/:key", auth, async (req, res) => {
   if (GLOBAL_ONLY_CONFIG_KEYS.has(key) && !isGlobalUser(req.user)) {
     return res.status(403).json({ error: "Configuração restrita à administração global." });
   }
-
-  // Chaves de escrita restrita: leitura pública, mas só usuário global pode salvar
-  if (GLOBAL_WRITE_ONLY_CONFIG_KEYS.has(key) && !isGlobalUser(req.user)) {
-    return res.status(403).json({ error: "Configuração restrita à administração global." });
+  // Restricted-write keys: public read, but only municipal or global admins can save.
+  if (MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS.has(key) && !isGlobalUser(req.user) && !isMunicipalAdmin(req.user)) {
+    return res.status(403).json({ error: "Configuração restrita à administração municipal." });
   }
 
   const municipalityId = isGlobalUser(req.user)

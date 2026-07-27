@@ -536,24 +536,25 @@ export function DashboardView({
 
   return (
     <section className={`opdash-root is-${activeTab}`}>
-      <header className="opdash-hero">
-        <div className="opdash-hero-copy">
-          <span>Fluxo operacional</span>
-          <h2>Dashboard de gestão</h2>
-          <p>Leitura geral de solicitações, agenda, castrações, adoções e território.</p>
+      <header className="page-header opdash-header">
+        <div className="page-header-main opdash-heading-main">
+          <h2 className="page-title opdash-title">Dashboard de gestão</h2>
+          <p className="page-subtitle opdash-header-note">Leitura geral de solicitações, agenda, castrações, adoções e território.</p>
         </div>
 
-        <nav className="opdash-nav" aria-label="Navegação do BI">
-          <div className="opdash-tabs">
+        <div className="page-controls opdash-controls-row">
+          <nav className="page-tabs opdash-tabs" aria-label="Navegação do BI">
             {DASHBOARD_TABS.map((tab) => (
               <button key={tab.id} type="button" className={activeTab === tab.id ? "is-active" : ""} onClick={() => setActiveTab(tab.id)}>
                 {tab.label}
               </button>
             ))}
-          </div>
-          <div className="opdash-toolbar" aria-label="Filtro de período">
-            <span>Período</span>
-            <div className="opdash-segment">
+          </nav>
+
+          <div className="opdash-header-fill" />
+
+          <div className="opdash-period-group" aria-label="Filtro de período">
+            <div className="page-segment opdash-segment">
               {PERIOD_OPTIONS.map((item) => (
                 <button key={item.id} type="button" className={period === item.id ? "is-active" : ""} onClick={() => setPeriod(item.id)}>
                   {item.label}
@@ -561,7 +562,7 @@ export function DashboardView({
               ))}
             </div>
           </div>
-        </nav>
+        </div>
       </header>
 
       <div className="opdash-kpis">

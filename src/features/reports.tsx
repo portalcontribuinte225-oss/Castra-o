@@ -161,102 +161,106 @@ export function ReportsView({
 
   return (
     <section className="content-grid">
-      <div className="reports-toolbar wide">
-        {/* Campo de busca livre */}
-        <div className="reports-search-row">
-          <div className="reports-search-wrap">
-            <Search size={15} className="reports-search-icon" />
-            <input
-              className="reports-search-input"
-              type="text"
-              placeholder="Microchip, CPF, tutor, nome do animal, protocolo..."
-              value={filters.search}
-              onChange={(e) => patchFilter("search", e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-            />
-            {filters.search && (
-              <span className="reports-search-hint">
-                {currentSearchType === "cpf" && "CPF detectado"}
-                {currentSearchType === "microchip" && "Microchip detectado"}
-              </span>
-            )}
-          </div>
+      <header className="page-header reports-toolbar wide">
+        <div className="page-header-main">
+          <h2 className="page-title">Relatórios</h2>
+          <p className="page-subtitle">Consulte solicitações, filtros e prontuários por período.</p>
         </div>
 
-        {/* Filtros secundários */}
-        <div className="reports-filter-grid">
-          <label className="field reports-filter-field">
-            <span>Início</span>
-            <input type="date" value={filters.start} onChange={(e) => patchFilter("start", e.target.value)} />
-          </label>
-          <label className="field reports-filter-field">
-            <span>Fim</span>
-            <input type="date" value={filters.end} onChange={(e) => patchFilter("end", e.target.value)} />
-          </label>
-          <label className="field reports-filter-field">
-            <span>Tipo</span>
-            <select value={filters.type} onChange={(e) => patchFilter("type", e.target.value)}>
-              <option value="">Todos</option>
-              {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </label>
-          <label className="field reports-filter-field">
-            <span>Status</span>
-            <select value={filters.status} onChange={(e) => patchFilter("status", e.target.value)}>
-              <option value="">Todos</option>
-              {operationalStatusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-            </select>
-          </label>
-          <label className="field reports-filter-field">
-            <span>Taxas</span>
-            <select value={filters.fee} onChange={(e) => patchFilter("fee", e.target.value)}>
-              <option value="">Todas</option>
-              <option value="charged">Com taxa</option>
-              <option value="free">Gratuitas</option>
-            </select>
-          </label>
-
-          <div className="reports-filter-actions">
-            <button
-              className="ghost-button"
-              type="button"
-              onClick={clearFilters}
-              disabled={!appliedFilters && !filters.search && !filters.start && !filters.end}
-            >
-              Limpar
-            </button>
-            <button className="primary-action" type="button" onClick={applyFilters}>
-              <Search size={15} />
-              Buscar
-            </button>
-            <button
-              className="secondary-action"
-              type="button"
-              onClick={exportPdf}
-              disabled={!appliedFilters}
-              title={!appliedFilters ? "Faça uma busca primeiro" : "Exportar relatório operacional"}
-            >
-              <Download size={15} />
-              Exportar
-            </button>
-            <button
-              className={`secondary-action${canProntuario ? "" : " disabled-look"}`}
-              type="button"
-              onClick={handleProntuario}
-              disabled={!canProntuario || prmLoading}
-              title={!canProntuario ? "Informe um microchip ou CPF para gerar o prontuário" : "Gerar prontuário completo do animal"}
-            >
-              <FileText size={15} />
-              {prmLoading ? "Gerando..." : "Prontuário"}
-            </button>
+        <div className="page-controls reports-controls">
+          <div className="reports-search-row">
+            <div className="reports-search-wrap">
+              <Search size={15} className="reports-search-icon" />
+              <input
+                className="reports-search-input"
+                type="text"
+                placeholder="Microchip, CPF, tutor, nome do animal, protocolo..."
+                value={filters.search}
+                onChange={(e) => patchFilter("search", e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && applyFilters()}
+              />
+              {filters.search && (
+                <span className="reports-search-hint">
+                  {currentSearchType === "cpf" && "CPF detectado"}
+                  {currentSearchType === "microchip" && "Microchip detectado"}
+                </span>
+              )}
+            </div>
           </div>
+
+          <div className="reports-filter-grid">
+            <label className="field reports-filter-field">
+              <span>Início</span>
+              <input type="date" value={filters.start} onChange={(e) => patchFilter("start", e.target.value)} />
+            </label>
+            <label className="field reports-filter-field">
+              <span>Fim</span>
+              <input type="date" value={filters.end} onChange={(e) => patchFilter("end", e.target.value)} />
+            </label>
+            <label className="field reports-filter-field">
+              <span>Tipo</span>
+              <select value={filters.type} onChange={(e) => patchFilter("type", e.target.value)}>
+                <option value="">Todos</option>
+                {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+            <label className="field reports-filter-field">
+              <span>Status</span>
+              <select value={filters.status} onChange={(e) => patchFilter("status", e.target.value)}>
+                <option value="">Todos</option>
+                {operationalStatusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </select>
+            </label>
+            <label className="field reports-filter-field">
+              <span>Taxas</span>
+              <select value={filters.fee} onChange={(e) => patchFilter("fee", e.target.value)}>
+                <option value="">Todas</option>
+                <option value="charged">Com taxa</option>
+                <option value="free">Gratuitas</option>
+              </select>
+            </label>
+
+            <div className="page-actions reports-filter-actions">
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={clearFilters}
+                disabled={!appliedFilters && !filters.search && !filters.start && !filters.end}
+              >
+                Limpar
+              </button>
+              <button className="primary-action" type="button" onClick={applyFilters}>
+                <Search size={15} />
+                Buscar
+              </button>
+              <button
+                className="secondary-action"
+                type="button"
+                onClick={exportPdf}
+                disabled={!appliedFilters}
+                title={!appliedFilters ? "Faça uma busca primeiro" : "Exportar relatório operacional"}
+              >
+                <Download size={15} />
+                Exportar
+              </button>
+              <button
+                className={`secondary-action${canProntuario ? "" : " disabled-look"}`}
+                type="button"
+                onClick={handleProntuario}
+                disabled={!canProntuario || prmLoading}
+                title={!canProntuario ? "Informe um microchip ou CPF para gerar o prontuário" : "Gerar prontuário completo do animal"}
+              >
+                <FileText size={15} />
+                {prmLoading ? "Gerando..." : "Prontuário"}
+              </button>
+            </div>
+          </div>
+
+          {prmError && (
+            <p className="reports-prm-error">{prmError}</p>
+          )}
         </div>
-
-        {prmError && (
-          <p className="reports-prm-error">{prmError}</p>
-        )}
-      </div>
-
+      </header>
       <div className="panel wide">
         {!appliedFilters ? (
           <EmptyState

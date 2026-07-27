@@ -94,49 +94,49 @@ export function AccessRequestsView({
 
   return (
     <section className="cr-root">
-      <div className="cr-toolbar">
-        <div className="cr-toolbar-left">
-          <span className="cr-title-kicker">
-            <Shield size={13} /> Gestão de acesso
-          </span>
-          <h2 className="cr-title">Credenciamentos</h2>
+      <header className="page-header cr-toolbar">
+        <div className="page-header-main cr-toolbar-left">
+          <h2 className="page-title cr-title">Credenciamentos</h2>
+          <p className="page-subtitle">Gerencie solicitações de acesso de organizações e responsáveis.</p>
         </div>
-        <div className="cr-stats-row">
-          <span><ClipboardList size={12} /> {accessRequests.length} total</span>
-          {pendingCount > 0 && <span className="cr-stat-warn">{pendingCount} pendentes</span>}
-          {approvedCount > 0 && <span className="cr-stat-ok">{approvedCount} aprovados</span>}
-          {rejectedCount > 0 && <span>{rejectedCount} recusados</span>}
-        </div>
-      </div>
 
-      <nav className="request-nav cr-nav" aria-label="Filtros de credenciamento">
-        <div className="request-filter-tabs">
-          {FILTERS.map((item) => {
-            const count =
-              item.id === "PENDENTE" ? pendingCount :
-              item.id === "APROVADO" ? approvedCount :
-              item.id === "RECUSADO" ? rejectedCount :
-              accessRequests.length;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                className={filter === item.id ? "selected" : ""}
-                onClick={() => setFilter(item.id)}
-              >
-                {item.label}
-                {count > 0 && <span className="cr-seg-count">{count}</span>}
-              </button>
-            );
-          })}
-        </div>
-        <div className="request-today-segment cr-result-segment">
-          <span className="cr-result-label">
-            {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-      </nav>
+        <div className="page-controls cr-controls-row">
+          <div className="cr-stats-row">
+            <span><ClipboardList size={12} /> {accessRequests.length} total</span>
+            {pendingCount > 0 && <span className="cr-stat-warn">{pendingCount} pendentes</span>}
+            {approvedCount > 0 && <span className="cr-stat-ok">{approvedCount} aprovados</span>}
+            {rejectedCount > 0 && <span>{rejectedCount} recusados</span>}
+          </div>
 
+          <nav className="request-nav cr-nav" aria-label="Filtros de credenciamento">
+            <div className="page-tabs request-filter-tabs">
+              {FILTERS.map((item) => {
+                const count =
+                  item.id === "PENDENTE" ? pendingCount :
+                  item.id === "APROVADO" ? approvedCount :
+                  item.id === "RECUSADO" ? rejectedCount :
+                  accessRequests.length;
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={filter === item.id ? "selected" : ""}
+                    onClick={() => setFilter(item.id)}
+                  >
+                    {item.label}
+                    {count > 0 && <span className="cr-seg-count">{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="page-segment request-today-segment cr-result-segment">
+              <span className="cr-result-label">
+                {filtered.length} resultado{filtered.length !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </nav>
+        </div>
+      </header>
       {feedback && (
         <div className={`cr-feedback ${feedback.includes("sucesso") || feedback.includes("Senha") ? "is-ok" : "is-error"}`}>
           {feedback.includes("sucesso") || feedback.includes("Senha")

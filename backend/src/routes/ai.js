@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
+import { optionalAuth } from "../middleware/auth.js";
+import { pickMunicipalityId } from "../tenant.js";
 
 const router = Router();
 
@@ -11,10 +13,11 @@ const providerEnvKeys = {
 
 export const DEFAULT_MINIMUM_CONFIDENCE = 0.55;
 
-router.post("/validate", async (req, res) => {
+router.post("/validate", optionalAuth, async (req, res) => {
   try {
     const { document = {}, file = {}, aiSettings = {} } = req.body || {};
-    const settings = await resolveAiSettings(aiSettings);
+    const municipalityId = pickMunicipalityId(req);
+    const settings = await resolveAiSettings(aiSettings, municipalityId);
     const provider = settings.provider;
     const apiKey = settings.apiKey;
     const model = settings.model;
@@ -38,14 +41,21 @@ router.post("/validate", async (req, res) => {
   }
 });
 
-async function resolveAiSettings(requestSettings = {}) {
-  const { rows } = await pool.query("SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", ["ai"]);
+// Each municipality is an isolated customer: municipality-scoped requests use
+// only that municipality's AI config. The platform env fallback is reserved for
+// the internal global path used by master/support.
+async function resolveAiSettings(requestSettings = {}, municipalityId = null) {
+  const query = municipalityId
+    ? { text: "SELECT value FROM config WHERE key=$1 AND municipality_id=$2", values: ["ai", municipalityId] }
+    : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: ["ai"] };
+  const { rows } = await pool.query(query.text, query.values);
   const savedSettings = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
   const merged = { ...savedSettings, ...requestSettings };
   const provider = ["OpenAI", "Anthropic", "Gemini"].includes(merged.provider) ? merged.provider : "OpenAI";
+  const envFallback = municipalityId ? "" : process.env[providerEnvKeys[provider]] || "";
   return {
     provider,
-    apiKey: String(requestSettings.apiKey || savedSettings.apiKey || process.env[providerEnvKeys[provider]] || "").trim(),
+    apiKey: String(requestSettings.apiKey || savedSettings.apiKey || envFallback || "").trim(),
     model: String(merged.model || "").trim(),
   };
 }

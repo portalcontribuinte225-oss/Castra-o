@@ -174,17 +174,27 @@ router.post("/", auth, async (req, res) => {
 
 // ── Atualização de município ──────────────────────────────────────────────
 
+// Non-global authenticated users can edit only contact/branding data for their
+// own municipality. Tenant identity and activation fields remain master/support-only.
+const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "contact", "email", "address", "cep"];
+const MUNICIPALITY_GLOBAL_EDIT_FIELDS = ["name", "state", "active", ...MUNICIPALITY_SELF_EDIT_FIELDS];
+
 router.patch("/:id", auth, async (req, res) => {
-  if (!isGlobalUser(req.user)) return res.status(403).json({ error: "Acesso restrito ao suporte." });
+  const isGlobal = isGlobalUser(req.user);
+  const ownMunicipalityId = req.user?.municipalityId || req.user?.municipality_id || null;
+  if (!isGlobal && ownMunicipalityId !== req.params.id) {
+    return res.status(403).json({ error: "Acesso restrito ao proprio municipio." });
+  }
+
   const fields = [];
   const values = [];
-  ["name", "state", "active", "brasao", "contact", "email", "address", "cep"].forEach((field) => {
+  (isGlobal ? MUNICIPALITY_GLOBAL_EDIT_FIELDS : MUNICIPALITY_SELF_EDIT_FIELDS).forEach((field) => {
     if (req.body?.[field] !== undefined) {
       values.push(field === "state" ? String(req.body[field]).trim().toUpperCase().slice(0, 2) : field === "email" ? String(req.body[field] || "").trim().toLowerCase() : field === "active" ? req.body[field] : String(req.body[field] || "").trim());
       fields.push(`${field} = $${values.length}`);
     }
   });
-  if (req.body?.slug !== undefined) {
+  if (isGlobal && req.body?.slug !== undefined) {
     values.push(slugify(req.body.slug));
     fields.push(`slug = $${values.length}`);
   }

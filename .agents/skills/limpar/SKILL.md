@@ -1,4 +1,4 @@
----
+﻿---
 name: limpar
 description: Create new agent skills with proper structure, progressive disclosure, and bundled resources. Use when user wants to create, write, or build a new skill.
 ---
@@ -27,11 +27,11 @@ description: Create new agent skills with proper structure, progressive disclosu
 
 ```
 skill-name/
-├── SKILL.md           # Main instructions (required)
-├── REFERENCE.md       # Detailed docs (if needed)
-├── EXAMPLES.md        # Usage examples (if needed)
-└── scripts/           # Utility scripts (if needed)
-    └── helper.js
+â”œâ”€â”€ SKILL.md           # Main instructions (required)
+â”œâ”€â”€ REFERENCE.md       # Detailed docs (if needed)
+â”œâ”€â”€ EXAMPLES.md        # Usage examples (if needed)
+â””â”€â”€ scripts/           # Utility scripts (if needed)
+    â””â”€â”€ helper.js
 ```
 
 ## SKILL.md Template
@@ -102,7 +102,7 @@ Scripts save tokens and improve reliability vs generated code.
 Split into separate files when:
 
 - SKILL.md exceeds 100 lines
-- Content has distinct domains (finance vs sales schemas)
+- Content has distinct domains (castration vs adoption workflows)
 - Advanced features are rarely needed
 
 ## Review Checklist

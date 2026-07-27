@@ -147,6 +147,18 @@ import { AgendaView } from "./features/agenda";
 import { useRequestActions } from "./features/request-actions";
 import { DashboardView } from "./features/dashboard";
 import { ReportsView } from "./features/reports";
+
+type ConfigTabItem = {
+  id: string;
+  label: string;
+  globalOnly?: boolean;
+  aiSettingsOnly?: boolean;
+};
+
+type ConfigSidebarItem = ConfigTabItem & {
+  tabs?: ConfigTabItem[];
+};
+
 const menu = [
   { id: "dashboard", label: "Dashboard", icon: BarChart3 },
   { id: "admin", label: "Solicitações", icon: LayoutDashboard },
@@ -157,34 +169,47 @@ const menu = [
   { id: "config", label: "Configurações", icon: Settings },
 ];
 
-const configSidebarItems = [
-  { id: "environment", label: "Configurar Ambiente" },
-  { id: "municipalities", label: "Criar Municípios", globalOnly: true },
+const environmentConfigTabs: ConfigTabItem[] = [
+  { id: "agenda", label: "Agenda" },
+  { id: "requests", label: "Tipo de Solicitação" },
+  { id: "sizes", label: "Portes" },
+  { id: "species", label: "Espécies" },
+  { id: "documents", label: "Documentos Solicitados" },
+];
+
+const integrationsConfigTabs: ConfigTabItem[] = [
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "ai_settings", label: "Intelig\u00eancia Artificial", aiSettingsOnly: true },
+];
+
+const configSidebarItems: ConfigSidebarItem[] = [
+  { id: "environment", label: "Configurar Ambiente", tabs: environmentConfigTabs },
+  { id: "municipalities", label: "Dados Gerais" },
   { id: "users", label: "Criar Usuários" },
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
-  { id: "ai_settings", label: "Inteligência Artificial", globalOnly: true },
+  { id: "integrations", label: "Integrações", tabs: integrationsConfigTabs },
 ];
 
 const permissionMenuItems = menu.map(({ id, label }) => ({ id, label }));
 
-const permissionConfigItems = [
+const permissionConfigItems: ConfigTabItem[] = [
   { id: "environment", label: "Configurar Ambiente" },
-  { id: "municipalities", label: "Criar Municípios", globalOnly: true },
+  { id: "municipalities", label: "Dados Gerais" },
   { id: "users", label: "Criar Usuários" },
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
   { id: "whatsapp_settings", label: "Aba WhatsApp" },
 ];
 
-const environmentConfigTabs = [
-  { id: "agenda", label: "Agenda" },
-  { id: "requests", label: "Tipo de Solicitação" },
-  { id: "sizes", label: "Portes" },
-  { id: "species", label: "Espécies" },
-  { id: "documents", label: "Documentos Solicitados" },
-  { id: "whatsapp", label: "WhatsApp" },
-];
+function filterVisibleConfigTabs(tabs: ConfigTabItem[] = [], currentUser: AnyRecord, canUsePermissions: boolean, currentPermissionGroup: AnyRecord): ConfigTabItem[] {
+  return tabs.filter((tab) => {
+    if (tab.globalOnly && !isGlobalRole(currentUser?.role)) return false;
+    if (tab.aiSettingsOnly && !canManageAiSettings(currentUser?.role)) return false;
+    if (tab.id === "whatsapp" && canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("whatsapp_settings")) return false;
+    return true;
+  });
+}
 
 function scopeConfigItems(items = [], municipality: AnyRecord = {}) {
   if (!Array.isArray(items)) return [];
@@ -456,16 +481,28 @@ export default function App() {
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
 
+  const aiConfigMunicipalityId = currentUser
+    ? (isGlobalRole(currentUser.role) ? globalMunicipalityFilterId : currentUser.municipalityId || "")
+    : selectedMunicipalityId;
+
   useEffect(() => {
-    api.getConfig("ai").then((saved) => {
-      if (saved && typeof saved === "object") {
-        const merged = { ...initialAiSettings, ...saved, active: Boolean(saved.active) };
-        const validModels = aiProviderOptions[merged.provider]?.models || [];
-        if (validModels.length && !validModels.includes(merged.model)) merged.model = validModels[0];
-        setAiSettings(merged);
-      }
-    }).catch(() => {});
-  }, []);
+    if (!currentUser && !selectedMunicipalityId) {
+      setAiSettings(initialAiSettings);
+      return;
+    }
+    let cancelled = false;
+    api.getConfig("ai", aiConfigMunicipalityId).then((saved) => {
+      if (cancelled) return;
+      const safeSaved = saved && typeof saved === "object" ? saved : {};
+      const merged = { ...initialAiSettings, ...safeSaved, active: Boolean(safeSaved.active) };
+      const validModels = aiProviderOptions[merged.provider]?.models || [];
+      if (validModels.length && !validModels.includes(merged.model)) merged.model = validModels[0];
+      setAiSettings(merged);
+    }).catch(() => {
+      if (!cancelled) setAiSettings(initialAiSettings);
+    });
+    return () => { cancelled = true; };
+  }, [aiConfigMunicipalityId, currentUser?.id, currentUser?.role, selectedMunicipalityId]);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -692,15 +729,19 @@ export default function App() {
     String(user.email || "").toLowerCase() === String(currentUser?.email || "").toLowerCase()
   ));
   const currentPermissionGroup = permissionGroups.find((group) => group.id === currentTeamUser?.permissionGroupId && group.active !== false);
-  const canUsePermissions = currentPermissionGroup && !isGlobalRole(currentUser?.role);
+  const canUsePermissions = Boolean(currentPermissionGroup && !isGlobalRole(currentUser?.role));
   const visibleMenu = canUsePermissions
     ? menu.filter((item) => currentPermissionGroup.allowedMenuItems?.includes(item.id))
     : menu;
+  const visibleEnvironmentTabs = filterVisibleConfigTabs(environmentConfigTabs, currentUser, canUsePermissions, currentPermissionGroup);
+  const visibleIntegrationsTabs = filterVisibleConfigTabs(integrationsConfigTabs, currentUser, canUsePermissions, currentPermissionGroup);
   const visibleConfigSidebarItems = configSidebarItems
     .filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role))
-    .filter((item) => !canUsePermissions || currentPermissionGroup.allowedConfigItems?.includes(item.id));
-  const visibleEnvironmentTabs = environmentConfigTabs
-    .filter((tab) => tab.id !== "whatsapp" || !canUsePermissions || currentPermissionGroup.allowedConfigItems?.includes("whatsapp_settings"));
+    .filter((item) => {
+      if (!canUsePermissions) return true;
+      if (item.id === "integrations") return visibleIntegrationsTabs.length > 0;
+      return currentPermissionGroup.allowedConfigItems?.includes(item.id);
+    });
   const activeMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : currentUser?.municipalityId || "";
   const scopedMunicipalityId = activeMunicipalityId;
   const scopedRequests = filterByMunicipalityScope(requests, scopedMunicipalityId);
@@ -795,39 +836,49 @@ export default function App() {
                 </button>
                 {item.id === "config" && active === "config" && configMenuOpen && (
                   <div className="sidebar-subnav" aria-label="Subabas de configurações">
-                    {visibleConfigSidebarItems.map((subitem) => (
-                      <React.Fragment key={subitem.id}>
-                        <button
-                          className={`config-nav-item${configArea === subitem.id ? " active" : ""}`}
-                          type="button"
-                          onClick={() => {
-                            setActive("config");
-                            setConfigArea(configArea === subitem.id ? "" : subitem.id);
-                            setMobileOpen(false);
-                          }}
-                        >
-                          <span className="config-nav-dot" />
-                          <span className="config-nav-text">
-                            <span className="config-nav-label">{subitem.label}</span>
-                          </span>
-                          <ChevronRight size={13} className={`config-nav-chevron${subitem.id === "environment" && configArea === "environment" ? " open" : ""}`} />
-                        </button>
-                        {subitem.id === "environment" && configArea === "environment" && (
-                          <div className="config-nav-children">
-                            {visibleEnvironmentTabs.map((tab) => (
-                              <button
-                                key={tab.id}
-                                className={`config-nav-child${configTab === tab.id ? " active" : ""}`}
-                                type="button"
-                                onClick={() => { setActive("config"); setConfigArea("environment"); setConfigTab(tab.id); setMobileOpen(false); }}
-                              >
-                                {tab.label}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </React.Fragment>
-                    ))}
+                    {visibleConfigSidebarItems.map((subitem) => {
+                      const subitemTabs = subitem.id === "environment"
+                        ? visibleEnvironmentTabs
+                        : subitem.id === "integrations"
+                          ? visibleIntegrationsTabs
+                          : [];
+                      const hasTabs = subitemTabs.length > 0;
+                      return (
+                        <React.Fragment key={subitem.id}>
+                          <button
+                            className={`config-nav-item${configArea === subitem.id ? " active" : ""}`}
+                            type="button"
+                            onClick={() => {
+                              setActive("config");
+                              setConfigArea(configArea === subitem.id ? "" : subitem.id);
+                              setMobileOpen(false);
+                            }}
+                          >
+                            <span className="config-nav-dot" />
+                            <span className="config-nav-text">
+                              <span className="config-nav-label">{subitem.label}</span>
+                            </span>
+                            {hasTabs && (
+                              <ChevronRight size={13} className={`config-nav-chevron${configArea === subitem.id ? " open" : ""}`} />
+                            )}
+                          </button>
+                          {hasTabs && configArea === subitem.id && (
+                            <div className="config-nav-children">
+                              {subitemTabs.map((tab) => (
+                                <button
+                                  key={tab.id}
+                                  className={`config-nav-child${configTab === tab.id ? " active" : ""}`}
+                                  type="button"
+                                  onClick={() => { setActive("config"); setConfigArea(subitem.id); setConfigTab(tab.id); setMobileOpen(false); }}
+                                >
+                                  {tab.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
                   </div>
                 )}
               </React.Fragment>
@@ -872,14 +923,12 @@ export default function App() {
             <Menu size={20} />
           </button>
           <div className="main-reader">
-            <div className="topbar-context-chip">
-              <strong>
-                {!isGlobalRole(currentUser.role)
-                  ? municipalities.find((m) => m.id === currentUser.municipalityId)?.name || "Bem-estar animal"
-                  : "Bem-estar animal"}
-              </strong>
-              <i aria-hidden="true" />
-            </div>
+            {isGlobalRole(currentUser.role) && (
+              <div className="topbar-context-chip">
+                <strong>Bem-estar animal</strong>
+                <i aria-hidden="true" />
+              </div>
+            )}
           </div>
           <div className="topbar-actions">
             {isGlobalRole(currentUser?.role) && municipalities.length > 0 && (
@@ -958,6 +1007,7 @@ export default function App() {
           configTab={configTab}
           setConfigTab={setConfigTab}
           environmentTabs={visibleEnvironmentTabs}
+          integrationsTabs={visibleIntegrationsTabs}
           globalSearch={globalSearch}
           selectedMunicipalityId={activeMunicipalityId}
           onConsultAnimal={(query: AnyRecord) => api.consultAnimalByMicrochip(query)}
@@ -1123,7 +1173,7 @@ function userRoleLabel(role = "") {
 }
 
 function canManageAiSettings(role = "") {
-  return isGlobalRole(role) || role === "admin_municipal";
+  return isGlobalRole(role) || normalizeText(role) === "admin_municipal";
 }
 
 function canManagePublicAnimalFlows(role = "") {
@@ -2890,7 +2940,6 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
     <section className={compact ? "simple-stack consultation-results" : "content-grid"}>
       {!compact && <div className="hero-panel">
         <div>
-          <span className="eyebrow">Área do solicitante</span>
           <h2>Olá, {currentUser.name}</h2>
         </div>
         <button className="primary-action" onClick={() => setActive("solicitacao")}>
@@ -3572,7 +3621,8 @@ function NewRequest({
           message: aiSettings.active ? "Analisando documento e critérios cadastrados..." : "Arquivo anexado para conferência manual...",
         },
       }));
-      const result = await validateDocumentWithAI(normalizedDocument, file, aiSettings, dataUrl);
+      const documentMunicipalityId = requestData.municipalityId || selectedMunicipalityId || initialMunicipalityId || currentUser?.municipalityId || "";
+      const result = await validateDocumentWithAI(normalizedDocument, file, aiSettings, dataUrl, documentMunicipalityId);
       setDocumentUploads((current) => ({
         ...current,
         [normalizedDocument.id]: {
@@ -4395,7 +4445,6 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     <main class="pdf-page pdf-page--compact">
       <header class="pdf-header compact-header">
         <div>
-          <span class="kicker">Cadastro da solicitação</span>
           <h1>Dados informados para castração animal</h1>
         </div>
         <div class="header-box"><span>Data</span><strong>${new Date().toLocaleDateString("pt-BR")}</strong></div>
@@ -4602,40 +4651,43 @@ function AdminDashboard({
   return (
     <section className="request-workspace triage-workspace clean-requests-workspace">
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
-      <div className="workspace-heading request-page-head">
-        <div className="workspace-heading-main">
-          <h2>Solicitações</h2>
-          <p>Acompanhe triagem, agenda e atendimento.</p>
+      <header className="page-header request-page-head">
+        <div className="page-header-main workspace-heading-main">
+          <h2 className="page-title">Solicitações</h2>
+          <p className="page-subtitle">Acompanhe triagem, agenda e atendimento.</p>
         </div>
-        <div className="workspace-heading-actions">
-          <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
-            <Plus size={18} />
-            Criar Solicitação
-          </button>
-        </div>
-        <nav className="request-nav" aria-label="Filtros de solicitações">
-          <div className="request-filter-tabs">
-            {filterTabs.map((tab) => (
-              <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
-                {tab.label}<span>{tab.requests.length}</span>
-              </button>
-            ))}
-          </div>
-          <div className="request-today-segment">
-            <button
-              type="button"
-              className={todayOnly ? "selected" : ""}
-              aria-pressed={todayOnly}
-              onClick={() => setTodayOnly((current) => !current)}
-            >
-              <CalendarDays size={14} />
-              Hoje
-              <span>{todayRequests.length}</span>
+
+        <div className="page-controls request-page-controls">
+          <div className="page-actions workspace-heading-actions">
+            <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
+              <Plus size={18} />
+              Criar Solicitação
             </button>
           </div>
-        </nav>
-      </div>
 
+          <nav className="request-nav" aria-label="Filtros de solicitações">
+            <div className="page-tabs request-filter-tabs">
+              {filterTabs.map((tab) => (
+                <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
+                  {tab.label}<span>{tab.requests.length}</span>
+                </button>
+              ))}
+            </div>
+            <div className="page-segment request-today-segment">
+              <button
+                type="button"
+                className={todayOnly ? "selected" : ""}
+                aria-pressed={todayOnly}
+                onClick={() => setTodayOnly((current) => !current)}
+              >
+                <CalendarDays size={14} />
+                Hoje
+                <span>{todayRequests.length}</span>
+              </button>
+            </div>
+          </nav>
+        </div>
+      </header>
       <div className="triage-card-grid">
         {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui."} />}
         {activeRequests.map((request) => (
@@ -4752,6 +4804,10 @@ function AdminDashboard({
   );
 }
 
+function isAnimalPhotoDocument(d: AnyRecord = {}) {
+  return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
+}
+
 export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
@@ -4799,8 +4855,6 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     status: "Gerado",
     available: true,
   };
-
-  const isAnimalPhotoDocument = (d: AnyRecord) => d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
 
   const requiredRows = requiredDocTypes.map((dt) => {
     const uploaded = uploadedDocs.find(
@@ -6121,23 +6175,26 @@ function AdoptionView({
   return (
     <section className="content-grid adoption-workspace">
       <div className="adoption-shell">
-        <header className="adoption-command-header">
-          <div className="adoption-command-copy">
-            <span className="adoption-command-kicker"><HeartHandshake size={14} /> Adocao responsavel</span>
-            <h2>Painel de adocao</h2>
+        <header className="page-header adoption-command-header">
+          <div className="page-header-main adoption-command-copy">
+            <h2 className="page-title">Painel de adoção</h2>
+            <p className="page-subtitle">Acompanhe animais disponíveis, triagens, adoções e interessados.</p>
+          </div>
+
+          <div className="page-controls adoption-command-controls">
             <div className="adoption-command-stats">
-              <span>{availableAnimals.length} disponiveis</span>
+              <span>{availableAnimals.length} disponíveis</span>
               <span>{inProgressAnimals.length} em triagem</span>
               <span>{adoptedAnimals.length} adotados</span>
               <span>{totalInterests} interessados</span>
             </div>
+            {canManageAdoptions && (
+              <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
+                <Plus size={16} />
+                Cadastrar animal
+              </button>
+            )}
           </div>
-          {canManageAdoptions && (
-            <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
-              <Plus size={16} />
-              Cadastrar animal
-            </button>
-          )}
         </header>
 
         {canManageAdoptions && isFormOpen && (
@@ -6153,7 +6210,7 @@ function AdoptionView({
                 <div className="adoption-photo-column">
                   <label className="animal-photo-uploader">
                     {animalForm.photos.length > 0 ? (
-                      <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Previa principal do animal" />
+                      <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Prévia principal do animal" />
                     ) : (
                       <span>
                         <UploadCloud size={28} />
@@ -6252,7 +6309,7 @@ function AdoptionView({
         </div>
 
         {canManageAdoptions && (
-          <nav className="adoption-nav adoption-nav-modern" aria-label="Filtros de adocao">
+          <nav className="adoption-nav adoption-nav-modern" aria-label="Filtros de adoção">
             <div className="adoption-filter-group" aria-label="Filtrar por status">
               {statusQuickFilters.map((filter) => {
                 const Icon = filter.icon;
@@ -6343,7 +6400,7 @@ function AdoptionView({
                               <RefreshCw size={16} />
                             </button>
                           ) : (
-                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adocao" aria-label="Concluir adocao">
+                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adoção" aria-label="Concluir adoção">
                               <CheckCircle2 size={16} />
                             </button>
                           )}
@@ -6384,7 +6441,7 @@ function AdoptionView({
                           {animal.status === ADOPTION_STATUS_ADOPTED ? (
                             <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar"><RefreshCw size={15} /></button>
                           ) : (
-                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adocao" aria-label="Concluir adocao"><CheckCircle2 size={15} /></button>
+                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adoção" aria-label="Concluir adoção"><CheckCircle2 size={15} /></button>
                           )}
                         </div>
                       )}
@@ -6396,7 +6453,7 @@ function AdoptionView({
           </div>
 
           {canManageAdoptions && (
-            <aside className="adoption-rail" aria-label="Resumo operacional da adocao">
+            <aside className="adoption-rail" aria-label="Resumo operacional da adoção">
               <div className="adoption-rail-card">
                 <h3>Aguardando triagem</h3>
                 <div className="adoption-rail-list">
@@ -6501,7 +6558,7 @@ function AdoptionView({
                   {selectedAdoptionAnimal.status === ADOPTION_STATUS_ADOPTED ? (
                     <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(selectedAdoptionAnimal, ADOPTION_STATUS_AVAILABLE)}><RefreshCw size={15} /> Reativar</button>
                   ) : (
-                    <button className="primary-action" type="button" onClick={() => openAdoptionConfirmModal(selectedAdoptionAnimal)}><CheckCircle2 size={15} /> Concluir adocao</button>
+                    <button className="primary-action" type="button" onClick={() => openAdoptionConfirmModal(selectedAdoptionAnimal)}><CheckCircle2 size={15} /> Concluir adoção</button>
                   )}
                 </div>
               )}
@@ -6792,6 +6849,7 @@ function ConfigView({
   configTab = "agenda",
   setConfigTab = (_value: string | ((current: string) => string)) => {},
   environmentTabs = environmentConfigTabs,
+  integrationsTabs = integrationsConfigTabs,
   selectedMunicipalityId = "",
   aiSettings = initialAiSettings,
   setAiSettings,
@@ -6901,6 +6959,10 @@ function ConfigView({
       setConfigTab((current) => (environmentTabs.some((tab) => tab.id === current) ? current : "agenda"));
       return;
     }
+    if (configArea === "integrations") {
+      setConfigTab((current) => (integrationsTabs.some((tab) => tab.id === current) ? current : "whatsapp"));
+      return;
+    }
     setConfigTab(configArea);
   }, [configArea]);
 
@@ -6979,7 +7041,7 @@ function ConfigView({
     };
     setAiSaveStatus("Salvando configuração...");
     try {
-      const saved = await api.setConfig("ai", nextSettings);
+      const saved = await api.setConfig("ai", nextSettings, configMunicipalityScopeId);
       const publicSettings = {
         ...nextSettings,
         ...(saved?.value || {}),
@@ -6994,7 +7056,7 @@ function ConfigView({
   }
 
   useEffect(() => {
-    if (configArea !== "environment" || configTab !== "whatsapp") return;
+    if (configArea !== "integrations" || configTab !== "whatsapp") return;
     setTestPhone("");
     setTestSendStatus("");
     setConfirmEndContract(false);
@@ -7033,7 +7095,7 @@ function ConfigView({
     return getItemMunicipalityId(item) === configMunicipalityScopeId;
   }
 
-  const currentConfigKey = configArea === "environment" ? configTab : configArea;
+  const currentConfigKey = configArea === "environment" || configArea === "integrations" ? configTab : configArea;
   const configStatusFilter = configStatusFilters[currentConfigKey] || "active";
   const filterByConfigStatus = (items = []) =>
     items.filter((item) => {
@@ -8256,7 +8318,7 @@ function ConfigView({
   );
   const configAreaTitle = {
     environment: "Configurar Ambiente",
-    municipalities: "Criar Municípios",
+    municipalities: "Dados Gerais",
     users: "Criar Usuários",
     sectors: "Criar Setores",
     permissions: "Permissões",
@@ -8265,35 +8327,45 @@ function ConfigView({
   return (
     <section className="config-workspace">
 
-      {configArea === "municipalities" && isGlobalRole(currentUser?.role) && (
-        <div className="panel wide">
-          <ConfigSectionHeader title="Municípios" createLabel="Cadastrar município" onCreate={() => openMunicipalityModal()}>
-            <ConfigStatusFilter
-              value={configStatusFilter}
-              onChange={setConfigStatusFilter}
-              activeCount={municipalities.filter((item) => item.active !== false).length}
-              inactiveCount={municipalities.filter((item) => item.active === false).length}
-            />
-          </ConfigSectionHeader>
-          <div className="config-editor-grid">
-            {filteredMunicipalities.length === 0 && <EmptyState title="Nenhum município cadastrado" text="Cadastre um município para liberar um ambiente próprio." />}
-            {filteredMunicipalities.map((municipality, index) => (
-              <article className="config-list-row" key={municipality.id} onClick={() => openMunicipalityModal(municipality)} role="button" tabIndex={0}>
-                <span className="config-list-index">{index + 1}</span>
-                <div className="config-list-main">
-                  <strong>{municipality.name}</strong>
-                  <span>{municipality.state || "UF não informada"}</span>
-                </div>
-                <small className={municipality.active === false ? "schedule-status inactive" : "schedule-status active"}>
-                  {municipality.active === false ? "Inativo" : "Ativo"}
-                </small>
-              </article>
-            ))}
+      {configArea === "municipalities" && (() => {
+        const isGlobal = isGlobalRole(currentUser?.role);
+        const municipalityRows = isGlobal ? filteredMunicipalities : municipalities;
+        return (
+          <div className="panel wide">
+            <ConfigSectionHeader
+              title="Dados Gerais"
+              createLabel={isGlobal ? "Cadastrar município" : undefined}
+              onCreate={isGlobal ? () => openMunicipalityModal() : undefined}
+            >
+              {isGlobal && (
+                <ConfigStatusFilter
+                  value={configStatusFilter}
+                  onChange={setConfigStatusFilter}
+                  activeCount={municipalities.filter((item) => item.active !== false).length}
+                  inactiveCount={municipalities.filter((item) => item.active === false).length}
+                />
+              )}
+            </ConfigSectionHeader>
+            <div className="config-editor-grid">
+              {municipalityRows.length === 0 && <EmptyState title="Nenhum município cadastrado" text="Cadastre um município para liberar um ambiente próprio." />}
+              {municipalityRows.map((municipality, index) => (
+                <article className="config-list-row" key={municipality.id} onClick={() => openMunicipalityModal(municipality)} role="button" tabIndex={0}>
+                  <span className="config-list-index">{index + 1}</span>
+                  <div className="config-list-main">
+                    <strong>{municipality.name}</strong>
+                    <span>{municipality.state || "UF não informada"}</span>
+                  </div>
+                  <small className={municipality.active === false ? "schedule-status inactive" : "schedule-status active"}>
+                    {municipality.active === false ? "Inativo" : "Ativo"}
+                  </small>
+                </article>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
-      {configArea === "ai_settings" && isGlobalRole(currentUser?.role) && (
+      {configArea === "integrations" && configTab === "ai_settings" && canManageAiSettings(currentUser?.role) && (
         <div className="panel wide">
           <PanelHeader title="IA externa para documentos" />
           <div className="ai-settings-layout">
@@ -8759,7 +8831,7 @@ function ConfigView({
         </div>
       )}
 
-      {configArea === "environment" && configTab === "whatsapp" && (() => {
+      {configArea === "integrations" && configTab === "whatsapp" && (() => {
         const templateVars: string[] = Array.isArray(whatsappSettings.templateVariables)
           ? whatsappSettings.templateVariables
           : initialWhatsappSettings.templateVariables;
@@ -9032,63 +9104,73 @@ function ConfigView({
                 setNewMunicipality(emptyMunicipalityForm);
               }}
             />
-            <div className="config-modal-options">
-              <ConfigActiveToggle
-                checked={newMunicipality.active !== false}
-                onChange={(checked) => setNewMunicipality((current) => ({ ...current, active: checked }))}
-              />
-            </div>
-            <label className="field">
-              <span>Estado</span>
-              <select
-                value={newMunicipality.state}
-                onChange={(event) => {
-                  const state = event.target.value;
-                  setNewMunicipality((current) => ({
-                    ...current,
-                    state,
-                    name: state === current.state ? current.name : "",
-                  }));
-                }}
-              >
-                <option value="">Selecione o estado</option>
-                {brazilStates.map((state) => (
-                  <option key={state.id || state.sigla} value={state.sigla}>
-                    {state.sigla} - {state.nome}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {brazilLocationStatus.startsWith("Não foi possível") ? (
-              <Field
-                label="Município"
-                value={newMunicipality.name}
-                placeholder="Digite o município"
-                onChange={(value) => setNewMunicipality((current) => ({ ...current, name: value }))}
-              />
-            ) : (
-              <label className="field">
-                <span>Município</span>
-                <select
-                  value={newMunicipality.name}
-                  disabled={!newMunicipality.state || brazilLocationStatus.startsWith("Carregando")}
-                  onChange={(event) => setNewMunicipality((current) => ({ ...current, name: event.target.value }))}
-                >
-                  <option value="">
-                    {newMunicipality.state ? "Selecione o município" : "Selecione um estado primeiro"}
-                  </option>
-                  {newMunicipality.name && !brazilMunicipalities.some((city) => city.nome === newMunicipality.name) && (
-                    <option value={newMunicipality.name}>{newMunicipality.name}</option>
-                  )}
-                  {brazilMunicipalities.map((city) => (
-                    <option key={city.id || city.nome} value={city.nome}>
-                      {city.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            {isGlobalRole(currentUser?.role) && (
+              <div className="config-modal-options">
+                <ConfigActiveToggle
+                  checked={newMunicipality.active !== false}
+                  onChange={(checked) => setNewMunicipality((current) => ({ ...current, active: checked }))}
+                />
+              </div>
             )}
-            {brazilLocationStatus && <p className="helper-text">{brazilLocationStatus}</p>}
+            {isGlobalRole(currentUser?.role) ? (
+              <>
+                <label className="field">
+                  <span>Estado</span>
+                  <select
+                    value={newMunicipality.state}
+                    onChange={(event) => {
+                      const state = event.target.value;
+                      setNewMunicipality((current) => ({
+                        ...current,
+                        state,
+                        name: state === current.state ? current.name : "",
+                      }));
+                    }}
+                  >
+                    <option value="">Selecione o estado</option>
+                    {brazilStates.map((state) => (
+                      <option key={state.id || state.sigla} value={state.sigla}>
+                        {state.sigla} - {state.nome}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {brazilLocationStatus.startsWith("Não foi possível") ? (
+                  <Field
+                    label="Município"
+                    value={newMunicipality.name}
+                    placeholder="Digite o município"
+                    onChange={(value) => setNewMunicipality((current) => ({ ...current, name: value }))}
+                  />
+                ) : (
+                  <label className="field">
+                    <span>Município</span>
+                    <select
+                      value={newMunicipality.name}
+                      disabled={!newMunicipality.state || brazilLocationStatus.startsWith("Carregando")}
+                      onChange={(event) => setNewMunicipality((current) => ({ ...current, name: event.target.value }))}
+                    >
+                      <option value="">
+                        {newMunicipality.state ? "Selecione o município" : "Selecione um estado primeiro"}
+                      </option>
+                      {newMunicipality.name && !brazilMunicipalities.some((city) => city.nome === newMunicipality.name) && (
+                        <option value={newMunicipality.name}>{newMunicipality.name}</option>
+                      )}
+                      {brazilMunicipalities.map((city) => (
+                        <option key={city.id || city.nome} value={city.nome}>
+                          {city.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {brazilLocationStatus && <p className="helper-text">{brazilLocationStatus}</p>}
+              </>
+            ) : (
+              <p className="helper-text">
+                {[newMunicipality.name, newMunicipality.state].filter(Boolean).join(" / ")}
+              </p>
+            )}
 
             <div className="modal-form-grid">
               <Field label="Contato" value={newMunicipality.contact} placeholder="Telefone, WhatsApp ou setor responsável" onChange={(value) => setNewMunicipality((current) => ({ ...current, contact: value }))} />
@@ -9927,7 +10009,6 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
             <AnimalIcon size={28} />
           </div>
           <div>
-            <span className="eyebrow">Prontuário global por microchip</span>
             <h3>{animal.name || "Animal sem nome"}</h3>
             <p>{animalSummary}</p>
             <div className="animal-record-meta">
@@ -10356,7 +10437,7 @@ function DocumentScanningPreview({ dataUrl, fileType }: AnyRecord) {
   );
 }
 
-async function validateDocumentWithAI(document: AnyRecord, file: File, aiSettings: AnyRecord = initialAiSettings, dataUrl = ""): Promise<AnyRecord> {
+async function validateDocumentWithAI(document: AnyRecord, file: File, aiSettings: AnyRecord = initialAiSettings, dataUrl = "", municipalityId = ""): Promise<AnyRecord> {
   const localResult = await validateDocumentLocally(document, file);
   if (localResult.status === "rejected" || !aiSettings?.active) return localResult;
 
@@ -10378,6 +10459,7 @@ async function validateDocumentWithAI(document: AnyRecord, file: File, aiSetting
         provider: aiSettings.provider,
         model: aiSettings.model,
       },
+      municipalityId,
     });
   } catch (err) {
     console.error("Erro ao validar documento com IA externa:", err);
@@ -10577,7 +10659,6 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
   <body>
     <header class="pdf-header">
       <div>
-        <span class="kicker">Prontuário Animal</span>
         <h1>${escapeHtml(animal.name || "Animal não identificado")}</h1>
         <span style="font-size:11px;opacity:.8">${[animal.species, animal.sex, animal.size].filter(Boolean).join(" · ")}</span>
       </div>
@@ -10631,7 +10712,7 @@ const PDF_BASE_STYLES = `
   * { box-sizing: border-box; }
   body { margin: 0; padding: 28px; color: #172026; font-family: Arial, sans-serif; background: #ffffff; }
   .pdf-header { background: #10364f; color: #ffffff; border-radius: 14px; padding: 18px; display: flex; justify-content: space-between; gap: 18px; }
-  .kicker, .section-title, .header-box span, .data-item span { font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .section-title, .header-box span, .data-item span { font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
   h1 { margin: 4px 0 0; font-size: 22px; }
   .header-box { min-width: 130px; border: 1px solid rgba(255,255,255,.28); border-radius: 10px; padding: 10px; text-align: right; }
   .header-box strong { display: block; margin-top: 4px; font-size: 16px; }
@@ -10894,9 +10975,13 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
   const animalMicrochip = (fullHistory?.animal?.microchip || req.animalMicrochip || animal.microchip || "").trim();
 
-  const animalPhotoDoc = getUserUploadedProcessDocuments(req.documents).find(
-    (d) => d.documentId === "animal_photo" || d.documentName === "Foto de registro animal",
-  );
+  // request.documents only covers the specific request passed in; callers that only have
+  // the animal's aggregated history (fullHistory, no request) still need the photo, so fall
+  // back to the most recent request in that history that has one attached.
+  const historyDocuments = (fullHistory?.history || [])
+    .flatMap((entry: AnyRecord) => entry?.data?.registration?.documents || []);
+  const animalPhotoDoc = getUserUploadedProcessDocuments(req.documents).find(isAnimalPhotoDocument)
+    || getUserUploadedProcessDocuments(historyDocuments).find(isAnimalPhotoDocument);
   const animalPhotoDataUrl = getDocumentPreviewSource(animalPhotoDoc || {});
 
   const page = output.addPage(pageSize);
