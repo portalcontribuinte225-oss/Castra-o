@@ -25459,9 +25459,15 @@ main,
   flex-wrap: wrap !important;
 }
 
-.cr-controls-row .cr-stats-row,
 .cr-controls-row .request-filter-tabs {
+  order: 1 !important;
   flex: 0 1 auto !important;
+}
+
+.cr-controls-row .cr-stats-row {
+  order: 2 !important;
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
 }
 /* Adoção: one clean action row, with create button on the right */
 .adoption-command-controls {
