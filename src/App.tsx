@@ -1795,6 +1795,31 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   );
 }
 
+function ScheduleDayButton({
+  hasVacancy,
+  selected,
+  mutirao = false,
+  disabled,
+  onClick,
+  children,
+}: AnyRecord) {
+  return (
+    <button
+      className={[
+        "calendar-day-button",
+        hasVacancy ? "has-vacancy" : "",
+        selected ? "selected" : "",
+        mutirao ? "mutirao-day" : "",
+      ].filter(Boolean).join(" ")}
+      type="button"
+      disabled={disabled}
+      aria-pressed={selected}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
 function PublicSchedulePicker({
   requests,
   scheduleDays = [],
@@ -1883,22 +1908,18 @@ function PublicSchedulePicker({
           day.offset
             ? <div key={`offset-${index}`} className="calendar-day-button calendar-day-offset" aria-hidden="true" />
             : (
-              <button
+              <ScheduleDayButton
                 key={day.date}
-                className={[
-                  "calendar-day-button",
-                  selectedDate === day.date ? "selected" : "",
-                  day.kind === "Mutirao" ? "mutirao-day" : "",
-                  day.available && !day.isPast && day.hasEnoughVacancies ? "has-vacancy" : "",
-                ].filter(Boolean).join(" ")}
-                type="button"
+                selected={selectedDate === day.date}
+                mutirao={day.kind === "Mutirao"}
+                hasVacancy={day.available && !day.isPast && day.hasEnoughVacancies}
                 disabled={!day.available || !day.hasEnoughVacancies || day.isPast}
                 onClick={() => onSelect(day.date)}
               >
                 <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
                 <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} - ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
                 {day.kind === "Mutirao" && <em>Mutirão</em>}
-              </button>
+              </ScheduleDayButton>
             )
         )}
       </div>
@@ -3644,6 +3665,8 @@ function NewRequest({
 
     try {
       const normalizedDocument = normalizeDocumentType(document);
+      const documentUsesAi = normalizedDocument.analysisRules?.useAi !== false;
+      const shouldAnalyzeWithAi = aiSettings.active && documentUsesAi;
       const dataUrl = await readFileAsDataUrl(file);
       setDocumentUploads((current) => ({
         ...current,
@@ -3655,7 +3678,7 @@ function NewRequest({
           fileSize: file.size,
           dataUrl,
           status: "checking",
-          message: aiSettings.active ? "Analisando documento e critérios cadastrados..." : "Arquivo anexado para conferência manual...",
+          message: shouldAnalyzeWithAi ? "Analisando documento e critérios cadastrados..." : "Arquivo anexado...",
         },
       }));
       const documentMunicipalityId = requestData.municipalityId || selectedMunicipalityId || initialMunicipalityId || currentUser?.municipalityId || "";
@@ -3682,7 +3705,7 @@ function NewRequest({
           fileType: file.type,
           fileSize: file.size,
           status: "attached",
-          message: "Arquivo anexado para conferência manual.",
+          message: "Arquivo anexado.",
           confidence: null,
           error: true,
         },
@@ -4338,7 +4361,7 @@ function NewRequest({
                           key={document.id}
                           document={document}
                           upload={upload}
-                          aiActive={aiSettings.active}
+                          aiActive={aiSettings.active && document.analysisRules?.useAi !== false}
                           onUpload={(file) => handleDocumentFile(document, file)}
                           onRemove={() => removeDocumentFile(document.id)}
                         />
@@ -5210,18 +5233,17 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
           : (
             <div className="reschedule-grid">
               {scheduleDays.map((day) => (
-                <button
+                <ScheduleDayButton
                   key={day.date}
-                  className={`calendar-day-button${day.remaining > 0 ? " has-vacancy" : ""}${selectedRescheduleDate === day.date ? " selected" : ""}`}
-                  type="button"
+                  selected={selectedRescheduleDate === day.date}
+                  hasVacancy={day.remaining > 0}
                   disabled={day.remaining <= 0}
-                  aria-pressed={selectedRescheduleDate === day.date}
                   onClick={() => setSelectedRescheduleDate(day.date)}
                 >
                   <span>{day.weekday}</span>
                   <strong>{day.date}</strong>
                   <small>{day.remaining} vagas</small>
-                </button>
+                </ScheduleDayButton>
               ))}
             </div>
           )
@@ -6774,7 +6796,6 @@ function AgendaKindSelector({ value, onChange }: AnyRecord) {
 const documentCriteriaVariants = {
   required: { label: "Obrigatórios", accent: "green" },
   rejection: { label: "Recusa", accent: "red" },
-  manual: { label: "Revisão manual", accent: "amber" },
 } as const;
 
 function DocumentCriteriaColumn({ variant, value, onChange, placeholder }: AnyRecord) {
@@ -6797,13 +6818,13 @@ function DocumentCriteriaColumn({ variant, value, onChange, placeholder }: AnyRe
 }
 
 function DocumentConfidenceSlider({ value, onChange }: AnyRecord) {
+  const [isAdjusting, setIsAdjusting] = useState(false);
+  const bubblePosition = `clamp(20px, ${value}%, calc(100% - 20px))`;
+
   return (
-    <div className="document-confidence-slider">
-      <div className="document-confidence-slider-label">
-        <span>Confiança mínima</span>
-        <strong>{value}<small>%</small></strong>
-      </div>
+    <div className={`document-confidence-slider${isAdjusting ? " is-adjusting" : ""}`}>
       <div className="document-confidence-track-wrap">
+        <span className="document-confidence-value-bubble" style={{ left: bubblePosition }}>{value}%</span>
         <div className="document-confidence-track">
           <div className="document-confidence-fill" style={{ width: `${value}%` }} />
         </div>
@@ -6814,8 +6835,13 @@ function DocumentConfidenceSlider({ value, onChange }: AnyRecord) {
           step={1}
           value={value}
           onChange={(event) => onChange(Number(event.target.value))}
+          onFocus={() => setIsAdjusting(true)}
+          onBlur={() => setIsAdjusting(false)}
+          onPointerDown={() => setIsAdjusting(true)}
+          onPointerUp={() => setIsAdjusting(false)}
+          onPointerCancel={() => setIsAdjusting(false)}
           className="document-confidence-range"
-          aria-label="Confiança mínima"
+          aria-label="Percentual mínimo"
         />
       </div>
       <p>Abaixo deste valor, o documento é enviado para revisão manual em vez de decidido automaticamente.</p>
@@ -6892,15 +6918,13 @@ function ConfigView({
     name: "",
     expectedDocument: "",
     minimumConfidence: Math.round(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE * 100),
-    allowAutomaticApproval: true,
-    allowAutomaticRejection: false,
+    useAi: true,
     required: true,
     active: true,
   };
   const [newDocument, setNewDocument] = useState(emptyDocumentForm);
   const [newRequiredCriterion, setNewRequiredCriterion] = useState("");
   const [newRejectionCriterion, setNewRejectionCriterion] = useState("");
-  const [newManualCriterion, setNewManualCriterion] = useState("");
   const [newSectorName, setNewSectorName] = useState("");
   const [newSectorActive, setNewSectorActive] = useState(true);
   const [editingSectorId, setEditingSectorId] = useState(null);
@@ -7268,6 +7292,10 @@ function ConfigView({
     const minimumConfidencePercent = Number.isFinite(Number(payload.minimumConfidence))
       ? Number(payload.minimumConfidence)
       : Math.round(DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE * 100);
+    const existingAnalysisRules = { ...(existing.analysisRules || {}) };
+    delete existingAnalysisRules.manualReviewCriteria;
+    delete existingAnalysisRules.allowAutomaticApproval;
+    delete existingAnalysisRules.allowAutomaticRejection;
     return {
       ...existing,
       id: existing.id || `doc_${Date.now()}`,
@@ -7277,14 +7305,12 @@ function ConfigView({
       accept: existing.accept || ["image/jpeg", "image/png", "application/pdf"],
       maxSizeMb: existing.maxSizeMb || 5,
       analysisRules: {
-        ...(existing.analysisRules || {}),
-        expectedDocument: payload.expectedDocument || "",
+        ...existingAnalysisRules,
+        expectedDocument: String(payload.expectedDocument || "").trim().toUpperCase(),
         requiredCriteria: Array.isArray(payload.requiredCriteria) ? payload.requiredCriteria : [],
-        manualReviewCriteria: Array.isArray(payload.manualReviewCriteria) ? payload.manualReviewCriteria : [],
         rejectionCriteria: Array.isArray(payload.rejectionCriteria) ? payload.rejectionCriteria : [],
         minimumConfidence: Math.max(0, Math.min(1, minimumConfidencePercent / 100)),
-        allowAutomaticApproval: payload.allowAutomaticApproval !== false,
-        allowAutomaticRejection: payload.allowAutomaticRejection === true,
+        useAi: payload.useAi !== false,
       },
       municipalityId: payload.municipalityId || existing.municipalityId || configMunicipalityScopeId,
     };
@@ -7364,20 +7390,17 @@ function ConfigView({
         name: normalized.name || "",
         expectedDocument: rules.expectedDocument || "",
         minimumConfidence: Math.round((Number(rules.minimumConfidence ?? DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE)) * 100),
-        allowAutomaticApproval: rules.allowAutomaticApproval !== false,
-        allowAutomaticRejection: rules.allowAutomaticRejection === true,
+        useAi: rules.useAi !== false,
         required: normalized.required !== false,
         active: normalized.active !== false,
       });
       setNewRequiredCriterion((Array.isArray(rules.requiredCriteria) ? rules.requiredCriteria : []).join("\n"));
       setNewRejectionCriterion((Array.isArray(rules.rejectionCriteria) ? rules.rejectionCriteria : []).join("\n"));
-      setNewManualCriterion((Array.isArray(rules.manualReviewCriteria) ? rules.manualReviewCriteria : []).join("\n"));
     } else {
       setEditingDocumentId(null);
       setNewDocument(emptyDocumentForm);
       setNewRequiredCriterion("");
       setNewRejectionCriterion("");
-      setNewManualCriterion("");
     }
     setConfigModal("document");
   }
@@ -8432,8 +8455,8 @@ function ConfigView({
             <article className="ai-rules-card">
               <strong>Como a IA será usada</strong>
               <p>
-                Ao anexar um documento, a IA usa os critérios cadastrados no tipo de documento (obrigatórios, de recusa
-                e de revisão manual) para decidir se o arquivo condiz com o solicitado.
+                Ao anexar um documento, a IA usa os critérios cadastrados no tipo de documento (obrigatórios e de recusa)
+                para decidir se o arquivo condiz com o solicitado.
               </p>
               <p>
                 Com a IA inativa, o arquivo fica apenas anexado e segue para conferência manual, sem análise automática.
@@ -9695,12 +9718,10 @@ function ConfigView({
                 ...newDocument,
                 requiredCriteria: textToCriteriaList(newRequiredCriterion),
                 rejectionCriteria: textToCriteriaList(newRejectionCriterion),
-                manualReviewCriteria: textToCriteriaList(newManualCriterion),
               });
               setNewDocument(emptyDocumentForm);
               setNewRequiredCriterion("");
               setNewRejectionCriterion("");
-              setNewManualCriterion("");
               setEditingDocumentId(null);
               setConfigModal(null);
             }}
@@ -9719,36 +9740,51 @@ function ConfigView({
                   )}
                 </span>
               }
-              actions={
-                <div className="document-modal-switches">
-                  <ConfigActiveToggle
-                    checked={newDocument.required !== false}
-                    onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
-                    onText="Obrigatório"
-                    offText="Opcional"
-                  />
-                  <ConfigActiveToggle
-                    checked={newDocument.active !== false}
-                    onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
-                  />
-                </div>
-              }
-              onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); setNewManualCriterion(""); }}
+              onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); }}
             />
 
+            <div className="document-settings-card">
+              <div className="document-settings-item">
+                <span>Ativo</span>
+                <ConfigActiveToggle
+                  checked={newDocument.active !== false}
+                  onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
+                  onText=""
+                  offText=""
+                />
+              </div>
+              <div className="document-settings-item">
+                <span>Obrigatório</span>
+                <ConfigActiveToggle
+                  checked={newDocument.required !== false}
+                  onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
+                  onText=""
+                  offText=""
+                />
+              </div>
+              <div className="document-settings-item">
+                <span>Usar Análise por IA</span>
+                <ConfigActiveToggle
+                  checked={newDocument.useAi !== false}
+                  onChange={(checked) => setNewDocument((current) => ({ ...current, useAi: checked }))}
+                  onText=""
+                  offText=""
+                />
+              </div>
+            </div>
             <div className="document-modal-body">
               <section className="document-modal-panel">
                 <div className="document-section-heading">
                   <span><ClipboardCheck size={15} /> Identificação</span>
                 </div>
                 <div className="document-identity-grid">
-                  <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residência" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
-                  <label className="field document-expected-field">
-                    <span>Documento esperado</span>
-                    <textarea
+                  <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residencia" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
+                  <label className="field document-sigla-field">
+                    <span>Sigla</span>
+                    <input
                       value={newDocument.expectedDocument}
-                      placeholder="Descreva qual documento deve ser enviado e quais informações precisam estar visíveis."
-                      onChange={(event) => setNewDocument((current) => ({ ...current, expectedDocument: event.target.value }))}
+                      placeholder="EX: CR"
+                      onChange={(event) => setNewDocument((current) => ({ ...current, expectedDocument: event.target.value.toUpperCase() }))}
                     />
                   </label>
                 </div>
@@ -9772,56 +9808,23 @@ function ConfigView({
                     onChange={setNewRejectionCriterion}
                     placeholder={"Ex: documento ilegível\nRasura visível no documento"}
                   />
-                  <DocumentCriteriaColumn
-                    variant="manual"
-                    value={newManualCriterion}
-                    onChange={setNewManualCriterion}
-                    placeholder={"Ex: baixa confiança\nDivergência de dados"}
-                  />
                 </div>
               </section>
-
-              <section className="document-modal-panel document-modal-panel--decision">
-                <div className="document-section-heading">
-                  <span><ShieldCheck size={15} /> Decisão automática</span>
-                </div>
-                <div className="document-decision-grid">
+              {newDocument.useAi !== false && (
+                <section className="document-modal-panel document-modal-panel--decision">
+                  <div className="document-section-heading">
+                    <span><ShieldCheck size={15} /> Decisão automática</span>
+                  </div>
                   <DocumentConfidenceSlider
                     value={newDocument.minimumConfidence}
                     onChange={(value: number) => setNewDocument((current) => ({ ...current, minimumConfidence: value }))}
                   />
-                  <div className="document-decision-toggles">
-                    <div className="document-decision-toggle-row">
-                      <div>
-                        <strong>Aprovação automática</strong>
-                        <span>Aprova sem revisão quando a confiança é suficiente.</span>
-                      </div>
-                      <ConfigActiveToggle
-                        checked={newDocument.allowAutomaticApproval !== false}
-                        onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticApproval: checked }))}
-                        onText=""
-                        offText=""
-                      />
-                    </div>
-                    <div className="document-decision-toggle-row">
-                      <div>
-                        <strong>Recusar automaticamente</strong>
-                        <span>Sem isso, recusas automáticas viram conferência manual.</span>
-                      </div>
-                      <ConfigActiveToggle
-                        checked={newDocument.allowAutomaticRejection === true}
-                        onChange={(checked) => setNewDocument((current) => ({ ...current, allowAutomaticRejection: checked }))}
-                        onText=""
-                        offText=""
-                      />
-                    </div>
-                  </div>
-                </div>
-              </section>
+                </section>
+              )}
             </div>
 
             <div className="form-actions document-modal-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); setNewManualCriterion(""); }}>Cancelar</button>
+              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
             </div>
           </form>
@@ -10366,17 +10369,18 @@ function DocumentButtonPicker({ documents, selectedDocuments, onToggle }: AnyRec
 }
 
 function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove }: AnyRecord) {
+  const documentUsesAi = document.analysisRules?.useAi !== false;
   const needsReplacement = upload?.status === "attached" && upload?.aiVerdict === "rejected";
   const statusLabel = needsReplacement ? "Não confirmado" : ({
-    checking: aiActive ? "Em análise" : "Conferindo arquivo",
+    checking: aiActive ? "Em análise" : "Recebendo arquivo",
     approved: aiActive ? "Aprovado pela análise" : "Aprovado",
-    attached: "Conferência manual",
+    attached: documentUsesAi ? "Conferência manual" : "Anexado",
     rejected: aiActive ? "Recusado pela análise" : "Recusado",
   }[upload?.status] || "Aguardando arquivo");
   const publicMessage = needsReplacement
     ? "Este arquivo não parece ser o documento solicitado. Anexe o comprovante correto para continuar."
     : upload?.status === "attached"
-    ? "Arquivo recebido para conferência da nossa equipe."
+    ? documentUsesAi ? "Arquivo recebido para conferência da nossa equipe." : "Arquivo anexado."
     : upload?.status === "approved"
     ? "Documento confirmado automaticamente."
     : upload?.status === "rejected"
@@ -10475,7 +10479,7 @@ function DocumentScanningPreview({ dataUrl, fileType }: AnyRecord) {
 
 async function validateDocumentWithAI(document: AnyRecord, file: File, aiSettings: AnyRecord = initialAiSettings, dataUrl = "", municipalityId = ""): Promise<AnyRecord> {
   const localResult = await validateDocumentLocally(document, file);
-  if (localResult.status === "rejected" || !aiSettings?.active) return localResult;
+  if (localResult.status === "rejected" || !aiSettings?.active || document.analysisRules?.useAi === false) return localResult;
 
   try {
     return await api.validateDocument({
@@ -12192,4 +12196,3 @@ function buildMonthCalendarDays(monthKey = getCurrentScheduleMonthKey()): AnyRec
 
   return [...offsets, ...days];
 }
-

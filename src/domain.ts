@@ -160,16 +160,14 @@ function parseDocumentConfidence(value: any): number {
 export function normalizeDocumentAnalysisRules(rules: AnyRecord = {}, migrationSource: AnyRecord = {}): AnyRecord {
   const minimumConfidence = parseDocumentConfidence(rules.minimumConfidence);
   return {
-    expectedDocument: String(rules.expectedDocument || migrationSource.expectedDocument || "").trim(),
+    expectedDocument: String(rules.expectedDocument || migrationSource.expectedDocument || "").trim().toUpperCase(),
     requiredCriteria: textToCriteriaList(rules.requiredCriteria ?? migrationSource.requiredCriteria),
     rejectionCriteria: textToCriteriaList(rules.rejectionCriteria ?? migrationSource.rejectionCriteria),
-    manualReviewCriteria: textToCriteriaList(rules.manualReviewCriteria ?? migrationSource.manualReviewCriteria),
     matchRules: Array.isArray(rules.matchRules) ? rules.matchRules : [],
     minimumConfidence: Number.isFinite(minimumConfidence)
       ? Math.max(0, Math.min(1, minimumConfidence))
       : DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE,
-    allowAutomaticApproval: rules.allowAutomaticApproval !== false,
-    allowAutomaticRejection: rules.allowAutomaticRejection === true,
+    useAi: rules.useAi !== false,
   };
 }
 

@@ -97,7 +97,7 @@ export async function testProviderKey(provider, { apiKey, model }) {
   const testDocument = normalizeDocumentPayload({
     id: "test-key",
     name: "Teste de chave",
-    analysisRules: { requiredCriteria: [], rejectionCriteria: [], manualReviewCriteria: [] },
+    analysisRules: { requiredCriteria: [], rejectionCriteria: [] },
   });
   const testFile = { name: "teste.png", type: "image/png", dataUrl: TEST_KEY_IMAGE_DATA_URL };
 
@@ -120,16 +120,14 @@ function normalizeDocumentPayload(document = {}) {
 function normalizeAnalysisRules(rules = {}, document = {}) {
   const minimumConfidence = Number(rules.minimumConfidence);
   return {
-    expectedDocument: String(rules.expectedDocument || document.name || "Documento solicitado").trim(),
+    expectedDocument: String(rules.expectedDocument || "").trim().toUpperCase(),
     requiredCriteria: toStringList(rules.requiredCriteria),
     rejectionCriteria: toStringList(rules.rejectionCriteria),
-    manualReviewCriteria: toStringList(rules.manualReviewCriteria),
     matchRules: Array.isArray(rules.matchRules) ? rules.matchRules : [],
     minimumConfidence: Number.isFinite(minimumConfidence)
       ? Math.max(0, Math.min(1, minimumConfidence))
       : DEFAULT_MINIMUM_CONFIDENCE,
-    allowAutomaticApproval: rules.allowAutomaticApproval !== false,
-    allowAutomaticRejection: rules.allowAutomaticRejection === true,
+    useAi: rules.useAi !== false,
   };
 }
 
@@ -161,18 +159,15 @@ Privacidade obrigatoria:
 
 Documento solicitado: ${document.name || "Documento"}
 Arquivo: ${file.name || "arquivo"} (${file.type || "tipo desconhecido"})
-Documento esperado: ${rules.expectedDocument || document.name || "Documento compatível com a solicitacao"}
+Sigla do documento: ${rules.expectedDocument || "nao informada"}
 Confianca minima configurada: ${rules.minimumConfidence}
-Aprovacao automatica permitida: ${rules.allowAutomaticApproval ? "sim" : "nao"}
-Recusa automatica permitida: ${rules.allowAutomaticRejection ? "sim" : "nao"}
 
 ${formatRuleList("Criterios obrigatorios", rules.requiredCriteria)}
-${formatRuleList("Criterios de revisao manual", rules.manualReviewCriteria)}
 ${formatRuleList("Regras de recusa", rules.rejectionCriteria)}
 
 Decida assim:
-- Use "approved" apenas quando o documento condiz com os criterios obrigatorios e nao ha sinal relevante de recusa ou revisao.
-- Use "needs_review" quando estiver legivel, mas houver duvida, baixa confianca, criterio parcialmente verificavel ou situacao prevista para revisao manual.
+- Use "approved" apenas quando o documento condiz com os criterios obrigatorios e nao ha sinal relevante de recusa.
+- Use "needs_review" quando estiver legivel, mas houver duvida, baixa confianca ou criterio parcialmente verificavel.
 - Use "rejected" apenas quando houver evidencia clara de regra de recusa ou falta de criterio obrigatorio essencial.
 
 Formato obrigatorio sem dados pessoais:
@@ -333,7 +328,7 @@ function normalizeAiResult(text, provider, rules = {}) {
   const manualReviewReasons = toSanitizedList(parsed.manualReviewReasons);
   const message = sanitizeText(parsed.message || "Documento analisado pela IA.");
 
-  if (normalizedStatus === "approved" && confidence >= minimumConfidence && rules.allowAutomaticApproval !== false) {
+  if (normalizedStatus === "approved" && confidence >= minimumConfidence) {
     return {
       status: "approved",
       aiVerdict: normalizedStatus,
@@ -346,7 +341,7 @@ function normalizeAiResult(text, provider, rules = {}) {
     };
   }
 
-  if (normalizedStatus === "rejected" && confidence >= minimumConfidence && rules.allowAutomaticRejection === true) {
+  if (normalizedStatus === "rejected" && confidence >= minimumConfidence) {
     return {
       status: "rejected",
       aiVerdict: normalizedStatus,
@@ -372,14 +367,12 @@ function normalizeAiResult(text, provider, rules = {}) {
 }
 
 function manualReviewMessage(message, provider, status, confidence, minimumConfidence) {
-  if (status === "rejected") return "Documento encaminhado para conferencia manual antes de recusa definitiva.";
   if (confidence < minimumConfidence) return `O ${provider} nao confirmou todos os criterios com seguranca. Documento encaminhado para conferencia manual.`;
   return message || `O ${provider} recomendou conferencia manual do documento.`;
 }
 
 function defaultManualReviewReasons(status, confidence, minimumConfidence) {
   if (confidence < minimumConfidence) return ["Confianca abaixo do minimo configurado."];
-  if (status === "rejected") return ["Recusa automatica desativada para este documento."];
   return ["Analise automatica inconclusiva."];
 }
 
