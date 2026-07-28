@@ -9083,7 +9083,7 @@ function ConfigView({
       {configModal === "municipality" && (
         <div className="modal-backdrop">
           <form
-            className="config-modal compact"
+            className="config-modal compact config-environment-modal"
             onSubmit={async (event) => {
               event.preventDefault();
               await saveMunicipality();
@@ -9241,7 +9241,7 @@ function ConfigView({
 
       {configModal === "agenda" && (
         <div className="modal-backdrop">
-          <form className="config-modal agenda-config-modal" onSubmit={createScheduleFromModal} role="dialog" aria-modal="true">
+          <form className="config-modal agenda-config-modal config-environment-modal" onSubmit={createScheduleFromModal} role="dialog" aria-modal="true">
             <ModalHeader
               title={editingScheduleRuleId ? "Editar agenda" : "Criar agenda"}
               onClose={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); setAgendaSaving(false); setAgendaSaveStatus(""); }}
@@ -9491,7 +9491,7 @@ function ConfigView({
       {configModal === "requestType" && (
         <div className="modal-backdrop">
           <form
-            className="config-modal compact request-type-modal"
+            className="config-modal compact request-type-modal config-environment-modal"
             onSubmit={(event) => {
               event.preventDefault();
               if (editingRequestTypeId) {
@@ -9596,7 +9596,7 @@ function ConfigView({
 
       {configModal === "species" && (
         <div className="modal-backdrop">
-          <form className="config-modal compact" onSubmit={(event) => { event.preventDefault(); createSpecies(newSpecies); setNewSpecies({ name: "", active: true }); setEditingSpeciesId(null); setConfigModal(null); }}>
+          <form className="config-modal compact config-environment-modal" onSubmit={(event) => { event.preventDefault(); createSpecies(newSpecies); setNewSpecies({ name: "", active: true }); setEditingSpeciesId(null); setConfigModal(null); }}>
             <ModalHeader
               title={editingSpeciesId ? "Editar espécie" : "Criar espécie"}
               onClose={() => { setConfigModal(null); setEditingSpeciesId(null); setNewSpecies({ name: "", active: true }); }}
@@ -9618,7 +9618,7 @@ function ConfigView({
 
       {configModal === "size" && (
         <div className="modal-backdrop">
-          <form className="config-modal compact" onSubmit={(event) => { event.preventDefault(); saveSize(newSize); setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true }); setEditingSizeId(null); setConfigModal(null); }}>
+          <form className="config-modal compact config-environment-modal" onSubmit={(event) => { event.preventDefault(); saveSize(newSize); setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true }); setEditingSizeId(null); setConfigModal(null); }}>
             <ModalHeader
               title={editingSizeId ? "Editar porte" : "Criar porte"}
               onClose={() => { setConfigModal(null); setEditingSizeId(null); setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true }); }}
@@ -9646,7 +9646,7 @@ function ConfigView({
       {configModal === "document" && (
         <div className="modal-backdrop">
           <form
-            className="config-modal document-analysis-modal"
+            className="config-modal document-analysis-modal config-environment-modal"
             onSubmit={(event) => {
               event.preventDefault();
               createDocumentType({

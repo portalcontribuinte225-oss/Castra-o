@@ -7407,16 +7407,17 @@ main {
 
 
 .config-modal.compact {
-  width: min(540px, 100%);
+  width: min(560px, calc(100vw - 32px));
 }
 
 
 .config-modal.request-type-modal {
-  width: min(720px, 100%);
+  width: min(780px, calc(100vw - 32px));
 }
 .config-modal.document-analysis-modal {
-  width: min(900px, calc(100vw - 48px));
-  max-height: calc(100dvh - 48px);
+  width: min(980px, calc(100vw - 24px));
+  height: min(94dvh, 900px);
+  max-height: calc(100dvh - 24px);
   overflow: hidden;
   padding: 14px 18px 0;
   border: 1px solid #dbe5f1;
@@ -7474,6 +7475,7 @@ main {
 
 .document-modal-body {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
   min-height: 0;
   max-height: 100%;
@@ -7496,6 +7498,7 @@ main {
 .document-modal-panel--criteria {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 10px;
+  min-height: 0;
   padding: 10px 12px 12px;
 }
 
@@ -7507,7 +7510,7 @@ main {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 8px 12px;
+  padding: 7px 12px;
 }
 
 .document-section-heading {
@@ -7571,7 +7574,7 @@ main {
 .document-criteria-column {
   display: flex;
   flex-direction: column;
-  height: 238px;
+  height: clamp(300px, 42dvh, 430px);
   min-width: 0;
   padding: 8px;
   border: 1px solid #dbe5f1;
@@ -7759,10 +7762,11 @@ main {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px 16px;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
+  padding: 10px 0 0;
+  border: 0;
+  border-top: 1px solid #eef2f6;
+  border-radius: 0;
+  background: transparent;
 }
 
 
@@ -7877,10 +7881,13 @@ main {
 
 
 .config-modal-options {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: 18px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .config-modal-options.stacked {
@@ -16207,10 +16214,20 @@ form textarea:focus,
 
 .config-workspace .ai-settings-card,
 .config-workspace .ai-rules-card,
-.config-workspace .whatsapp-section,
-.config-workspace .config-modal-options {
+.config-workspace .whatsapp-section {
   border: 1px solid var(--ui-border);
   border-radius: 15px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.config-workspace .config-modal-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
   background: transparent;
   box-shadow: none;
 }
@@ -17162,8 +17179,7 @@ form textarea:focus,
 
 
 .config-modal-options,
-.agenda-modal-block,
-.request-type-steps-section {
+.agenda-modal-block {
   border-color: #dfe7f1;
   border-radius: 11px;
   background: #ffffff;
@@ -17199,6 +17215,74 @@ form textarea:focus,
   border-color: #a9c6f5;
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+
+.modal-backdrop > .config-environment-modal {
+  max-height: calc(100dvh - 32px);
+  padding: 14px 18px;
+  gap: 12px;
+  border-color: #dbe5f1;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.14);
+}
+
+.modal-backdrop > .config-environment-modal > .modal-header {
+  position: relative;
+  top: auto;
+  min-height: 0;
+  margin: -2px 0 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.config-environment-modal .modal-header-text h2 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.config-environment-modal > .form-actions {
+  position: sticky;
+  bottom: -14px;
+  z-index: 3;
+  justify-content: flex-end;
+  margin: 0 -18px -14px;
+  padding: 10px 18px 14px;
+  border-top: 1px solid #eef2f6;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(8px);
+}
+
+.config-environment-modal > .form-actions .ghost-button,
+.config-environment-modal > .form-actions .primary-action {
+  min-height: 38px;
+  border-radius: 999px;
+}
+
+.config-modal-options .config-active-toggle,
+.document-settings-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 36px;
+  padding: 7px 10px;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.config-modal-options .config-active-toggle > span:last-child,
+.document-settings-item span {
+  min-width: 0;
+  color: #0f172a;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 
@@ -17841,26 +17925,30 @@ form textarea:focus,
 
 /* Modern agenda modal */
 .config-modal.agenda-config-modal {
-  width: min(920px, calc(100vw - 40px));
-  max-height: min(88vh, 840px);
-  padding: 20px;
-  overflow: auto;
+  width: min(980px, calc(100vw - 32px));
+  height: min(92dvh, 860px);
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+  padding: 14px 18px 0;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  gap: 10px;
 }
 
 .agenda-config-modal .modal-header {
-  margin-bottom: 12px;
+  margin: -2px 0 4px;
 }
 
 .agenda-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 14px;
-  padding: 14px 16px;
-  border: 1px solid #d7e2ef;
-  border-radius: 16px;
-  background: linear-gradient(135deg, #f8fbff 0%, #ffffff 100%);
+  gap: 12px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #ffffff;
 }
 
 .agenda-modal-head > div {
@@ -17887,19 +17975,24 @@ form textarea:focus,
 }
 
 .config-modal .agenda-modal-layout--modern {
-  gap: 14px;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 2px 12px;
+  scrollbar-gutter: stable;
 }
 
 .config-modal .agenda-modal-layout--modern .agenda-modal-block {
-  padding: 16px;
-  border: 1px solid #d7e2ef;
-  border-radius: 16px;
+  padding: 12px;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
   background: #ffffff;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  box-shadow: none;
 }
 
 .config-modal .agenda-modal-layout--modern .agenda-modal-block--identity {
-  background: #fbfdff;
+  background: #ffffff;
 }
 
 .config-modal .agenda-block-title {
@@ -17921,10 +18014,10 @@ form textarea:focus,
 
 .agenda-mode-note {
   margin: 0;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid #bfe8d8;
-  border-radius: 12px;
-  background: #f0fdf7;
+  border-radius: 10px;
+  background: #f5fbf8;
   color: #17684e;
 }
 
@@ -17939,11 +18032,11 @@ form textarea:focus,
 
 .agenda-occurrence-card {
   display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid #e6ddc9;
-  border-radius: 14px;
-  background: #fffdf8;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #ffffff;
 }
 
 .agenda-occurrence-header {
@@ -17970,11 +18063,11 @@ form textarea:focus,
 
 .agenda-config-modal .form-actions {
   position: sticky;
-  bottom: -20px;
+  bottom: 0;
   z-index: 2;
-  margin: 16px -20px -20px;
-  padding: 14px 20px;
-  border-top: 1px solid #e6edf5;
+  margin: 0 -18px;
+  padding: 10px 18px 14px;
+  border-top: 1px solid #eef2f6;
   background: rgba(255, 255, 255, 0.96);
   backdrop-filter: blur(8px);
 }
@@ -21530,7 +21623,7 @@ form textarea:focus,
   }
 
   .document-criteria-column {
-    height: 200px;
+    height: clamp(220px, 32dvh, 320px);
   }
 
   .document-analysis-modal .modal-header {
