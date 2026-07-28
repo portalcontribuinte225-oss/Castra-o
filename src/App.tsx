@@ -3920,7 +3920,7 @@ function NewRequest({
           )}
           <div className="nr-topbar-stepper">{stepperNode}</div>
           {publicFlow && onBack && (
-            <button className="nr-topbar-continue nr-topbar-home" type="button" onClick={onBack}>
+            <button className="nr-topbar-continue nr-topbar-home primary-action" type="button" onClick={onBack}>
               Voltar ao início
             </button>
           )}
@@ -4304,7 +4304,7 @@ function NewRequest({
           <div className={`nr-nav-row${currentStepIndex === formSteps.length - 1 ? " nr-nav-row--final" : ""}`}>
             {currentStepIndex > 0 && (
               <button
-                className="nr-back-btn"
+                className="nr-back-btn primary-action"
                 type="button"
                 onClick={() => navigateToStep(formSteps[currentStepIndex - 1].step)}
               >
@@ -4318,7 +4318,7 @@ function NewRequest({
             )}
             {currentStepIndex < formSteps.length - 1 ? (
               <button
-                className="nr-topbar-continue"
+                className="nr-topbar-continue primary-action"
                 type="button"
                 onClick={() => navigateToStep(formSteps[currentStepIndex + 1].step)}
               >
@@ -4327,7 +4327,7 @@ function NewRequest({
               </button>
             ) : (
               <button
-                className="nr-topbar-continue"
+                className="nr-topbar-continue primary-action"
                 type="button"
                 disabled={submitting}
                 onClick={submit}
