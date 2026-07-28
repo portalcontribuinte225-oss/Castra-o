@@ -66,9 +66,53 @@ export function TutorTransferAnalysisSection({ request }: { request: AnyRecord }
   );
 }
 
+export function ComplaintAnalysisSection({ request }: { request: AnyRecord }) {
+  const wf = request.workflowData || request.workflow_data || {};
+  const location = [request.address, request.neighborhood, request.city, request.state, request.cep].filter(Boolean).join(", ");
+  const resolutionNote = request.complaintResolutionNote || wf.complaintResolutionNote || "";
+
+  return (
+    <div className="prm-section prm-section--procedure">
+      <div className="prm-section-block">
+        <p className="prm-section-title">Denunciante</p>
+        <div className="prm-procedure-fields">
+          <label className="field">
+            <span>Nome</span>
+            <input value={request.tutor || ""} readOnly placeholder="Não informado" />
+          </label>
+          <label className="field">
+            <span>CPF</span>
+            <input value={request.cpf || ""} readOnly placeholder="Não informado" />
+          </label>
+          <label className="field">
+            <span>Telefone</span>
+            <input value={request.phone || ""} readOnly placeholder="Não informado" />
+          </label>
+          <label className="field">
+            <span>E-mail</span>
+            <input value={request.email || ""} readOnly placeholder="Não informado" />
+          </label>
+        </div>
+        {location && <p className="prm-muted-note">Local da ocorrência: {location}</p>}
+      </div>
+      <div className="prm-section-block">
+        <p className="prm-section-title">Relato</p>
+        <p className="prm-muted-note">{request.notes || "Nenhum relato informado."}</p>
+      </div>
+      {resolutionNote && (
+        <div className="prm-section-block">
+          <p className="prm-section-title">Conclusão da apuração</p>
+          <p className="prm-muted-note">{resolutionNote}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SPECIAL_REQUEST_SECTIONS: Record<string, (props: { request: AnyRecord }) => JSX.Element> = {
   [RequestType.ANIMAL_DEATH]: DeathAnalysisSection,
   [RequestType.TUTOR_TRANSFER]: TutorTransferAnalysisSection,
+  [RequestType.COMPLAINT]: ComplaintAnalysisSection,
 };
 
 export function getSpecialRequestSection(request: AnyRecord) {
@@ -83,5 +127,6 @@ export function specialRequestConfirmLabel(request: AnyRecord) {
   const type = normalizeRequestType(request.request_type || request.type);
   if (type === RequestType.ANIMAL_DEATH) return "Confirmar óbito";
   if (type === RequestType.TUTOR_TRANSFER) return "Confirmar troca de tutor";
+  if (type === RequestType.COMPLAINT) return "Deferir";
   return "Confirmar";
 }

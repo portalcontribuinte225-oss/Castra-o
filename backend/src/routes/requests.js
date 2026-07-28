@@ -182,16 +182,23 @@ router.post("/", optionalAuth, async (req, res) => {
 
     const protocol = await nextProtocol(client);
     const requestType = pick(body.request_type, body.requestType, body.requestTypeId, body.type);
-    const requiresTutorCpf = requestType !== "DENUNCIA";
+    const isComplaint = requestType === "DENUNCIA";
     const cpf = pick(body.cpf, body.tutor_cpf);
     const cleanCpf = normalizeCpf(cpf);
-    if (requiresTutorCpf && !isValidCpf(cleanCpf)) {
+    if (!isValidCpf(cleanCpf)) {
       await client.query("ROLLBACK");
-      return res.status(400).json({ error: "CPF valido e obrigatorio para gerar codigo do tutor." });
+      return res.status(400).json({ error: isComplaint ? "CPF valido e obrigatorio para registrar a denuncia." : "CPF valido e obrigatorio para gerar codigo do tutor." });
     }
-    if (requestType === "DENUNCIA" && body.phone && !isValidPhone(body.phone)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: "Informe um telefone valido em Contato." });
+    if (isComplaint) {
+      const tutorName = pick(body.tutor_name, body.tutorName, body.tutor);
+      if (!tutorName || !String(tutorName).trim()) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Nome do denunciante e obrigatorio." });
+      }
+      if (!isValidPhone(body.phone)) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({ error: "Informe um telefone valido em Contato." });
+      }
     }
     const validationKey = await validationKeyForCpf(client, cpf);
     const animals = Array.isArray(body.animals) ? body.animals : [];
@@ -237,14 +244,15 @@ router.post("/", optionalAuth, async (req, res) => {
         workflow_data,
         latitude,
         longitude,
-        origin
+        origin,
+        is_confidential
       )
       VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8,
         $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
         $19, $20, $21, $22, 'NOVA', $23, $24, $25, $26,
         $27, $28, $29, $30, $31, $32::jsonb, $33::jsonb, $34::jsonb,
-        $35, $36, $37
+        $35, $36, $37, $38
       )
       RETURNING *`,
       [
@@ -285,6 +293,7 @@ router.post("/", optionalAuth, async (req, res) => {
         pick(body.latitude, body.lat) || null,
         pick(body.longitude, body.lng) || null,
         pick(body.origin, req.user ? "INTERNA" : "PUBLICA") || "PUBLICA",
+        Boolean(body.is_confidential || body.isConfidential),
       ]
     );
 

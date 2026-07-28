@@ -1,4 +1,5 @@
 import type { AnyRecord } from "./types";
+import { maskCpf, maskName } from "./utils";
 
 export const statuses = [
   "NOVA",
@@ -455,9 +456,12 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     validationKey: request.validationKey || request.validation_key || "",
     signatureDataUrl: request.signatureDataUrl || request.signature_data_url || "",
     signedAt: request.signedAt || request.signed_at || "",
-    tutor: request.tutor || request.tutor_name || request.tutorName || "Tutor não informado",
+    isConfidential: Boolean(request.isConfidential || request.is_confidential),
+    tutor: (request.isConfidential || request.is_confidential)
+      ? maskName(request.tutor || request.tutor_name || request.tutorName)
+      : (request.tutor || request.tutor_name || request.tutorName || "Tutor não informado"),
     email: request.email || request.tutor_email || request.tutorEmail || "",
-    cpf: request.cpf || "",
+    cpf: (request.isConfidential || request.is_confidential) ? maskCpf(request.cpf) : (request.cpf || ""),
     phone: request.phone || "",
     cep: request.cep || "",
     address: request.address || "",

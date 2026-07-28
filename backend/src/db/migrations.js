@@ -230,6 +230,7 @@ export async function runMigrations() {
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS target_tutor_cep TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS death_date TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS death_cause TEXT;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS is_confidential BOOLEAN DEFAULT FALSE;
     ALTER TABLE requests ALTER COLUMN status SET DEFAULT 'NOVA';
 
     ALTER TABLE schedule_days ADD COLUMN IF NOT EXISTS location_name TEXT;

@@ -89,6 +89,7 @@ import {
   normalizeDocumentType,
   normalizeRequest,
   normalizeRequestStatus,
+  normalizeRequestType,
   normalizeScheduleDateText,
   normalizeScheduleDay,
   normalizeScheduleSlots,
@@ -2832,7 +2833,7 @@ function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
 
 function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }: AnyRecord) {
   const [form, setForm] = useState({
-    name: "", contact: "", email: "", description: "",
+    name: "", cpf: "", contact: "", email: "", description: "", confidential: false,
     cep: "", number: "", address: "", neighborhood: "", city: "", state: "",
   });
   const [error, setError] = useState("");
@@ -2869,13 +2870,20 @@ function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }:
 
   async function submitReport(event) {
     event.preventDefault();
-    if (!form.description.trim()) {
-      setError("Descreva a situação observada.");
+    if (!form.name.trim()) {
+      setError("Informe o nome do denunciante.");
       return;
     }
-    const contact = form.contact.trim();
-    if (contact && !isValidPhone(contact)) {
+    if (!isValidCpf(form.cpf)) {
+      setError("Informe um CPF válido do denunciante.");
+      return;
+    }
+    if (!isValidPhone(form.contact)) {
       setError("Informe um telefone válido em Contato.");
+      return;
+    }
+    if (!form.description.trim()) {
+      setError("Descreva a situação observada.");
       return;
     }
     setError("");
@@ -2884,6 +2892,7 @@ function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }:
       await onSubmit?.({
         tutor_name: form.name.trim(),
         tutor_email: form.email.trim(),
+        cpf: form.cpf.trim(),
         phone: form.contact.trim(),
         cep: form.cep.trim(),
         address: [form.address.trim(), form.number.trim()].filter(Boolean).join(", "),
@@ -2891,6 +2900,7 @@ function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }:
         city: form.city.trim(),
         state: form.state.trim(),
         notes: form.description.trim(),
+        is_confidential: form.confidential,
       });
     } catch (err: any) {
       setError(err.message || "Não foi possível registrar a denúncia.");
@@ -2913,15 +2923,24 @@ function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }:
           <span className="form-sub-card-title">Denunciante</span>
           <div className="two-column-fields">
             <div className="access-field" data-label="Nome">
-              <input type="text" value={form.name} onChange={(e) => patch("name", e.target.value)} placeholder="Opcional" />
+              <input type="text" value={form.name} onChange={(e) => patch("name", e.target.value)} placeholder="Nome completo" />
             </div>
+            <div className="access-field" data-label="CPF">
+              <input type="text" value={form.cpf} onChange={(e) => patch("cpf", formatCpf(e.target.value))} placeholder="000.000.000-00" />
+            </div>
+          </div>
+          <div className="two-column-fields">
             <div className="access-field" data-label="Telefone">
               <input type="tel" value={form.contact} onChange={(e) => patch("contact", formatPhone(e.target.value))} placeholder="(00) 00000-0000" />
             </div>
+            <div className="access-field" data-label="Email">
+              <input type="email" value={form.email} onChange={(e) => patch("email", e.target.value)} placeholder="Opcional" />
+            </div>
           </div>
-          <div className="access-field" data-label="Email">
-            <input type="email" value={form.email} onChange={(e) => patch("email", e.target.value)} placeholder="Opcional" />
-          </div>
+          <label className="checkbox-row">
+            <input type="checkbox" checked={form.confidential} onChange={(event) => patch("confidential", event.target.checked)} />
+            Manter meus dados em sigilo
+          </label>
         </div>
 
         <div className="form-sub-card">
@@ -4885,8 +4904,10 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   const [downloadLoadingId, setDownloadLoadingId] = useState("");
   const [bundleLoading, setBundleLoading] = useState(false);
   const [confirmingSchedule, setConfirmingSchedule] = useState(false);
-  const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | null>(null);
+  const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | "confirmComplaint" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
+  const [complaintResolutionNote, setComplaintResolutionNote] = useState("");
+  const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [docDecisions, setDocDecisions] = useState<AnyRecord>({});
   const [modalTab, setModalTab] = useState<"procedimento" | "anexos">(
     normalizedRequest.status === "AGENDADA" ? "procedimento" : "anexos",
@@ -4909,6 +4930,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   const isScheduleConfirmed = normalizedRequest.status === "AGENDADA";
   const specialSection = getSpecialRequestSection(normalizedRequest);
   const isSpecialType = Boolean(specialSection);
+  const isComplaint = normalizeRequestType(normalizedRequest.request_type || normalizedRequest.type) === RequestType.COMPLAINT;
   const canUseProcedureTab = isScheduleConfirmed || (isSpecialType && canAnalyze);
   const canUseAttendanceActions = isScheduleConfirmed;
   const procedureTabLabel = isSpecialType ? requestTypeLabel(normalizedRequest) : "Procedimento e saúde";
@@ -5189,9 +5211,41 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     onReject?.(request, rejectData);
   }
 
+  function confirmComplaintInline(event) {
+    event.preventDefault();
+    if (blockWithoutAssignment) return;
+    onConfirmSpecial?.(request, { note: complaintResolutionNote });
+  }
+
   function confirmAttendanceInline(event) {
     event.preventDefault();
     onAttendance?.(request, { ...attendanceData, animalData });
+  }
+
+  async function handleEvidenceUpload(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !patchRequest) return;
+    setUploadingEvidence(true);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const currentDocuments = Array.isArray(request.documents) ? request.documents : [];
+      const newDocument = {
+        documentId: `evidencia-${Date.now()}`,
+        documentName: "Evidência da apuração",
+        fileName: file.name,
+        fileType: file.type,
+        fileSize: file.size,
+        dataUrl,
+        status: "approved",
+        message: "Anexado pela equipe durante a apuração.",
+      };
+      await patchRequest(request.id, { documents: [...currentDocuments, newDocument] }, `Evidência anexada: ${file.name}`);
+    } catch {
+      // erro de upload é reportado via estado de disabled/loading; a lista de anexos não é atualizada em caso de falha
+    } finally {
+      setUploadingEvidence(false);
+    }
   }
 
   async function confirmSchedule() {
@@ -5483,7 +5537,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
           {!isRescheduleMode && (
             <div className="prm-header-meta" aria-label="Resumo do processo">
               <span><strong>Tipo</strong>{requestTypeLabel(normalizedRequest)}</span>
-              <span><strong>Agenda</strong>{normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>
+              {!isComplaint && <span><strong>Agenda</strong>{normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>}
               <span><strong>Responsável</strong>{displayText(normalizedRequest.responsible) || "-"}</span>
             </div>
           )}
@@ -5508,6 +5562,20 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                 <div className="prm-inline-actions">
                   <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
                   <button className="secondary-action danger-action" type="button" disabled={!rejectData.category} onClick={confirmRejectInline}>Confirmar indeferimento</button>
+                </div>
+              </div>
+          )}
+
+          {canAnalyze && activePanel === "confirmComplaint" && (
+            <div className="prm-inline-panel">
+                <strong className="prm-inline-panel-title">Deferir denúncia</strong>
+                <label className="field">
+                  <span>Conclusão da apuração</span>
+                  <textarea value={complaintResolutionNote} onChange={(e) => setComplaintResolutionNote(e.target.value)} placeholder="Descreva o que foi apurado..." />
+                </label>
+                <div className="prm-inline-actions">
+                  <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
+                  <button className="secondary-action" type="button" onClick={confirmComplaintInline}>Confirmar deferimento</button>
                 </div>
               </div>
           )}
@@ -5590,12 +5658,16 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
           )}
           {!isRescheduleMode && modalTab === "anexos" && (
             <div className="prm-section prm-section--documents">
+              <div className="prm-section-head">
+                <p className="prm-section-label">Documentos</p>
+                <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
+              </div>
+              <label className="ghost-button prm-evidence-upload-btn">
+                <input type="file" onChange={handleEvidenceUpload} disabled={uploadingEvidence} hidden />
+                {uploadingEvidence ? "Anexando..." : "Anexar evidência"}
+              </label>
               {anexos.length > 0 ? (
                 <>
-                  <div className="prm-section-head">
-                    <p className="prm-section-label">Documentos</p>
-                    <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
-                  </div>
                   {renderAttachments()}
                   {canAnalyze && blockingAttachments.length > 0 && (
                     <p className="prm-documents-warning">{scheduleBlockReason}</p>
@@ -5642,13 +5714,13 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                   </button>
                 )}
               </div>
-              {activePanel !== "reject" && isSpecialType && (
+              {activePanel !== "reject" && activePanel !== "confirmComplaint" && isSpecialType && (
                 <button
                   className="prm-action-btn prm-action-btn--primary"
                   type="button"
                   disabled={blockWithoutAssignment}
                   title={blockWithoutAssignment ? assignmentRequiredTitle : specialRequestConfirmLabel(normalizedRequest)}
-                  onClick={() => onConfirmSpecial?.(request)}
+                  onClick={() => (isComplaint ? setActivePanel("confirmComplaint") : onConfirmSpecial?.(request))}
                 >
                   <CheckCircle2 size={15} /> {specialRequestConfirmLabel(normalizedRequest)}
                 </button>

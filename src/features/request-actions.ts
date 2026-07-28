@@ -160,11 +160,13 @@ export function useRequestActions({
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
-  async function confirmSpecialRequest(request: AnyRecord) {
+  async function confirmSpecialRequest(request: AnyRecord, data: AnyRecord = {}) {
     if (!request) return;
-    const patch = { status: "REALIZADA" };
+    const note = String(data.note || "").trim();
+    const patch: AnyRecord = { status: "REALIZADA" };
+    if (note) patch.workflow_data = { ...((request.workflow_data || request.workflowData) || {}), complaintResolutionNote: note };
     try {
-      await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}`);
+      await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}${note ? `. Conclusão: ${note}` : ""}`);
       showToast("Processo confirmado com sucesso", "success");
     } catch { showToast("Erro ao confirmar processo", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);

@@ -89,6 +89,12 @@ export function maskCpf(value = "") {
   return `***.${digits.slice(3, 6)}.${digits.slice(6, 9)}-**`;
 }
 
+export function maskName(value = "") {
+  const parts = String(value || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "Não informado";
+  return parts.map((part) => `${part[0].toUpperCase()}${"*".repeat(Math.max(part.length - 1, 1))}`).join(" ");
+}
+
 export function formatDateTime(value = "") {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) return value || new Date().toLocaleString("pt-BR");
