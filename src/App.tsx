@@ -8642,22 +8642,23 @@ function ConfigView({
                 <h2>{editingSectorId ? "Editar setor" : "Criar setor"}</h2>
                 <p>Organize vínculos internos e responsáveis por etapa.</p>
               </div>
-              <button className="modal-header-close" type="button" onClick={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }} aria-label="Fechar">
-                <X size={16} />
-              </button>
+              <div className="permission-modal-head-actions">
+                <label className="permission-inline-toggle">
+                  <span>Ativo</span>
+                  <input
+                    type="checkbox"
+                    checked={newSectorActive}
+                    onChange={(event) => setNewSectorActive(event.target.checked)}
+                  />
+                  <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
+                </label>
+                <button className="modal-header-close" type="button" onClick={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }} aria-label="Fechar">
+                  <X size={16} />
+                </button>
+              </div>
             </header>
 
             <div className="sector-modal-body">
-              <label className="sector-status-panel">
-                <span>Ativo</span>
-                <input
-                  type="checkbox"
-                  checked={newSectorActive}
-                  onChange={(event) => setNewSectorActive(event.target.checked)}
-                />
-                <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
-              </label>
-
               <label className="field sector-name-field">
                 <span>Nome do setor</span>
                 <input
@@ -8786,21 +8787,23 @@ function ConfigView({
                 <p>Grupo padrão com todas as permissões do catálogo habilitadas.</p>
                 <span>Criado em: {newPermissionGroup.createdAt || "sem registro"}</span>
               </div>
-              <button className="modal-header-close" type="button" onClick={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }} aria-label="Fechar">
-                <X size={16} />
-              </button>
+              <div className="permission-modal-head-actions">
+                <label className="permission-inline-toggle">
+                  <span>Ativo</span>
+                  <input
+                    type="checkbox"
+                    checked={newPermissionGroup.active !== false}
+                    onChange={(event) => setNewPermissionGroup((current) => ({ ...current, active: event.target.checked }))}
+                  />
+                  <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
+                </label>
+                <button className="modal-header-close" type="button" onClick={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }} aria-label="Fechar">
+                  <X size={16} />
+                </button>
+              </div>
             </header>
 
             <div className="permission-modal-body">
-              <label className="permission-status-panel">
-                <span>Ativo</span>
-                <input
-                  type="checkbox"
-                  checked={newPermissionGroup.active !== false}
-                  onChange={(event) => setNewPermissionGroup((current) => ({ ...current, active: event.target.checked }))}
-                />
-                <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
-              </label>
               <label className="field permission-name-field">
                 <span>Nome do grupo</span>
                 <input
@@ -8869,12 +8872,23 @@ function ConfigView({
       {userModal && (
         <div className="modal-backdrop">
           <form className="workflow-modal config-user-modal" onSubmit={async (e) => { e.preventDefault(); setUserSaveError(""); if (await createTeamUser()) setUserModal(false); }}>
-            <ModalHeader title={editingTeamUserId ? "Editar usuário" : "Criar usuário"} onClose={() => { setUserModal(false); setEditingTeamUserId(null); setSectorPickerOpen(false); setUserSaveError(""); }} />
+            <ModalHeader
+              title={editingTeamUserId ? "Editar usuário" : "Criar usuário"}
+              onClose={() => { setUserModal(false); setEditingTeamUserId(null); setSectorPickerOpen(false); setUserSaveError(""); }}
+              actions={
+                <label className="permission-inline-toggle">
+                  <span>Ativo</span>
+                  <input
+                    type="checkbox"
+                    checked={newTeamUser.active !== false}
+                    onChange={(event) => setNewTeamUser((c) => ({ ...c, active: event.target.checked }))}
+                  />
+                  <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
+                </label>
+              }
+            />
             <div className="config-management-body">
-              <div className="config-modal-options">
-                <ConfigActiveToggle checked={newTeamUser.active !== false} onChange={(active) => setNewTeamUser((c) => ({ ...c, active }))} />
-            </div>
-            <Field label="Nome" value={newTeamUser.name} placeholder="Nome completo" onChange={(value) => setNewTeamUser((c) => ({ ...c, name: value }))} />
+              <Field label="Nome" value={newTeamUser.name} placeholder="Nome completo" onChange={(value) => setNewTeamUser((c) => ({ ...c, name: value }))} />
             <Field label="Email" value={newTeamUser.email} placeholder="email@dominio.com" onChange={(value) => setNewTeamUser((c) => ({ ...c, email: value }))} />
             {isGlobalRole(currentUser?.role) && (() => {
               const munStates = [...new Set(activeMunicipalities.map((m) => m.state).filter(Boolean))].sort();
