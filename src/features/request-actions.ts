@@ -136,10 +136,18 @@ export function useRequestActions({
     const note = String(data.note || "").trim();
     const receita = String(data.receita || "").trim();
     const performedProcedures = getPerformedProceduresLabel(normalized);
+    const animalData = data.animalData && typeof data.animalData === "object" ? data.animalData : {};
+    const hasAnimalData = Object.keys(animalData).length > 0;
     const currentAnimals = Array.isArray(normalized.animals) ? normalized.animals : [];
-    const animals = microchip
-      ? currentAnimals.map((animal: AnyRecord, index: number) => index === 0 ? { ...animal, hasChip: "Sim", microchip } : animal)
-      : currentAnimals;
+    const animals = currentAnimals.length > 0
+      ? currentAnimals.map((animal: AnyRecord, index: number) => index === 0 ? {
+        ...animal,
+        ...(hasAnimalData ? animalData : {}),
+        ...(microchip ? { hasChip: "Sim", microchip } : {}),
+      } : animal)
+      : hasAnimalData || microchip
+        ? [{ ...(hasAnimalData ? animalData : {}), ...(microchip ? { hasChip: "Sim", microchip } : {}) }]
+        : currentAnimals;
     const patch = {
       status: "REALIZADA",
       animalMicrochip: microchip,

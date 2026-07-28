@@ -689,7 +689,7 @@ button:disabled {
   align-items: center;
   min-height: clamp(180px, 20vw, 240px);
   padding: clamp(24px, 3vw, 40px) clamp(24px, 4vw, 60px);
-  padding-right: clamp(34px, 43vw, 720px);
+  padding-right: clamp(34px, 26vw, 420px);
   background: linear-gradient(135deg, #e9dfc8 0%, #f3ead6 100%);
 }
 
@@ -712,7 +712,7 @@ button:disabled {
   gap: 14px;
   position: relative;
   z-index: 3;
-  max-width: 480px;
+  max-width: 720px;
 }
 
 
@@ -4273,193 +4273,6 @@ main {
 
 /* --- IRM footer --- */
 
-.process-attachments-list {
-  display: grid;
-  gap: 10px;
-}
-
-
-.process-attachment-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #f8fbfd;
-  padding: 12px;
-}
-
-
-.process-attachment-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  flex: 1;
-}
-
-
-.process-attachment-number {
-  flex: 0 0 28px;
-  color: #94a3b8;
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-align: right;
-}
-
-
-.process-attachment-icon {
-  flex-shrink: 0;
-  color: #94a3b8;
-}
-
-
-.process-attachment-info {
-  flex: 1;
-  min-width: 0;
-}
-
-
-.process-attachment-info strong {
-  display: block;
-  color: #172026;
-  font-size: 0.9rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
-.attachment-ai-message {
-  margin: 2px 0 0;
-  color: #64748b;
-  font-size: 0.74rem;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.attachment-ai-meta {
-  margin: 2px 0 0;
-  color: #94a3b8;
-  font-size: 0.68rem;
-  font-weight: 600;
-}
-
-.attachment-ai-criteria {
-  justify-self: stretch;
-  justify-content: flex-end;
-  margin-top: 4px;
-}
-
-
-.attachment-status {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 3px 9px;
-  font-size: 0.67rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-
-
-.process-attachment-actions {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 4px;
-  align-items: center;
-}
-
-
-.icon-action {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  background: #fff;
-  color: #2563eb;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-
-.icon-action:hover {
-  background: #f0f7ff;
-  border-color: #93c5fd;
-  color: #1479b8;
-}
-
-
-.icon-action:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-
-.attachment-unavailable {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  color: #94a3b8;
-  font-size: 0.76rem;
-  font-weight: 600;
-  padding: 0 4px;
-}
-
-
-
-.doc-decision-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  background: #f8fafc;
-  color: #94a3b8;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s, border-color 0.12s;
-}
-
-
-.doc-decision-btn:hover {
-  background: #dcfce7;
-  color: #15803d;
-  border-color: #86efac;
-}
-
-
-.doc-decision-btn--reject:hover {
-  background: #fee2e2;
-  color: #dc2626;
-  border-color: #fca5a5;
-}
-
-
-.doc-decision-btn--active-ok {
-  background: #dcfce7;
-  color: #15803d;
-  border-color: #86efac;
-}
-
-
-.doc-decision-btn--active-reject {
-  background: #fee2e2;
-  color: #dc2626;
-  border-color: #fca5a5;
-}
-
-
-
 .process-history-tree {
   position: relative;
   margin: 0;
@@ -6687,7 +6500,11 @@ main {
 
 
 .ai-settings-card {
-  background: #ffffff;
+  display: grid;
+  gap: 7px;
+  align-content: start;
+  padding: 12px;
+  background: transparent;
 }
 
 
@@ -6719,7 +6536,7 @@ main {
 .ai-rules-card {
   border: 1px solid #e5e7eb;
   border-radius: var(--radius);
-  background: #f8fbfd;
+  background: transparent;
   padding: 14px;
   display: grid;
   gap: 8px;
@@ -6800,7 +6617,7 @@ main {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #fff;
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: 18px 20px;
@@ -7452,7 +7269,7 @@ main {
 }
 
 
-.config-workspace > .panel.wide {
+.config-workspace > .config-panel.wide {
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -7461,7 +7278,7 @@ main {
 }
 
 
-.config-workspace > .panel.wide:hover {
+.config-workspace > .config-panel.wide:hover {
   box-shadow: none;
 }
 
@@ -7504,7 +7321,7 @@ main {
   gap: 0;
   border: 1px solid #e5e7eb;
   border-radius: 8px;
-  background: #ffffff;
+  background: transparent;
   overflow: hidden;
 }
 
@@ -7531,6 +7348,8 @@ main {
 .config-editor-grid > .empty-state {
   width: 100%;
   border-radius: var(--radius);
+  background: transparent;
+  box-shadow: none;
 }
 
 
@@ -7540,7 +7359,7 @@ main {
   gap: 16px;
   padding: 14px 20px;
   border-bottom: 1px solid #e5e7eb;
-  background: #ffffff;
+  background: transparent;
   cursor: pointer;
   transition: background 120ms;
   border-radius: 0;
@@ -7591,6 +7410,8 @@ main {
 
 .team-list > .empty-state {
   width: 100%;
+  background: transparent;
+  box-shadow: none;
 }
 
 
@@ -8720,20 +8541,6 @@ main {
   }
 
 
-  .process-attachment-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-
-  .process-attachment-actions {
-    flex-direction: row;
-  }
-
-
-  .process-attachment-actions > * {
-    width: auto;
-  }
 
 
   .inline-create-row,
@@ -14017,8 +13824,7 @@ body * {
 
 
   .document-upload-actions,
-  .animal-photo-actions,
-  .process-attachment-actions {
+  .animal-photo-actions {
     justify-content: stretch;
   }
 
@@ -16330,12 +16136,12 @@ form textarea:focus,
 }
 
 
-.config-workspace > .panel.wide {
+.config-workspace > .config-panel.wide {
   width: 100%;
   padding: 0;
-  border: 0 !important;
-  background: transparent !important;
-  box-shadow: none !important;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 
@@ -16506,7 +16312,8 @@ form textarea:focus,
 
 .config-workspace .ai-settings-card,
 .config-workspace .ai-rules-card,
-.config-workspace .whatsapp-section {
+.config-workspace .whatsapp-section,
+.config-workspace .config-modal-options {
   border: 1px solid var(--ui-border);
   border-radius: 15px;
   background: transparent;
@@ -18846,10 +18653,10 @@ main {
   align-items: center;
   justify-content: center;
   min-height: 34px;
-  border: 1px solid #fecdd3;
-  border-radius: 9px;
-  background: #fff1f2;
-  color: #be123c;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #374151;
   font-size: 0.78rem;
   font-weight: 600;
   box-shadow: none;
@@ -18865,11 +18672,15 @@ main {
   width: 32px;
   height: 32px;
   padding: 0;
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
 }
 
 .prm-pdf-btn:hover:not(:disabled) {
   border-color: #d1d5db;
   background: #f9fafb;
+  color: #111827;
 }
 
 .prm-close-btn:hover {
@@ -18991,13 +18802,6 @@ main {
   grid-column: 1 / -1;
 }
 
-.prm-animal-save-row {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: 16px;
-  margin-top: 18px;
-  border-top: 1px solid #eef0f3;
-}
 
 .prm-crias-block {
   display: flex;
@@ -19311,6 +19115,19 @@ main {
   font-size: 0.74rem;
 }
 
+.prm-modal .attachment-ai-meta {
+  margin: 2px 0 0;
+  color: #94a3b8;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.prm-modal .attachment-ai-criteria {
+  justify-self: stretch;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
 .prm-modal .process-attachment-actions {
   display: flex;
   align-items: center;
@@ -19336,6 +19153,24 @@ main {
   color: #111827;
 }
 
+.prm-modal .doc-decision-btn--reject:hover:not(:disabled) {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.prm-modal .doc-decision-btn--active-ok {
+  border-color: #86efac;
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.prm-modal .doc-decision-btn--active-reject {
+  border-color: #fca5a5;
+  background: #fee2e2;
+  color: #dc2626;
+}
+
 .prm-modal .attachment-unavailable {
   display: inline-flex;
   align-items: center;
@@ -19343,6 +19178,52 @@ main {
   color: #9ca3af;
   font-size: 0.74rem;
   font-weight: 650;
+}
+
+.prm-modal .process-attachment-row.is-blocking {
+  background: #fff7ed;
+}
+
+.prm-documents-warning {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  background: #fff7ed;
+  color: #9a3412;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.prm-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.prm-history-item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid #eef0f3;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.prm-history-item span {
+  color: #9ca3af;
+  font-size: 0.72rem;
+}
+
+.prm-history-item strong {
+  color: #111827;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.prm-history-item p {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.78rem;
 }
 
 .prm-section-head {
@@ -20793,7 +20674,6 @@ form textarea:focus,
 .config-create-action,
 .panel-header > .primary-action,
 .access-modal > .primary-action,
-.prm-action-btn--primary,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
 .config-status-filter button.active,
@@ -20812,8 +20692,7 @@ form textarea:focus,
 
 .primary-action:hover:not(:disabled),
 .config-create-action:hover:not(:disabled),
-.access-modal > .primary-action:hover:not(:disabled),
-.prm-action-btn--primary:hover:not(:disabled) {
+.access-modal > .primary-action:hover:not(:disabled) {
   border-color: #111827 !important;
   background: #111827 !important;
   box-shadow: none !important;
@@ -21796,8 +21675,8 @@ form textarea:focus,
 
 .public-hero--compact {
   width: 100%;
-  height: 100%;
-  min-height: 100%;
+  height: auto;
+  min-height: 420px;
   max-height: 100%;
   margin: 0;
   padding: clamp(24px, 2.4vw, 36px);
@@ -21807,7 +21686,7 @@ form textarea:focus,
 }
 
 .public-hero--compact .hero-content {
-  max-width: 360px;
+  max-width: 480px;
   gap: 13px;
 }
 
@@ -22358,6 +22237,11 @@ form textarea:focus,
   justify-content: flex-end;
 }
 
+.public-service-panel .nr-nav-row .anm-add-btn {
+  width: auto;
+  flex: 1 1 auto;
+}
+
 .public-service-panel .nr-back-btn {
   min-height: 38px;
   padding: 0 16px;
@@ -22624,10 +22508,11 @@ form textarea:focus,
    ============================================================ */
 
 .adoption-workspace {
-  background: #f5f1e9;
+  background: var(--ui-page, #f8fafc);
   border-radius: 0;
   padding: 0 0 32px;
   gap: 0;
+  color: var(--ink-800, #1e293b);
 }
 
 .adoption-shell {
@@ -22641,7 +22526,6 @@ form textarea:focus,
 .adoption-command-header,
 .adoption-control-panel,
 .adoption-nav-modern,
-.adoption-results-panel,
 .adoption-rail-card {
   background: #ffffff;
   border: 1px solid #efeae0;
@@ -22813,7 +22697,7 @@ form textarea:focus,
   min-height: 0;
   border: 0;
   border-radius: 20px;
-  background: #ffffff;
+  background: transparent;
   padding: 8px;
   box-shadow: none;
   display: grid;
@@ -22826,10 +22710,6 @@ form textarea:focus,
   box-shadow: 0 16px 32px rgba(28, 25, 23, 0.08);
 }
 
-.adoption-workspace .adoption-card-modern.is-highlighted {
-  outline: 1px solid #b7dcc8;
-  background: #fcfefa;
-}
 
 .adoption-workspace .adoption-card-modern .animal-photo,
 .adoption-list-thumb,
@@ -22866,7 +22746,6 @@ form textarea:focus,
   white-space: nowrap;
 }
 
-.adoption-card-modern .adoption-card-status,
 .adoption-drawer-photo .adoption-card-status {
   position: absolute;
   top: 10px;
@@ -22889,7 +22768,6 @@ form textarea:focus,
   color: #6b6259;
 }
 
-.adoption-highlight-badge,
 .public-adoption-highlight-badge {
   position: absolute;
   right: 10px;
@@ -22930,11 +22808,6 @@ form textarea:focus,
   line-height: 1.35;
 }
 
-.adoption-workspace .adoption-card-modern .adoption-card-actions {
-  border-top: 1px solid #f2eee6;
-  padding: 8px 0 0;
-  gap: 6px;
-}
 
 .adoption-workspace .adoption-card-modern .adoption-card-actions .ghost-button,
 .adoption-workspace .adoption-card-modern .adoption-card-actions .secondary-action,
@@ -23564,24 +23437,26 @@ form textarea:focus,
   border: 1px solid #e7dfd3;
   border-radius: 22px;
   padding: 10px;
-  background: #ffffff;
+  background: transparent;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 8px;
+  row-gap: 8px;
 }
 
 .adoption-workspace .adoption-card-modern .animal-photo {
+  grid-column: 1 / -1;
+  grid-row: 1;
   height: 172px;
   aspect-ratio: auto;
+  margin: 0;
   border: 1px dashed #b8afa4;
   border-radius: 15px;
   background: #ebe7df;
 }
 
-.adoption-card-modern .adoption-card-status {
-  top: 10px;
-  left: 10px;
-  min-height: 22px;
-  background: #ffffff;
-  font-size: 0.68rem;
-}
 
 .adoption-card-body {
   min-height: 38px;
@@ -23597,14 +23472,40 @@ form textarea:focus,
   font-size: 0.73rem;
 }
 
+.adoption-workspace .adoption-card-modern .adoption-card-body {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 31px;
+  padding: 0 0 0 6px;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.adoption-workspace .adoption-card-modern .adoption-card-body h3 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.adoption-workspace .adoption-card-modern .adoption-card-body p,
+.adoption-workspace .adoption-card-modern .adoption-card-body small {
+  display: none;
+}
+
 .adoption-workspace .adoption-card-modern .adoption-card-actions {
-  position: absolute;
-  right: 16px;
-  bottom: 16px;
-  border: 0;
-  padding: 0;
+  grid-column: 2;
+  grid-row: 2;
+  position: static;
+  inset: auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
   width: auto;
-  gap: 8px;
+  padding: 0;
+  margin: 0;
+  border-top: 0;
 }
 
 .adoption-workspace .adoption-card-modern .adoption-card-actions .adoption-interest-indicator,
@@ -23669,25 +23570,6 @@ form textarea:focus,
   .adoption-nav-modern .adoption-filter-group {
     flex-wrap: wrap;
   }
-}
-/* Adoption card compact info correction */
-.adoption-workspace .adoption-card-modern {
-  position: relative;
-  padding-bottom: 52px;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-body {
-  min-height: 30px;
-  padding: 0 8px;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-body p,
-.adoption-workspace .adoption-card-modern .adoption-card-body small {
-  display: none;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-body h3 {
-  white-space: nowrap;
 }
 /* Adoption form modal softer home style */
 .adoption-form-modal {
@@ -23809,82 +23691,6 @@ form textarea:focus,
   background: #fbf7ef !important;
   border-color: #d8ccbb !important;
 }
-/* Adoption white background correction */
-.adoption-workspace {
-  background: #ffffff !important;
-}
-
-.adoption-form-modal,
-.adoption-confirm-modal {
-  background: #ffffff !important;
-}
-
-.adoption-form-modal > .modal-header,
-.adoption-confirm-modal > .modal-header,
-.adoption-form-modal .adoption-editor-grid,
-.adoption-form-modal .adoption-editor-fields,
-.adoption-form-modal .animal-photo-uploader,
-.adoption-form-modal > .form-actions {
-  background: #ffffff !important;
-}
-
-.adoption-form-modal .field input,
-.adoption-form-modal .field textarea,
-.adoption-form-modal .compact-choice-field button {
-  background: #ffffff !important;
-}
-
-.adoption-form-modal .animal-photo-uploader:hover,
-.adoption-form-modal .ghost-button:hover:not(:disabled) {
-  background: #ffffff !important;
-}
-/* Adoption card single-line footer correction */
-.adoption-workspace .adoption-card-modern {
-  display: grid !important;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  grid-template-rows: auto auto;
-  align-items: center;
-  column-gap: 8px;
-  row-gap: 8px;
-  padding: 10px !important;
-  padding-bottom: 10px !important;
-}
-
-.adoption-workspace .adoption-card-modern .animal-photo {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  margin: 0 !important;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-body {
-  grid-column: 1;
-  grid-row: 2;
-  min-height: 31px;
-  padding: 0 0 0 6px !important;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-body h3 {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-actions {
-  grid-column: 2;
-  grid-row: 2;
-  position: static !important;
-  inset: auto !important;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  width: auto;
-  padding: 0 !important;
-  margin: 0 !important;
-}
 /* Adoption modal clean white correction */
 .adoption-form-modal {
   background: #ffffff !important;
@@ -23988,18 +23794,6 @@ form textarea:focus,
   color: #4f463f !important;
   box-shadow: none !important;
 }
-/* Adoption page transparent workspace correction */
-.adoption-workspace,
-main:has(.adoption-workspace) .adoption-workspace {
-  background: transparent !important;
-}
-
-.adoption-shell,
-.adoption-board-layout,
-.adoption-results-panel {
-  background: transparent !important;
-}
-
 .brand-text span,
 .topbar-context-chip span {
   display: none !important;
@@ -24241,7 +24035,6 @@ h6,
 .empty-state,
 .triage-card,
 .request-card,
-.adoption-card,
 .ag-day-card,
 .ag-drawer-card {
   border-color: var(--ui-border) !important;
@@ -24249,25 +24042,13 @@ h6,
   box-shadow: var(--ui-shadow-line) !important;
 }
 
-.config-workspace > .panel.wide,
-.config-workspace .config-editor-grid,
-.config-workspace .config-list-row,
-.config-workspace .ai-settings-card,
-.config-workspace .ai-rules-card,
-.config-workspace .whatsapp-section,
-.config-workspace .config-modal-options,
-.config-workspace .empty-state {
-  background: transparent !important;
-  box-shadow: none !important;
-}
 
 
 .brand-mark,
 .metric-icon,
 .primary-action,
 .config-create-action,
-.panel-header > .primary-action,
-.prm-action-btn--primary {
+.panel-header > .primary-action {
   border-color: var(--ui-action) !important;
   background: var(--ui-action) !important;
   color: var(--ink-25) !important;
@@ -24276,8 +24057,7 @@ h6,
 
 .primary-action:hover:not(:disabled),
 .config-create-action:hover:not(:disabled),
-.panel-header > .primary-action:hover:not(:disabled),
-.prm-action-btn--primary:hover:not(:disabled) {
+.panel-header > .primary-action:hover:not(:disabled) {
   border-color: var(--ui-action-hover) !important;
   background: var(--ui-action-hover) !important;
 }
@@ -25330,7 +25110,6 @@ main,
 .primary-action,
 .config-create-action,
 .panel-header > .primary-action,
-.prm-action-btn--primary,
 .access-modal > .primary-action,
 .adoption-form-modal .primary-action,
 .nr-shell .nr-topbar-continue,
@@ -25360,7 +25139,6 @@ main,
 .primary-action:hover:not(:disabled),
 .config-create-action:hover:not(:disabled),
 .panel-header > .primary-action:hover:not(:disabled),
-.prm-action-btn--primary:hover:not(:disabled),
 .access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
 .nr-shell .nr-topbar-continue:hover:not(:disabled),
@@ -25450,11 +25228,6 @@ main,
   }
 }
 /* Adoção: remove remaining beige and soften automatic highlight banner */
-.adoption-workspace {
-  background: var(--ui-page, #f8fafc) !important;
-  color: var(--ink-800, #1e293b) !important;
-}
-
 .adoption-shell,
 .adoption-card-body h3,
 .adoption-list-info strong,
@@ -25467,9 +25240,7 @@ main,
 .adoption-command-header,
 .adoption-control-panel,
 .adoption-nav-modern,
-.adoption-results-panel,
 .adoption-rail-card,
-.adoption-workspace .adoption-card-modern,
 .adoption-list-row,
 .adoption-drawer-interest {
   border-color: var(--ui-border, #e2e8f0) !important;
@@ -25491,6 +25262,7 @@ main,
 .adoption-view-toggle button,
 .adoption-nav-modern .adoption-filter-group button,
 .adoption-workspace .adoption-card-modern .adoption-card-actions .ghost-button,
+.adoption-workspace .adoption-card-modern .adoption-card-actions .secondary-action,
 .adoption-workspace .adoption-list-actions .ghost-button,
 .adoption-workspace .adoption-list-actions .secondary-action,
 .adoption-workspace .adoption-card-modern .adoption-card-delete-top {
@@ -25516,20 +25288,17 @@ main,
 }
 
 .adoption-nav-modern .adoption-filter-sep,
-.adoption-drawer-actions,
-.adoption-workspace .adoption-card-modern .adoption-card-actions {
+.adoption-drawer-actions {
   border-color: var(--ui-border, #e2e8f0) !important;
   background-color: var(--ui-border, #e2e8f0) !important;
 }
 
-.adoption-workspace .adoption-card-modern.is-highlighted,
 .public-animal-card.is-highlighted {
   outline-color: #93c5fd !important;
   background: #f8fbff !important;
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.10) !important;
 }
 
-.adoption-highlight-badge,
 .public-adoption-highlight-badge {
   border: 1px solid #93c5fd !important;
   background: #dbeafe !important;
@@ -25853,7 +25622,6 @@ textarea::placeholder,
 .primary-action,
 .config-create-action,
 .panel-header > .primary-action,
-.prm-action-btn--primary,
 .access-modal > .primary-action,
 .adoption-form-modal .primary-action,
 .nr-shell .nr-topbar-continue,
@@ -25970,7 +25738,6 @@ textarea::placeholder,
 .adoption-card-status,
 .animal-status-chip,
 .schedule-status,
-.adoption-highlight-badge,
 .public-adoption-highlight-badge {
   font-weight: var(--type-weight-control) !important;
   letter-spacing: 0 !important;
@@ -26068,7 +25835,6 @@ small,
 .primary-action,
 .config-create-action,
 .panel-header > .primary-action,
-.prm-action-btn--primary,
 .access-modal > .primary-action,
 .adoption-form-modal .primary-action,
 .nr-shell .nr-topbar-continue,
@@ -26098,7 +25864,6 @@ small,
 .primary-action svg,
 .config-create-action svg,
 .panel-header > .primary-action svg,
-.prm-action-btn--primary svg,
 .access-modal > .primary-action svg,
 .adoption-form-modal .primary-action svg,
 .nr-shell .nr-topbar-continue svg,
@@ -26116,7 +25881,6 @@ small,
 .primary-action:hover:not(:disabled),
 .config-create-action:hover:not(:disabled),
 .panel-header > .primary-action:hover:not(:disabled),
-.prm-action-btn--primary:hover:not(:disabled),
 .access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
 .nr-shell .nr-topbar-continue:hover:not(:disabled),
@@ -26136,7 +25900,6 @@ small,
 .primary-action:focus-visible,
 .config-create-action:focus-visible,
 .panel-header > .primary-action:focus-visible,
-.prm-action-btn--primary:focus-visible,
 .access-modal > .primary-action:focus-visible,
 .adoption-form-modal .primary-action:focus-visible,
 .nr-shell .nr-topbar-continue:focus-visible,

@@ -4168,6 +4168,10 @@ function NewRequest({
                     <div className="form-sub-card">
                       <span className="form-sub-card-title">{showTypeSelector ? "Tipo e identificação" : "Identificação do animal"}</span>
 
+                      <div className="animal-choice-grid species-row">
+                        <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
+                      </div>
+
                       {showTypeSelector && (
                         <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
                           <span className="anm-type-label">Tipo de solicitação</span>
@@ -4261,12 +4265,6 @@ function NewRequest({
                       )}
                     </div>
                     <div className="form-sub-card">
-                      <span className="form-sub-card-title">Procedimento desejado</span>
-                      <div className="animal-choice-grid species-row">
-                        <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
-                      </div>
-                    </div>
-                    <div className="form-sub-card">
                       <span className="form-sub-card-title">Saúde e cuidados</span>
                       <div className="health-grid">
                         <HealthField label={externalLikeRegistration ? "Vermifugado" : "Vermifugado?"} value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
@@ -4287,9 +4285,6 @@ function NewRequest({
               );
             })}
             <div className={externalLikeRegistration ? "anm-actions-row" : undefined}>
-              <button className="anm-add-btn" type="button" onClick={addAnimal}>
-                Adicionar animal
-              </button>
               {externalLikeRegistration && animals.length > 1 && (
                 <button
                   className="animal-remove-inline"
@@ -4403,6 +4398,11 @@ function NewRequest({
                 onClick={() => navigateToStep(formSteps[currentStepIndex - 1].step)}
               >
                 Voltar
+              </button>
+            )}
+            {formStep === 1 && (
+              <button className="anm-add-btn" type="button" onClick={addAnimal}>
+                Adicionar animal
               </button>
             )}
             {currentStepIndex < formSteps.length - 1 ? (
@@ -4878,11 +4878,13 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [downloadLoadingId, setDownloadLoadingId] = useState("");
   const [bundleLoading, setBundleLoading] = useState(false);
+  const [confirmingSchedule, setConfirmingSchedule] = useState(false);
   const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
-  const [docDecisions, setDocDecisions] = useState({});
-  const [modalTab, setModalTab] = useState<"procedimento" | "anexos">("procedimento");
-  const [savingAnimalData, setSavingAnimalData] = useState(false);
+  const [docDecisions, setDocDecisions] = useState<AnyRecord>({});
+  const [modalTab, setModalTab] = useState<"procedimento" | "saude" | "historico" | "anexos">(
+    normalizedRequest.status === "AGENDADA" ? "procedimento" : "anexos",
+  );
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [selectedRescheduleDate, setSelectedRescheduleDate] = useState("");
   const [attendanceData, setAttendanceData] = useState({
@@ -4896,8 +4898,8 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     userId: normalizedRequest.assignedUserId || "",
   });
 
-  const canAnalyze = request.status === "NOVA";
-  const canRecordAttendance = request.status === "AGENDADA";
+  const canAnalyze = normalizedRequest.status === "NOVA";
+  const canRecordAttendance = normalizedRequest.status === "AGENDADA";
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
   const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
   const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
@@ -4917,6 +4919,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     tipo: "Requerimento municipal",
     status: "Gerado",
     available: true,
+    required: false,
   };
 
   const requiredRows = requiredDocTypes.map((dt) => {
@@ -5010,6 +5013,68 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     return "Aguardando";
   }
 
+  function getAttachmentDecision(anexo) {
+    return docDecisions[anexo.id] || "";
+  }
+
+  function isSystemDocument(anexo) {
+    return anexo.kind === "request" || anexo.status === "Gerado";
+  }
+
+  function isAnimalPhotoAttachment(anexo) {
+    return anexo.kind === "photo";
+  }
+
+  function isAttachmentAiApproved(anexo) {
+    return statusClass(anexo.status) === "approved" || anexo.document?.status === "approved";
+  }
+
+  function isAttachmentRejected(anexo) {
+    return statusClass(anexo.status) === "rejected" || anexo.document?.status === "rejected";
+  }
+
+  function isRequiredAttachment(anexo) {
+    return anexo.required === true || requiredRows.some((row) => row.id === anexo.id);
+  }
+
+  function isAttachmentAccepted(anexo) {
+    const decision = getAttachmentDecision(anexo);
+    if (decision === "approved") return true;
+    if (decision === "rejected") return false;
+    return isSystemDocument(anexo) || isAnimalPhotoAttachment(anexo) || isAttachmentAiApproved(anexo);
+  }
+
+  function requiresManualDocumentDecision(anexo) {
+    return canAnalyze
+      && anexo.available
+      && isRequiredAttachment(anexo)
+      && !isSystemDocument(anexo)
+      && !isAnimalPhotoAttachment(anexo)
+      && !isAttachmentAiApproved(anexo)
+      && !isAttachmentRejected(anexo);
+  }
+
+  function isAttachmentBlockingSchedule(anexo) {
+    if (!isRequiredAttachment(anexo) || isSystemDocument(anexo) || isAnimalPhotoAttachment(anexo)) return false;
+    const decision = getAttachmentDecision(anexo);
+    if (decision === "approved") return false;
+    if (decision === "rejected") return true;
+    return !isAttachmentAccepted(anexo);
+  }
+
+  const blockingAttachments = canAnalyze ? anexos.filter(isAttachmentBlockingSchedule) : [];
+  const canConfirmSchedule = canAnalyze && !blockWithoutAssignment && blockingAttachments.length === 0;
+  const scheduleBlockReason = blockWithoutAssignment
+    ? assignmentRequiredTitle
+    : blockingAttachments.length
+      ? "Resolva os anexos obrigatorios: " + blockingAttachments.map((item) => item.tipo).join(", ")
+      : "Confirmar agenda";
+
+  useEffect(() => {
+    if (canRecordAttendance) return;
+    if (modalTab !== "anexos") setModalTab("anexos");
+  }, [canRecordAttendance, modalTab, normalizedRequest.id]);
+
   async function handlePreview(item) {
     setPreviewLoadingId(item.id);
     try {
@@ -5076,29 +5141,47 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
 
   function confirmAttendanceInline(event) {
     event.preventDefault();
-    onAttendance?.(request, attendanceData);
+    onAttendance?.(request, { ...attendanceData, animalData });
   }
 
-  async function saveAnimalData() {
-    if (!patchRequest) return;
-    setSavingAnimalData(true);
-    const currentAnimals = Array.isArray(normalizedRequest.animals) ? normalizedRequest.animals : [];
-    const updatedAnimals = currentAnimals.length > 0
-      ? currentAnimals.map((a, i) => i === 0 ? { ...a, ...animalData } : a)
-      : [{ ...animalData }];
+  async function confirmSchedule() {
+    if (!canConfirmSchedule || confirmingSchedule) return;
+    setConfirmingSchedule(true);
     try {
-      await patchRequest(request.id, { animals: updatedAnimals }, "Dados clínicos do animal atualizados");
-    } catch { /* silencioso */ }
-    setSavingAnimalData(false);
+      const decisions = Object.entries(docDecisions).filter(([, decision]) => decision === "approved" || decision === "rejected");
+      if (decisions.length && patchRequest) {
+        const currentDocuments = Array.isArray(request.documents) ? request.documents : [];
+        const updatedDocuments = currentDocuments.map((document) => {
+          const row = anexos.find((anexo) => anexo.document === document
+            || anexo.document?.documentId === document.documentId
+            || anexo.document?.fileName === document.fileName
+            || anexo.id === document.documentId
+            || anexo.id === document.fileName);
+          const decision = row ? docDecisions[row.id] : "";
+          if (decision !== "approved" && decision !== "rejected") return document;
+          return {
+            ...document,
+            status: decision,
+            message: document.message || (decision === "approved" ? "Documento aprovado manualmente na conferencia." : "Documento recusado manualmente na conferencia."),
+          };
+        });
+        await patchRequest(request.id, { documents: updatedDocuments }, "Documentos conferidos antes da agenda");
+      }
+      onApprove?.(request);
+    } finally {
+      setConfirmingSchedule(false);
+    }
   }
 
   function renderAttachments() {
     return (
       <div className="process-attachments-list">
         {anexos.map((anexo) => {
-          const decision = docDecisions[anexo.id];
+          const decision = getAttachmentDecision(anexo);
+          const canManuallyDecide = requiresManualDocumentDecision(anexo);
+          const rowClassName = `process-attachment-row${isAttachmentBlockingSchedule(anexo) ? " is-blocking" : ""}`;
           return (
-            <article className="process-attachment-row" key={`${anexo.kind}-${anexo.id}`}>
+            <article className={rowClassName} key={`${anexo.kind}-${anexo.id}`}>
               <div className="process-attachment-main">
                 <span className="process-attachment-icon-box">
                   <FileText size={15} className="process-attachment-icon" />
@@ -5123,7 +5206,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                 </div>
               </div>
               <div className="process-attachment-actions">
-                {anexo.available && anexo.kind !== "request" && anexo.kind !== "photo" && canAnalyze ? (
+                {canManuallyDecide ? (
                   <>
                     <button
                       className={`doc-decision-btn${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
@@ -5268,6 +5351,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   }
 
   const isRescheduleMode = activePanel === "reschedule";
+  const processHistory = Array.isArray(normalizedRequest.history) ? normalizedRequest.history : [];
 
   return (
     <div className="modal-backdrop">
@@ -5333,13 +5417,31 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
 
           {!isRescheduleMode && (
             <div className="prm-tabs">
-              <button
-                type="button"
-                className={`prm-tab${modalTab === "procedimento" ? " prm-tab--active" : ""}`}
-                onClick={() => setModalTab("procedimento")}
-              >
-                <FileText size={13} /> Procedimento
-              </button>
+              {canRecordAttendance && (
+                <>
+                  <button
+                    type="button"
+                    className={`prm-tab${modalTab === "procedimento" ? " prm-tab--active" : ""}`}
+                    onClick={() => setModalTab("procedimento")}
+                  >
+                    <FileText size={13} /> Procedimento
+                  </button>
+                  <button
+                    type="button"
+                    className={`prm-tab${modalTab === "saude" ? " prm-tab--active" : ""}`}
+                    onClick={() => setModalTab("saude")}
+                  >
+                    <Activity size={13} /> Saude
+                  </button>
+                  <button
+                    type="button"
+                    className={`prm-tab${modalTab === "historico" ? " prm-tab--active" : ""}`}
+                    onClick={() => setModalTab("historico")}
+                  >
+                    <Clock size={13} /> Historico
+                  </button>
+                </>
+              )}
               <button
                 type="button"
                 className={`prm-tab${modalTab === "anexos" ? " prm-tab--active" : ""}`}
@@ -5350,132 +5452,140 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
             </div>
           )}
 
-          {!isRescheduleMode && modalTab === "procedimento" && (
+          {!isRescheduleMode && canRecordAttendance && modalTab === "procedimento" && (
             <div className="prm-section prm-section--procedure">
-              {canRecordAttendance && (
-                <>
-                  <div className="prm-section-block">
-                    <p className="prm-section-title">Procedimento</p>
-                    <div className="prm-procedure-fields">
-                      <label className="field">
-                        <span>Microchip</span>
-                        <input
-                          value={attendanceData.microchip}
-                          onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
-                          placeholder="Código aplicado ou lido"
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Observação</span>
-                        <input
-                          type="text"
-                          value={attendanceData.note}
-                          onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
-                          placeholder="Observações do atendimento"
-                        />
-                      </label>
-                    </div>
-                  </div>
-                  <div className="prm-section-divider" />
-                </>
-              )}
-
               <div className="prm-section-block">
-                <p className="prm-section-title">Histórico de saúde</p>
-                <div className="prm-animal-data-grid">
-                <label className="field">
-                  <span>Doenças pré-existentes</span>
-                  <textarea
-                    value={animalData.doencas}
-                    onChange={(e) => setAnimalData((d) => ({ ...d, doencas: e.target.value }))}
-                    placeholder="Ex: diabetes, displasia, cardiopatia..."
-                    rows={2}
-                  />
-                </label>
-                <label className="field">
-                  <span>Alergias conhecidas</span>
-                  <textarea
-                    value={animalData.alergias}
-                    onChange={(e) => setAnimalData((d) => ({ ...d, alergias: e.target.value }))}
-                    placeholder="Ex: alergia a penicilina, sensibilidade a frango..."
-                    rows={2}
-                  />
-                </label>
-                <div className="prm-animal-field--full prm-crias-block">
-                  <div className="prm-crias-toggle-row">
-                    <span className="prm-crias-toggle-label">Já teve crias?</span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={animalData.teveCrias}
-                      className={`prm-toggle${animalData.teveCrias ? " prm-toggle--on" : ""}`}
-                      onClick={() => setAnimalData((d) => ({ ...d, teveCrias: !d.teveCrias, crias: !d.teveCrias ? (d.crias.length ? d.crias : [{ filhotes: "" }]) : d.crias }))}
-                    >
-                      <span className="prm-toggle-thumb" />
-                    </button>
-                  </div>
-                  {animalData.teveCrias && (
-                    <div className="prm-crias-list">
-                      {animalData.crias.map((cria, i) => (
-                        <div key={i} className="prm-cria-row">
-                          <span className="prm-cria-label">Cria {i + 1}</span>
-                          <input
-                            type="number"
-                            min="0"
-                            value={cria.filhotes}
-                            onChange={(e) => setAnimalData((d) => {
-                              const next = d.crias.map((c, ci) => ci === i ? { ...c, filhotes: e.target.value } : c);
-                              return { ...d, crias: next };
-                            })}
-                            placeholder="Filhotes"
-                            className="prm-cria-input"
-                          />
-                          <span className="prm-cria-suffix">filhotes</span>
-                          {animalData.crias.length > 1 && (
-                            <button
-                              type="button"
-                              className="prm-cria-remove"
-                              onClick={() => setAnimalData((d) => ({ ...d, crias: d.crias.filter((_, ci) => ci !== i) }))}
-                              aria-label="Remover cria"
-                            >
-                              <X size={13} />
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                      <button
-                        type="button"
-                        className="prm-cria-add"
-                        onClick={() => setAnimalData((d) => ({ ...d, crias: [...d.crias, { filhotes: "" }] }))}
-                      >
-                        <Plus size={13} /> Adicionar cria
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <label className="field prm-animal-field--full">
-                  <span>Descendência / observações reprodutivas</span>
-                  <textarea
-                    value={animalData.descendencia}
-                    onChange={(e) => setAnimalData((d) => ({ ...d, descendencia: e.target.value }))}
-                    placeholder="Informações sobre descendência, histórico reprodutivo..."
-                    rows={2}
-                  />
-                </label>
+                <p className="prm-section-title">Procedimento</p>
+                <div className="prm-procedure-fields">
+                  <label className="field">
+                    <span>Microchip</span>
+                    <input
+                      value={attendanceData.microchip}
+                      onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
+                      placeholder="Codigo aplicado ou lido"
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Observacao</span>
+                    <input
+                      type="text"
+                      value={attendanceData.note}
+                      onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
+                      placeholder="Observacoes do atendimento"
+                    />
+                  </label>
                 </div>
               </div>
+            </div>
+          )}
 
-              {patchRequest && (
-                <div className="prm-animal-save-row">
-                  <button
-                    type="button"
-                    className="prm-action-btn prm-action-btn--secondary"
-                    onClick={saveAnimalData}
-                    disabled={savingAnimalData}
-                  >
-                    {savingAnimalData ? "Salvando..." : "Salvar dados do animal"}
-                  </button>
+          {!isRescheduleMode && canRecordAttendance && modalTab === "saude" && (
+            <div className="prm-section prm-section--health">
+              <div className="prm-section-block">
+                <p className="prm-section-title">Saude do animal</p>
+                <div className="prm-animal-data-grid">
+                  <label className="field">
+                    <span>Doencas pre-existentes</span>
+                    <textarea
+                      value={animalData.doencas}
+                      onChange={(e) => setAnimalData((d) => ({ ...d, doencas: e.target.value }))}
+                      placeholder="Ex: diabetes, displasia, cardiopatia..."
+                      rows={2}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>Alergias conhecidas</span>
+                    <textarea
+                      value={animalData.alergias}
+                      onChange={(e) => setAnimalData((d) => ({ ...d, alergias: e.target.value }))}
+                      placeholder="Ex: alergia a penicilina, sensibilidade a frango..."
+                      rows={2}
+                    />
+                  </label>
+                  <div className="prm-animal-field--full prm-crias-block">
+                    <div className="prm-crias-toggle-row">
+                      <span className="prm-crias-toggle-label">Ja teve crias?</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={animalData.teveCrias}
+                        className={`prm-toggle${animalData.teveCrias ? " prm-toggle--on" : ""}`}
+                        onClick={() => setAnimalData((d) => ({ ...d, teveCrias: !d.teveCrias, crias: !d.teveCrias ? (d.crias.length ? d.crias : [{ filhotes: "" }]) : d.crias }))}
+                      >
+                        <span className="prm-toggle-thumb" />
+                      </button>
+                    </div>
+                    {animalData.teveCrias && (
+                      <div className="prm-crias-list">
+                        {animalData.crias.map((cria, i) => (
+                          <div key={i} className="prm-cria-row">
+                            <span className="prm-cria-label">Cria {i + 1}</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={cria.filhotes}
+                              onChange={(e) => setAnimalData((d) => {
+                                const next = d.crias.map((c, ci) => ci === i ? { ...c, filhotes: e.target.value } : c);
+                                return { ...d, crias: next };
+                              })}
+                              placeholder="Filhotes"
+                              className="prm-cria-input"
+                            />
+                            <span className="prm-cria-suffix">filhotes</span>
+                            {animalData.crias.length > 1 && (
+                              <button
+                                type="button"
+                                className="prm-cria-remove"
+                                onClick={() => setAnimalData((d) => ({ ...d, crias: d.crias.filter((_, ci) => ci !== i) }))}
+                                aria-label="Remover cria"
+                              >
+                                <X size={13} />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="prm-cria-add"
+                          onClick={() => setAnimalData((d) => ({ ...d, crias: [...d.crias, { filhotes: "" }] }))}
+                        >
+                          <Plus size={13} /> Adicionar cria
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <label className="field prm-animal-field--full">
+                    <span>Descendencia / observacoes reprodutivas</span>
+                    <textarea
+                      value={animalData.descendencia}
+                      onChange={(e) => setAnimalData((d) => ({ ...d, descendencia: e.target.value }))}
+                      placeholder="Informacoes sobre descendencia, historico reprodutivo..."
+                      rows={2}
+                    />
+                  </label>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {!isRescheduleMode && canRecordAttendance && modalTab === "historico" && (
+            <div className="prm-section prm-section--history">
+              <div className="prm-section-head">
+                <p className="prm-section-label">Historico do processo</p>
+                <span className="prm-section-count">{processHistory.length} {processHistory.length === 1 ? "item" : "itens"}</span>
+              </div>
+              {processHistory.length > 0 ? (
+                <div className="prm-history-list">
+                  {processHistory.map((item, index) => (
+                    <article className="prm-history-item" key={`${item.at || item.createdAt || index}-${index}`}>
+                      <span>{formatDateTime(item.at || item.createdAt || item.date) || "Sem data"}</span>
+                      <strong>{item.status || "Movimentacao"}</strong>
+                      {item.notes && <p>{item.notes}</p>}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="prm-muted-note">Nenhuma movimentacao registrada.</p>
               )}
             </div>
           )}
@@ -5489,6 +5599,9 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                     <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
                   </div>
                   {renderAttachments()}
+                  {canAnalyze && blockingAttachments.length > 0 && (
+                    <p className="prm-documents-warning">{scheduleBlockReason}</p>
+                  )}
                 </>
               ) : (
                 <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
@@ -5525,11 +5638,11 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                 <button
                   className="prm-action-btn prm-action-btn--primary"
                   type="button"
-                  disabled={blockWithoutAssignment}
-                  title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar agenda"}
-                  onClick={() => onApprove?.(request)}
+                  disabled={!canConfirmSchedule || confirmingSchedule}
+                  title={scheduleBlockReason}
+                  onClick={confirmSchedule}
                 >
-                  <CheckCircle2 size={15} /> Confirmar Agenda
+                  <CheckCircle2 size={15} /> {confirmingSchedule ? "Confirmando..." : "Confirmar Agenda"}
                 </button>
               )}
             </>
@@ -6395,17 +6508,13 @@ function AdoptionView({
             {displayedAnimals.length > 0 && adoptionViewMode === "grid" && (
               <div className="adoption-grid adoption-grid-modern">
                 {displayedAnimals.map((animal) => {
-                  const statusView = getAdoptionStatusView(animal);
                   const interestCount = getAdoptionInterestList(animal).length;
                   const daysInProgram = getAdoptionDaysInProgram(animal);
-                  const highlighted = isAdoptionHighlighted(animal);
                   const displayName = animal.name || animal.animal_name || "Animal";
                   return (
-                    <article className={`adoption-card adoption-card-modern${highlighted ? " is-highlighted" : ""}`} key={animal.id || animal.name}>
+                    <article className="adoption-card adoption-card-modern" key={animal.id || animal.name}>
                       <div className={`animal-photo ${getAnimalGradient(animal)}`}>
                         {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={44} />}
-                        <span className={`adoption-card-status ${statusView.className}`}>{statusView.label}</span>
-                        {highlighted && <span className="adoption-highlight-badge"><BadgeCheck size={12} /> Destaque</span>}
                       </div>
                       <div className="adoption-card-body">
                         <h3>{displayName}</h3>
@@ -8378,7 +8487,7 @@ function ConfigView({
         const isGlobal = isGlobalRole(currentUser?.role);
         const municipalityRows = isGlobal ? filteredMunicipalities : municipalities;
         return (
-          <div className="panel wide">
+          <div className="config-panel wide">
             <ConfigSectionHeader
               title="Dados Gerais"
               createLabel={isGlobal ? "Cadastrar município" : undefined}
@@ -8413,10 +8522,10 @@ function ConfigView({
       })()}
 
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
-        <div className="panel wide">
+        <div className="config-panel wide">
           <PanelHeader title="IA externa para documentos" />
           <div className="ai-settings-layout">
-            <article className="request-type-card ai-settings-card">
+            <article className="ai-settings-card">
               <div className="config-modal-options">
                 <ConfigActiveToggle
                   checked={Boolean(aiSettings.active)}
@@ -8509,7 +8618,7 @@ function ConfigView({
       )}
 
       {configArea === "environment" && configTab === "requests" && (
-        <div className="panel wide">
+        <div className="config-panel wide">
           <ConfigSectionHeader title="Tipos de solicitação" createLabel="Criar tipo" onCreate={() => setConfigModal("requestType")}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -8539,7 +8648,7 @@ function ConfigView({
       )}
 
       {configArea === "environment" && configTab === "agenda" && (
-        <div className="panel wide">
+        <div className="config-panel wide">
           <ConfigSectionHeader title="Agenda" createLabel="Criar agenda" onCreate={() => openAgendaModal()}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -8577,7 +8686,7 @@ function ConfigView({
       )}
 
       {configArea === "sectors" && (
-        <div className="panel wide">
+        <div className="config-panel wide">
           <ConfigSectionHeader title={configAreaTitle} createLabel="Criar setor" onCreate={() => openSectorModal()}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -8648,7 +8757,7 @@ function ConfigView({
       )}
 
       {configArea === "permissions" && (
-        <div className="panel wide">
+        <div className="config-panel wide">
           <ConfigSectionHeader title={configAreaTitle} createLabel="Criar grupo" onCreate={() => openPermissionModal()}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -8681,7 +8790,7 @@ function ConfigView({
       )}
 
       {configArea === "users" && (
-        <div className="panel wide">
+        <div className="config-panel wide">
           <ConfigSectionHeader title={configAreaTitle} createLabel="Criar usuário" onCreate={() => openTeamUserModal()}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -8915,7 +9024,7 @@ function ConfigView({
           ? new Date(contractEnd + "T00:00:00").toLocaleDateString("pt-BR")
           : null;
         return (
-          <div className="panel wide">
+          <div className="config-panel wide">
             <PanelHeader title="WhatsApp por município" />
 
             {configMunicipalityScopeId && (
@@ -9124,7 +9233,7 @@ function ConfigView({
       })()}
 
       {configArea === "environment" && configTab === "documents" && (
-        <div className="panel wide">
+        <div className="config-panel wide">
           <ConfigSectionHeader title="Tipos de documentos" createLabel="Criar documento" onCreate={() => openDocumentModal()}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -9830,7 +9939,7 @@ function ConfigView({
 
 function SimpleConfigList({ title, items, allItems = items, filterValue = "active", onFilterChange, onCreate, onEdit, onPatch, showDescription = false }: AnyRecord) {
   return (
-    <div className="panel wide">
+    <div className="config-panel wide">
       <ConfigSectionHeader title={title} createLabel="Criar item" onCreate={onCreate}>
         {onFilterChange && (
           <ConfigStatusFilter
