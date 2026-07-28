@@ -21921,7 +21921,6 @@ form textarea:focus,
 .public-service-panel .nr-topbar {
   padding: 6px 0 10px;
   border: 0;
-  border-bottom: 1px solid rgba(230, 221, 201, 0.9);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -24614,8 +24613,6 @@ main,
 .app-shell,
 .public-form-page,
 .public-form-page:not(.public-form-page--consultation),
-.public-form-page:not(.public-form-page--consultation) .nr-shell,
-.nr-shell,
 .nr-body,
 .request-workspace,
 .clean-requests-workspace,
@@ -24629,9 +24626,7 @@ main,
 
 .topbar,
 .sidebar,
-.public-topbar,
-.nr-topbar,
-.internal-request-modal .nr-topbar--internal {
+.public-topbar {
   background: var(--surface) !important;
 }
 /* Neutral public/background lock: remove remaining cream page surfaces */
