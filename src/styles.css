@@ -5827,8 +5827,6 @@ main {
   border-radius: 12px;
   background: #fff;
   color: var(--ink);
-  font-size: 0.95rem;
-  font-weight: 600;
   padding: 12px 22px;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
@@ -25552,6 +25550,7 @@ textarea::placeholder,
 .adoption-view-toggle button,
 .adoption-nav-modern .adoption-filter-group button,
 .compact-choice-field button,
+.anm-type-card,
 .weekday-picker button,
 .agenda-kind-selector button,
 .calendar-day-button,
@@ -25578,6 +25577,7 @@ textarea::placeholder,
 .adoption-view-toggle button.selected,
 .adoption-nav-modern .adoption-filter-group button.selected,
 .compact-choice-field button.selected,
+.anm-type-card.is-selected,
 .weekday-picker button.selected,
 .agenda-kind-selector button.selected,
 .calendar-day-button.selected {
