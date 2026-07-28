@@ -727,7 +727,7 @@ button:disabled {
   pointer-events: none;
   background-color: #f3ead6;
   background-repeat: no-repeat;
-  background-size: contain;
+  background-size: cover;
   background-position: 50% 36%;
   filter: saturate(1.14) contrast(1.05) brightness(1.04);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.22) 10%, rgba(0,0,0,0.9) 28%, #000 100%);
@@ -19270,15 +19270,16 @@ main {
   background: #f9fafb;
 }
 
-.prm-action-btn--ghost-danger {
-  border-color: transparent;
-  background: transparent;
-  color: #f87171;
+.prm-action-btn--danger {
+  border-color: #be123c;
+  background: #be123c;
+  color: #ffffff;
 }
 
-.prm-action-btn--ghost-danger:hover:not(:disabled) {
-  background: #fef2f2;
-  color: #ef4444;
+.prm-action-btn--danger:hover:not(:disabled) {
+  border-color: #9f1239;
+  background: #9f1239;
+  color: #ffffff;
 }
 
 .prm-action-btn--warning {

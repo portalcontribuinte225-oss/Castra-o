@@ -5568,13 +5568,13 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                 </button>
                 {activePanel !== "reject" && (
                   <button
-                    className="prm-action-btn prm-action-btn--ghost-danger"
+                    className="prm-action-btn prm-action-btn--danger"
                     type="button"
                     disabled={blockWithoutAssignment}
                     title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
                     onClick={() => openDocumentRejectPanel(blockingAttachments)}
                   >
-                    Indeferir
+                    <AlertCircle size={15} /> Indeferir
                   </button>
                 )}
               </div>
