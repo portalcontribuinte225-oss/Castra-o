@@ -2110,7 +2110,6 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
                   <input type="date" value={interestForm.visit_date} onChange={(e) => setInterestForm((f) => ({ ...f, visit_date: e.target.value }))} />
                 </div>
                 <div className="form-actions">
-                  <button className="ghost-button" type="button" onClick={() => setShowInterestForm(false)}>Cancelar</button>
                   <button className="primary-action" type="submit">
                     <HeartHandshake size={15} />
                     Enviar interesse
@@ -4516,6 +4515,7 @@ function AdminDashboard({
   sizeOptions = initialSizes,
   aiSettings = initialAiSettings,
   teams = initialTeams,
+  municipalities = [],
   globalSearch = "",
 }) {
   const [requestFilter, setRequestFilter] = useState("inbox");
@@ -4709,6 +4709,7 @@ function AdminDashboard({
           scheduleDays={activeScheduleDays}
           sectors={activeSectors}
           users={activeUsers}
+          municipalities={municipalities}
           onClose={closeRequestPreview}
           onApprove={approveRequest}
           onReject={rejectRequestFromProcess}
@@ -4762,7 +4763,7 @@ function isAnimalPhotoDocument(d: AnyRecord = {}) {
   return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
 }
 
-export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [] }: AnyRecord) {
+export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -5595,6 +5596,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
       {prescriptionModalOpen && (
         <PrescriptionModal
           request={request}
+          municipality={getPrescriptionMunicipality(request, municipalities)}
           initialText={attendanceData.receita}
           onSave={(text) => setAttendanceData((d) => ({ ...d, receita: text }))}
           onClose={() => setPrescriptionModalOpen(false)}
@@ -5684,31 +5686,114 @@ function PwaInstallPrompt() {
 }
 
 
-function PrescriptionModal({ request, initialText, onSave, onClose }: AnyRecord) {
+function getPrescriptionMunicipality(request: AnyRecord = {}, municipalities: AnyRecord[] = []) {
+  const normalizedRequest = normalizeRequest(request);
+  const municipalityId = normalizedRequest.municipalityId || getItemMunicipalityId(request);
+  const municipalityName = normalizedRequest.municipalityName || normalizedRequest.scheduleMunicipality || "";
+  return municipalities.find((item) => String(item.id || "") === String(municipalityId || ""))
+    || municipalities.find((item) => normalizeText(item.name || "") === normalizeText(municipalityName))
+    || { name: municipalityName };
+}
+
+function buildPrescriptionInstitutionName(municipality: AnyRecord = {}, request: AnyRecord = {}) {
+  const normalizedRequest = normalizeRequest(request);
+  const name = displayText(municipality.name || normalizedRequest.municipalityName || normalizedRequest.scheduleMunicipality || "");
+  if (!name) return "Sistema Municipal de Bem-Estar Animal";
+  return /^prefeitura/i.test(name) ? name : `Prefeitura Municipal de ${name}`;
+}
+
+function buildPrescriptionFooterLines(municipality: AnyRecord = {}) {
+  const location = [municipality.address, municipality.cep ? `CEP ${formatCep(municipality.cep)}` : ""].filter(Boolean).join(" - ");
+  const contact = [municipality.contact, municipality.email].filter(Boolean).join(" | ");
+  return [location, contact].filter(Boolean);
+}
+
+function buildPrescriptionPrintHtml(request: AnyRecord = {}, prescriptionText = "", municipality: AnyRecord = {}) {
+  const normalizedRequest = normalizeRequest(request);
+  const animal = normalizedRequest.animals?.[0] || {};
+  const microchip = normalizedRequest.animalMicrochip || animal.microchip || "";
+  const institutionName = buildPrescriptionInstitutionName(municipality, normalizedRequest);
+  const municipalityName = displayText(municipality.name || normalizedRequest.municipalityName || normalizedRequest.scheduleMunicipality || "");
+  const footerLines = buildPrescriptionFooterLines(municipality);
+  const logo = municipality.brasao
+    ? `<img class="rx-logo" src="${escapeHtml(municipality.brasao)}" alt="Brasão" />`
+    : `<div class="rx-logo-fallback">SM</div>`;
+  const animalLine = [animal.name || "Animal sem nome", animal.species, animal.sex, microchip ? `Chip: ${microchip}` : ""].filter(Boolean).join(" · ");
+  const prescriptionHtml = escapeHtml(prescriptionText).replace(/\n/g, "<br />");
+
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Receita Veterinária${normalizedRequest.protocol ? ` - ${escapeHtml(normalizedRequest.protocol)}` : ""}</title>
+    <style>
+      ${PDF_BASE_STYLES}
+      body { padding: 26px; }
+      .rx-page { min-height: calc(100vh - 52px); display: flex; flex-direction: column; }
+      .rx-header { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid #dbeaf3; }
+      .rx-logo, .rx-logo-fallback { width: 56px; height: 56px; object-fit: contain; }
+      .rx-logo-fallback { display: grid; place-items: center; border: 1px solid #dbeaf3; border-radius: 12px; color: #0f5132; font-weight: 800; background: #f8fafc; }
+      .rx-heading h1 { margin: 0; font-size: 21px; color: #172026; }
+      .rx-heading p { margin: 4px 0 0; color: #64748b; font-size: 11px; }
+      .rx-protocol { min-width: 132px; border: 1px solid #c9efd7; background: #eefbf3; border-radius: 10px; padding: 9px 11px; text-align: right; color: #0f5132; }
+      .rx-protocol span { display: block; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+      .rx-protocol strong { display: block; margin-top: 3px; font-size: 13px; }
+      .rx-patient { margin-top: 18px; color: #334155; font-size: 12px; line-height: 1.5; }
+      .rx-patient strong { color: #172026; }
+      .rx-symbol { margin-top: 30px; font-family: Georgia, serif; font-size: 38px; font-weight: 800; font-style: italic; color: #15803d; line-height: 1; }
+      .rx-prescription { margin-top: 8px; padding-top: 16px; border-top: 1px solid #dbeaf3; color: #172026; font-size: 14px; line-height: 1.75; white-space: normal; }
+      .rx-footer { margin-top: auto; padding-top: 18px; border-top: 1px solid #dbeaf3; display: flex; justify-content: space-between; gap: 16px; color: #64748b; font-size: 10px; }
+      .rx-footer span { display: block; }
+      @media print { body { padding: 0; } .rx-page { min-height: 100vh; } }
+    </style>
+  </head>
+  <body>
+    <main class="rx-page">
+      <header class="rx-header">
+        ${logo}
+        <div class="rx-heading">
+          <h1>${escapeHtml(institutionName)}</h1>
+          <p>Receita Veterinária${municipalityName ? ` · ${escapeHtml(municipalityName)}` : ""}</p>
+        </div>
+        <div class="rx-protocol"><span>Protocolo</span><strong>${escapeHtml(normalizedRequest.protocol ? `#${normalizedRequest.protocol}` : "-")}</strong></div>
+      </header>
+
+      <section class="rx-patient">
+        <div><strong>Paciente:</strong> ${escapeHtml(animalLine || "Animal sem nome")}</div>
+        <div><strong>Tutor:</strong> ${escapeHtml(normalizedRequest.tutor || "-")}</div>
+      </section>
+
+      <section>
+        <div class="rx-symbol">Rx</div>
+        <div class="rx-prescription">${prescriptionHtml || "-"}</div>
+      </section>
+
+      <footer class="rx-footer">
+        <div>
+          <span>${escapeHtml(footerLines[0] || "Sistema Municipal de Bem-Estar Animal")}</span>
+          <span>${escapeHtml(footerLines[1] || "Receita emitida pelo sistema municipal")}</span>
+        </div>
+        <span>Emitido em ${new Date().toLocaleDateString("pt-BR")}</span>
+      </footer>
+    </main>
+  </body>
+</html>`;
+}
+
+function PrescriptionModal({ request, municipality, initialText, onSave, onClose }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const principalAnimal = normalizedRequest.animals?.[0] || {};
   const [text, setText] = useState(initialText || "");
-  const [previewDoc, setPreviewDoc] = useState(null);
-  const [generating, setGenerating] = useState(false);
 
-  async function handleGenerate() {
+  function handleGenerate() {
     if (!text.trim()) return;
-    setGenerating(true);
-    try {
-      setPreviewDoc(await generatePrescriptionPdf(request, text));
-    } catch (err) {
-      console.error("Erro ao gerar receita:", err);
-    } finally {
-      setGenerating(false);
-    }
+    onSave?.(text);
+    printHtmlViaIframe(buildPrescriptionPrintHtml(request, text, municipality));
   }
 
-  function handleSave() {
-    onSave(text);
-    onClose();
-  }
-
-  const animalLabel = [principalAnimal.name, principalAnimal.species, principalAnimal.sex].filter(Boolean).join(" · ");
+  const animalLabel = [displayText(principalAnimal.name) || "Animal sem nome", principalAnimal.species, principalAnimal.sex]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="modal-backdrop">
@@ -5716,7 +5801,7 @@ function PrescriptionModal({ request, initialText, onSave, onClose }: AnyRecord)
         <header className="prescription-modal-header">
           <div className="prescription-modal-title">
             <h2>Receita Veterinária</h2>
-            {animalLabel && <p>{animalLabel} · {displayText(normalizedRequest.tutor)}</p>}
+            <p>{[animalLabel, displayText(normalizedRequest.tutor) && `Tutor: ${displayText(normalizedRequest.tutor)}`].filter(Boolean).join(" · ")}</p>
           </div>
           <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
             <X size={17} />
@@ -5724,18 +5809,6 @@ function PrescriptionModal({ request, initialText, onSave, onClose }: AnyRecord)
         </header>
 
         <div className="prescription-modal-body">
-          <div className="prescription-patient-strip">
-            <div className="prescription-patient-tag">
-              <strong>{displayText(principalAnimal.name) || "Animal"}</strong>
-              {principalAnimal.species && <span>{displayText(principalAnimal.species)}</span>}
-              {principalAnimal.sex && <span>{displayText(principalAnimal.sex)}</span>}
-              {(normalizedRequest.animalMicrochip || principalAnimal.microchip) && (
-                <span className="prescription-chip-tag">Chip: {normalizedRequest.animalMicrochip || principalAnimal.microchip}</span>
-              )}
-            </div>
-            {request.protocol && <span className="prescription-proto">#{request.protocol}</span>}
-          </div>
-
           <div className="prescription-rx-area">
             <span className="prescription-rx-symbol">Rx</span>
             <label className="field prescription-field">
@@ -5743,131 +5816,30 @@ function PrescriptionModal({ request, initialText, onSave, onClose }: AnyRecord)
               <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder={"1. Amoxicilina 50mg - 1 comprimido a cada 8h por 7 dias\n2. Meloxicam 0,5mg/kg - 1x ao dia por 3 dias\n\nOrientacoes: manter em repouso nas primeiras 24h..."}
-                rows={10}
+                placeholder={"1. Amoxicilina 50mg - 1 comprimido a cada 8h por 7 dias\n2. Meloxicam 0,5mg/kg - 1x ao dia por 3 dias\n\nOrientações: manter em repouso nas primeiras 24h..."}
+                rows={12}
                 autoFocus
               />
             </label>
-          </div>
-
-          <div className="prescription-sig-row">
-            <span className="prescription-date">{new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}</span>
-            <div className="prescription-sig-line"><span>Responsável técnico</span></div>
           </div>
         </div>
 
         <footer className="prescription-modal-footer">
           <button className="ghost-button" type="button" onClick={onClose}>Cancelar</button>
-          <button className="prm-action-btn prm-action-btn--secondary" type="button" onClick={handleSave}>
-            Salvar
-          </button>
           <button
             className="prm-action-btn prm-action-btn--primary"
             type="button"
-            disabled={!text.trim() || generating}
+            disabled={!text.trim()}
             onClick={handleGenerate}
           >
             <FileText size={15} />
-            {generating ? "Gerando..." : "Gerar PDF"}
+            Gerar PDF
           </button>
         </footer>
       </div>
-
-      {previewDoc && (
-        <DocumentPreviewModal
-          document={previewDoc}
-          onClose={() => setPreviewDoc(null)}
-        />
-      )}
     </div>
   );
 }
-
-async function generatePrescriptionPdf(request: AnyRecord = {}, prescriptionText: string = "") {
-  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
-  const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
-
-  const normalizedRequest = normalizeRequest(request);
-  const animal = normalizedRequest.animals?.[0] || {};
-  const microchip = normalizedRequest.animalMicrochip || animal.microchip || "";
-
-  const colors = {
-    ink: rgb(0.09, 0.13, 0.15),
-    muted: rgb(0.42, 0.49, 0.55),
-    green: rgb(0.07, 0.43, 0.21),
-    greenDark: rgb(0.04, 0.27, 0.13),
-    greenSoft: rgb(0.94, 0.99, 0.96),
-    greenLight: rgb(0.82, 0.97, 0.88),
-    line: rgb(0.82, 0.89, 0.93),
-    white: rgb(1, 1, 1),
-  };
-
-  const pageSize: [number, number] = [595.28, 841.89];
-  const page = pdf.addPage(pageSize);
-  const margin = 50;
-  const width = pageSize[0] - margin * 2;
-  let y = pageSize[1] - margin;
-
-  const headerH = 64;
-  page.drawRectangle({ x: margin, y: y - headerH, width, height: headerH, color: colors.greenDark });
-  page.drawRectangle({ x: margin + width * 0.58, y: y - headerH, width: width * 0.42, height: headerH, color: colors.green });
-  page.drawText("RECEITA VETERINARIA", { x: margin + 14, y: y - 26, size: 17, font: bold, color: colors.white });
-  page.drawText("Sistema Municipal de Bem-Estar Animal", { x: margin + 14, y: y - 46, size: 8, font, color: rgb(0.78, 1, 0.87) });
-  if (request.protocol) {
-    const protoText = pdfText(request.protocol);
-    const boxW = 112;
-    const boxX = margin + width - boxW - 12;
-    page.drawRectangle({ x: boxX, y: y - headerH + 10, width: boxW, height: 44, color: colors.greenDark, borderColor: colors.greenLight, borderWidth: 1 });
-    page.drawText("PROTOCOLO", { x: boxX + 10, y: y - headerH + 38, size: 7, font: bold, color: rgb(0.78, 1, 0.87) });
-    page.drawText(protoText, { x: boxX + 10, y: y - headerH + 20, size: 12, font: bold, color: colors.white });
-  }
-  y = y - headerH - 18;
-
-  const patBoxH = 72;
-  page.drawRectangle({ x: margin, y: y - patBoxH, width, height: patBoxH, color: colors.greenSoft, borderColor: rgb(0.8, 0.94, 0.85), borderWidth: 1 });
-  page.drawRectangle({ x: margin, y: y - patBoxH, width: 4, height: patBoxH, color: colors.green });
-  page.drawText("PACIENTE", { x: margin + 14, y: y - 14, size: 7, font: bold, color: colors.green });
-  page.drawText(pdfText(animal.name || "Sem nome"), { x: margin + 14, y: y - 30, size: 12, font: bold, color: colors.ink });
-  const speciesLine = [animal.species && `Especie: ${pdfText(animal.species)}`, animal.sex && `Sexo: ${pdfText(animal.sex)}`, microchip && `Microchip: ${pdfText(microchip)}`].filter(Boolean).join("   ");
-  if (speciesLine) page.drawText(speciesLine, { x: margin + 14, y: y - 46, size: 9, font, color: colors.ink });
-  page.drawText(`Tutor: ${pdfText(normalizedRequest.tutor || "-")}`, { x: margin + 14, y: y - 62, size: 9, font, color: colors.muted });
-  y = y - patBoxH - 26;
-
-  page.drawText("Rx", { x: margin, y, size: 36, font: italic, color: colors.green });
-  y = y - 16;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + width, y }, thickness: 0.5, color: colors.line });
-  y = y - 20;
-
-  for (const line of prescriptionText.split("\n")) {
-    if (y < margin + 100) break;
-    if (!line.trim()) { y -= 10; continue; }
-    const isMed = /^\d+[\.\-\)]/.test(line.trim());
-    page.drawText(pdfText(line.slice(0, 88)), { x: margin + 10, y, size: isMed ? 11 : 9, font: isMed ? bold : font, color: colors.ink });
-    y -= isMed ? 20 : 15;
-  }
-
-  const footerY = margin + 90;
-  page.drawLine({ start: { x: margin, y: footerY }, end: { x: margin + width, y: footerY }, thickness: 0.5, color: colors.line });
-  page.drawText(pdfText(new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })), { x: margin, y: footerY - 16, size: 9, font, color: colors.muted });
-  const sigX = margin + width / 2 - 60;
-  const sigY = footerY - 56;
-  page.drawLine({ start: { x: sigX, y: sigY }, end: { x: sigX + 120, y: sigY }, thickness: 0.5, color: colors.ink });
-  page.drawText("Responsavel tecnico", { x: sigX + 10, y: sigY - 14, size: 8, font, color: colors.muted });
-  page.drawText("Sistema municipal", { x: margin, y: margin - 12, size: 7, font, color: colors.muted });
-  page.drawText(`Receita Veterinaria${request.protocol ? ` - ${pdfText(request.protocol)}` : ""}`, { x: margin + width - 160, y: margin - 12, size: 7, font, color: colors.muted });
-
-  return {
-    documentName: "Receita Veterinaria",
-    fileName: `Receita ${pdfText(request.protocol || "")}.pdf`.trim(),
-    fileType: "application/pdf",
-    eyebrow: "Receita",
-    dataUrl: uint8ArrayToDataUrl(await pdf.save(), "application/pdf"),
-  };
-}
-
 function AdoptionView({
   adoptionAnimals,
   setAdoptionAnimals,

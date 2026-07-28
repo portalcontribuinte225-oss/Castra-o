@@ -4379,94 +4379,48 @@ main {
 
 .prescription-modal {
   background: #fff;
-  border-radius: 18px;
-  width: min(640px, calc(100vw - 16px));
+  border: 1px solid #dbe4ef;
+  border-radius: 16px;
+  width: min(620px, calc(100vw - 16px));
   max-height: min(88vh, 760px);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 24px 80px rgba(10,20,50,0.22), 0 2px 8px rgba(10,20,50,0.06);
+  box-shadow: 0 18px 54px rgba(15, 23, 42, 0.2), 0 2px 8px rgba(15, 23, 42, 0.06);
 }
 
 .prescription-modal-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 18px 22px 14px;
-  border-bottom: 1px solid #e9eef5;
+  gap: 14px;
+  padding: 18px 20px 13px;
+  border-bottom: 1px solid #e8eef6;
   flex-shrink: 0;
 }
 
 .prescription-modal-title h2 {
-  font-size: 1.05rem;
+  font-size: 1.02rem;
   font-weight: 700;
   color: #0f172a;
-  margin: 0 0 2px;
+  margin: 0 0 3px;
 }
 
 .prescription-modal-title p {
   margin: 0;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: #64748b;
 }
 
 .prescription-modal-body {
   flex: 1;
   overflow-y: auto;
-  padding: 18px 22px;
+  padding: 16px 20px 18px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 13px;
 }
 
-.prescription-patient-strip {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 12px 14px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 10px;
-}
-
-.prescription-patient-tag {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.prescription-patient-tag strong {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #14532d;
-}
-
-.prescription-patient-tag span {
-  font-size: 0.78rem;
-  color: #166534;
-  background: #dcfce7;
-  border-radius: 5px;
-  padding: 2px 8px;
-  font-weight: 500;
-}
-
-.prescription-chip-tag {
-  background: #d1fae5 !important;
-  font-weight: 600 !important;
-}
-
-.prescription-proto {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #166534;
-  background: #dcfce7;
-  border-radius: 6px;
-  padding: 3px 10px;
-  flex-shrink: 0;
-}
 
 .prescription-rx-area {
   display: flex;
@@ -4487,40 +4441,13 @@ main {
   font-family: "Courier New", Courier, monospace;
   font-size: 0.88rem;
   line-height: 1.6;
-  min-height: 200px;
-}
-
-.prescription-sig-row {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  padding-top: 12px;
-  border-top: 1px solid #e9eef5;
-}
-
-.prescription-date {
-  font-size: 0.82rem;
-  color: #64748b;
-}
-
-.prescription-sig-line {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding-top: 24px;
-  border-top: 1px solid #0f172a;
-  min-width: 160px;
-}
-
-.prescription-sig-line span {
-  font-size: 0.75rem;
-  color: #64748b;
+  min-height: 255px;
+  resize: vertical;
 }
 
 .prescription-modal-footer {
   padding: 12px 20px;
-  border-top: 1px solid #e9eef5;
+  border-top: 1px solid #e8eef6;
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -4556,10 +4483,13 @@ main {
     border-radius: 14px;
   }
 
-  .prescription-sig-row { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .prescription-modal-header,
+  .prescription-modal-body,
+  .prescription-modal-footer {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
 }
-
-
 .reschedule-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -6001,6 +5931,7 @@ main {
   gap: 2px;
   padding: 6px 8px;
   min-height: 42px;
+  white-space: nowrap;
 }
 
 
@@ -21056,6 +20987,7 @@ form textarea:focus,
 .nr-shell--public .health-grid {
   grid-template-columns: 1fr;
   gap: 0;
+  margin-top: -10px;
 }
 
 
@@ -21684,7 +21616,7 @@ form textarea:focus,
   height: auto;
   max-height: none;
   overflow: visible;
-  padding: 0 0 42px;
+  padding: 0 0 18px;
   position: relative;
   z-index: 2;
 }
@@ -22178,7 +22110,7 @@ form textarea:focus,
   position: static;
   width: 100%;
   max-width: none;
-  margin: 12px 0 0;
+  margin: 6px 0 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -22199,42 +22131,32 @@ form textarea:focus,
   flex: 1 1 auto;
 }
 
-.public-service-panel .nr-back-btn {
+.public-service-panel .nr-back-btn,
+.public-service-panel .nr-topbar-continue {
   min-height: 38px;
   padding: 0 16px;
-  border: 1px solid #d9e2ef;
+  border: 1px solid #020817;
   border-radius: 12px;
-  background: #ffffff;
-  color: #344054;
+  background: #020817;
+  color: #ffffff;
   font-size: 0.84rem;
   font-weight: 800;
   box-shadow: none;
 }
 
-.public-service-panel .nr-back-btn:hover {
-  border-color: #c8d4e4;
-  background: #f8fafc;
-  color: #111827;
+.public-service-panel .nr-back-btn:hover,
+.public-service-panel .nr-topbar-continue:hover:not(:disabled) {
+  border-color: #101828;
+  background: #101828;
+  color: #ffffff;
+  box-shadow: none;
 }
 
 .public-service-panel .nr-topbar-continue {
   width: auto;
   min-width: 104px;
   flex: 0 0 auto;
-  min-height: 38px;
   margin-left: auto;
-  padding: 0 16px;
-  border: 1px solid #020817;
-  border-radius: 12px;
-  background: #020817;
-  color: #ffffff;
-  box-shadow: none;
-}
-
-.public-service-panel .nr-topbar-continue:hover:not(:disabled) {
-  border-color: #101828;
-  background: #101828;
-  box-shadow: none;
 }
 
 .public-service-panel .nr-topbar-home {
@@ -24304,7 +24226,6 @@ textarea::placeholder,
 
 .access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.nr-shell .nr-topbar-continue,
 .public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action {
@@ -24316,7 +24237,6 @@ textarea::placeholder,
 
 .access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
-.nr-shell .nr-topbar-continue:hover:not(:disabled),
 .public-inline-actions .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
 .clean-requests-workspace .workspace-heading .primary-action:hover:not(:disabled) {
@@ -25074,7 +24994,6 @@ main,
 .panel-header > .primary-action,
 .access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.nr-shell .nr-topbar-continue,
 .public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action,
@@ -25103,7 +25022,6 @@ main,
 .panel-header > .primary-action:hover:not(:disabled),
 .access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
-.nr-shell .nr-topbar-continue:hover:not(:disabled),
 .public-inline-actions .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
 .clean-requests-workspace .workspace-heading .primary-action:hover:not(:disabled),
@@ -25586,7 +25504,6 @@ textarea::placeholder,
 .panel-header > .primary-action,
 .access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.nr-shell .nr-topbar-continue,
 .public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action,
@@ -25799,7 +25716,6 @@ small,
 .panel-header > .primary-action,
 .access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.nr-shell .nr-topbar-continue,
 .public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action,
@@ -25828,7 +25744,6 @@ small,
 .panel-header > .primary-action svg,
 .access-modal > .primary-action svg,
 .adoption-form-modal .primary-action svg,
-.nr-shell .nr-topbar-continue svg,
 .public-inline-actions .primary-action svg,
 .adoption-drawer-actions .primary-action svg,
 .clean-requests-workspace .workspace-heading .primary-action svg,
@@ -25845,7 +25760,6 @@ small,
 .panel-header > .primary-action:hover:not(:disabled),
 .access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
-.nr-shell .nr-topbar-continue:hover:not(:disabled),
 .public-inline-actions .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
 .clean-requests-workspace .workspace-heading .primary-action:hover:not(:disabled),
@@ -25864,7 +25778,6 @@ small,
 .panel-header > .primary-action:focus-visible,
 .access-modal > .primary-action:focus-visible,
 .adoption-form-modal .primary-action:focus-visible,
-.nr-shell .nr-topbar-continue:focus-visible,
 .public-inline-actions .primary-action:focus-visible,
 .adoption-drawer-actions .primary-action:focus-visible,
 .clean-requests-workspace .workspace-heading .primary-action:focus-visible,

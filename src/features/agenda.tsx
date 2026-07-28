@@ -119,6 +119,7 @@ export function AgendaView({
   patchRequest,
   currentUser,
   teams = { sectors: [], users: [] },
+  municipalities = [],
 }: AnyRecord) {
   const [view, setView] = useState<ViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -357,6 +358,7 @@ export function AgendaView({
           scheduleDays={activeScheduleDays}
           sectors={activeSectors}
           users={activeUsers}
+          municipalities={municipalities}
           onClose={closePreview}
           onApprove={approveRequest}
           onReject={rejectRequestFromProcess}
