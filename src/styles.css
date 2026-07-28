@@ -24935,46 +24935,92 @@ main,
 }
 
 .opdash-root {
-  --opdash-action: var(--accent-blue) !important;
-  --opdash-accent: var(--accent-blue) !important;
-  --opdash-accent-2: var(--accent-teal) !important;
-  --opdash-soft: var(--accent-blue-soft) !important;
+  --opdash-action: #526d8f !important;
+  --opdash-accent: #526d8f !important;
+  --opdash-accent-2: #6f879f !important;
+  --opdash-soft: #eef3f8 !important;
+  --opdash-chart: #7f93ad !important;
+  --opdash-chart-soft: #edf2f7 !important;
+  --opdash-ok: #5f8f76 !important;
+  --opdash-ok-soft: #edf7f1 !important;
+  --opdash-warn: #b8894f !important;
+  --opdash-warn-soft: #fbf4ea !important;
+  --opdash-info: #5f7898 !important;
+  --opdash-info-soft: #edf3f8 !important;
 }
 
 .opdash-root.is-gestao {
-  --opdash-action: #2563eb !important;
-  --opdash-accent: #2563eb !important;
-  --opdash-accent-2: #0f766e !important;
-  --opdash-soft: #eff6ff !important;
+  --opdash-action: #526d8f !important;
+  --opdash-accent: #526d8f !important;
+  --opdash-accent-2: #6f879f !important;
+  --opdash-soft: #eef3f8 !important;
+  --opdash-chart: #7f93ad !important;
 }
 
 .opdash-root.is-operacao,
 .opdash-root.is-processos {
-  --opdash-action: #0f766e !important;
-  --opdash-accent: #0f766e !important;
-  --opdash-accent-2: #2563eb !important;
-  --opdash-soft: #f0fdfa !important;
+  --opdash-action: #4f8377 !important;
+  --opdash-accent: #4f8377 !important;
+  --opdash-accent-2: #6f9a90 !important;
+  --opdash-soft: #edf7f4 !important;
+  --opdash-chart: #78a69c !important;
 }
 
 .opdash-root.is-produtividade,
 .opdash-root.is-territorio {
-  --opdash-action: #4f46e5 !important;
-  --opdash-accent: #4f46e5 !important;
-  --opdash-accent-2: #0f766e !important;
-  --opdash-soft: #eef2ff !important;
+  --opdash-action: #626f99 !important;
+  --opdash-accent: #626f99 !important;
+  --opdash-accent-2: #7c88aa !important;
+  --opdash-soft: #f0f2f8 !important;
+  --opdash-chart: #8a96b8 !important;
 }
 
 .opdash-root.is-estatisticas {
-  --opdash-action: #be185d !important;
-  --opdash-accent: #be185d !important;
-  --opdash-accent-2: #2563eb !important;
-  --opdash-soft: #fdf2f8 !important;
+  --opdash-action: #4f7080 !important;
+  --opdash-accent: #4f7080 !important;
+  --opdash-accent-2: #6f8996 !important;
+  --opdash-soft: #eef5f7 !important;
+  --opdash-chart: #7897a4 !important;
+}
+
+.opdash-kpi-head > span,
+.opdash-ranking h3,
+.opdash-trend h3,
+.opdash-decision span,
+.opdash-mini span {
+  font-weight: 500 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.opdash-panel-head strong {
+  font-weight: 600 !important;
+}
+
+.opdash-rank-row span,
+.opdash-funnel-row span,
+.opdash-schedule-row span,
+.opdash-signal span {
+  font-weight: 500 !important;
+}
+
+.opdash-rank-row strong,
+.opdash-funnel-row strong,
+.opdash-schedule-row strong,
+.opdash-decision strong,
+.opdash-signal strong {
+  color: #26364b !important;
+  font-weight: 580 !important;
 }
 
 .opdash-kpi strong,
-.opdash-mini strong,
+.opdash-mini strong {
+  color: var(--opdash-action, #526d8f) !important;
+  font-weight: 620 !important;
+}
+
 .clean-requests-workspace .tc-protocol {
-  color: var(--opdash-action, var(--accent-blue)) !important;
+  color: var(--accent-blue, #2563eb) !important;
 }
 
 .opdash-kpi-icon {
@@ -24983,7 +25029,11 @@ main,
 }
 
 .opdash-kpi::after,
-.opdash-kpi.is-info::after,
+.opdash-kpi.is-info::after {
+  background: var(--opdash-info) !important;
+  box-shadow: 0 0 0 4px var(--opdash-info-soft) !important;
+}
+
 .metric-card::after,
 .summary-card::after,
 .report-card::after,
@@ -24994,39 +25044,40 @@ main,
 }
 
 .opdash-kpi.is-ok::after {
-  background: var(--accent-green) !important;
-  box-shadow: 0 0 0 4px var(--accent-green-soft) !important;
+  background: var(--opdash-ok) !important;
+  box-shadow: 0 0 0 4px var(--opdash-ok-soft) !important;
 }
 
 .opdash-kpi.is-warn::after {
-  background: var(--accent-rose) !important;
-  box-shadow: 0 0 0 4px var(--accent-rose-soft) !important;
+  background: var(--opdash-warn) !important;
+  box-shadow: 0 0 0 4px var(--opdash-warn-soft) !important;
 }
 
 .opdash-rank-track i,
 .opdash-funnel-row i,
 .opdash-progress b,
 .opdash-trend-bars i {
-  background: var(--opdash-action) !important;
+  background: var(--opdash-chart) !important;
 }
 
 .opdash-decision.is-ok,
 .opdash-signal.is-ok {
-  border-color: #bbf7d0 !important;
-  background: #f0fdf4 !important;
+  border-color: #cfe5d8 !important;
+  background: #f3faf6 !important;
 }
 
 .opdash-decision.is-warn,
 .opdash-signal.is-warn {
-  border-color: #fecdd3 !important;
-  background: #fff1f2 !important;
+  border-color: #ead8bd !important;
+  background: #fcf7ef !important;
 }
 
 .opdash-decision.is-info,
 .opdash-signal.is-info {
-  border-color: #bfdbfe !important;
-  background: #eff6ff !important;
+  border-color: #d4e1ee !important;
+  background: #f3f7fb !important;
 }
+
 /* Unified action rows: Agenda rhythm across operational screens */
 .page-toolbar {
   display: flex !important;
@@ -26154,8 +26205,6 @@ h3,
 
 .metric-card strong,
 .summary-card strong,
-.opdash-kpi strong,
-.opdash-mini strong,
 .cr-value,
 .ag-side-stat strong,
 .adoption-rail-person strong,
