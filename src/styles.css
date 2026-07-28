@@ -16333,9 +16333,9 @@ form textarea:focus,
 .config-workspace > .panel.wide {
   width: 100%;
   padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 
@@ -16369,9 +16369,9 @@ form textarea:focus,
   gap: 0;
   border: 1px solid var(--ui-border);
   border-radius: 15px;
-  background: #ffffff;
+  background: transparent;
   overflow: hidden;
-  box-shadow: var(--ui-shadow-line);
+  box-shadow: none;
 }
 
 
@@ -16509,8 +16509,8 @@ form textarea:focus,
 .config-workspace .whatsapp-section {
   border: 1px solid var(--ui-border);
   border-radius: 15px;
-  background: #ffffff;
-  box-shadow: var(--ui-shadow-line);
+  background: transparent;
+  box-shadow: none;
 }
 
 
@@ -16538,7 +16538,6 @@ form textarea:focus,
   border-color: #2563eb;
   background: #2563eb;
 }
-
 
 @media (max-width: 760px) {
 
@@ -17154,9 +17153,13 @@ form textarea:focus,
 .nr-step-circle {
   width: 20px;
   height: 20px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
   background: #f1ede3;
   color: #93887a;
   font-size: 0.68rem;
+  flex-shrink: 0;
 }
 
 
@@ -21904,6 +21907,7 @@ form textarea:focus,
   pointer-events: auto;
 }
 
+/* !important sobrepõe o lock de tema .nr-shell (~L24617, "Neutral background lock"), compartilhado com .request-workspace/.clean-requests-workspace/.opdash-root/etc., fora de escopo */
 .public-service-panel .nr-shell {
   width: 100%;
   min-height: auto;
@@ -22186,10 +22190,7 @@ form textarea:focus,
 }
 
 .public-service-panel .nr-step--current {
-  border-color: rgba(31, 138, 95, 0.18);
-  background: #eaf3ee;
   color: #11684d;
-  box-shadow: none;
 }
 
 .public-service-panel .nr-step--done {
@@ -24243,15 +24244,24 @@ h6,
 .request-card,
 .adoption-card,
 .ag-day-card,
-.ag-drawer-card,
-.config-list-row,
-.config-workspace .ai-settings-card,
-.config-workspace .ai-rules-card,
-.config-workspace .whatsapp-section {
+.ag-drawer-card {
   border-color: var(--ui-border) !important;
   background: var(--surface) !important;
   box-shadow: var(--ui-shadow-line) !important;
 }
+
+.config-workspace > .panel.wide,
+.config-workspace .config-editor-grid,
+.config-workspace .config-list-row,
+.config-workspace .ai-settings-card,
+.config-workspace .ai-rules-card,
+.config-workspace .whatsapp-section,
+.config-workspace .config-modal-options,
+.config-workspace .empty-state {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 
 .brand-mark,
 .metric-icon,
