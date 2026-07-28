@@ -37,6 +37,19 @@ Este projeto não usa `staging` nem branch por feature — o trabalho é feito d
 
 O commit e o push (quando solicitados) ficam a cargo da skill `finalizar`, que também opera direto em `main`.
 
+---
+
+## Comunicação durante a execução
+
+O usuário não quer ver código, diffs nem explicações passo a passo enquanto a implementação está em andamento.
+
+- Ao começar, responda só `codando...` (ou equivalente curto). Nenhum outro texto.
+- Durante a implementação: não narre decisões, não cole trechos de código, não explique o que está sendo lido/editado. Trabalhe em silêncio.
+- Minimize o número de chamadas de ferramenta visíveis (Read/Edit/Bash/Grep): agrupe leituras relacionadas, evite reler o mesmo arquivo, prefira uma investigação ampla (grep bem direcionado) a várias pequenas. Cada tool call aparece no painel de atividade da interface (fora do controle desta skill) — o texto de resposta pode ficar em silêncio, mas o volume de chamadas ainda é visível, então menos chamadas = menos ruído reduzível.
+- Nota: o painel de atividade de ferramentas (Read/Edit/Bash com preview de diff) é renderizado automaticamente pela interface do Claude Code e não pode ser suprimido por instrução de skill — só o texto de resposta e a quantidade/tamanho das chamadas estão sob nosso controle.
+- Exceção: se travar numa decisão que só o usuário pode tomar (ambiguidade real do plano, escolha de produto, confirmação de ação destrutiva) — aí pare e pergunte, mas sem despejar código/diff na pergunta, só o necessário para a decisão.
+- Ao terminar, use o formato da seção "Saída final esperada" abaixo — curto, sem código/diff, terminando com "o que fazer agora?".
+
 
 ## Regras obrigatórias
 
@@ -555,37 +568,16 @@ Antes de concluir:
 
 ## Saída final esperada
 
-Ao finalizar, responda com:
+Sem código, sem diff. Curto — poucas linhas, não seções longas:
 
 ```md
-## Resumo
+finalizei.
 
-- O que foi implementado
-- Áreas afetadas
-- Principais decisões
+- Arquivos: arquivo1, arquivo2
+- Validações: typecheck ok, build ok (ou: o que falhou)
+- [só se houver] riscos/suposições relevantes em 1 linha
 
-## Arquivos alterados
-
-- arquivo 1
-- arquivo 2
-
-## Testes
-
-- testes adicionados
-- testes atualizados
-- cenários cobertos
-
-## Validações executadas
-
-- comando 1: resultado
-- comando 2: resultado
-
-## Observações
-
-- suposições feitas
-- limitações
-- riscos
-- próximos passos recomendados
+o que fazer agora?
 ```
 
-Se algo não pôde ser feito, diga claramente.
+Se algo não pôde ser feito ou uma validação falhou, diga isso na mesma resposta, sem esconder — mas ainda sem código/diff, só a descrição do problema.

@@ -4876,6 +4876,24 @@ main {
 }
 
 
+.reports-filter-grid .field input,
+.reports-filter-grid .field select {
+  min-height: 40px;
+}
+
+
+.reports-filter-actions .primary-action {
+  background: transparent;
+  border-color: var(--action-primary-border);
+  color: var(--action-primary-border);
+}
+
+.reports-filter-actions .primary-action:hover:not(:disabled) {
+  background: var(--action-primary);
+  color: var(--action-primary-ink);
+}
+
+
 .reports-prm-error {
   font-size: 0.83rem;
   color: #c0392b;

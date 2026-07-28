@@ -131,6 +131,8 @@ Quais achados quer que eu aplique?
 
 Só editar arquivos depois de aprovação explícita, e só os itens aprovados — nunca aplicar em massa itens marcados como "suspeita" sem confirmação item a item.
 
+**Fase de aplicação (depois da aprovação):** o usuário não quer ver código/diff aqui. Responda `codando...`, aplique as edições em silêncio, sem narrar cada arquivo. Minimize o número de chamadas de ferramenta (agrupe edições relacionadas, evite reler o mesmo trecho). Ao terminar, resuma em poucas linhas — achados aplicados vs. pulados, resultado de lint/typecheck — sem colar código, terminando com "o que fazer agora?". A fase de relatório (antes da aprovação) continua completa como descrito acima — é o entregável desta skill, não deve ser resumida. Nota: o painel de atividade de ferramentas da interface (preview de Read/Edit/Bash) é automático e não pode ser suprimido por esta skill, mesmo na fase de aplicação silenciosa.
+
 Depois de aplicar, rodar lint/typecheck do escopo afetado (ver `/AGENT.md` — `npm run lint`, `npm run typecheck`, ou os equivalentes com `--prefix frontend`/`--prefix backend`) para garantir que a remoção não quebrou nada.
 
 Esta skill não faz commit nem push — isso é papel da skill `finalizar`.

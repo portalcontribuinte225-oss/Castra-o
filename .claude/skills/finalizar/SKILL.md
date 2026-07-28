@@ -11,6 +11,18 @@ Este projeto **não tem branch `staging`** e **não usa Pull Request**. O fluxo 
 
 ---
 
+# Comunicação durante a execução
+
+O usuário não quer ver código, diffs nem explicações passo a passo enquanto a skill trabalha.
+
+- Ao começar, responda só `codando...` (ou equivalente curto).
+- Durante a revisão/validação: trabalhe em silêncio, sem narrar cada arquivo lido ou comando rodado.
+- O resumo do passo 3 ("Revisar alterações antes do commit") deve ser apresentado, mas curto — lista de arquivos e o objetivo em 1 linha, nunca o diff colado no chat.
+- Ao final (passo 10), use o formato compacto da seção "Resultado esperado" — sem código/diff, terminando com "o que fazer agora?".
+- Minimize o número de chamadas de ferramenta (git status/diff/log, Read, Bash): agrupe o que der, evite repetir a mesma consulta. O painel de atividade de ferramentas da interface do Claude Code (que mostra cada Read/Edit/Bash com preview) é renderizado automaticamente e não pode ser suprimido por esta skill — só o texto de resposta e a quantidade de chamadas estão sob controle.
+
+---
+
 # Fluxo Geral
 
 ```txt
@@ -276,12 +288,18 @@ sem autorização explícita do usuário.
 
 # 10. Resultado esperado
 
-Ao final, informar:
+Sem código, sem diff. Curto:
 
-* commit criado (hash + mensagem)
-* checks executados e resultado
-* push feito (confirmar que `main` local está em sincronia com `origin/main`)
-* riscos ou observações relevantes
+```md
+finalizei.
+
+- commit: <hash curto> — <mensagem em 1 linha>
+- checks: typecheck ok, build ok (ou: o que falhou)
+- push: feito, main sincronizado com origin/main
+- [só se houver] riscos/observações em 1 linha
+
+o que fazer agora?
+```
 
 ---
 
