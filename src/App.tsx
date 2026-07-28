@@ -6542,7 +6542,7 @@ function AdoptionView({
             <aside className="adoption-drawer" role="dialog" aria-modal="true" aria-label={`Ficha de ${displayName}`}>
               <div className={`adoption-drawer-photo ${getAnimalGradient(selectedAdoptionAnimal)}`}>
                 {getAnimalMainPhoto(selectedAdoptionAnimal) ? <img src={getAnimalMainPhoto(selectedAdoptionAnimal)} alt={displayName} /> : <PawPrint size={48} />}
-                <button type="button" onClick={() => setSelectedAdoptionAnimal(null)} aria-label="Fechar ficha"><X size={16} /></button>
+                <button className="adoption-drawer-close" type="button" onClick={() => setSelectedAdoptionAnimal(null)} aria-label="Fechar ficha"><X size={16} /></button>
                 <span className={`adoption-card-status ${statusView.className}`}>{statusView.label}</span>
               </div>
               <div className="adoption-drawer-body">
@@ -6811,18 +6811,18 @@ function DocumentCriteriaColumn({ variant, value, onChange, placeholder }: AnyRe
   const { label, accent } = documentCriteriaVariants[variant as keyof typeof documentCriteriaVariants];
   const count = textToCriteriaList(value).length;
   return (
-    <div className={`document-criteria-column document-criteria-column--${accent}`}>
-      <div className="document-criteria-column-header">
+    <section className={`document-criteria-column document-criteria-column--${accent}`}>
+      <header className="document-criteria-column-header">
         <span>{label}</span>
         <span className="document-criteria-count">{count}</span>
-      </div>
+      </header>
       <textarea
         className="document-criteria-textarea"
         value={value}
-        placeholder={placeholder || "Um critério por linha…"}
+        placeholder={placeholder || "Um crit\u00e9rio por linha\u2026"}
         onChange={(event) => onChange(event.target.value)}
       />
-    </div>
+    </section>
   );
 }
 
@@ -6832,28 +6832,31 @@ function DocumentConfidenceSlider({ value, onChange }: AnyRecord) {
 
   return (
     <div className={`document-confidence-slider${isAdjusting ? " is-adjusting" : ""}`}>
-      <div className="document-confidence-track-wrap">
-        <span className="document-confidence-value-bubble" style={{ left: bubblePosition }}>{value}%</span>
-        <div className="document-confidence-track">
-          <div className="document-confidence-fill" style={{ width: `${value}%` }} />
+      <div className="document-confidence-track-row">
+        <div className="document-confidence-track-wrap">
+          <span className="document-confidence-value-bubble" style={{ left: bubblePosition }}>{value}%</span>
+          <div className="document-confidence-track">
+            <div className="document-confidence-fill" style={{ width: `${value}%` }} />
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={value}
+            onChange={(event) => onChange(Number(event.target.value))}
+            onFocus={() => setIsAdjusting(true)}
+            onBlur={() => setIsAdjusting(false)}
+            onPointerDown={() => setIsAdjusting(true)}
+            onPointerUp={() => setIsAdjusting(false)}
+            onPointerCancel={() => setIsAdjusting(false)}
+            className="document-confidence-range"
+            aria-label="Percentual m\u00ednimo"
+          />
         </div>
-        <input
-          type="range"
-          min={0}
-          max={100}
-          step={1}
-          value={value}
-          onChange={(event) => onChange(Number(event.target.value))}
-          onFocus={() => setIsAdjusting(true)}
-          onBlur={() => setIsAdjusting(false)}
-          onPointerDown={() => setIsAdjusting(true)}
-          onPointerUp={() => setIsAdjusting(false)}
-          onPointerCancel={() => setIsAdjusting(false)}
-          className="document-confidence-range"
-          aria-label="Percentual mínimo"
-        />
+        <span className="document-confidence-static-value">{value}%</span>
       </div>
-      <p>Abaixo deste valor, o documento é enviado para revisão manual em vez de decidido automaticamente.</p>
+      <p>Abaixo deste valor, o documento \u00e9 enviado para revis\u00e3o manual em vez de decidido automaticamente.</p>
     </div>
   );
 }
@@ -9782,28 +9785,26 @@ function ConfigView({
                 </label>
               </div>
 
-              <section className="document-modal-panel">
+              <section className="document-modal-panel document-modal-panel--criteria">
                 <div className="document-section-heading">
                   <span><ListChecks size={15} /> Critérios de análise</span>
                   <small>Digite um critério por linha. As alterações são salvas junto com o botão Salvar deste documento.</small>
                 </div>
-                <div className="document-criteria-grid">
-                  <DocumentCriteriaColumn
-                    variant="required"
-                    value={newRequiredCriterion}
-                    onChange={setNewRequiredCriterion}
-                    placeholder={"Ex: documento legível\nFoto do condutor visível"}
-                  />
-                  <DocumentCriteriaColumn
-                    variant="rejection"
-                    value={newRejectionCriterion}
-                    onChange={setNewRejectionCriterion}
-                    placeholder={"Ex: documento ilegível\nRasura visível no documento"}
-                  />
-                </div>
+                <DocumentCriteriaColumn
+                  variant="required"
+                  value={newRequiredCriterion}
+                  onChange={setNewRequiredCriterion}
+                  placeholder={"Ex: documento leg\u00edvel\nFoto do condutor vis\u00edvel"}
+                />
+                <DocumentCriteriaColumn
+                  variant="rejection"
+                  value={newRejectionCriterion}
+                  onChange={setNewRejectionCriterion}
+                  placeholder={"Ex: documento ileg\u00edvel\nRasura vis\u00edvel no documento"}
+                />
               </section>
               {newDocument.useAi !== false && (
-                <section className="document-modal-panel">
+                <section className="document-modal-panel document-modal-panel--decision">
                   <div className="document-section-heading">
                     <span><ShieldCheck size={15} /> Decisão automática</span>
                   </div>
