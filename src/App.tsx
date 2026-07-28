@@ -39,6 +39,7 @@ import {
   Shield,
   UploadCloud,
   User,
+  UserCheck,
   Users,
   Building2,
   Mail,
@@ -1252,6 +1253,25 @@ function resolveConfiguredDocument(document: AnyRecord = {}, documentTypes: AnyR
   ));
   return configured ? { ...document, ...configured } : document;
 }
+function parseConfigDate(value: any): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  const text = String(value || "").trim();
+  const brMatch = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:,?\s*(\d{2}):(\d{2}))?/);
+  if (brMatch) {
+    const [, day, month, year, hour = "0", minute = "0"] = brMatch;
+    const time = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
+    return Number.isFinite(time) ? time : 0;
+  }
+  const time = new Date(text).getTime();
+  return Number.isFinite(time) ? time : 0;
+}
+
+function wasDocumentConfiguredForRequest(document: AnyRecord = {}, request: AnyRecord = {}): boolean {
+  const requestCreatedAt = parseConfigDate(request.createdAt || request.created_at);
+  const documentCreatedAt = parseConfigDate(document.createdAt || document.created_at);
+  return !requestCreatedAt || !documentCreatedAt || documentCreatedAt <= requestCreatedAt;
+}
 
 function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onRequestCreated, onRequestProcedure, municipalityId, initialService = null, onCloseService }: AnyRecord) {
   const [microchip, setMicrochip] = useState("");
@@ -2449,10 +2469,12 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
           </aside>
 
           <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
-            <div className="public-service-panel-header">
-              <h2>{activePublicServiceDetails?.label || "Serviço"}</h2>
-              <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
-            </div>
+            {activePublicService !== "procedure_form" && (
+              <div className="public-service-panel-header">
+                <h2>{activePublicServiceDetails?.label || "Serviço"}</h2>
+                <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
+              </div>
+            )}
 
             {publicServiceDone ? (
               <div className="public-inline-success public-service-success-card">
@@ -3313,16 +3335,11 @@ function NewRequest({
   ]);
   const [expandedAnimal, setExpandedAnimal] = useState(0);
   const [accepted, setAccepted] = useState(false);
-  const [cepStatus, setCepStatus] = useState("");
   const [documentUploads, setDocumentUploads] = useState<AnyRecord>({});
   const [formStep, setFormStep] = useState(internalSimple ? 0 : 1);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
-  const [smsCode, setSmsCode] = useState("");
-  const [smsInput, setSmsInput] = useState("");
-  const [smsConfirmed, setSmsConfirmed] = useState(canManagePublicAnimalFlows(currentUser.role) || skipTutorStep);
-  const [smsStatus, setSmsStatus] = useState("");
   const [submissionError, setSubmissionError] = useState("");
 
   useEffect(() => {
@@ -3465,59 +3482,12 @@ function NewRequest({
       state: (input) => input.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase(),
     };
     updateRequestField(field, masks[field] ? masks[field](value) : value);
-    if (field === "phone") {
-      setSmsConfirmed(canManagePublicAnimalFlows(currentUser.role));
-      setSmsCode("");
-      setSmsInput("");
-      setSmsStatus("");
-    }
-  }
-
-  function sendSmsCode() {
-    const cleanPhone = requestData.phone.replace(/\D/g, "");
-    if (cleanPhone.length < 10) {
-      setSmsStatus("Informe um celular válido antes de enviar o SMS.");
-      return;
-    }
-
-    const nextCode = String(Math.floor(100000 + Math.random() * 900000));
-    setSmsCode(nextCode);
-    setSmsInput("");
-    setSmsConfirmed(false);
-    setSmsStatus(`SMS enviado para ${requestData.phone}. Código de teste: ${nextCode}`);
-  }
-
-  function confirmSmsCode() {
-    if (!smsCode) {
-      setSmsStatus("Envie o SMS antes de confirmar.");
-      return;
-    }
-
-    if (smsInput.trim() !== smsCode) {
-      setSmsStatus("Código SMS incorreto.");
-      return;
-    }
-
-    setSmsConfirmed(true);
-    setSmsStatus("Celular confirmado por SMS.");
   }
 
   function getRequestValidationIssues() {
     const issues = [];
-    const cleanCpf = requestData.cpf.replace(/\D/g, "");
-    const cleanPhone = requestData.phone.replace(/\D/g, "");
     const filledAnimals = animals.length > 0 ? animals : [{}];
 
-    if (!requestData.tutor.trim()) issues.push("Informe o nome do tutor.");
-    if (cleanCpf.length !== 11) issues.push("Informe um CPF válido.");
-    if (!internalSimple && typeStepTutor) {
-      if (cleanPhone.length < 10) issues.push("Informe um celular válido.");
-      if (!skipTutorStep && !smsConfirmed) issues.push("Confirme o código SMS recebido no celular cadastrado.");
-      if (!requestData.address.trim()) issues.push("Informe o endereço.");
-      if (!requestData.neighborhood.trim()) issues.push("Informe o bairro.");
-      if (!requestData.city.trim()) issues.push("Informe a cidade.");
-      if (requestData.state.trim().length !== 2) issues.push("Informe a UF.");
-    }
     if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
     if (!internalSimple && typeStepAgenda && !requestData.schedule) issues.push("Escolha uma data disponível.");
     else if (!internalSimple && typeStepAgenda && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
@@ -3536,26 +3506,8 @@ function NewRequest({
   }
 
   function getStepIssues(step = formStep) {
-    const cleanCpf = requestData.cpf.replace(/\D/g, "");
-    const cleanPhone = requestData.phone.replace(/\D/g, "");
-
     if (step === 0) {
-      if (internalSimple) {
-        return [
-          !requestData.tutor.trim(),
-          cleanCpf.length !== 11,
-        ].filter(Boolean);
-      }
-      return [
-        !requestData.tutor.trim(),
-        cleanCpf.length !== 11,
-        cleanPhone.length < 10,
-        !smsConfirmed,
-        !requestData.address.trim(),
-        !requestData.neighborhood.trim(),
-        !requestData.city.trim(),
-        requestData.state.trim().length !== 2,
-      ].filter(Boolean);
+      return [];
     }
 
     if (step === 1) {
@@ -3583,23 +3535,9 @@ function NewRequest({
 
   function showInvalid(field) {
     if (!submitAttempted) return false;
-    const cleanCpf = requestData.cpf.replace(/\D/g, "");
-    const cleanPhone = requestData.phone.replace(/\D/g, "");
     const firstAnimal: AnyRecord = animals[0] || {};
     const checks = {
-      tutor: !requestData.tutor.trim(),
-      cpf: cleanCpf.length !== 11,
       email: Boolean(requestData.email.trim()) && !requestData.email.includes("@"),
-      phone: cleanPhone.length < 10 || !smsConfirmed,
-      sms: !smsConfirmed,
-      cep: false,
-      address: !requestData.address.trim(),
-      number: false,
-      neighborhood: !requestData.neighborhood.trim(),
-      city: !requestData.city.trim(),
-      state: requestData.state.trim().length !== 2,
-      animalName: false,
-      animalAge: false,
       type: configuredRequestTypes.length > 0 && !requestData.type,
       species: !firstAnimal.species,
       sex: !firstAnimal.sex,
@@ -3638,21 +3576,13 @@ function NewRequest({
     const maskedCep = formatCep(value);
     updateRequestField("cep", maskedCep);
 
-    if (cleanCep.length !== 8) {
-      setCepStatus("");
-      return;
-    }
-
-    setCepStatus("Buscando endereço...");
+    if (cleanCep.length !== 8) return;
 
     try {
       const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
       const data = await response.json();
 
-      if (data.erro) {
-        setCepStatus("CEP não encontrado.");
-        return;
-      }
+      if (data.erro) return;
 
       setRequestData((current) => ({
         ...current,
@@ -3662,9 +3592,8 @@ function NewRequest({
         city: data.localidade || current.city,
         state: data.uf || current.state,
       }));
-      setCepStatus("Endereço preenchido pelo CEP.");
     } catch {
-      setCepStatus("Não foi possível buscar o CEP agora.");
+      // busca de CEP é apenas conveniência; falha silenciosa não bloqueia o preenchimento manual
     }
   }
 
@@ -3985,12 +3914,17 @@ function NewRequest({
   return (
       <div className={requestShellClassName}>
         <div className={internalCompact ? "nr-topbar nr-topbar--internal" : "nr-topbar"}>
-          {!internalCompact && (
+          {!internalCompact && !publicFlow && (
             <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início">
               <Home size={20} />
             </button>
           )}
           <div className="nr-topbar-stepper">{stepperNode}</div>
+          {publicFlow && onBack && (
+            <button className="nr-topbar-continue nr-topbar-home" type="button" onClick={onBack}>
+              Voltar ao início
+            </button>
+          )}
         </div>
 
         <div className="nr-body">
@@ -4002,11 +3936,11 @@ function NewRequest({
               <>
                 <div className="form-sub-card">
                   <span className="form-sub-card-title">Responsável e contato</span>
-                  <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Nome completo">
+                  <div className="access-field" data-label="Nome completo">
                     <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
                   </div>
                   <div className="two-column-fields">
-                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
+                    <div className="access-field" data-label="CPF">
                       <input type="text" placeholder="000.000.000-00" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
                     </div>
                     <div className="access-field" data-label="CadÚnico (se aplica)">
@@ -4023,49 +3957,33 @@ function NewRequest({
                     <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
                       <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`} data-label="Telefone">
-                      <div className="access-field-action-row">
-                        <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
-                        {!smsCode && !smsConfirmed && (
-                          <button type="button" className="sms-verify-inline-btn" onClick={sendSmsCode}>Verificar</button>
-                        )}
-                      </div>
+                    <div className="access-field" data-label="Telefone">
+                      <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
                     </div>
                   </div>
-                  {(smsCode || smsConfirmed) && (
-                    <div className="sms-verify-row">
-                      <label className={showInvalid("sms") ? "field sms-code-field invalid" : "field sms-code-field"}>
-                        <span>Código SMS</span>
-                        <input value={smsInput} onChange={(event) => setSmsInput(event.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" disabled={smsConfirmed} />
-                      </label>
-                      <button className="ghost-button" type="button" onClick={confirmSmsCode} disabled={smsConfirmed}>Confirmar</button>
-                    </div>
-                  )}
-                  {smsStatus && <p className={smsConfirmed ? "sms-status confirmed" : "sms-status"}>{smsStatus}</p>}
                 </div>
 
                 <div className="form-sub-card">
                   <span className="form-sub-card-title">Endereço</span>
                   <div className="address-lookup-grid">
-                    <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
+                    <div className="access-field" data-label="CEP">
                       <input type="text" placeholder="00000-000" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Número">
+                    <div className="access-field" data-label="Número">
                       <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
+                    <div className="access-field" data-label="UF">
                       <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
                     </div>
                   </div>
-                  {cepStatus && <p className="cep-status">{cepStatus}</p>}
-                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereço">
+                  <div className="access-field" data-label="Endereço">
                     <input type="text" placeholder="Rua, complemento" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
                   </div>
                   <div className="address-city-grid">
-                    <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`} data-label="Bairro">
+                    <div className="access-field" data-label="Bairro">
                       <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`} data-label="Cidade">
+                    <div className="access-field" data-label="Cidade">
                       <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
                     </div>
                   </div>
@@ -4077,10 +3995,10 @@ function NewRequest({
                 <div className="form-sub-card">
                   <span className="form-sub-card-title">Identificação</span>
                   <div className="two-column-fields">
-                    <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Tutor">
+                    <div className="access-field" data-label="Tutor">
                       <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
+                    <div className="access-field" data-label="CPF">
                       <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
                     </div>
                   </div>
@@ -4098,25 +4016,24 @@ function NewRequest({
                 <div className="form-sub-card">
                   <span className="form-sub-card-title">Endereço</span>
                   <div className="address-lookup-grid">
-                    <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
+                    <div className="access-field" data-label="CEP">
                       <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Número">
+                    <div className="access-field" data-label="Número">
                       <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
+                    <div className="access-field" data-label="UF">
                       <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
                     </div>
                   </div>
-                  {cepStatus && <p className="cep-status">{cepStatus}</p>}
-                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereço">
+                  <div className="access-field" data-label="Endereço">
                     <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
                   </div>
                   <div className="address-city-grid">
-                    <div className={`access-field${showInvalid("neighborhood") ? " is-invalid" : ""}`} data-label="Bairro">
+                    <div className="access-field" data-label="Bairro">
                       <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("city") ? " is-invalid" : ""}`} data-label="Cidade">
+                    <div className="access-field" data-label="Cidade">
                       <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
                     </div>
                   </div>
@@ -4129,7 +4046,7 @@ function NewRequest({
                     <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
                       <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("phone") ? " is-invalid" : ""}`} data-label="Telefone">
+                    <div className="access-field" data-label="Telefone">
                       <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
                     </div>
                   </div>
@@ -4171,7 +4088,7 @@ function NewRequest({
 
                       {showTypeSelector && (
                         <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
-                          <span className="anm-type-label">Tipo de solicitação</span>
+                          <span className="anm-type-label">Tipo de solicitação<span className="required-asterisk">*</span></span>
                           <div className="anm-type-cards">
                             {configuredRequestTypes.map((type) => (
                               <button
@@ -4184,19 +4101,14 @@ function NewRequest({
                               </button>
                             ))}
                           </div>
-                        </div>
-                      )}
-
-                      {externalLikeRegistration && (
-                        <div className="access-field" data-label="Nome">
-                          <input type="text" placeholder="Ex: Bidu" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
+                          {showInvalid("type") && <small className="field-error-message">Campo obrigatório</small>}
                         </div>
                       )}
 
                       <div className="animal-choice-grid three-col">
-                        <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} />
-                        <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} />
-                        <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
+                        <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} required />
+                        <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} required />
+                        <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} required />
                       </div>
                       {animal.breedType === "Definida" && (
                         <div className="access-field" data-label="Raça">
@@ -4205,13 +4117,16 @@ function NewRequest({
                       )}
                       {externalLikeRegistration ? (
                         <>
-                          <CompactChoiceField label="Porte" value={animal.size} options={sizeChoiceOptions} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} />
-                          <div className="animal-choice-grid two-col">
-                            <div className="access-field" data-label="Idade">
-                              <input type="text" placeholder="Ex: 2 anos" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
+                          <CompactChoiceField label="Porte" value={animal.size} options={sizeChoiceOptions} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} required />
+                          <div className="animal-choice-grid name-coat-age-row">
+                            <div className="access-field" data-label="Nome">
+                              <input type="text" placeholder="Ex: Bidu" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
                             </div>
                             <div className="access-field" data-label="Pelagem">
                               <input type="text" placeholder="Cor" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
+                            </div>
+                            <div className="access-field" data-label="Idade">
+                              <input type="text" placeholder="Ex: 2 anos" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
                             </div>
                           </div>
                         </>
@@ -4377,8 +4292,9 @@ function NewRequest({
                     <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
                       <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
                       <span className="doc-check-box" />
-                      <span>Li e concordo com os termos</span>
+                      <span>Li e concordo com os termos<span className="required-asterisk">*</span></span>
                     </label>
+                    {showInvalid("accepted") && <small className="field-error-message">Campo obrigatório</small>}
                   </div>
                 </div>
               </div>
@@ -4624,6 +4540,7 @@ function AdminDashboard({
     archiveWithTag,
     rescheduleFromPreview,
     assignFromPreview,
+    assumeFromPreview,
     rejectRequestFromProcess,
     confirmAttendanceFromProcess,
   } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
@@ -4683,28 +4600,6 @@ function AdminDashboard({
   const todayRequests = visibleRequests.filter((r) => isRequestOnScheduleDate(r, today));
   const activeTab = filterTabs.find((tab) => tab.id === requestFilter) || filterTabs[0];
   const activeRequests = todayOnly ? todayRequests : activeTab.requests;
-  const currentTeamUser = activeUsers.find((user) => user.email && currentUser.email && user.email.toLowerCase() === currentUser.email.toLowerCase())
-    || activeUsers.find((user) => user.id === currentUser.id);
-  const currentUserSector = activeSectors.find((sector) => getUserSectorIds(currentTeamUser).includes(sector.id));
-
-  async function assumeRequest(request) {
-    try {
-      await patchRequest?.(
-        request.id,
-        {
-          status: request.status,
-          assignedSectorId: currentUserSector?.id || request.assignedSectorId || "",
-          assignedSectorName: currentUserSector?.name || request.assignedSectorName || "Sem setor",
-          assignedUserId: currentTeamUser?.id || currentUser.id || "",
-          responsible: currentTeamUser?.name || currentUser.name || "Usuário atual",
-          tags: mergeTags(request.tags, ["ATRIBUIDA"]),
-        },
-        `Assumida por ${currentTeamUser?.name || currentUser.name || "usuário atual"}`,
-      );
-      showToast("Processo assumido com sucesso", "success");
-    } catch { showToast("Erro ao assumir processo", "error"); }
-  }
-
   async function notAttendedRequest(request) {
     const patch = { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Não compareceu" } };
     try {
@@ -4821,6 +4716,7 @@ function AdminDashboard({
           onAttendance={confirmAttendanceFromProcess}
           onReschedule={rescheduleFromPreview}
           onAssign={assignFromPreview}
+          onAssume={assumeFromPreview}
           patchRequest={patchRequest}
         />
       )}
@@ -4866,7 +4762,7 @@ function isAnimalPhotoDocument(d: AnyRecord = {}) {
   return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
 }
 
-export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [] }: AnyRecord) {
+export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -4882,6 +4778,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   );
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [selectedRescheduleDate, setSelectedRescheduleDate] = useState("");
+  const [manualRescheduleDate, setManualRescheduleDate] = useState("");
   const [attendanceData, setAttendanceData] = useState({
     microchip: normalizedRequest.animalMicrochip || normalizedRequest.animals?.find((animal) => animal.microchip)?.microchip || "",
     receita: normalizedRequest.workflow_data?.attendancePrescription || normalizedRequest.workflowData?.attendancePrescription || "",
@@ -4901,6 +4798,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
   const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
   const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
+  const assumeDisabledTitle = "Assumir este processo";
 
   const uploadedDocs = getUserUploadedProcessDocuments(request.documents);
   const requestTypeConfig = requestTypes.find(
@@ -4908,7 +4806,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   );
   const requiredDocTypes = (requestTypeConfig?.documents || [])
     .map(normalizeDocumentType)
-    .filter((dt) => dt.active !== false);
+    .filter((dt) => dt.active !== false && wasDocumentConfiguredForRequest(dt, normalizedRequest));
 
   const requerimento = {
     id: `requerimento-${request.protocol || request.id || "processo"}`,
@@ -5338,8 +5236,37 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   }
 
   function renderInlineReschedule() {
+    function maskScheduleDateInput(value: string) {
+      const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
+      if (digits.length <= 2) return digits;
+      if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+      return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    }
+
+    function isValidManualScheduleDate(value: string) {
+      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return false;
+      const [day, month, year] = value.split("/").map(Number);
+      const date = new Date(year, month - 1, day);
+      return date.getFullYear() === year
+        && date.getMonth() === month - 1
+        && date.getDate() === day
+        && !isPastScheduleDay(value);
+    }
+
+    function selectRescheduleDate(date: string) {
+      setSelectedRescheduleDate(date);
+      setManualRescheduleDate(date);
+    }
+
+    function updateManualRescheduleDate(value: string) {
+      const nextDate = maskScheduleDateInput(value);
+      setManualRescheduleDate(nextDate);
+      setSelectedRescheduleDate(isValidManualScheduleDate(nextDate) ? nextDate : "");
+    }
+
     function cancelReschedule() {
       setSelectedRescheduleDate("");
+      setManualRescheduleDate("");
       setRescheduleReason("");
       setActivePanel(null);
     }
@@ -5348,6 +5275,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
       if (!selectedRescheduleDate) return;
       onReschedule?.(request, selectedRescheduleDate, rescheduleReason);
       setSelectedRescheduleDate("");
+      setManualRescheduleDate("");
       setRescheduleReason("");
       setActivePanel(null);
     }
@@ -5355,18 +5283,25 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     return (
       <div className="prm-inline-panel">
         <div className="prm-inline-panel-heading">
-          <div>
-            <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Reagendar atendimento</strong>
-            <p className="prm-inline-panel-note">Escolha uma nova data para a agenda.</p>
+          <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Reagendar atendimento</strong>
+          <div className="prm-reschedule-date-group">
+            <span className="prm-reschedule-current">Atual: {normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>
+            <input
+              className="prm-reschedule-date-input"
+              value={manualRescheduleDate}
+              onChange={(event) => updateManualRescheduleDate(event.target.value)}
+              placeholder="dd/mm/aaaa"
+              inputMode="numeric"
+              aria-label="Data especifica"
+            />
           </div>
-          <span className="prm-reschedule-current">Atual: {normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>
         </div>
-        <label className="field">
-          <span>Motivo do reagendamento</span>
+        <label className="field prm-reschedule-reason">
           <textarea
             value={rescheduleReason}
             onChange={(event) => setRescheduleReason(event.target.value)}
             placeholder="Motivo operacional"
+            aria-label="Motivo do reagendamento"
           />
         </label>
         {scheduleDays.length === 0
@@ -5379,7 +5314,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                   selected={selectedRescheduleDate === day.date}
                   hasVacancy={day.remaining > 0}
                   disabled={day.remaining <= 0}
-                  onClick={() => setSelectedRescheduleDate(day.date)}
+                  onClick={() => selectRescheduleDate(day.date)}
                 >
                   <span>{day.weekday}</span>
                   <strong>{day.date}</strong>
@@ -5459,9 +5394,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
               </div>
           )}
 
-          {isRescheduleMode && (
-            <div className="prm-inline-panel-wrap">{renderInlineReschedule()}</div>
-          )}
+          {isRescheduleMode && renderInlineReschedule()}
 
           {!isRescheduleMode && (
             <div className="prm-tabs">
@@ -5566,6 +5499,16 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                 >
                   <User size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
                 </button>
+                {onAssume && (
+                  <button
+                    className="prm-action-btn prm-action-btn--secondary"
+                    type="button"
+                    title={assumeDisabledTitle}
+                    onClick={() => onAssume?.(request)}
+                  >
+                    <UserCheck size={15} /> Assumir
+                  </button>
+                )}
                 {activePanel !== "reject" && (
                   <button
                     className="prm-action-btn prm-action-btn--danger"
@@ -5593,6 +5536,16 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
           )}
           {canUseAttendanceActions && (
             <>
+              {onAssume && (
+                <button
+                  className="prm-action-btn prm-action-btn--secondary"
+                  type="button"
+                  title={assumeDisabledTitle}
+                  onClick={() => onAssume?.(request)}
+                >
+                  <UserCheck size={15} /> Assumir
+                </button>
+              )}
               <button
                 className="prm-action-btn prm-action-btn--warning"
                 type="button"
@@ -7346,7 +7299,7 @@ function ConfigView({
       );
       return;
     }
-    setDocumentTypes?.((current) => [...current, normalizeDocumentType(buildDocumentPayload(payload))]);
+    setDocumentTypes?.((current) => [...current, normalizeDocumentType(buildDocumentPayload({ ...payload, createdAt: new Date().toISOString() }))]);
   }
   function patchDocumentType(documentId, patch) {
     setDocumentTypes?.((current) => current.map((document) => (matchesScopedConfigItem(document, documentId) ? normalizeDocumentType({ ...document, ...patch }) : document)));

@@ -161,10 +161,10 @@ export function ToggleChoiceField({ label, value, options, onChange }: AnyRecord
   );
 }
 
-export function CompactChoiceField({ label, value, options, onChange, invalid = false }: AnyRecord) {
+export function CompactChoiceField({ label, value, options, onChange, invalid = false, required = false }: AnyRecord) {
   return (
     <div className={`compact-choice-field ${invalid ? "invalid" : ""}`}>
-      <span>{label}</span>
+      <span>{label}{required && <span className="required-asterisk">*</span>}</span>
       <div>
         {(options || []).map((option) => {
           const item = typeof option === "string" ? { label: option, value: option } : option;
@@ -177,6 +177,7 @@ export function CompactChoiceField({ label, value, options, onChange, invalid = 
           );
         })}
       </div>
+      {invalid && <small className="field-error-message">Campo obrigatório</small>}
     </div>
   );
 }

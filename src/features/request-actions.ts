@@ -11,6 +11,10 @@ export function getPerformedProceduresLabel(request: AnyRecord = {}) {
 
 type ShowToast = (message: string, type?: "success" | "error" | "info" | "warning") => void;
 
+function getActionUserSectorIds(user: AnyRecord = {}) {
+  const ids = Array.isArray(user.sectorIds) ? user.sectorIds : [];
+  return [...new Set([...ids, user.sectorId].filter(Boolean))];
+}
 export function useRequestActions({
   patchRequest,
   currentUser,
@@ -32,6 +36,9 @@ export function useRequestActions({
 
   const activeUsers = teams.users?.filter((user: AnyRecord) => user.active !== false) || [];
   const activeSectors = teams.sectors?.filter((sector: AnyRecord) => sector.active !== false) || [];
+  const currentTeamUser = activeUsers.find((user: AnyRecord) => user.email && currentUser?.email && user.email.toLowerCase() === currentUser.email.toLowerCase())
+    || activeUsers.find((user: AnyRecord) => user.id === currentUser?.id);
+  const currentUserSector = activeSectors.find((sector: AnyRecord) => getActionUserSectorIds(currentTeamUser).includes(sector.id));
   const activeScheduleDays = scheduleDays
     .filter((day: AnyRecord) => day.active !== false && !isPastScheduleDay(day.date))
     .map((day: AnyRecord) => ({ ...day, remaining: Math.max((day.vacancies || 0) - countUsedVacancies(requests, day.date), 0) }));
@@ -113,6 +120,30 @@ export function useRequestActions({
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
+  async function assumeFromPreview(request: AnyRecord) {
+    if (!request) return;
+    const currentAssignedSector = activeSectors.find((sector: AnyRecord) => sector.id === request.assignedSectorId);
+    const sector = currentUserSector || currentAssignedSector || activeSectors[0];
+    if (!sector) {
+      showToast("Nenhum setor ativo disponivel para assumir o processo", "error");
+      return;
+    }
+    const userId = currentTeamUser?.id || currentUser?.id || "";
+    const userName = currentTeamUser?.name || currentUser?.name || "Usuario atual";
+    const patch = {
+      status: request.status,
+      assignedSectorId: sector.id,
+      assignedSectorName: sector.name,
+      assignedUserId: userId,
+      responsible: userName,
+      tags: mergeTags(request.tags, ["ATRIBUIDA"]),
+    };
+    try {
+      await patchRequest?.(request.id, patch, `Assumida por ${userName}`);
+      showToast("Processo assumido com sucesso", "success");
+    } catch { showToast("Erro ao assumir processo", "error"); }
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+  }
   async function rejectRequestFromProcess(request: AnyRecord, data: AnyRecord = {}) {
     if (!request) return;
     const note = String(data.note || "").trim();
@@ -172,6 +203,7 @@ export function useRequestActions({
     archiveWithTag,
     rescheduleFromPreview,
     assignFromPreview,
+    assumeFromPreview,
     rejectRequestFromProcess,
     confirmAttendanceFromProcess,
   };

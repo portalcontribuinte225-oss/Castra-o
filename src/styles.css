@@ -1493,6 +1493,21 @@ button:disabled {
 }
 
 
+.required-asterisk {
+  margin-left: 3px;
+  color: #ef4444;
+}
+
+
+.field-error-message {
+  display: block;
+  margin-top: 4px;
+  color: #ef4444;
+  font-size: 0.76rem;
+  font-weight: 500;
+}
+
+
 .access-field.is-invalid .access-field-icon {
   color: #ef4444;
 }
@@ -2947,11 +2962,6 @@ button:disabled {
 }
 
 
-.sms-code-field {
-  min-width: 120px;
-}
-
-
 .sms-status {
   margin: 0;
   color: var(--muted);
@@ -3035,18 +3045,6 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
-}
-
-
-.sms-verify-row {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-}
-
-
-.sms-verify-row .field {
-  flex: 1;
 }
 
 
@@ -5847,6 +5845,11 @@ main {
 
 .animal-choice-grid.three-col {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+
+.animal-choice-grid.name-coat-age-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 0.8fr);
 }
 
 
@@ -15576,22 +15579,10 @@ body * {
   .public-form-page:not(.public-form-page--consultation) .address-lookup-grid,
   .public-form-page:not(.public-form-page--consultation) .address-city-grid,
   .public-form-page:not(.public-form-page--consultation) .phone-validation-row,
-  .public-form-page:not(.public-form-page--consultation) .sms-verify-row,
   .public-form-page:not(.public-form-page--consultation) .animal-choice-grid,
   .public-form-page:not(.public-form-page--consultation) .animal-choice-grid.two-col,
   .public-form-page:not(.public-form-page--consultation) .health-grid {
     grid-template-columns: 1fr;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .sms-verify-row {
-    display: grid;
-    gap: 8px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .sms-verify-row .ghost-button {
-    width: 100%;
   }
 
 
@@ -18712,8 +18703,7 @@ main {
 }
 
 .prm-section,
-.prm-inline-panel--reject,
-.prm-inline-panel-wrap {
+.prm-inline-panel--reject {
   margin-top: 16px;
 }
 
@@ -20732,88 +20722,117 @@ form textarea:focus,
 }
 
 .prm-modal--reschedule .prm-body {
-  padding: 16px 20px 20px;
-  overflow: hidden;
-  background: var(--ui-page, #f8fafc);
-}
-
-.prm-modal--reschedule .prm-inline-panel-wrap {
+  display: flex;
   min-height: 0;
-  margin-top: 0;
+  padding: 14px 20px 14px;
+  overflow: hidden;
+  background: #ffffff;
 }
 
 .prm-modal--reschedule .prm-inline-panel {
   display: flex;
+  flex: 1;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
   min-height: 0;
-  max-height: calc(100dvh - 180px);
+  height: 100%;
   margin: 0;
-  padding: 18px;
-  border-color: var(--ui-border, #e2e8f0);
-  border-radius: 22px;
-  background: #ffffff;
-  box-shadow: var(--ui-shadow-line, 0 1px 2px rgba(15, 23, 42, 0.035));
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .prm-modal--reschedule .prm-inline-panel-heading {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 14px;
+  flex-shrink: 0;
 }
 
 .prm-modal--reschedule .prm-inline-panel-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--ui-ink, #020817);
   font-size: 0.96rem;
   font-weight: 650;
 }
 
-.prm-modal--reschedule .prm-inline-panel-note {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 0.84rem;
-}
-
 .prm-modal--reschedule .prm-reschedule-current {
   display: inline-flex;
   align-items: center;
-  min-height: 30px;
-  padding: 0 11px;
-  border: 1px solid var(--ui-border, #e2e8f0);
-  border-radius: 999px;
+  min-height: 38px;
+  min-width: 156px;
+  justify-content: center;
+  padding: 0 14px;
+  border: 1px solid var(--ui-border, #dbe3ef);
+  border-radius: 12px;
   background: #f8fafc;
   color: #334155;
-  font-size: 0.76rem;
+  font-size: 0.88rem;
   font-weight: 650;
   white-space: nowrap;
 }
 
-.prm-modal--reschedule .field textarea {
-  min-height: 86px;
-  resize: vertical;
+.prm-reschedule-date-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 0;
 }
 
-.prm-modal--reschedule .field textarea:focus {
+.prm-reschedule-date-input {
+  width: 148px;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--ui-border, #dbe3ef);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--ui-ink, #020817);
+  font-size: 0.88rem;
+  outline: none;
+}
+
+.prm-reschedule-date-input:focus {
   border-color: var(--ui-action, #020817);
   box-shadow: 0 0 0 3px rgba(2, 8, 23, 0.08);
 }
 
-.prm-modal--reschedule .prm-inline-panel .reschedule-grid {
+.prm-modal--reschedule .field.prm-reschedule-reason {
+  margin: 0;
+}
+
+.prm-modal--reschedule .field.prm-reschedule-reason textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.prm-modal--reschedule .field.prm-reschedule-reason textarea:focus {
+  border-color: var(--ui-action, #020817);
+  box-shadow: 0 0 0 3px rgba(2, 8, 23, 0.08);
+}
+
+.prm-modal--reschedule .reschedule-grid {
+  flex: 1;
   grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
+  align-content: start;
   gap: 10px;
   min-height: 0;
-  max-height: min(46vh, 430px);
+  max-height: none;
   padding-right: 4px;
   overflow: auto;
 }
 
 .prm-modal--reschedule .calendar-day-button,
 .prm-modal--reschedule .calendar-day-button.has-vacancy {
-  min-height: 74px;
+  min-height: 72px;
   padding: 9px 10px;
   border-color: var(--ui-border, #e2e8f0);
-  border-radius: 16px;
+  border-radius: 14px;
   background: #ffffff;
   color: var(--ui-ink, #020817);
   box-shadow: none;
@@ -20912,13 +20931,11 @@ form textarea:focus,
   }
 
   .prm-modal--reschedule .prm-body {
-    padding: 10px;
+    padding: 12px;
   }
 
   .prm-modal--reschedule .prm-inline-panel {
-    max-height: calc(100dvh - 150px);
-    padding: 14px;
-    border-radius: 18px;
+    height: 100%;
   }
 
   .prm-modal--reschedule .prm-inline-panel-heading {
@@ -20926,16 +20943,25 @@ form textarea:focus,
     flex-direction: column;
   }
 
+  .prm-reschedule-date-group {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
   .prm-modal--reschedule .prm-reschedule-current {
     width: fit-content;
+    min-width: 156px;
   }
 
-  .prm-modal--reschedule .prm-inline-panel .reschedule-grid {
+  .prm-reschedule-date-input {
+    width: 148px;
+  }
+
+  .prm-modal--reschedule .reschedule-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-height: 44vh;
+    max-height: none;
   }
 }
-
 
 /* Fluxo público de solicitação (Solicitações v2): paleta verde/creme.
    Escopado a .nr-shell--public (presente só quando publicFlow=true) para não
@@ -21038,13 +21064,13 @@ form textarea:focus,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 9px 0;
+  padding: 6px 0;
   border-bottom: 1px solid #f1ede3;
 }
 
 
 .nr-shell--public .yes-no-toggle-field > span {
-  font-size: 0.86rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: #2b2420;
 }
@@ -21459,30 +21485,6 @@ form textarea:focus,
   min-width: 0;
 }
 
-.nr-shell--public .sms-verify-inline-btn {
-  flex-shrink: 0;
-  border: 1px solid #e6ddc9;
-  border-radius: 10px;
-  padding: 0 16px;
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  font-family: "Poppins", sans-serif;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #1f8a5f;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.nr-shell--public .sms-verify-inline-btn:hover {
-  background: #eaf3ee;
-  border-color: #1f8a5f;
-}
-
 /* Botão quadrado do CadÚnico "se aplica" — checkbox real escondido (acessível),
    quadrado verde+check quando marcado, borda creme quando não. Reaproveita o
    mesmo truque CSS (::after com borda rotacionada) já usado em .doc-check-box. */
@@ -21678,7 +21680,7 @@ form textarea:focus,
   display: grid;
   align-self: start;
   align-content: start;
-  gap: 14px;
+  gap: 8px;
   height: auto;
   max-height: none;
   overflow: visible;
@@ -21753,7 +21755,7 @@ form textarea:focus,
 }
 
 .public-service-panel .nr-topbar {
-  padding: 6px 0 10px;
+  padding: 4px 0 6px;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -21761,7 +21763,7 @@ form textarea:focus,
 }
 
 .public-service-panel .nr-body {
-  padding: 10px 0 0;
+  padding: 4px 0 0;
   background: transparent;
   overflow: visible;
   overscroll-behavior: auto;
@@ -22233,6 +22235,11 @@ form textarea:focus,
   border-color: #101828;
   background: #101828;
   box-shadow: none;
+}
+
+.public-service-panel .nr-topbar-home {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .animal-form-header--card {

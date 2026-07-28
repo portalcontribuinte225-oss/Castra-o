@@ -144,6 +144,7 @@ export function AgendaView({
     archiveWithTag,
     rescheduleFromPreview,
     assignFromPreview,
+    assumeFromPreview,
     rejectRequestFromProcess,
     confirmAttendanceFromProcess,
   } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
@@ -363,6 +364,7 @@ export function AgendaView({
           onAttendance={confirmAttendanceFromProcess}
           onReschedule={rescheduleFromPreview}
           onAssign={assignFromPreview}
+          onAssume={assumeFromPreview}
           patchRequest={patchRequest}
         />
       )}
