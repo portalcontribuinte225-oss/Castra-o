@@ -20926,7 +20926,7 @@ form textarea:focus,
 .clean-requests-workspace .tc-label {
   color: #64748b;
   font-size: 0.68rem;
-  font-weight: 650;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -20934,7 +20934,7 @@ form textarea:focus,
 .clean-requests-workspace .tc-value {
   color: var(--ui-ink);
   font-size: 0.9rem;
-  font-weight: 620;
+  font-weight: 400;
 }
 
 .clean-requests-workspace .triage-card-grid > .empty-state {
@@ -21067,6 +21067,10 @@ form textarea:focus,
 .opdash-kpi strong,
 .opdash-mini strong {
   color: #020817 !important;
+}
+
+.clean-requests-workspace .tc-protocol {
+  font-weight: 600;
 }
 
 .opdash-kpi::after,
@@ -26155,9 +26159,7 @@ h3,
 .cr-value,
 .ag-side-stat strong,
 .adoption-rail-person strong,
-.adoption-visit-item strong,
-.tc-value,
-.clean-requests-workspace .tc-protocol {
+.adoption-visit-item strong {
   font-weight: var(--type-weight-number) !important;
   letter-spacing: 0 !important;
 }
