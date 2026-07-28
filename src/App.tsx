@@ -2477,9 +2477,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 createRequest={createRequest}
                 currentUser={GUEST_USER}
                 publicFlow
-                municipalities={municipalities}
                 selectedMunicipalityId={selectedMunicipalityId}
-                onMunicipalitySelect={onMunicipalitySelect}
                 onBack={closePublicService}
                 onDone={(request) => {
                   const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
@@ -3240,9 +3238,7 @@ function NewRequest({
   compact = false,
   internalSimple = false,
   publicFlow = false,
-  municipalities = [],
   selectedMunicipalityId = "",
-  onMunicipalitySelect = () => {},
   onBack,
   onDone,
   requests = [],
@@ -3320,7 +3316,6 @@ function NewRequest({
   const [expandedAnimal, setExpandedAnimal] = useState(0);
   const [accepted, setAccepted] = useState(false);
   const [cepStatus, setCepStatus] = useState("");
-  const [locationStatus, setLocationStatus] = useState("");
   const [documentUploads, setDocumentUploads] = useState<AnyRecord>({});
   const [formStep, setFormStep] = useState(internalSimple ? 0 : 1);
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -3641,27 +3636,6 @@ function NewRequest({
     setSubmitAttempted(false);
     setFormStep(targetStep);
   }
-  function useCurrentLocation() {
-    if (!navigator.geolocation) {
-      setLocationStatus("Localização atual indisponível neste navegador.");
-      return;
-    }
-
-    setLocationStatus("Solicitando localização atual...");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setRequestData((current) => ({
-          ...current,
-          latitude: position.coords.latitude.toFixed(6),
-          longitude: position.coords.longitude.toFixed(6),
-        }));
-        setLocationStatus("Localização atual registrada.");
-      },
-      () => setLocationStatus("Não foi possível obter a localização atual."),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
-    );
-  }
-
   async function lookupCep(value) {
     const cleanCep = value.replace(/\D/g, "");
     const maskedCep = formatCep(value);
@@ -4099,7 +4073,6 @@ function NewRequest({
                     </div>
                   </div>
                   {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
-                  {locationStatus && <p className="cep-status">{locationStatus}</p>}
                 </div>
               </>
             ) : (
@@ -4151,7 +4124,6 @@ function NewRequest({
                     </div>
                   </div>
                   {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
-                  {locationStatus && <p className="cep-status">{locationStatus}</p>}
                 </div>
 
                 <div className="form-sub-card">
