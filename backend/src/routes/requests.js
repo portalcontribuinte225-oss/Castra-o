@@ -2,7 +2,7 @@ import { Router } from "express";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
-import { normalizeCpf } from "../utils.js";
+import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
 import { isGlobalUser, requireMunicipality } from "../tenant.js";
 import { notifyScheduleConfirmation, whatsappHistoryNote } from "../services/whatsapp.js";
 
@@ -148,7 +148,7 @@ router.post("/consult", async (req, res) => {
   try {
     const { validationKey, cpf, municipalityId } = req.body || {};
     const cleanCpf = normalizeCpf(cpf);
-    if (cleanCpf.length !== 11) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
+    if (!isValidCpf(cleanCpf)) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
     if (!validationKey) return res.status(400).json({ error: "Chave de consulta obrigatoria." });
 
     const { rows: keyRows } = await pool.query(
@@ -181,17 +181,22 @@ router.post("/", optionalAuth, async (req, res) => {
     await client.query("BEGIN");
 
     const protocol = await nextProtocol(client);
+    const requestType = pick(body.request_type, body.requestType, body.requestTypeId, body.type);
+    const requiresTutorCpf = requestType !== "DENUNCIA";
     const cpf = pick(body.cpf, body.tutor_cpf);
     const cleanCpf = normalizeCpf(cpf);
-    if (cleanCpf.length !== 11) {
+    if (requiresTutorCpf && !isValidCpf(cleanCpf)) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "CPF valido e obrigatorio para gerar codigo do tutor." });
+    }
+    if (requestType === "DENUNCIA" && body.phone && !isValidPhone(body.phone)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Informe um telefone valido em Contato." });
     }
     const validationKey = await validationKeyForCpf(client, cpf);
     const animals = Array.isArray(body.animals) ? body.animals : [];
     const firstAnimal = animals[0] || {};
     const scheduleDate = pick(body.schedule_date, body.preferredSchedule, body.appointment);
-    const requestType = pick(body.request_type, body.requestType, body.requestTypeId, body.type);
 
     const { rows } = await client.query(
       `INSERT INTO requests (

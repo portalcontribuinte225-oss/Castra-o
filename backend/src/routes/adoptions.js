@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
-import { normalizeCpf } from "../utils.js";
+import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
 import { isGlobalUser, pickMunicipalityId, requireMunicipality } from "../tenant.js";
 
 const router = Router();
@@ -270,6 +270,8 @@ router.post("/", auth, async (req, res) => {
 router.post("/:id/interest", optionalAuth, async (req, res) => {
   const { name, phone, visit_date, cpf, municipalityId } = req.body;
   if (!name || !phone) return res.status(400).json({ error: "Nome e telefone sao obrigatorios." });
+  if (!isValidPhone(phone)) return res.status(400).json({ error: "Telefone invalido." });
+  if (cpf && !isValidCpf(cpf)) return res.status(400).json({ error: "CPF invalido." });
 
   try {
     const scope = municipalityId ? " AND municipality_id = $2" : "";

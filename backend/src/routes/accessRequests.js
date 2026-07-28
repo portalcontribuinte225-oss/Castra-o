@@ -5,6 +5,7 @@ import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
 import { isGlobalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
+import { isValidCpfOrCnpj, isValidPhone } from "../utils.js";
 
 const router = Router();
 
@@ -63,11 +64,16 @@ router.post("/", async (req, res) => {
   const email = normalizeEmail(body.email);
   const assignedSector = String(body.assigned_sector || body.assignedSector || sectorByType[requesterType] || "").trim();
   const municipalityId = pickMunicipalityId(req);
+  const phone = String(body.phone || "").trim();
+  const document = String(body.document || "").trim();
+  const isNumericDocument = /^[0-9.\-/\s]+$/.test(document);
 
   if (!REQUESTER_TYPES.has(requesterType)) return res.status(400).json({ error: "Tipo de solicitante invalido." });
   if (!responsibleName) return res.status(400).json({ error: "Nome do responsavel e obrigatorio." });
   if (!email) return res.status(400).json({ error: "Email e obrigatorio." });
   if (!municipalityId) return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
+  if (phone && !isValidPhone(phone)) return res.status(400).json({ error: "Telefone invalido." });
+  if (document && isNumericDocument && !isValidCpfOrCnpj(document)) return res.status(400).json({ error: "CPF ou CNPJ invalido." });
 
   try {
     const { rows } = await pool.query(
@@ -92,8 +98,8 @@ router.post("/", async (req, res) => {
         String(body.organization_name || body.organizationName || "").trim(),
         responsibleName,
         email,
-        String(body.phone || "").trim(),
-        String(body.document || "").trim(),
+        phone,
+        document,
         String(body.city || "").trim(),
         String(body.state || "").trim(),
         municipalityId,

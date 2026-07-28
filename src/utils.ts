@@ -28,6 +28,61 @@ export function formatCpf(value = "") {
     .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
 }
 
+export function isValidCpf(value = "") {
+  const digits = onlyDigits(value);
+  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return false;
+
+  const calcCheckDigit = (length: number) => {
+    let sum = 0;
+    for (let i = 0; i < length; i += 1) sum += Number(digits[i]) * (length + 1 - i);
+    const remainder = (sum * 10) % 11;
+    return remainder === 10 ? 0 : remainder;
+  };
+
+  return calcCheckDigit(9) === Number(digits[9]) && calcCheckDigit(10) === Number(digits[10]);
+}
+
+export function isValidCnpj(value = "") {
+  const digits = onlyDigits(value);
+  if (digits.length !== 14 || /^(\d)\1{13}$/.test(digits)) return false;
+
+  const calcCheckDigit = (length: number) => {
+    const weights = length === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+    let sum = 0;
+    for (let i = 0; i < length; i += 1) sum += Number(digits[i]) * weights[i];
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+
+  return calcCheckDigit(12) === Number(digits[12]) && calcCheckDigit(13) === Number(digits[13]);
+}
+
+export function isValidCpfOrCnpj(value = "") {
+  const digits = onlyDigits(value);
+  if (digits.length === 11) return isValidCpf(digits);
+  if (digits.length === 14) return isValidCnpj(digits);
+  return false;
+}
+
+export function formatCnpj(value = "") {
+  return onlyDigits(value)
+    .slice(0, 14)
+    .replace(/(\d{2})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1.$2")
+    .replace(/(\d{3})(\d)/, "$1/$2")
+    .replace(/(\d{4})(\d{1,2})$/, "$1-$2");
+}
+
+export function formatCpfOrCnpj(value = "") {
+  const digits = onlyDigits(value);
+  return digits.length > 11 ? formatCnpj(digits) : formatCpf(digits);
+}
+
+export function isValidPhone(value = "") {
+  const digits = onlyDigits(value);
+  return digits.length === 10 || digits.length === 11;
+}
+
 export function maskCpf(value = "") {
   const digits = onlyDigits(value);
   if (digits.length !== 11) return value || "Não informado";
