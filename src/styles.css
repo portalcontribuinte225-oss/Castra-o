@@ -117,16 +117,16 @@ button:disabled {
 
 
 .sidebar {
-  background: #f9fafb;
+  background: #ffffff;
   color: var(--ink);
-  padding: 16px 12px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 10px;
   position: sticky;
   top: 0;
   height: 100vh;
-  border-right: 1px solid #e5e7eb;
+  border-right: 1px solid var(--ui-border);
   box-shadow: none;
   overflow-x: hidden;
   transition: width 200ms ease;
@@ -232,9 +232,13 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 8px 14px;
-  border-bottom: 1px solid #e5e7eb;
-  margin-bottom: 8px;
+  min-height: 0;
+  margin: 0 0 8px;
+  padding: 6px 14px;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-xl);
+  background: #ffffff;
+  box-shadow: var(--ui-shadow-line);
 }
 
 
@@ -245,18 +249,20 @@ button:disabled {
 
 
 .brand strong {
-  font-size: 0.92rem;
-  color: var(--ink);
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--ui-ink);
   line-height: 1.2;
+  letter-spacing: 0;
 }
 
 
 .brand span {
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+  font-size: 0.68rem;
+  font-weight: 450;
+  letter-spacing: 0;
   text-transform: uppercase;
-  color: #2563eb;
+  color: var(--ui-muted);
   margin-top: 2px;
 }
 
@@ -265,11 +271,12 @@ button:disabled {
 .metric-icon {
   display: grid;
   place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: #0a0a0a;
-  color: white;
+  width: 46px;
+  height: 46px;
+  border-radius: 18px;
+  background: #020817;
+  color: #ffffff;
+  box-shadow: 0 14px 24px -20px rgba(2, 8, 23, 0.9);
   flex: 0 0 auto;
   box-shadow: none;
 }
@@ -4839,67 +4846,6 @@ main {
   padding: 18px 20px;
   display: grid;
   gap: 12px;
-}
-
-
-.reports-search-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-
-.reports-search-wrap {
-  position: relative;
-  flex: 1;
-  display: flex;
-  align-items: center;
-}
-
-
-.reports-search-icon {
-  position: absolute;
-  left: 12px;
-  color: var(--muted, #7a8fa0);
-  pointer-events: none;
-  flex-shrink: 0;
-}
-
-
-.reports-search-input {
-  width: 100%;
-  padding: 9px 12px 9px 36px;
-  border: 1px solid var(--border, #e5edf4);
-  border-radius: 10px;
-  background: var(--surface-alt, #f8fbfd);
-  font-size: 0.9rem;
-  color: var(--text, #172026);
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-
-.reports-search-input:focus {
-  outline: none;
-  border-color: var(--accent, #0f6ea8);
-  box-shadow: 0 0 0 3px rgba(15, 110, 168, 0.1);
-}
-
-
-.reports-search-input::placeholder {
-  color: var(--muted, #7a8fa0);
-}
-
-
-.reports-search-hint {
-  position: absolute;
-  right: 10px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--accent, #0f6ea8);
-  background: var(--accent-light, #e8f4fd);
-  padding: 2px 8px;
-  border-radius: 20px;
-  pointer-events: none;
 }
 
 
@@ -16099,11 +16045,6 @@ main {
 }
 
 
-.sidebar {
-  background: #ffffff;
-  border-right: 1px solid var(--ui-border);
-}
-
 
 .brand,
 .sidebar nav > button,
@@ -16115,13 +16056,6 @@ main {
   border-color: var(--ui-border);
   border-radius: 16px;
   box-shadow: var(--ui-shadow-line);
-}
-
-
-.brand {
-  padding: 12px;
-  border: 1px solid var(--ui-border);
-  background: #ffffff;
 }
 
 
@@ -18622,43 +18556,6 @@ main {
   grid-template-columns: 254px minmax(0, 1fr);
 }
 
-.sidebar {
-  padding: 8px;
-  gap: 10px;
-  background: #f8fafc;
-  border-right: 1px solid #dfe7f1;
-}
-
-.brand {
-  min-height: 60px;
-  margin: 0 0 10px;
-  padding: 10px 12px;
-  border: 1px solid #dfe7f1;
-  border-radius: 18px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.035);
-}
-
-.brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
-  background: #020817;
-}
-
-.brand strong {
-  font-size: 0.82rem;
-  font-weight: 780;
-}
-
-.brand span {
-  color: #7b8ba3;
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
 .sidebar nav {
   gap: 7px;
 }
@@ -20519,29 +20416,6 @@ main {
 
 .app-shell {
   background: var(--ui-page);
-}
-
-.sidebar {
-  border-right: 1px solid var(--ui-border);
-  background: #ffffff;
-}
-
-.brand {
-  min-height: 76px;
-  padding: 12px 14px;
-  border: 1px solid var(--ui-border);
-  border-radius: var(--ui-radius-xl);
-  background: #ffffff;
-  box-shadow: var(--ui-shadow-line);
-}
-
-.brand-mark {
-  width: 46px;
-  height: 46px;
-  border-radius: 18px;
-  background: #020817;
-  color: #ffffff;
-  box-shadow: 0 14px 24px -20px rgba(2, 8, 23, 0.9);
 }
 
 .brand strong,
@@ -24231,7 +24105,7 @@ main:has(.adoption-workspace) .adoption-workspace {
 .topbar-page-heading h1 {
   margin: 0;
   color: var(--ui-ink, #020817);
-  font-size: clamp(1.15rem, 2vw, 1.65rem);
+  font-size: clamp(1rem, 1.4vw, 1.3rem);
   font-weight: 760;
   line-height: 1.1;
   letter-spacing: 0;
@@ -24416,7 +24290,6 @@ h6,
 .clean-requests-workspace .tc-label,
 .field label,
 .form-field label,
-.reports-search-hint,
 .sidebar-user-info span {
   color: var(--ink-500) !important;
 }
@@ -25196,11 +25069,6 @@ main,
   flex-wrap: wrap !important;
 }
 
-.reports-search-row {
-  flex: 1 1 320px !important;
-  min-width: min(100%, 280px) !important;
-}
-
 .reports-filter-grid {
   flex: 1 1 100% !important;
   display: flex !important;
@@ -25210,9 +25078,7 @@ main,
 }
 
 .reports-filter-actions {
-  order: -1;
-  justify-content: flex-start !important;
-  margin-right: 2px;
+  margin-left: auto;
 }
 
 @media (max-width: 760px) {
@@ -25988,7 +25854,6 @@ button,
 .access-field textarea,
 .topbar-search input,
 .global-search input,
-.reports-search-input,
 .ag-search input,
 .mun-search-box input,
 .cr-note-field textarea,
@@ -26007,7 +25872,6 @@ textarea::placeholder,
 .access-field textarea::placeholder,
 .topbar-search input::placeholder,
 .global-search input::placeholder,
-.reports-search-input::placeholder,
 .ag-search input::placeholder,
 .mun-search-box input::placeholder,
 .cr-note-field textarea::placeholder,
@@ -26226,7 +26090,6 @@ small,
 .adoption-rail-person small,
 .adoption-visit-item small,
 .adoption-rail-empty,
-.reports-search-hint,
 .sidebar-user-info span {
   font-weight: var(--type-weight-muted) !important;
   letter-spacing: 0 !important;

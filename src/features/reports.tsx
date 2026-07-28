@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Download, Search, FileText } from "lucide-react";
+import { Download, FileText, Search } from "lucide-react";
 import type { AnyRecord } from "../types";
 import {
   initialRequestTypes,
   initialTeams,
+  isRequestOnScheduleDate,
   normalizeRequest,
   requestHasTag,
   requestResultLabel,
@@ -28,6 +29,11 @@ const operationalStatusOptions = [
   { id: "rescheduled", label: "Reagendadas" },
   { id: "done", label: "Realizadas" },
   { id: "canceled", label: "Canceladas" },
+];
+
+const agendaKindOptions = [
+  { id: "mutirao", label: "Mutirão" },
+  { id: "agenda", label: "Agenda normal" },
 ];
 
 function detectSearchType(search: string): "microchip" | "cpf" | "text" | null {
@@ -58,15 +64,23 @@ function matchesSearch(request: AnyRecord, query: string): boolean {
   return searchable.includes(key) || normalizeText(searchable).includes(normalizeText(key));
 }
 
+function getRequestAgendaKind(request: AnyRecord, scheduleDays: AnyRecord[]): "mutirao" | "agenda" | "" {
+  const day = scheduleDays.find((d) => isRequestOnScheduleDate(request, d.date));
+  if (!day) return "";
+  return day.kind === "Mutirao" ? "mutirao" : "agenda";
+}
+
 export function ReportsView({
   requests = [],
   metrics,
   requestTypes = initialRequestTypes,
   teams = initialTeams,
+  scheduleDays = [],
+  globalSearch = "",
   onConsultAnimal,
   onGenerateProntuario,
 }: AnyRecord) {
-  const emptyFilters = { start: "", end: "", type: "", status: "", fee: "", search: "" };
+  const emptyFilters = { start: "", end: "", type: "", status: "", fee: "", agendaKind: "" };
   const [filters, setFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState<AnyRecord | null>(null);
   const [prmLoading, setPrmLoading] = useState(false);
@@ -86,6 +100,7 @@ export function ReportsView({
         if (appliedFilters.status && getOperationalStatusId(request) !== appliedFilters.status) return false;
         if (appliedFilters.fee === "charged" && !hasFee) return false;
         if (appliedFilters.fee === "free" && hasFee) return false;
+        if (appliedFilters.agendaKind && getRequestAgendaKind(request, scheduleDays) !== appliedFilters.agendaKind) return false;
         if (appliedFilters.search && !matchesSearch(request, appliedFilters.search)) return false;
         return true;
       })
@@ -113,8 +128,7 @@ export function ReportsView({
     { title: "Taxas", items: feeSeries },
   ];
 
-  const appliedSearchType = appliedFilters ? detectSearchType(appliedFilters.search || "") : null;
-  const currentSearchType = detectSearchType(filters.search);
+  const currentSearchType = detectSearchType(globalSearch);
   const canProntuario = currentSearchType === "cpf" || currentSearchType === "microchip";
 
   function patchFilter(field: string, value: string) {
@@ -123,7 +137,7 @@ export function ReportsView({
   }
 
   function applyFilters() {
-    setAppliedFilters({ ...filters });
+    setAppliedFilters({ ...filters, search: globalSearch });
     setPrmError("");
   }
 
@@ -143,10 +157,10 @@ export function ReportsView({
   }
 
   async function handleProntuario() {
-    const type = detectSearchType(filters.search);
+    const type = detectSearchType(globalSearch);
     if (!type || type === "text") return;
-    const digits = filters.search.replace(/\D/g, "");
-    const query = type === "cpf" ? { cpf: digits } : { microchip: filters.search.trim() };
+    const digits = globalSearch.replace(/\D/g, "");
+    const query = type === "cpf" ? { cpf: digits } : { microchip: globalSearch.trim() };
     setPrmLoading(true);
     setPrmError("");
     try {
@@ -162,26 +176,6 @@ export function ReportsView({
   return (
     <section className="content-grid">
       <div className="page-toolbar reports-controls wide">
-          <div className="reports-search-row">
-            <div className="reports-search-wrap">
-              <Search size={15} className="reports-search-icon" />
-              <input
-                className="reports-search-input"
-                type="text"
-                placeholder="Microchip, CPF, tutor, nome do animal, protocolo..."
-                value={filters.search}
-                onChange={(e) => patchFilter("search", e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && applyFilters()}
-              />
-              {filters.search && (
-                <span className="reports-search-hint">
-                  {currentSearchType === "cpf" && "CPF detectado"}
-                  {currentSearchType === "microchip" && "Microchip detectado"}
-                </span>
-              )}
-            </div>
-          </div>
-
           <div className="reports-filter-grid">
             <label className="field reports-filter-field">
               <span>Início</span>
@@ -213,13 +207,20 @@ export function ReportsView({
                 <option value="free">Gratuitas</option>
               </select>
             </label>
+            <label className="field reports-filter-field">
+              <span>Agenda</span>
+              <select value={filters.agendaKind} onChange={(e) => patchFilter("agendaKind", e.target.value)}>
+                <option value="">Todas</option>
+                {agendaKindOptions.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+              </select>
+            </label>
 
             <div className="page-actions reports-filter-actions">
               <button
                 className="ghost-button"
                 type="button"
                 onClick={clearFilters}
-                disabled={!appliedFilters && !filters.search && !filters.start && !filters.end}
+                disabled={!appliedFilters && !filters.start && !filters.end}
               >
                 Limpar
               </button>
@@ -242,7 +243,7 @@ export function ReportsView({
                 type="button"
                 onClick={handleProntuario}
                 disabled={!canProntuario || prmLoading}
-                title={!canProntuario ? "Informe um microchip ou CPF para gerar o prontuário" : "Gerar prontuário completo do animal"}
+                title={!canProntuario ? "Informe um microchip ou CPF na busca para gerar o prontuário" : "Gerar prontuário completo do animal"}
               >
                 <FileText size={15} />
                 {prmLoading ? "Gerando..." : "Prontuário"}
@@ -255,74 +256,68 @@ export function ReportsView({
           )}
       </div>
       <div className="panel wide">
-        {!appliedFilters ? (
-          <EmptyState
-            title="Nenhum filtro aplicado"
-            text="Use os filtros acima e clique em Buscar. Para gerar o prontuário de um animal, informe o microchip ou CPF no campo de busca."
-          />
-        ) : (
-          <>
-            <div className="reports-breakdown-grid">
-              {reportBreakdowns.map((group) => (
-                <div className="reports-breakdown" key={group.title}>
-                  <div className="reports-breakdown-head">
-                    <span>{group.title}</span>
-                    <strong>{sumValues(group.items)}</strong>
-                  </div>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Descrição</th>
-                        <th>Qtd.</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(group.items.length ? group.items : [{ label: "Sem dados", value: 0 }]).map((item) => (
-                        <tr key={item.label}>
-                          <td>{item.label}</td>
-                          <td>{item.value}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
-            <div className="reports-table-wrap">
-              <table className="reports-table">
+        <div className="reports-breakdown-grid">
+          {reportBreakdowns.map((group) => (
+            <div className="reports-breakdown" key={group.title}>
+              <div className="reports-breakdown-head">
+                <span>{group.title}</span>
+                <strong>{sumValues(group.items)}</strong>
+              </div>
+              <table>
                 <thead>
                   <tr>
-                    <th>Protocolo</th>
-                    <th>Tutor</th>
-                    <th>Microchip</th>
-                    <th>Tipo</th>
-                    <th>Status</th>
-                    <th>Resultado</th>
-                    <th>Usuário</th>
-                    <th>Taxa</th>
+                    <th>Descrição</th>
+                    <th>Qtd.</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRequests.slice(0, 50).map((request) => (
-                    <tr key={request.id || request.protocol}>
-                      <td>{request.protocol || request.id}</td>
-                      <td>{request.tutor || request.tutor_name || "Não informado"}</td>
-                      <td>{getRequestMicrochip(request) || "-"}</td>
-                      <td>{getRequestTypeName(request, requestTypes)}</td>
-                      <td>{getOperationalStatusLabel(request)}</td>
-                      <td>{requestResultLabel(request)}</td>
-                      <td>{getRequestUserName(request)}</td>
-                      <td>{request.fee || request.billingAmount || "Gratuito"}</td>
+                  {(group.items.length ? group.items : [{ label: "Sem dados", value: 0 }]).map((item) => (
+                    <tr key={item.label}>
+                      <td>{item.label}</td>
+                      <td>{item.value}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {filteredRequests.length === 0 && (
-                <EmptyState title="Nenhum registro encontrado" text="Tente ajustar os filtros." />
-              )}
             </div>
-          </>
-        )}
+          ))}
+        </div>
+        <div className="reports-table-wrap">
+          <table className="reports-table">
+            <thead>
+              <tr>
+                <th>Protocolo</th>
+                <th>Tutor</th>
+                <th>Microchip</th>
+                <th>Tipo</th>
+                <th>Status</th>
+                <th>Resultado</th>
+                <th>Usuário</th>
+                <th>Taxa</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRequests.slice(0, 50).map((request) => (
+                <tr key={request.id || request.protocol}>
+                  <td>{request.protocol || request.id}</td>
+                  <td>{request.tutor || request.tutor_name || "Não informado"}</td>
+                  <td>{getRequestMicrochip(request) || "-"}</td>
+                  <td>{getRequestTypeName(request, requestTypes)}</td>
+                  <td>{getOperationalStatusLabel(request)}</td>
+                  <td>{requestResultLabel(request)}</td>
+                  <td>{getRequestUserName(request)}</td>
+                  <td>{request.fee || request.billingAmount || "Gratuito"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {filteredRequests.length === 0 && (
+            <EmptyState
+              title={appliedFilters ? "Nenhum registro encontrado" : "Nenhum filtro aplicado"}
+              text={appliedFilters ? "Tente ajustar os filtros." : "Use os filtros acima e clique em Buscar."}
+            />
+          )}
+        </div>
       </div>
     </section>
   );
@@ -379,6 +374,7 @@ function generateReportsPdf(requests = [], filters: AnyRecord = {}, series: AnyR
     ["Tipo", filters.type || "Todos"],
     ["Status", filters.status ? operationalStatusOptions.find((s) => s.id === filters.status)?.label || filters.status : "Todos"],
     ["Taxa", filters.fee === "charged" ? "Com taxa" : filters.fee === "free" ? "Gratuitas" : "Todas"],
+    ["Agenda", filters.agendaKind ? agendaKindOptions.find((k) => k.id === filters.agendaKind)?.label || filters.agendaKind : "Todas"],
   ]
     .map(([l, v]) => `<tr><td>${escapeHtml(l)}</td><td>${escapeHtml(v)}</td></tr>`)
     .join("");
