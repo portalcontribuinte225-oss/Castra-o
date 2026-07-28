@@ -727,7 +727,7 @@ button:disabled {
   pointer-events: none;
   background-color: #f3ead6;
   background-repeat: no-repeat;
-  background-size: cover;
+  background-size: contain;
   background-position: 50% 36%;
   filter: saturate(1.14) contrast(1.05) brightness(1.04);
   -webkit-mask-image: linear-gradient(90deg, transparent 0%, rgba(0,0,0,0.22) 10%, rgba(0,0,0,0.9) 28%, #000 100%);
@@ -4372,31 +4372,6 @@ main {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-
-/* Process modal 2-col layout */
-
-/* Action zone (bottom of right col) */
-
-/* Footer — horizontal progress stepper */
-
-.attachment-ai-status {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-  justify-items: end;
-}
-
-
-@media (max-width: 760px) {
-
-
-  .attachment-ai-status {
-    grid-column: 1 / -1;
-    justify-items: start;
-  }
-
 }
 
 
@@ -18542,7 +18517,8 @@ main {
   display: flex;
   flex-direction: column;
   width: min(1080px, calc(100vw - 48px));
-  max-height: calc(100dvh - 48px);
+  height: 90dvh;
+  max-height: 90dvh;
   overflow: hidden;
   border: 1px solid var(--ui-border, #e5e7eb);
   border-radius: 20px;
@@ -18765,8 +18741,19 @@ main {
   transition: color 0.15s, border-color 0.15s;
 }
 
-.prm-tab:hover {
+.prm-tab:hover:not(:disabled) {
   color: #475569;
+}
+
+.prm-tab:disabled,
+.prm-tab--disabled {
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.prm-tab:disabled svg,
+.prm-tab--disabled svg {
+  opacity: 0.58;
 }
 
 .prm-tab--active {
@@ -18792,154 +18779,15 @@ main {
   border: 0;
 }
 
+.prm-procedure-fields,
 .prm-animal-data-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 16px;
 }
 
-.prm-animal-field--full {
-  grid-column: 1 / -1;
-}
 
 
-.prm-crias-block {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.prm-crias-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.prm-crias-toggle-label {
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: #374151;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.prm-toggle {
-  position: relative;
-  width: 38px;
-  height: 22px;
-  border-radius: 99px;
-  background: #e5e7eb;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  flex-shrink: 0;
-  transition: background 0.2s;
-}
-
-.prm-toggle--on {
-  background: #111827;
-}
-
-.prm-toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-  transition: transform 0.2s;
-}
-
-.prm-toggle--on .prm-toggle-thumb {
-  transform: translateX(16px);
-}
-
-.prm-crias-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-left: 4px;
-}
-
-.prm-cria-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.prm-cria-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #3a5570;
-  min-width: 52px;
-}
-
-.prm-cria-input {
-  width: 90px;
-  height: 34px;
-  border: 1px solid #e5e7eb;
-  border-radius: 9px;
-  padding: 0 10px;
-  font-size: 0.85rem;
-  color: #0f172a;
-  background: #fff;
-  outline: none;
-}
-
-.prm-cria-input:focus {
-  border-color: #111827;
-  box-shadow: none;
-}
-
-.prm-cria-suffix {
-  font-size: 0.78rem;
-  color: #9ca3af;
-}
-
-.prm-cria-remove {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  border: none;
-  background: transparent;
-  color: #a0b0c0;
-  cursor: pointer;
-  border-radius: 6px;
-  padding: 0;
-  margin-left: auto;
-  transition: color 0.15s, background 0.15s;
-}
-
-.prm-cria-remove:hover {
-  color: #c0392b;
-  background: #fff0ef;
-}
-
-.prm-cria-add {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 1px dashed #cbd5e1;
-  background: transparent;
-  color: #2563eb;
-  font-size: 0.78rem;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  width: fit-content;
-  margin-top: 2px;
-  transition: background 0.15s, border-color 0.15s;
-}
-
-.prm-cria-add:hover {
-  background: #eff6ff;
-  border-color: #2563eb;
-}
 
 .prm-section,
 .prm-section--procedure,
@@ -19007,12 +18855,13 @@ main {
 }
 
 .prm-modal .process-attachment-row {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
   gap: 14px;
-  padding: 14px 4px;
+  padding: 12px 0;
   border: 0;
-  border-bottom: 1px solid #f3f4f6;
+  border-bottom: 1px solid #f1f5f9;
   border-radius: 0;
   background: transparent;
 }
@@ -19022,65 +18871,80 @@ main {
 }
 
 .prm-modal .process-attachment-row:hover {
-  background: #fafafa;
+  background: #fbfcfd;
 }
 
 .prm-modal .process-attachment-main {
   display: flex;
   align-items: flex-start;
-  gap: 14px;
+  gap: 12px;
   min-width: 0;
-  flex: 1;
 }
 
 .prm-modal .process-attachment-icon-box {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   flex-shrink: 0;
+  border: 1px solid #eef2f7;
   border-radius: 9px;
-  background: #f3f4f6;
-  color: #6b7280;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.prm-modal .process-attachment-row--approved .process-attachment-icon-box {
+  background: #f0fdf4;
+  border-color: #dcfce7;
+  color: #15803d;
+}
+
+.prm-modal .process-attachment-row--rejected .process-attachment-icon-box,
+.prm-modal .process-attachment-row--missing .process-attachment-icon-box {
+  background: #fff1f2;
+  border-color: #ffe4e6;
+  color: #be123c;
 }
 
 .prm-modal .process-attachment-info {
   display: grid;
-  gap: 4px;
+  gap: 5px;
   min-width: 0;
   flex: 1;
 }
 
-.prm-modal .process-attachment-info strong {
-  display: block;
+.prm-modal .process-attachment-heading {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+
+.prm-modal .process-attachment-heading strong {
   min-width: 0;
   overflow: hidden;
   color: #111827;
-  font-size: 0.86rem;
-  font-weight: 700;
+  font-size: 0.88rem;
+  font-weight: 650;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.prm-modal .attachment-ai-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
 }
 
 .prm-modal .attachment-status {
   display: inline-flex;
   align-items: center;
   min-height: 22px;
-  padding: 0 10px;
-  border: 0;
+  padding: 0 9px;
+  border: 1px solid transparent;
   border-radius: 999px;
   background: #eef2f7;
   color: #40546d;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .prm-modal .attachment-status--generated {
@@ -19090,73 +18954,126 @@ main {
 
 .prm-modal .attachment-status--approved {
   background: #ecfdf5;
+  border-color: #d1fae5;
   color: #047857;
 }
 
 .prm-modal .attachment-status--pending {
-  background: #fffbeb;
+  background: #fff7ed;
+  border-color: #fed7aa;
   color: #b45309;
 }
 
 .prm-modal .attachment-status--missing {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #64748b;
 }
 
 .prm-modal .attachment-status--rejected {
   background: #fff1f2;
+  border-color: #ffe4e6;
   color: #be123c;
 }
 
-.prm-modal .attachment-ai-message {
-  flex-basis: 100%;
-  margin: 0;
-  color: #9ca3af;
-  font-size: 0.74rem;
+.prm-modal .attachment-confidence {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.prm-modal .attachment-ai-meta {
-  margin: 2px 0 0;
-  color: #94a3b8;
-  font-size: 0.68rem;
-  font-weight: 600;
+.prm-modal .attachment-ai-message {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1.42;
+}
+
+.prm-modal .process-attachment-row--approved .attachment-ai-message {
+  color: #166534;
+}
+
+.prm-modal .process-attachment-row--rejected .attachment-ai-message,
+.prm-modal .process-attachment-row--missing .attachment-ai-message,
+.prm-modal .process-attachment-row.is-blocking .attachment-ai-message {
+  color: #991b1b;
+}
+
+.prm-modal .attachment-ai-details {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 .prm-modal .attachment-ai-criteria {
-  justify-self: stretch;
-  justify-content: flex-end;
-  margin-top: 4px;
+  justify-content: flex-start;
+  gap: 4px;
+  margin-top: 2px;
 }
 
-.prm-modal .process-attachment-actions {
+.prm-modal .attachment-ai-criteria span {
+  min-height: 18px;
+  padding: 1px 7px;
+  font-size: 0.65rem;
+  font-weight: 650;
+}
+
+.prm-modal .process-attachment-actions,
+.prm-modal .process-attachment-decision-actions,
+.prm-modal .process-attachment-file-actions {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
-  flex-shrink: 0;
+  gap: 5px;
+}
+
+.prm-modal .process-attachment-actions {
+  flex-wrap: nowrap;
+  min-width: max-content;
+}
+
+.prm-modal .process-attachment-decision-actions,
+.prm-modal .process-attachment-file-actions {
+  padding: 2px;
+  border: 1px solid #eef2f7;
+  border-radius: 10px;
+  background: #ffffff;
 }
 
 .prm-modal .icon-action,
 .prm-modal .doc-decision-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 30px;
   height: 30px;
-  border: 1px solid #e5e7eb;
+  padding: 0;
+  border: 1px solid transparent;
   border-radius: 8px;
-  background: #ffffff;
-  color: #6b7280;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
 }
 
 .prm-modal .icon-action:hover:not(:disabled),
 .prm-modal .doc-decision-btn:hover:not(:disabled) {
-  border-color: #d1d5db;
-  background: #f3f4f6;
+  border-color: #dbe3ee;
+  background: #f8fafc;
   color: #111827;
 }
 
+.prm-modal .doc-decision-btn--approve:hover:not(:disabled) {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
 .prm-modal .doc-decision-btn--reject:hover:not(:disabled) {
-  border-color: #fca5a5;
-  background: #fee2e2;
-  color: #dc2626;
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
 }
 
 .prm-modal .doc-decision-btn--active-ok {
@@ -19171,19 +19088,56 @@ main {
   color: #dc2626;
 }
 
+.prm-modal .prm-attachment-reject-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid #fecdd3;
+  border-radius: 9px;
+  background: #fff1f2;
+  color: #be123c;
+  font-size: 0.74rem;
+  font-weight: 650;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.prm-modal .prm-attachment-reject-btn:hover:not(:disabled) {
+  border-color: #fda4af;
+  background: #ffe4e6;
+  color: #9f1239;
+}
+
+.prm-modal .icon-action:disabled,
+.prm-modal .doc-decision-btn:disabled,
+.prm-modal .prm-attachment-reject-btn:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 .prm-modal .attachment-unavailable {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 5px;
-  color: #9ca3af;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  color: #64748b;
   font-size: 0.74rem;
   font-weight: 650;
+  white-space: nowrap;
 }
 
 .prm-modal .process-attachment-row.is-blocking {
-  background: #fff7ed;
+  margin-inline: -8px;
+  padding-inline: 8px;
+  border-left: 2px solid #fdba74;
+  background: #fffaf5;
 }
-
 .prm-documents-warning {
   margin: 12px 0 0;
   padding: 10px 12px;
@@ -19195,36 +19149,6 @@ main {
   font-weight: 600;
 }
 
-.prm-history-list {
-  display: grid;
-  gap: 8px;
-}
-
-.prm-history-item {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid #eef0f3;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.prm-history-item span {
-  color: #9ca3af;
-  font-size: 0.72rem;
-}
-
-.prm-history-item strong {
-  color: #111827;
-  font-size: 0.82rem;
-  font-weight: 650;
-}
-
-.prm-history-item p {
-  margin: 0;
-  color: #6b7280;
-  font-size: 0.78rem;
-}
 
 .prm-section-head {
   display: flex;
@@ -19411,7 +19335,8 @@ main {
 
   .prm-modal {
     width: min(100%, calc(100vw - 20px));
-    max-height: calc(100dvh - 20px);
+    height: 90dvh;
+    max-height: 90dvh;
     border-radius: 14px;
   }
 
@@ -19459,6 +19384,20 @@ main {
     grid-template-columns: 1fr;
   }
 
+  .prm-modal .process-attachment-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding-block: 12px;
+  }
+
+  .prm-modal .process-attachment-main {
+    gap: 10px;
+  }
+
+  .prm-modal .process-attachment-heading strong {
+    white-space: normal;
+  }
+
   .prm-modal .attachment-ai-criteria {
     justify-content: flex-start;
   }
@@ -19469,7 +19408,21 @@ main {
     flex-wrap: wrap;
   }
 
-  .prm-action-btn,
+  .prm-modal .process-attachment-actions {
+    min-width: 0;
+  }
+
+  .prm-modal .process-attachment-decision-actions,
+  .prm-modal .process-attachment-file-actions {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .prm-modal .prm-attachment-reject-btn,
+  .prm-modal .attachment-unavailable {
+    flex: 1 1 100%;
+  }
+.prm-action-btn,
   .prm-inline-actions > * {
     width: 100%;
   }
@@ -21031,25 +20984,25 @@ form textarea:focus,
 }
 
 
-/* Pills viram um controle segmentado (trilho bege + pill branca no selecionado), como no mockup:
-   o container ganha o fundo/raio do trilho e cada botão fica transparente até ser selecionado. */
+/* Cada opção vira um card independente (borda própria, sem trilho de fundo compartilhado),
+   mesmo tratamento visual dos cards de Espécie/Sexo/Raça. */
 .nr-shell--public .anm-type-cards,
 .nr-shell--public .compact-choice-field > div,
 .nr-shell--public .single-request-form .animal-form .compact-choice-field > div {
-  gap: 4px;
+  gap: 8px;
   border: none;
-  border-radius: 10px;
-  background: #f1ede3;
-  padding: 4px;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 
 .nr-shell--public .anm-type-card,
 .nr-shell--public .compact-choice-field button,
 .nr-shell--public .single-request-form .animal-form .compact-choice-field button {
-  border: none;
-  border-radius: 8px;
-  background: transparent;
+  border: 1px solid #e6ddc9;
+  border-radius: 10px;
+  background: #ffffff;
   color: #93887a;
 }
 
@@ -21064,9 +21017,10 @@ form textarea:focus,
 .nr-shell--public .anm-type-card.is-selected,
 .nr-shell--public .compact-choice-field button.selected,
 .nr-shell--public .single-request-form .animal-form .compact-choice-field button.selected {
-  background: #ffffff !important;
-  color: #2b2420 !important;
-  box-shadow: 0 1px 3px rgba(43, 36, 32, 0.15) !important;
+  border-color: #1f8a5f !important;
+  background: #eaf3ee !important;
+  color: #11684d !important;
+  box-shadow: none !important;
 }
 
 
@@ -21667,16 +21621,16 @@ form textarea:focus,
   top: calc(var(--public-header-height) + 8px);
   align-self: start;
   min-width: 0;
-  height: calc(98vh - var(--public-header-height) - 16px);
-  max-height: calc(98vh - var(--public-header-height) - 16px);
+  height: calc(100vh - var(--public-header-height) - var(--public-footer-height) - 16px);
+  max-height: calc(100vh - var(--public-header-height) - var(--public-footer-height) - 16px);
   overflow: hidden;
   z-index: 1;
 }
 
 .public-hero--compact {
   width: 100%;
-  height: auto;
-  min-height: 420px;
+  height: 100%;
+  min-height: 100%;
   max-height: 100%;
   margin: 0;
   padding: clamp(24px, 2.4vw, 36px);
@@ -21709,7 +21663,7 @@ form textarea:focus,
   left: 0;
   right: 0;
   bottom: 0;
-  height: 43%;
+  height: 58%;
   opacity: 0.94;
   background-size: cover;
   background-position: 50% 36%;
@@ -21975,7 +21929,7 @@ form textarea:focus,
 @media (min-width: 981px) {
   .public-service-panel--success {
     grid-template-rows: auto 1fr;
-    min-height: calc(98vh - var(--public-header-height) - 16px);
+    min-height: calc(100vh - var(--public-header-height) - var(--public-footer-height) - 16px);
   }
 }
 

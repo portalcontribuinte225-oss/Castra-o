@@ -3226,7 +3226,6 @@ function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {
     { label: request.status === "REALIZADA" ? "Procedimento realizado" : "Procedimento solicitado", value: displayText(procedureStatus || "Não informado") },
     { label: "Vermifugado", value: displayText(animal.dewormed || "Não informado") },
     { label: "Vacinas em dia", value: displayText(animal.vaccinated || "Não informado") },
-    { label: "Já teve cria", value: displayText(animal.hadLitter || "Não informado") },
     { label: "Histórico de doenças", value: displayText(animal.illnessHistory || "Não informado") },
     { label: "Alimentação", value: displayText(animal.food || "Não informado") },
   ].filter((item) => item.value);
@@ -3308,7 +3307,6 @@ function NewRequest({
       microchip: "",
       dewormed: "",
       vaccinated: "",
-      hadLitter: "",
       illnessHistory: "",
       food: "",
     },
@@ -3414,7 +3412,6 @@ function NewRequest({
           microchip: "",
           dewormed: "",
           vaccinated: "",
-          hadLitter: "",
           illnessHistory: "",
           food: "",
         },
@@ -4053,7 +4050,7 @@ function NewRequest({
                     <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
                       <input type="text" placeholder="00000-000" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Numero">
+                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Número">
                       <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
                     </div>
                     <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
@@ -4061,7 +4058,7 @@ function NewRequest({
                     </div>
                   </div>
                   {cepStatus && <p className="cep-status">{cepStatus}</p>}
-                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereco">
+                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereço">
                     <input type="text" placeholder="Rua, complemento" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
                   </div>
                   <div className="address-city-grid">
@@ -4088,7 +4085,7 @@ function NewRequest({
                     </div>
                   </div>
                   <div className="cadunico-row">
-                    <div className="access-field" data-label="CadUnico">
+                    <div className="access-field" data-label="CadÚnico">
                       <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
                     </div>
                     <label className="checkbox-row cadunico-checkbox">
@@ -4104,7 +4101,7 @@ function NewRequest({
                     <div className={`access-field${showInvalid("cep") ? " is-invalid" : ""}`} data-label="CEP">
                       <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
                     </div>
-                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Numero">
+                    <div className={`access-field${showInvalid("number") ? " is-invalid" : ""}`} data-label="Número">
                       <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
                     </div>
                     <div className={`access-field${showInvalid("state") ? " is-invalid" : ""}`} data-label="UF">
@@ -4112,7 +4109,7 @@ function NewRequest({
                     </div>
                   </div>
                   {cepStatus && <p className="cep-status">{cepStatus}</p>}
-                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereco">
+                  <div className={`access-field${showInvalid("address") ? " is-invalid" : ""}`} data-label="Endereço">
                     <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
                   </div>
                   <div className="address-city-grid">
@@ -4202,7 +4199,7 @@ function NewRequest({
                         <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} />
                       </div>
                       {animal.breedType === "Definida" && (
-                        <div className="access-field" data-label="Raca">
+                        <div className="access-field" data-label="Raça">
                           <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
                         </div>
                       )}
@@ -4243,7 +4240,7 @@ function NewRequest({
                           <div className="access-field" data-label="Microchip">
                             <input
                               type="text"
-                              placeholder={animal.hasChip === "Sim" ? "Codigo do microchip" : "Microchip nao informado"}
+                              placeholder={animal.hasChip === "Sim" ? "Código do microchip" : "Microchip não informado"}
                               value={animal.microchip}
                               onChange={(event) => updateAnimal(index, "microchip", event.target.value)}
                               readOnly={animal.hasChip !== "Sim"}
@@ -4269,7 +4266,6 @@ function NewRequest({
                       <div className="health-grid">
                         <HealthField label={externalLikeRegistration ? "Vermifugado" : "Vermifugado?"} value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
                         <HealthField label={externalLikeRegistration ? "Vacinas em dia" : "Vacinas em dia?"} value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
-                        <HealthField label={externalLikeRegistration ? "Já teve cria" : "Já teve cria?"} value={animal.hadLitter} onChange={(value) => updateAnimal(index, "hadLitter", value)} />
                         <HealthField label={externalLikeRegistration ? "Histórico de doenças" : "Histórico de doenças?"} value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
                         <FoodField label={externalLikeRegistration ? "Alimentação exclusiva com ração" : "Alimentação"} value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
                       </div>
@@ -4489,7 +4485,6 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     ["Microchip", "microchip"],
     ["Vermifugado", "dewormed"],
     ["Vacinas em dia", "vaccinated"],
-    ["Já teve cria", "hadLitter"],
     ["Histórico de doenças", "illnessHistory"],
     ["Alimentação", "food"],
   ];
@@ -4882,7 +4877,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
   const [docDecisions, setDocDecisions] = useState<AnyRecord>({});
-  const [modalTab, setModalTab] = useState<"procedimento" | "saude" | "historico" | "anexos">(
+  const [modalTab, setModalTab] = useState<"procedimento" | "anexos">(
     normalizedRequest.status === "AGENDADA" ? "procedimento" : "anexos",
   );
   const [rescheduleReason, setRescheduleReason] = useState("");
@@ -4899,7 +4894,10 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   });
 
   const canAnalyze = normalizedRequest.status === "NOVA";
-  const canRecordAttendance = normalizedRequest.status === "AGENDADA";
+  const isScheduleConfirmed = normalizedRequest.status === "AGENDADA";
+  const canUseProcedureTab = isScheduleConfirmed;
+  const canUseAttendanceActions = isScheduleConfirmed;
+  const procedureTabBlockReason = canUseProcedureTab ? "Procedimento e saúde" : "Disponível após confirmar a agenda";
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
   const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
   const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
@@ -4989,9 +4987,6 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   const [animalData, setAnimalData] = useState({
     doencas: principalAnimal.doencas || wf.doencas || "",
     alergias: principalAnimal.alergias || wf.alergias || "",
-    teveCrias: Boolean(principalAnimal.teveCrias || wf.teveCrias),
-    crias: (principalAnimal.crias || wf.crias || []) as { filhotes: string }[],
-    descendencia: principalAnimal.descendencia || wf.descendencia || "",
   });
 
   function statusClass(status) {
@@ -5011,6 +5006,12 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     if (anexo.status === "Anexado") return "Sem validação necessária";
     if (anexo.status === "Não enviado") return "Pendente";
     return "Aguardando";
+  }
+
+  function getAttachmentConfidenceText(anexo) {
+    const numericConfidence = Number(anexo.document?.confidence);
+    if (!Number.isFinite(numericConfidence)) return "";
+    return `${Math.round(numericConfidence > 1 ? numericConfidence : numericConfidence * 100)}%`;
   }
 
   function getAttachmentDecision(anexo) {
@@ -5062,18 +5063,29 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     return !isAttachmentAccepted(anexo);
   }
 
+  function getAttachmentReviewMessage(anexo, decision) {
+    if (!anexo.available) return "Documento não enviado.";
+    if (decision === "approved") return "Documento aprovado manualmente na conferência.";
+    if (decision === "rejected") return "Documento recusado manualmente na conferência.";
+    if (isSystemDocument(anexo)) return "Documento gerado pelo sistema.";
+    if (isAnimalPhotoAttachment(anexo)) return "Anexo informativo, sem validação necessária.";
+    if (isAttachmentAiApproved(anexo)) return "IA aprovou este documento pelos critérios cadastrados. Revisão manual opcional.";
+    if (isAttachmentRejected(anexo)) return "Documento recusado pela análise automática.";
+    if (requiresManualDocumentDecision(anexo)) return "Documento precisa de conferência antes de confirmar agenda.";
+    return anexo.message || "Documento disponível para consulta.";
+  }
+
   const blockingAttachments = canAnalyze ? anexos.filter(isAttachmentBlockingSchedule) : [];
   const canConfirmSchedule = canAnalyze && !blockWithoutAssignment && blockingAttachments.length === 0;
   const scheduleBlockReason = blockWithoutAssignment
     ? assignmentRequiredTitle
     : blockingAttachments.length
-      ? "Resolva os anexos obrigatorios: " + blockingAttachments.map((item) => item.tipo).join(", ")
+      ? "Resolva os anexos obrigatórios: " + blockingAttachments.map((item) => item.tipo).join(", ")
       : "Confirmar agenda";
 
   useEffect(() => {
-    if (canRecordAttendance) return;
-    if (modalTab !== "anexos") setModalTab("anexos");
-  }, [canRecordAttendance, modalTab, normalizedRequest.id]);
+    setModalTab(canUseProcedureTab ? "procedimento" : "anexos");
+  }, [canUseProcedureTab, normalizedRequest.id]);
 
   async function handlePreview(item) {
     setPreviewLoadingId(item.id);
@@ -5133,6 +5145,28 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     }
   }
 
+  function describeAttachmentBlock(anexo) {
+    if (!anexo.available) return `${anexo.tipo}: documento não enviado`;
+    const decision = getAttachmentDecision(anexo);
+    if (decision === "rejected" || isAttachmentRejected(anexo)) return `${anexo.tipo}: documento recusado`;
+    return `${anexo.tipo}: aguardando conferência`;
+  }
+
+  function buildDocumentRejectionNote(items = blockingAttachments) {
+    const targets = (items.length ? items : blockingAttachments).map(describeAttachmentBlock);
+    return targets.length
+      ? `Indeferimento por documentação obrigatória: ${targets.join("; ")}.`
+      : "Indeferimento por documentação obrigatória.";
+  }
+
+  function openDocumentRejectPanel(items = blockingAttachments) {
+    setRejectData((current) => ({
+      category: current.category || "Documentação incompleta",
+      note: current.note || buildDocumentRejectionNote(items),
+    }));
+    setActivePanel("reject");
+  }
+
   function confirmRejectInline(event) {
     event.preventDefault();
     if (blockWithoutAssignment) return;
@@ -5162,7 +5196,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
           return {
             ...document,
             status: decision,
-            message: document.message || (decision === "approved" ? "Documento aprovado manualmente na conferencia." : "Documento recusado manualmente na conferencia."),
+            message: document.message || (decision === "approved" ? "Documento aprovado manualmente na conferência." : "Documento recusado manualmente na conferência."),
           };
         });
         await patchRequest(request.id, { documents: updatedDocuments }, "Documentos conferidos antes da agenda");
@@ -5179,7 +5213,12 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
         {anexos.map((anexo) => {
           const decision = getAttachmentDecision(anexo);
           const canManuallyDecide = requiresManualDocumentDecision(anexo);
-          const rowClassName = `process-attachment-row${isAttachmentBlockingSchedule(anexo) ? " is-blocking" : ""}`;
+          const canRejectByAttachment = canAnalyze && isAttachmentBlockingSchedule(anexo);
+          const statusKind = decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : statusClass(anexo.status);
+          const confidenceText = getAttachmentConfidenceText(anexo);
+          const reviewMessage = getAttachmentReviewMessage(anexo, decision);
+          const canOpenAttachment = anexo.available;
+          const rowClassName = `process-attachment-row process-attachment-row--${statusKind}${canRejectByAttachment ? " is-blocking" : ""}`;
           return (
             <article className={rowClassName} key={`${anexo.kind}-${anexo.id}`}>
               <div className="process-attachment-main">
@@ -5187,29 +5226,34 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                   <FileText size={15} className="process-attachment-icon" />
                 </span>
                 <div className="process-attachment-info">
-                  <strong>{anexo.tipo}</strong>
-                  <div className="attachment-ai-status">
-                    <span className={`attachment-status attachment-status--${decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : statusClass(anexo.status)}`}>
+                  <div className="process-attachment-heading">
+                    <strong>{anexo.tipo}</strong>
+                    <span className={`attachment-status attachment-status--${statusKind}`}>
                       {getAiStatusLabel(anexo, decision)}
                     </span>
-                    {anexo.message && <p className="attachment-ai-message">{anexo.message}</p>}
-                    <AiAnalysisDetails
-                      show={Boolean(anexo.document?.provider) && !anexo.document?.error}
-                      provider={anexo.document?.provider}
-                      model={anexo.document?.model}
-                      confidence={anexo.document?.confidence}
-                      criteriaResults={anexo.document?.criteriaResults}
-                      metaClassName="attachment-ai-meta"
-                      criteriaClassName="doc-criteria-results attachment-ai-criteria"
-                    />
+                    {confidenceText && <span className="attachment-confidence">{confidenceText} confiança</span>}
                   </div>
+                  <p className="attachment-ai-message">{reviewMessage}</p>
+                  {Boolean(anexo.document?.provider) && !anexo.document?.error && (
+                    <div className="attachment-ai-details">
+                      <AiAnalysisDetails
+                        show
+                        provider={anexo.document?.provider}
+                        model={anexo.document?.model}
+                        confidence={anexo.document?.confidence}
+                        criteriaResults={anexo.document?.criteriaResults}
+                        showMeta={false}
+                        criteriaClassName="doc-criteria-results attachment-ai-criteria"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="process-attachment-actions">
-                {canManuallyDecide ? (
-                  <>
+                {canManuallyDecide && (
+                  <div className="process-attachment-decision-actions" aria-label={`Conferência de ${anexo.tipo}`}>
                     <button
-                      className={`doc-decision-btn${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
+                      className={`doc-decision-btn doc-decision-btn--approve${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
                       type="button"
                       title={blockWithoutAssignment ? assignmentRequiredTitle : "Aprovar documento"}
                       disabled={blockWithoutAssignment}
@@ -5222,24 +5266,30 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                       disabled={blockWithoutAssignment}
                       onClick={() => setDocDecisions((d) => ({ ...d, [anexo.id]: decision === "rejected" ? undefined : "rejected" }))}
                     ><X size={15} /></button>
+                  </div>
+                )}
+                {canOpenAttachment ? (
+                  <div className="process-attachment-file-actions" aria-label={`Ações de ${anexo.tipo}`}>
                     <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
                       <Eye size={16} />
                     </button>
                     <button className="icon-action" title="Baixar" type="button" disabled={downloadLoadingId === anexo.id} onClick={() => handleDownload(anexo)}>
                       <Download size={16} />
                     </button>
-                  </>
-                ) : anexo.available ? (
-                  <>
-                    <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
-                      <Eye size={16} />
-                    </button>
-                    <button className="icon-action" title="Baixar" type="button" disabled={downloadLoadingId === anexo.id} onClick={() => handleDownload(anexo)}>
-                      <Download size={16} />
-                    </button>
-                  </>
+                  </div>
                 ) : (
                   <span className="attachment-unavailable"><X size={14} />Não enviado</span>
+                )}
+                {canRejectByAttachment && (
+                  <button
+                    className="prm-attachment-reject-btn"
+                    type="button"
+                    title={blockWithoutAssignment ? assignmentRequiredTitle : `Indeferir por ${anexo.tipo}`}
+                    disabled={blockWithoutAssignment}
+                    onClick={() => openDocumentRejectPanel([anexo])}
+                  >
+                    Indeferir
+                  </button>
                 )}
               </div>
             </article>
@@ -5248,7 +5298,6 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
       </div>
     );
   }
-
   function renderAssignModal() {
     const sectorUsers = users.filter((u) => !assignData.sectorId || userBelongsToSector(u, assignData.sectorId));
     return (
@@ -5351,7 +5400,6 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   }
 
   const isRescheduleMode = activePanel === "reschedule";
-  const processHistory = Array.isArray(normalizedRequest.history) ? normalizedRequest.history : [];
 
   return (
     <div className="modal-backdrop">
@@ -5417,31 +5465,16 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
 
           {!isRescheduleMode && (
             <div className="prm-tabs">
-              {canRecordAttendance && (
-                <>
-                  <button
-                    type="button"
-                    className={`prm-tab${modalTab === "procedimento" ? " prm-tab--active" : ""}`}
-                    onClick={() => setModalTab("procedimento")}
-                  >
-                    <FileText size={13} /> Procedimento
-                  </button>
-                  <button
-                    type="button"
-                    className={`prm-tab${modalTab === "saude" ? " prm-tab--active" : ""}`}
-                    onClick={() => setModalTab("saude")}
-                  >
-                    <Activity size={13} /> Saude
-                  </button>
-                  <button
-                    type="button"
-                    className={`prm-tab${modalTab === "historico" ? " prm-tab--active" : ""}`}
-                    onClick={() => setModalTab("historico")}
-                  >
-                    <Clock size={13} /> Historico
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                className={`prm-tab${modalTab === "procedimento" ? " prm-tab--active" : ""}${!canUseProcedureTab ? " prm-tab--disabled" : ""}`}
+                disabled={!canUseProcedureTab}
+                aria-disabled={!canUseProcedureTab}
+                title={procedureTabBlockReason}
+                onClick={() => { if (canUseProcedureTab) setModalTab("procedimento"); }}
+              >
+                <FileText size={13} /> Procedimento e saúde
+              </button>
               <button
                 type="button"
                 className={`prm-tab${modalTab === "anexos" ? " prm-tab--active" : ""}`}
@@ -5452,7 +5485,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
             </div>
           )}
 
-          {!isRescheduleMode && canRecordAttendance && modalTab === "procedimento" && (
+          {!isRescheduleMode && canUseProcedureTab && modalTab === "procedimento" && (
             <div className="prm-section prm-section--procedure">
               <div className="prm-section-block">
                 <p className="prm-section-title">Procedimento</p>
@@ -5462,30 +5495,25 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                     <input
                       value={attendanceData.microchip}
                       onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
-                      placeholder="Codigo aplicado ou lido"
+                      placeholder="Código aplicado ou lido"
                     />
                   </label>
                   <label className="field">
-                    <span>Observacao</span>
+                    <span>Observação</span>
                     <input
                       type="text"
                       value={attendanceData.note}
                       onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
-                      placeholder="Observacoes do atendimento"
+                      placeholder="Observações do atendimento"
                     />
                   </label>
                 </div>
               </div>
-            </div>
-          )}
-
-          {!isRescheduleMode && canRecordAttendance && modalTab === "saude" && (
-            <div className="prm-section prm-section--health">
               <div className="prm-section-block">
-                <p className="prm-section-title">Saude do animal</p>
+                <p className="prm-section-title">Saúde do animal</p>
                 <div className="prm-animal-data-grid">
                   <label className="field">
-                    <span>Doencas pre-existentes</span>
+                    <span>Doenças pré-existentes</span>
                     <textarea
                       value={animalData.doencas}
                       onChange={(e) => setAnimalData((d) => ({ ...d, doencas: e.target.value }))}
@@ -5502,94 +5530,10 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                       rows={2}
                     />
                   </label>
-                  <div className="prm-animal-field--full prm-crias-block">
-                    <div className="prm-crias-toggle-row">
-                      <span className="prm-crias-toggle-label">Ja teve crias?</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={animalData.teveCrias}
-                        className={`prm-toggle${animalData.teveCrias ? " prm-toggle--on" : ""}`}
-                        onClick={() => setAnimalData((d) => ({ ...d, teveCrias: !d.teveCrias, crias: !d.teveCrias ? (d.crias.length ? d.crias : [{ filhotes: "" }]) : d.crias }))}
-                      >
-                        <span className="prm-toggle-thumb" />
-                      </button>
-                    </div>
-                    {animalData.teveCrias && (
-                      <div className="prm-crias-list">
-                        {animalData.crias.map((cria, i) => (
-                          <div key={i} className="prm-cria-row">
-                            <span className="prm-cria-label">Cria {i + 1}</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={cria.filhotes}
-                              onChange={(e) => setAnimalData((d) => {
-                                const next = d.crias.map((c, ci) => ci === i ? { ...c, filhotes: e.target.value } : c);
-                                return { ...d, crias: next };
-                              })}
-                              placeholder="Filhotes"
-                              className="prm-cria-input"
-                            />
-                            <span className="prm-cria-suffix">filhotes</span>
-                            {animalData.crias.length > 1 && (
-                              <button
-                                type="button"
-                                className="prm-cria-remove"
-                                onClick={() => setAnimalData((d) => ({ ...d, crias: d.crias.filter((_, ci) => ci !== i) }))}
-                                aria-label="Remover cria"
-                              >
-                                <X size={13} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <button
-                          type="button"
-                          className="prm-cria-add"
-                          onClick={() => setAnimalData((d) => ({ ...d, crias: [...d.crias, { filhotes: "" }] }))}
-                        >
-                          <Plus size={13} /> Adicionar cria
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  <label className="field prm-animal-field--full">
-                    <span>Descendencia / observacoes reprodutivas</span>
-                    <textarea
-                      value={animalData.descendencia}
-                      onChange={(e) => setAnimalData((d) => ({ ...d, descendencia: e.target.value }))}
-                      placeholder="Informacoes sobre descendencia, historico reprodutivo..."
-                      rows={2}
-                    />
-                  </label>
                 </div>
               </div>
             </div>
           )}
-
-          {!isRescheduleMode && canRecordAttendance && modalTab === "historico" && (
-            <div className="prm-section prm-section--history">
-              <div className="prm-section-head">
-                <p className="prm-section-label">Historico do processo</p>
-                <span className="prm-section-count">{processHistory.length} {processHistory.length === 1 ? "item" : "itens"}</span>
-              </div>
-              {processHistory.length > 0 ? (
-                <div className="prm-history-list">
-                  {processHistory.map((item, index) => (
-                    <article className="prm-history-item" key={`${item.at || item.createdAt || index}-${index}`}>
-                      <span>{formatDateTime(item.at || item.createdAt || item.date) || "Sem data"}</span>
-                      <strong>{item.status || "Movimentacao"}</strong>
-                      {item.notes && <p>{item.notes}</p>}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <p className="prm-muted-note">Nenhuma movimentacao registrada.</p>
-              )}
-            </div>
-          )}
-
           {!isRescheduleMode && modalTab === "anexos" && (
             <div className="prm-section prm-section--documents">
               {anexos.length > 0 ? (
@@ -5628,7 +5572,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                     type="button"
                     disabled={blockWithoutAssignment}
                     title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
-                    onClick={() => setActivePanel("reject")}
+                    onClick={() => openDocumentRejectPanel(blockingAttachments)}
                   >
                     Indeferir
                   </button>
@@ -5642,12 +5586,12 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                   title={scheduleBlockReason}
                   onClick={confirmSchedule}
                 >
-                  <CheckCircle2 size={15} /> {confirmingSchedule ? "Confirmando..." : "Confirmar Agenda"}
+                  <CheckCircle2 size={15} /> {confirmingSchedule ? "Confirmando..." : "Confirmar agenda"}
                 </button>
               )}
             </>
           )}
-          {canRecordAttendance && (
+          {canUseAttendanceActions && (
             <>
               <button
                 className="prm-action-btn prm-action-btn--warning"
@@ -5681,7 +5625,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
               </button>
             </>
           )}
-          {!canAnalyze && !canRecordAttendance && (
+          {!canAnalyze && !canUseAttendanceActions && (
             <p className="prm-muted-note">Nenhuma ação pendente.</p>
           )}
           </footer>
@@ -6003,7 +5947,7 @@ function AdoptionView({
   const emptyAdoptionModalForm = {
     tutor: "", cpf: "", cep: "", number: "", address: "", neighborhood: "", city: "", state: "", email: "", phone: "",
     procedimentos: "", adopted_at: new Date().toISOString().slice(0, 10),
-    doencas: "", alergias: "", teveCrias: false, crias: [] as { filhotes: string }[], comportamento: "", vacinas: "",
+    doencas: "", alergias: "", comportamento: "", vacinas: "",
   };
   const [adoptionConfirmModal, setAdoptionConfirmModal] = useState(null);
   const [adoptionModalForm, setAdoptionModalForm] = useState(emptyAdoptionModalForm);
@@ -6816,61 +6760,6 @@ function AdoptionView({
                       rows={2}
                     />
                   </label>
-                  <div className="prm-crias-block">
-                    <div className="prm-crias-toggle-row">
-                      <span className="prm-crias-toggle-label">Já teve crias?</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={adoptionModalForm.teveCrias}
-                        className={`prm-toggle${adoptionModalForm.teveCrias ? " prm-toggle--on" : ""}`}
-                        onClick={() => {
-                          updateAdoptionModalForm("teveCrias", !adoptionModalForm.teveCrias);
-                          if (!adoptionModalForm.teveCrias && adoptionModalForm.crias.length === 0) updateAdoptionModalForm("crias", [{ filhotes: "" }]);
-                        }}
-                      >
-                        <span className="prm-toggle-thumb" />
-                      </button>
-                    </div>
-                    {adoptionModalForm.teveCrias && (
-                      <div className="prm-crias-list">
-                        {(adoptionModalForm.crias as { filhotes: string }[]).map((cria, i) => (
-                          <div key={i} className="prm-cria-row">
-                            <span className="prm-cria-label">Cria {i + 1}</span>
-                            <input
-                              type="number"
-                              min="0"
-                              value={cria.filhotes}
-                              onChange={(e) => {
-                                const next = adoptionModalForm.crias.map((c, ci) => ci === i ? { ...c, filhotes: e.target.value } : c);
-                                updateAdoptionModalForm("crias", next);
-                              }}
-                              placeholder="Filhotes"
-                              className="prm-cria-input"
-                            />
-                            <span className="prm-cria-suffix">filhotes</span>
-                            {adoptionModalForm.crias.length > 1 && (
-                              <button
-                                type="button"
-                                className="prm-cria-remove"
-                                onClick={() => updateAdoptionModalForm("crias", adoptionModalForm.crias.filter((_, ci) => ci !== i))}
-                                aria-label="Remover cria"
-                              >
-                                <X size={13} />
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                        <button
-                          type="button"
-                          className="prm-cria-add"
-                          onClick={() => updateAdoptionModalForm("crias", [...adoptionModalForm.crias, { filhotes: "" }])}
-                        >
-                          <Plus size={13} /> Adicionar cria
-                        </button>
-                      </div>
-                    )}
-                  </div>
                 </div>
               )}
             </div>
@@ -10532,7 +10421,7 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
   );
 }
 
-function AiAnalysisDetails({ show, provider, model, confidence, criteriaResults, metaClassName = "doc-row-meta", criteriaClassName = "doc-criteria-results" }: AnyRecord) {
+function AiAnalysisDetails({ show, provider, model, confidence, criteriaResults, metaClassName = "doc-row-meta", criteriaClassName = "doc-criteria-results", showMeta = true }: AnyRecord) {
   if (!show) return null;
   const numericConfidence = Number(confidence);
   const hasConfidence = Number.isFinite(numericConfidence);
@@ -10541,7 +10430,7 @@ function AiAnalysisDetails({ show, provider, model, confidence, criteriaResults,
 
   return (
     <>
-      {(providerLabel || hasConfidence) && (
+      {showMeta && (providerLabel || hasConfidence) && (
         <small className={metaClassName}>
           {[providerLabel, hasConfidence ? `${Math.round(numericConfidence * 100)}% de confiança` : ""].filter(Boolean).join(" · ")}
         </small>
@@ -10918,7 +10807,7 @@ async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord
   };
 }
 
-function drawProntuarioHeader(page, protocol, statusLabel, statusColor, ctx, microchip = "", docTitle = "PRONTUARIO DO ANIMAL", idOverride = "") {
+function drawProntuarioHeader(page, protocol, statusLabel, statusColor, ctx, microchip = "", docTitle = "PRONTUÁRIO DO ANIMAL", idOverride = "") {
   const { font, bold, colors, margin } = ctx;
   const pageW = page.getWidth();
   const pageH = page.getHeight();
@@ -10926,7 +10815,7 @@ function drawProntuarioHeader(page, protocol, statusLabel, statusColor, ctx, mic
 
   page.drawRectangle({ x: margin, y: topY - 58, width: 4, height: 58, color: colors.blue });
 
-  page.drawText("PROGRAMA MUNICIPAL DE CASTRACAO ANIMAL", {
+  page.drawText("PROGRAMA MUNICIPAL DE CASTRAÇÃO ANIMAL", {
     x: margin + 12, y: topY - 12, size: 7, font: bold, color: colors.muted,
   });
   page.drawText(pdfText(docTitle), {
@@ -11040,15 +10929,15 @@ function drawProntuarioSectionBand(page, title, y, _bg, _text, ctx, _right = "")
 }
 
 const prmHistoryEventLabel = (type: string) => ({
-  SOLICITACAO: "Solicitacao de procedimento",
+  SOLICITACAO: "Solicitação de procedimento",
   IMPORTACAO_SOLICITACAO: "Cadastro importado",
   CIRURGIA_REALIZADA: "Cirurgia realizada",
-  SOLICITACAO_OBITO: "Solicitacao de obito",
-  ANIMAL_OBITO: "Obito registrado",
-  SOLICITACAO_TROCA_TUTOR: "Solicitacao de troca de tutor",
+  SOLICITACAO_OBITO: "Solicitação de óbito",
+  ANIMAL_OBITO: "Óbito registrado",
+  SOLICITACAO_TROCA_TUTOR: "Solicitação de troca de tutor",
   TROCA_TUTOR: "Troca de tutor",
   SOLICITACAO_PROCEDIMENTO: "Procedimento solicitado",
-  ADOCAO: "Adocao confirmada",
+  ADOCAO: "Adoção confirmada",
 } as AnyRecord)[type] || type || "Evento";
 
 async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
@@ -11108,13 +10997,6 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
   const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
 
-  const hasClinical = animal.doencas || animal.alergias || animal.teveCrias;
-  const criasInfo = animal.teveCrias
-    ? Array.isArray(animal.crias) && animal.crias.length
-      ? animal.crias.map((c, i) => `Cria ${i + 1}: ${c.filhotes || "?"} filhotes`).join("  |  ")
-      : "Sim (sem detalhes)"
-    : "Nao teve crias";
-
   const animalMicrochip = (fullHistory?.animal?.microchip || req.animalMicrochip || animal.microchip || "").trim();
 
   // request.documents only covers the specific request passed in; callers that only have
@@ -11131,7 +11013,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   y -= 10;
 
   // ── ANIMAL ──────────────────────────────────────────────────────
-  y = drawProntuarioSectionTitle(page, "IDENTIFICACAO DO ANIMAL", y, ctx);
+  y = drawProntuarioSectionTitle(page, "IDENTIFICAÇÃO DO ANIMAL", y, ctx);
   y -= 6;
   const photoBoxW = 72;
   const photoBoxH = 96;
@@ -11141,21 +11023,21 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   y = drawProntuarioFields(page, [
     [
       { label: "NOME", value: animal.name || "-" },
-      { label: "ESPECIE", value: animal.species || "-" },
+      { label: "ESPÉCIE", value: animal.species || "-" },
       { label: "SEXO", value: animal.sex || "-" },
       { label: "PORTE", value: animal.size || "-" },
     ],
     [
-      { label: "RACA", value: animalBreed || "-" },
+      { label: "RAÇA", value: animalBreed || "-" },
       { label: "NASCIMENTO / IDADE", value: animal.birthDate || animal.age || "-" },
       { label: "COR / PELAGEM", value: animal.color || "-" },
       { label: "MICROCHIP", value: animal.microchip || req.animalMicrochip || "-" },
     ],
     [
       { label: "PROCEDIMENTO SOLICITADO", value: animal.procedure || requestTypeLabel(req) || "-" },
-      { label: "ORIGEM DA SOLICITACAO", value: req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcao" : "Portal publico" },
+      { label: "ORIGEM DA SOLICITAÇÃO", value: req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcão" : "Portal público" },
       { label: "TIPO DE ANIMAL", value: req.type || "-" },
-      { label: "SETOR RESPONSAVEL", value: req.assignedSectorName || "-" },
+      { label: "SETOR RESPONSÁVEL", value: req.assignedSectorName || "-" },
     ],
   ], y, ctx, identificationFieldsW);
   if (animalPhotoDataUrl) {
@@ -11165,17 +11047,13 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
-  // ── DADOS CLINICOS ───────────────────────────────────────────────
-  y = drawProntuarioSectionTitle(page, "DADOS CLINICOS", y, ctx);
+  // ── DADOS CLÍNICOS ───────────────────────────────────────────────
+  y = drawProntuarioSectionTitle(page, "DADOS CLÍNICOS", y, ctx);
   y -= 6;
   y = drawProntuarioFields(page, [
     [
-      { label: "DOENCAS PRE-EXISTENTES", value: animal.doencas || "Nao informado" },
-      { label: "ALERGIAS CONHECIDAS", value: animal.alergias || "Nao informado" },
-    ],
-    [
-      { label: "HISTORICO REPRODUTIVO", value: criasInfo },
-      { label: "DESCENDENCIA / OBSERVACOES", value: animal.descendencia || "-" },
+      { label: "DOENÇAS PRÉ-EXISTENTES", value: animal.doencas || "Não informado" },
+      { label: "ALERGIAS CONHECIDAS", value: animal.alergias || "Não informado" },
     ],
   ], y, ctx);
   y -= 14;
@@ -11183,7 +11061,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   y -= 14;
 
   // ── TUTOR ────────────────────────────────────────────────────────
-  y = drawProntuarioSectionTitle(page, "TUTOR / RESPONSAVEL", y, ctx);
+  y = drawProntuarioSectionTitle(page, "TUTOR / RESPONSÁVEL", y, ctx);
   y -= 6;
   y = drawProntuarioFields(page, [
     [
@@ -11192,7 +11070,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
       { label: "CELULAR", value: req.phone || histTutor.phone || histTutor.celular || "-" },
       { label: "EMAIL", value: req.email || histTutor.email || "-" },
     ],
-    [{ label: "ENDERECO COMPLETO", value: fullAddr || "-" }],
+    [{ label: "ENDEREÇO COMPLETO", value: fullAddr || "-" }],
   ], y, ctx);
   y -= 14;
   page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
@@ -11200,8 +11078,8 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
   // ── HISTORICO (timeline) ─────────────────────────────────────────
   const historyTitle = fullHistory?.history?.length
-    ? "HISTORICO COMPLETO DO ANIMAL"
-    : "HISTORICO DO PROCESSO";
+    ? "HISTÓRICO COMPLETO DO ANIMAL"
+    : "HISTÓRICO DO PROCESSO";
   y = drawProntuarioSectionTitle(page, historyTitle, y, ctx);
   y -= 12;
 
@@ -11237,14 +11115,14 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
     tlEvents.push({
       date: openDate,
-      title: "Abertura da solicitacao",
+      title: "Abertura da solicitação",
       details: [[requestTypeLabel(req), openTime].filter(Boolean).join("  ·  "), `Protocolo: ${req.protocol || "-"}`],
       done: true,
     });
     tlEvents.push({
       date: scheduleDate,
       title: "Agendamento",
-      details: [scheduleAddress || "Local nao informado", req.responsible ? `Responsavel: ${req.responsible}` : ""].filter(Boolean),
+      details: [scheduleAddress || "Local não informado", req.responsible ? `Responsável: ${req.responsible}` : ""].filter(Boolean),
       done: req.status === "AGENDADA" || isRealizada,
     });
     if (isRealizada) {
@@ -11253,7 +11131,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
         date: realizadaDate,
         title: "Procedimento realizado",
         details: [
-          microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: nao registrado",
+          microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: não registrado",
           attendanceNote ? `Obs.: ${attendanceNote}` : "",
         ].filter(Boolean),
         done: true,
@@ -11266,12 +11144,12 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
       tlEvents.push({
         date: "",
         title: "Processo cancelado / indeferido",
-        details: [cancelReason || "Motivo nao informado", cancelNote].filter(Boolean),
+        details: [cancelReason || "Motivo não informado", cancelNote].filter(Boolean),
         done: true,
       });
     }
     if (!isRealizada && !isCancelada) {
-      tlEvents.push({ date: "-", title: "Realizacao · aguardando", details: ["Procedimento ainda nao realizado"], done: false });
+      tlEvents.push({ date: "-", title: "Realização · aguardando", details: ["Procedimento ainda não realizado"], done: false });
     }
   }
 
@@ -11279,24 +11157,24 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
   // nota de rodapé quando sem microchip
   if (!animalMicrochip) {
-    page.drawText("* Historico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
+    page.drawText("* Histórico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
       x: margin, y: margin + 20, size: 7, font, color: colors.muted,
     });
   }
 
   void y;
-  drawRequestPdfFooter(page, "Prontuario emitido pelo sistema municipal", "Pagina 1", ctx);
+  drawRequestPdfFooter(page, "Prontuário emitido pelo sistema municipal", "Página 1", ctx);
 
   const bytes = await output.save();
   const animalName = animal.name || histAnimal.name || "";
   const animalMicrochipFinal = animalMicrochip || "";
-  const fileName = ["Prontuario", animalName, animalMicrochipFinal || req.protocol || ""]
+  const fileName = ["Prontuário", animalName, animalMicrochipFinal || req.protocol || ""]
     .filter(Boolean).join(" ").trim() + ".pdf";
   return {
-    documentName: "Prontuario do animal",
+    documentName: "Prontuário do animal",
     fileName,
     fileType: "application/pdf",
-    eyebrow: "Prontuario",
+    eyebrow: "Prontuário",
     dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
   };
 }
@@ -11306,7 +11184,7 @@ async function generateAndDownloadProntuario(fullHistory: AnyRecord) {
   if (bundle?.dataUrl) {
     const anchor = window.document.createElement("a");
     anchor.href = bundle.dataUrl;
-    anchor.download = bundle.fileName || "Prontuario.pdf";
+    anchor.download = bundle.fileName || "Prontuário.pdf";
     anchor.click();
   }
 }
@@ -11331,7 +11209,7 @@ function buildProcessEvents(request: AnyRecord): AnyRecord[] {
     date: fmt(req.createdAt),
     details: [
       `Procedimento: ${requestTypeLabel(req) || "-"}`,
-      `Origem: ${req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcao" : "Portal publico"}`,
+      `Origem: ${req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcão" : "Portal público"}`,
       `Protocolo: #${req.protocol || "-"}`,
       animal.name ? `Animal: ${animal.name} (${[animal.species, animal.sex].filter(Boolean).join(", ")})` : "",
     ].filter(Boolean),
@@ -11360,12 +11238,12 @@ function buildProcessEvents(request: AnyRecord): AnyRecord[] {
   // 3. Atribuição ao setor — se tiver setor ou tag ATRIBUIDA (RIGHT)
   if (requestHasTag(req, "ATRIBUIDA") || req.assignedSectorName) {
     events.push({
-      label: "Atribuicao ao setor",
+      label: "Atribuição ao setor",
       actor: req.assignedSectorName || req.responsible || "Equipe",
       date: fmtDate(req.createdAt),
       details: [
         req.assignedSectorName ? `Setor: ${req.assignedSectorName}` : "",
-        req.responsible ? `Responsavel: ${req.responsible}` : "",
+        req.responsible ? `Responsável: ${req.responsible}` : "",
         requestHasTag(req, "PRIORIDADE") ? "Marcado como PRIORIDADE" : "",
       ].filter(Boolean),
       side: "right",
@@ -11376,10 +11254,10 @@ function buildProcessEvents(request: AnyRecord): AnyRecord[] {
   // 4. Mutirão — se tag MUTIRAO (RIGHT)
   if (requestHasTag(req, "MUTIRAO")) {
     events.push({
-      label: "Incluido em mutirao",
+      label: "Incluído em mutirão",
       actor: req.assignedSectorName || "Equipe",
       date: fmtDate(req.preferredSchedule || req.appointment),
-      details: ["Solicitacao vinculada a mutirao de castração"],
+      details: ["Solicitação vinculada a mutirão de castração"],
       side: "right",
       color: "purple",
     });
@@ -11438,7 +11316,7 @@ function buildProcessEvents(request: AnyRecord): AnyRecord[] {
       actor: req.responsible || req.assignedSectorName || "Equipe",
       date: fmt(wf.attendedAt || schedDate),
       details: [
-        microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: nao registrado",
+        microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: não registrado",
         wf.performedProcedures ? `Procedimentos: ${pdfText(wf.performedProcedures)}` : "",
         attendanceNote ? `Obs.: ${pdfText(attendanceNote)}` : "",
       ].filter(Boolean),
@@ -11592,7 +11470,7 @@ async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
   y -= 14;
 
   // ── Título da seção de tramitações ───────────────────────────────
-  y = drawProntuarioSectionTitle(page, "TRAMITACOES DO PROCESSO", y, ctx);
+  y = drawProntuarioSectionTitle(page, "TRAMITAÇÕES DO PROCESSO", y, ctx);
   y -= 14;
 
   // ── Bolhas de tramitação ─────────────────────────────────────────
@@ -11604,7 +11482,7 @@ async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
     );
     const bubbleH = 32 + 8 + detailLines.length * 13 + 8 + 10;
     if (y - bubbleH < margin + 50) {
-      drawRequestPdfFooter(page, "Relatorio processual emitido pelo sistema municipal", `Pagina ${pageNum}`, ctx);
+      drawRequestPdfFooter(page, "Relatório processual emitido pelo sistema municipal", `Página ${pageNum}`, ctx);
       page = output.addPage(pageSize);
       pageNum += 1;
       y = pageH - margin - 20;
@@ -11619,7 +11497,7 @@ async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
     y -= 20;
   }
 
-  drawRequestPdfFooter(page, "Relatorio processual emitido pelo sistema municipal", `Pagina ${pageNum}`, ctx);
+  drawRequestPdfFooter(page, "Relatório processual emitido pelo sistema municipal", `Página ${pageNum}`, ctx);
   void y;
 
   const documents = getUserUploadedProcessDocuments(request.documents);
@@ -11629,7 +11507,7 @@ async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
     if (!dataUrl) {
       await appendUnsupportedAttachmentPage(output, {
         title: document.documentName || "Documento anexado",
-        fileName: document.fileName || "Arquivo sem previa",
+        fileName: document.fileName || "Arquivo sem prévia",
         StandardFonts,
         rgb,
       });
@@ -11643,7 +11521,7 @@ async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
     }
     await appendUnsupportedAttachmentPage(output, {
       title: document.documentName || "Documento anexado",
-      fileName: document.fileName || "Arquivo sem previa",
+      fileName: document.fileName || "Arquivo sem prévia",
       StandardFonts,
       rgb,
     });
@@ -11651,8 +11529,8 @@ async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
 
   const bytes = await output.save();
   return {
-    documentName: "Relatorio Processual",
-    fileName: `Relatorio ${req.protocol || ""}`.trim() + ".pdf",
+    documentName: "Relatório processual",
+    fileName: `Relatório ${req.protocol || ""}`.trim() + ".pdf",
     fileType: "application/pdf",
     dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
   };
@@ -11774,7 +11652,7 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
   const page1 = pdf.addPage(pageSize);
   let y = drawProntuarioHeader(
     page1, req.protocol, "Requerimento", rgb(0.05, 0.45, 0.69), ctx, "",
-    "REQUERIMENTO DE SERVICO",
+    "REQUERIMENTO DE SERVIÇO",
     pdfText(`Protocolo: #${req.protocol || "-"}`)
   );
   y -= 10;
@@ -11855,7 +11733,6 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
       [
         { label: "VERMIFUGADO", value: animal.dewormed || "-" },
         { label: "VACINAS EM DIA", value: animal.vaccinated || animal.vaccines || animal.vacinas || "-" },
-        { label: "JÁ TEVE CRIA", value: animal.hadLitter || (animal.teveCrias ? "Sim" : "-") },
         { label: "ALIMENTAÇÃO", value: animal.food || "-" },
       ],
       [
@@ -11884,12 +11761,12 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
     pdfText(`Aceite eletrônico registrado em ${formatDateTime(signedAt)}`),
     { x: margin + 9, y, size: 8, font, color: colors.muted }
   );
-  drawRequestPdfFooter(page1, "Requerimento municipal", "Pagina 1 de 2", ctx);
+  drawRequestPdfFooter(page1, "Requerimento municipal", "Página 1 de 2", ctx);
 
   // ── PÁGINA 2: declaração ─────────────────────────────────────────
   const page2 = pdf.addPage(pageSize);
   let y2 = drawProntuarioHeader(
-    page2, req.protocol, "Declaracao", rgb(0.05, 0.45, 0.69), ctx, "",
+    page2, req.protocol, "Declaração", rgb(0.05, 0.45, 0.69), ctx, "",
     "DECLARAÇÃO DE RESPONSABILIDADES",
     pdfText(`Protocolo: #${req.protocol || "-"}`)
   );
@@ -11934,7 +11811,7 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
       { label: "MÉTODO", value: "Li e aceito" },
     ],
   ], y2, ctx);
-  drawRequestPdfFooter(page2, "Requerimento municipal", "Pagina 2 de 2", ctx);
+  drawRequestPdfFooter(page2, "Requerimento municipal", "Página 2 de 2", ctx);
 
   return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
 }
@@ -12019,7 +11896,6 @@ function drawRequestPdfAnimalCard(page, animal: AnyRecord = {}, index, y, ctx) {
     ["MICROCHIP", animal.microchip || "-"],
     ["VERMIFUGADO", animal.dewormed || "-"],
     ["VACINAS", animal.vaccinated || "-"],
-    ["JÁ TEVE CRIA", animal.hadLitter || "-"],
     ["ALIMENTAÇÃO", animal.food || "-"],
   ];
   const columns = 3;
