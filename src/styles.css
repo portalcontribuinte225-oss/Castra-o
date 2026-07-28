@@ -24935,52 +24935,54 @@ main,
 }
 
 .opdash-root {
-  --opdash-action: #526d8f !important;
-  --opdash-accent: #526d8f !important;
-  --opdash-accent-2: #6f879f !important;
-  --opdash-soft: #eef3f8 !important;
-  --opdash-chart: #7f93ad !important;
-  --opdash-chart-soft: #edf2f7 !important;
-  --opdash-ok: #5f8f76 !important;
-  --opdash-ok-soft: #edf7f1 !important;
-  --opdash-warn: #b8894f !important;
-  --opdash-warn-soft: #fbf4ea !important;
-  --opdash-info: #5f7898 !important;
-  --opdash-info-soft: #edf3f8 !important;
+  --opdash-action: #2563eb !important;
+  --opdash-accent: #2563eb !important;
+  --opdash-accent-2: #0f766e !important;
+  --opdash-soft: #eff6ff !important;
+  --opdash-chart: rgba(37, 99, 235, 0.52) !important;
+  --opdash-chart-soft: rgba(37, 99, 235, 0.12) !important;
+  --opdash-ok: #16a34a !important;
+  --opdash-ok-soft: #ecfdf5 !important;
+  --opdash-warn: #d97706 !important;
+  --opdash-warn-soft: #fffbeb !important;
+  --opdash-risk: #e11d48 !important;
+  --opdash-risk-soft: #fff1f2 !important;
+  --opdash-info: #2563eb !important;
+  --opdash-info-soft: #eff6ff !important;
 }
 
 .opdash-root.is-gestao {
-  --opdash-action: #526d8f !important;
-  --opdash-accent: #526d8f !important;
-  --opdash-accent-2: #6f879f !important;
-  --opdash-soft: #eef3f8 !important;
-  --opdash-chart: #7f93ad !important;
+  --opdash-action: #2563eb !important;
+  --opdash-accent: #2563eb !important;
+  --opdash-accent-2: #0f766e !important;
+  --opdash-soft: #eff6ff !important;
+  --opdash-chart: rgba(37, 99, 235, 0.52) !important;
 }
 
 .opdash-root.is-operacao,
 .opdash-root.is-processos {
-  --opdash-action: #4f8377 !important;
-  --opdash-accent: #4f8377 !important;
-  --opdash-accent-2: #6f9a90 !important;
-  --opdash-soft: #edf7f4 !important;
-  --opdash-chart: #78a69c !important;
+  --opdash-action: #0f766e !important;
+  --opdash-accent: #0f766e !important;
+  --opdash-accent-2: #2563eb !important;
+  --opdash-soft: #f0fdfa !important;
+  --opdash-chart: rgba(15, 118, 110, 0.52) !important;
 }
 
 .opdash-root.is-produtividade,
 .opdash-root.is-territorio {
-  --opdash-action: #626f99 !important;
-  --opdash-accent: #626f99 !important;
-  --opdash-accent-2: #7c88aa !important;
-  --opdash-soft: #f0f2f8 !important;
-  --opdash-chart: #8a96b8 !important;
+  --opdash-action: #4f46e5 !important;
+  --opdash-accent: #4f46e5 !important;
+  --opdash-accent-2: #0f766e !important;
+  --opdash-soft: #eef2ff !important;
+  --opdash-chart: rgba(79, 70, 229, 0.50) !important;
 }
 
 .opdash-root.is-estatisticas {
-  --opdash-action: #4f7080 !important;
-  --opdash-accent: #4f7080 !important;
-  --opdash-accent-2: #6f8996 !important;
-  --opdash-soft: #eef5f7 !important;
-  --opdash-chart: #7897a4 !important;
+  --opdash-action: #be185d !important;
+  --opdash-accent: #be185d !important;
+  --opdash-accent-2: #7c3aed !important;
+  --opdash-soft: #fdf2f8 !important;
+  --opdash-chart: rgba(190, 24, 93, 0.46) !important;
 }
 
 .opdash-kpi-head > span,
@@ -25049,8 +25051,8 @@ main,
 }
 
 .opdash-kpi.is-warn::after {
-  background: var(--opdash-warn) !important;
-  box-shadow: 0 0 0 4px var(--opdash-warn-soft) !important;
+  background: var(--opdash-risk) !important;
+  box-shadow: 0 0 0 4px var(--opdash-risk-soft) !important;
 }
 
 .opdash-rank-track i,
@@ -25062,20 +25064,20 @@ main,
 
 .opdash-decision.is-ok,
 .opdash-signal.is-ok {
-  border-color: #cfe5d8 !important;
-  background: #f3faf6 !important;
+  border-color: rgba(22, 163, 74, 0.24) !important;
+  background: var(--opdash-ok-soft) !important;
 }
 
 .opdash-decision.is-warn,
 .opdash-signal.is-warn {
-  border-color: #ead8bd !important;
-  background: #fcf7ef !important;
+  border-color: rgba(225, 29, 72, 0.22) !important;
+  background: var(--opdash-risk-soft) !important;
 }
 
 .opdash-decision.is-info,
 .opdash-signal.is-info {
-  border-color: #d4e1ee !important;
-  background: #f3f7fb !important;
+  border-color: rgba(37, 99, 235, 0.20) !important;
+  background: var(--opdash-info-soft) !important;
 }
 
 /* Unified action rows: Agenda rhythm across operational screens */
