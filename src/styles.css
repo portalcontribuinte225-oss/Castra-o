@@ -875,6 +875,85 @@ button:disabled {
   }
 }
 
+/* -- MUTIRAO BANNER ------------------------------- */
+.mutirao-banner {
+  width: min(1760px, calc(100% - clamp(28px, 3.6vw, 60px)));
+  margin: clamp(16px, 2vw, 24px) auto 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 16px;
+  padding: 16px 22px;
+}
+
+.mutirao-banner-tag {
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #ffedd5;
+  color: #c2410c;
+  padding: 4px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.mutirao-banner-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.mutirao-banner-title {
+  color: #7c2d12;
+  font-size: 0.95rem;
+}
+
+.mutirao-banner-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.85rem;
+  color: #9a3412;
+}
+
+.mutirao-banner-details a {
+  color: #9a3412;
+  text-decoration: underline;
+}
+
+.mutirao-banner-cta {
+  flex-shrink: 0;
+  border: 1px solid #c2410c;
+  background: transparent;
+  color: #c2410c;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.mutirao-banner-cta:hover {
+  background: #c2410c;
+  color: #fff7ed;
+}
+
+@media (max-width: 640px) {
+  .mutirao-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .mutirao-banner-cta {
+    width: 100%;
+    text-align: center;
+  }
+}
+
 /* -- PUBLIC STATS ------------------------------- */
 .public-stats-row {
   width: min(1760px, calc(100% - clamp(28px, 3.6vw, 60px)));

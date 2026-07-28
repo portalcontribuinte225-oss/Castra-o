@@ -526,6 +526,12 @@ export function isPastScheduleDay(dateText: string) {
   return date < today.getTime();
 }
 
+export function getNextUpcomingMutirao(scheduleDays: AnyRecord[] = []) {
+  return scheduleDays
+    .filter((day) => day.active !== false && day.kind === "Mutirao" && !isPastScheduleDay(day.date))
+    .sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date))[0] || null;
+}
+
 export function countRequestAnimals(request: AnyRecord = {}) {
   return Array.isArray(request.animals) && request.animals.length > 0 ? request.animals.length : 1;
 }

@@ -69,6 +69,7 @@ import {
   formatScheduleDate,
   formatSizeRange,
   getItemMunicipalityId,
+  getNextUpcomingMutirao,
   hiddenWorkflowTags,
   initialAiSettings,
   initialDocumentTypes,
@@ -2338,6 +2339,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
   const activePublicServiceDetails = publicHomeServices.find((service) => service.id === activePublicService) || null;
   const effectivePublicServiceScheduleDays = mergeScheduleDaysWithRules(publicServiceScheduleDays, publicServiceScheduleRules);
+  const nextMutirao = getNextUpcomingMutirao(effectivePublicServiceScheduleDays);
 
   function scrollToAdoption() {
     if (activePublicService) setActivePublicService(null);
@@ -2348,6 +2350,12 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     setProcedurePrefill(null);
     setPublicServiceDone(null);
     setActivePublicService(serviceId);
+  }
+
+  function joinMutirao() {
+    setProcedurePrefill(nextMutirao ? { schedule: nextMutirao.date } : null);
+    setPublicServiceDone(null);
+    setActivePublicService("procedure_form");
   }
 
   function closePublicService() {
@@ -2486,6 +2494,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 speciesOptions={publicServiceSpeciesOptions}
                 sizeOptions={publicServiceSizeOptions}
                 initialType={procedurePrefill?.requestType || ""}
+                initialSchedule={procedurePrefill?.schedule || ""}
               />
             ) : activePublicService === "credential" ? (
               <PublicAccessRequestInline onSubmit={onAccessRequest} />
@@ -2510,6 +2519,8 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
             onGoToAdoption={scrollToAdoption}
             onPublicRequest={() => openPublicService("procedure_form")}
           />
+
+          {nextMutirao && <MutiraoBanner scheduleDay={nextMutirao} onJoin={joinMutirao} />}
 
           <div className="public-stats-row">
             <div className="public-stat-card">
@@ -2866,6 +2877,33 @@ function PetWelcomeArt({ className = "", onGoToAdoption, onPublicRequest }: AnyR
           </button>
         </div>
       </div>
+    </section>
+  );
+}
+function MutiraoBanner({ scheduleDay, onJoin }: AnyRecord) {
+  if (!scheduleDay) return null;
+  const time = scheduleDay.offeredSlot?.time || scheduleDay.startTime || "";
+  return (
+    <section className="mutirao-banner">
+      <span className="mutirao-banner-tag">Mutirão</span>
+      <div className="mutirao-banner-content">
+        <strong className="mutirao-banner-title">
+          Mutirão de castração {scheduleDay.locationName ? `em ${scheduleDay.locationName}` : ""}
+        </strong>
+        <div className="mutirao-banner-details">
+          <span>{scheduleDay.date}{time ? ` às ${time}` : ""}</span>
+          {scheduleDay.locationAddress && (
+            scheduleDay.addressUrl ? (
+              <a href={scheduleDay.addressUrl} target="_blank" rel="noreferrer">{scheduleDay.locationAddress}</a>
+            ) : (
+              <span>{scheduleDay.locationAddress}</span>
+            )
+          )}
+        </div>
+      </div>
+      <button type="button" className="mutirao-banner-cta" onClick={onJoin}>
+        Quero participar
+      </button>
     </section>
   );
 }
