@@ -12106,128 +12106,10 @@ body * {
 
 /* ============================================================
    CREDENCIAMENTO (cr-)
-   Segue o mesmo design system de ag- e opdash-
+   Lista e toolbar reaproveitam o design system de Solicitações
+   (page-toolbar, request-nav, request-filter-tabs, triage-card).
+   Classes abaixo cobrem só o que é específico de credenciamento.
    ============================================================ */
-
-.cr-root {
-  display: grid;
-  gap: 14px;
-  padding-bottom: 32px;
-}
-
-
-/* ---- Toolbar ---- */
-
-.cr-toolbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #e5edf4);
-  border-radius: 14px;
-  padding: 18px 20px;
-}
-
-
-.cr-toolbar-left {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.cr-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-size: 1.35rem;
-  font-weight: 780;
-  color: var(--text, #0f172a);
-  line-height: 1.1;
-}
-
-
-/* ---- Stats inline ---- */
-
-.cr-stats-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  font-size: 0.82rem;
-  color: var(--muted, #7a8fa0);
-  flex-wrap: wrap;
-}
-
-.cr-stats-row span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.cr-stat-warn {
-  color: #92400e;
-}
-
-.cr-stat-ok {
-  color: #166534;
-}
-
-
-/* ---- Navbar de filtros ---- */
-
-.cr-nav {
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #e5edf4);
-  border-radius: 14px;
-}
-
-
-.cr-nav .request-filter-tabs {
-  min-width: 0;
-  overflow-x: auto;
-}
-
-
-.cr-seg-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  border-radius: 9px;
-  background: rgba(255, 255, 255, 0.28);
-  font-size: 0.68rem;
-  font-weight: 700;
-  line-height: 1;
-}
-
-
-.request-filter-tabs button:not(.selected) .cr-seg-count {
-  background: rgba(15, 23, 42, 0.08);
-  color: #475569;
-}
-
-
-.cr-result-segment {
-  flex: 0 0 auto;
-  min-height: 44px;
-  padding: 4px;
-}
-
-
-.cr-result-label {
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 14px;
-  border-radius: 10px;
-  color: #475569;
-  font-size: 0.82rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
 
 /* ---- Feedback ---- */
 
@@ -12272,64 +12154,6 @@ body * {
 }
 
 
-/* ---- Tabela de credenciamentos ---- */
-
-.cr-table-wrap {
-  overflow-x: auto;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #e5edf4);
-  border-radius: 14px;
-}
-
-
-.cr-table {
-  width: 100%;
-  min-width: 700px;
-  border-collapse: collapse;
-}
-
-
-.cr-table th {
-  padding: 10px 14px;
-  text-align: left;
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: var(--muted, #7a8fa0);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid var(--border, #e5edf4);
-}
-
-
-.cr-table td {
-  padding: 11px 14px;
-  font-size: 0.85rem;
-  color: var(--text, #172026);
-  border-bottom: 1px solid var(--line, #eff4f8);
-}
-
-
-.cr-table tbody tr:last-child td {
-  border-bottom: none;
-}
-
-
-.cr-table-row {
-  cursor: pointer;
-  transition: background 0.12s;
-}
-
-.cr-table-row:hover td {
-  background: var(--surface-alt, #f8fbfd);
-}
-
-
-.cr-col-name {
-  font-weight: 500;
-  color: var(--text, #172026);
-}
-
-
 .cr-temp-pw {
   display: block;
   font-size: 0.72rem;
@@ -12338,402 +12162,188 @@ body * {
 }
 
 
-/* ---- Badges ---- */
+/* ---- Lista em cards (reaproveita triage-card / tc-*) ---- */
 
-.cr-badge {
-  display: inline-flex;
-  align-items: center;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: 7px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  white-space: nowrap;
-  flex-shrink: 0;
+.cr-card-row {
+  grid-template-columns: minmax(160px, 1.1fr) minmax(120px, 0.7fr) minmax(160px, 1fr) minmax(120px, 0.8fr) minmax(120px, 0.8fr) minmax(110px, 0.7fr) 150px;
 }
 
 
-.cr-badge.is-pending {
-  background: #f1f5f9;
-  color: #374151;
-}
+/* ============================================================
+   CREDENTIAL CARD MODAL (ccm-)
+   Modal de revisão de credenciamento: header simples (sem dados
+   duplicados), corpo em uma única rolagem com os dados enviados
+   em grid (mesmo padrão de .field/.modal-form-grid dos cadastros)
+   seguido do parecer, e footer fixo com as ações.
+   ============================================================ */
 
-
-.cr-badge.is-success {
-  background: #dcfce7;
-  color: #15803d;
-}
-
-
-.cr-badge.is-danger {
-  background: #fee2e2;
-  color: #b91c1c;
-}
-
-
-/* ---- Empty state ---- */
-
-.cr-empty {
+.ccm-modal {
+  position: relative;
+  width: min(820px, calc(100vw - 24px));
+  max-height: min(92vh, 860px);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 60px 24px;
-  text-align: center;
-}
-
-
-.cr-empty-icon {
-  display: grid;
-  place-items: center;
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: rgba(15, 159, 143, 0.08);
-  color: var(--teal);
-  margin-bottom: 4px;
-}
-
-
-.cr-empty strong {
-  font-size: 0.95rem;
-  color: #0f172a;
-  font-weight: 600;
-}
-
-
-.cr-empty span {
-  font-size: 0.8rem;
-  color: #64748b;
-  max-width: 320px;
-  line-height: 1.5;
-}
-
-
-/* ---- Modal ---- */
-
-.cr-modal {
-  background: #fff;
-  border-radius: 20px;
-  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
-  width: 100%;
-  max-width: 520px;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: 0 30px 90px rgba(15, 23, 42, 0.28);
 }
 
 
-.cr-modal-head {
+.ccm-header {
+  flex-shrink: 0;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+
+.ccm-header-identity {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid #f1f5f9;
+  gap: 16px;
 }
 
 
-.cr-modal-identity {
+.ccm-header-identity-text {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
 }
 
 
-.cr-modal-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--teal), var(--blue));
-  display: grid;
-  place-items: center;
-  color: #fff;
-  font-size: 0.9rem;
+.ccm-eyebrow {
+  font-size: 0.72rem;
   font-weight: 700;
-  flex-shrink: 0;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 
-.cr-modal-name {
-  margin: 0 0 4px;
-  font-size: 1rem;
-  font-weight: 700;
+.ccm-headline {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 750;
   color: #0f172a;
 }
 
 
-.cr-modal-type {
-  font-size: 0.74rem;
-  color: #64748b;
-}
-
-
-.cr-modal-head-right {
+.ccm-header-actions {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 
-.cr-modal-close {
+.ccm-close-btn {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border: 1px solid #fecdd3;
   border-radius: 8px;
-  background: #fff1f2;
-  color: #be123c;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-
-
-.cr-modal-close:hover {
-  border-color: #fda4af;
-  background: #ffe4e6;
-  color: #9f1239;
-}
-
-
-/* Stepper */
-
-.cr-stepper {
-  display: flex;
-  align-items: center;
-  padding: 14px 20px;
+  border: 1px solid #e2e8f0;
   background: #f8fafc;
-  border-bottom: 1px solid #f1f5f9;
-  gap: 0;
-}
-
-
-.cr-step {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  position: relative;
-}
-
-
-.cr-step-dot {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 2px solid #e2e8f0;
-  display: grid;
-  place-items: center;
-  font-size: 0.7rem;
-  font-weight: 700;
-  color: #94a3b8;
-  background: #fff;
-  flex-shrink: 0;
-  transition: border-color 0.2s, background 0.2s, color 0.2s;
-}
-
-
-.cr-step.is-active .cr-step-dot {
-  border-color: var(--teal);
-  color: var(--teal);
-}
-
-
-.cr-step.is-done .cr-step-dot {
-  border-color: var(--teal);
-  background: var(--teal);
-  color: #fff;
-}
-
-
-.cr-step-label {
-  font-size: 0.72rem;
-  font-weight: 500;
-  color: #94a3b8;
-  white-space: nowrap;
-  transition: color 0.2s;
-}
-
-
-.cr-step.is-active .cr-step-label,
-.cr-step.is-done .cr-step-label {
-  color: #334155;
-  font-weight: 600;
-}
-
-
-.cr-step-line {
-  flex: 1;
-  height: 2px;
-  background: #e2e8f0;
-  margin: 0 6px;
-  border-radius: 1px;
-  transition: background 0.2s;
-}
-
-
-.cr-step.is-done .cr-step-line {
-  background: var(--teal);
-}
-
-
-/* Info grid */
-
-.cr-modal-info {
-  display: grid;
-  gap: 0;
-  padding: 16px 20px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-
-.cr-info-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 7px 0;
-  border-bottom: 1px solid #f8fafc;
-  font-size: 0.8rem;
-}
-
-
-.cr-info-row:last-child {
-  border-bottom: 0;
-}
-
-
-.cr-info-row span {
   color: #64748b;
-  font-weight: 400;
-  flex-shrink: 0;
+  cursor: pointer;
+  transition: background 0.12s;
 }
 
 
-.cr-info-row strong {
+.ccm-close-btn:hover {
+  background: #f1f5f9;
   color: #0f172a;
-  font-weight: 500;
-  text-align: right;
 }
 
 
-/* Note field */
+/* Body */
 
-.cr-note-field {
+.ccm-body {
+  flex: 1;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 16px 20px;
-  border-bottom: 1px solid #f1f5f9;
+  gap: 20px;
+  padding: 20px;
 }
 
 
-.cr-note-field > span {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #475569;
+.ccm-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+
+.ccm-section-title {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748b;
   text-transform: uppercase;
-  letter-spacing: 0.04em !important;
+  letter-spacing: 0.05em;
 }
 
 
-.cr-note-field textarea {
-  width: 100%;
+.ccm-readonly-field .ccm-readonly-value {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border: 1px solid #e5e7eb;
+  border-radius: var(--radius);
+  padding: 0 12px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 0.92rem;
+}
+
+
+.ccm-readonly-field--wide {
+  grid-column: 1 / -1;
+}
+
+
+.ccm-prior-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   padding: 10px 12px;
-  border: 1px solid #e2e8f0;
   border-radius: 10px;
   background: #f8fafc;
-  font-size: 0.82rem;
-  color: #0f172a;
-  resize: vertical;
-  outline: none;
-  font-family: inherit;
-  line-height: 1.5;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
+  border: 1px solid #e2e8f0;
 }
 
 
-.cr-note-field textarea:focus {
-  border-color: var(--teal);
-  background: #fff;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 10%, transparent);
-}
-
-
-.cr-note-field textarea::placeholder {
+.ccm-prior-note span {
+  font-size: 0.68rem;
+  font-weight: 700;
   color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 
-/* Modal actions */
+.ccm-prior-note p {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #334155;
+  line-height: 1.4;
+}
 
-.cr-modal-actions {
+
+/* Footer */
+
+.ccm-footer {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
-  padding: 16px 20px;
-}
-
-
-.cr-action-reject {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 38px;
-  padding: 0 16px;
-  border: 1px solid #fecaca;
-  border-radius: 10px;
-  background: #fff1f2;
-  color: #be123c;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-
-
-.cr-action-reject:hover:not(:disabled) {
-  background: #fee2e2;
-}
-
-
-.cr-action-reject:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-
-.cr-action-approve {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 38px;
-  padding: 0 18px;
-  border: 0;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--teal), var(--blue));
-  color: #fff;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  box-shadow: 0 6px 16px color-mix(in srgb, var(--teal) 30%, transparent);
-  transition: opacity 0.15s;
-}
-
-
-.cr-action-approve:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-
-.cr-action-approve:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+  padding: 14px 20px;
+  border-top: 1px solid #e5e7eb;
 }
 
 
@@ -24825,6 +24435,7 @@ textarea::placeholder,
 .status-badge.aguardando_cirurgia,
 .status-badge.triage-status--surgery,
 .cr-badge.is-pending,
+.tc-result-badge--pending,
 .ag-badge--neutral {
   background: var(--status-warn-bg) !important;
   color: var(--status-warn-ink) !important;

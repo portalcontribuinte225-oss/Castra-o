@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
 import {
   CheckCircle2,
-  ClipboardList,
-  Shield,
   ShieldCheck,
   X,
   XCircle,
@@ -10,6 +8,7 @@ import {
 import type { AnyRecord } from "../types";
 import { initialTeams } from "../domain";
 import { normalizeText } from "../utils";
+import { EmptyState } from "../components/ui";
 
 export function accessStatusLabel(status = "") {
   return (
@@ -19,21 +18,9 @@ export function accessStatusLabel(status = "") {
   );
 }
 
-function getInitials(name = "") {
-  return (
-    name
-      .split(" ")
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase() || "?"
-  );
-}
-
 function statusTone(status: string) {
   if (status === "APROVADO") return "success";
-  if (status === "RECUSADO") return "danger";
+  if (status === "RECUSADO") return "canceled";
   return "pending";
 }
 
@@ -92,35 +79,15 @@ export function AccessRequestsView({
     setReviewNote(item.reviewNote || "");
   }
 
+  const emptyCopy: Record<string, { title: string; text: string }> = {
+    PENDENTE: { title: "Nenhuma solicitação pendente", text: "As solicitações enviadas pela home aparecerão aqui para análise." },
+    APROVADO: { title: "Nenhum credenciamento aprovado", text: "As solicitações enviadas pela home aparecerão aqui para análise." },
+    RECUSADO: { title: "Nenhum credenciamento recusado", text: "As solicitações enviadas pela home aparecerão aqui para análise." },
+    TODOS: { title: "Nenhuma solicitação encontrada", text: "As solicitações enviadas pela home aparecerão aqui para análise." },
+  };
+
   return (
-    <section className="cr-root">
-      <div className="page-toolbar cr-controls-row">
-          <nav className="request-nav cr-nav" aria-label="Filtros de credenciamento">
-            <div className="cr-stats-row" aria-label="Total de credenciamentos">
-              <span><ClipboardList size={12} /> {accessRequests.length} total</span>
-            </div>
-            <div className="request-filter-tabs">
-              {FILTERS.map((item) => {
-                const count =
-                  item.id === "PENDENTE" ? pendingCount :
-                  item.id === "APROVADO" ? approvedCount :
-                  item.id === "RECUSADO" ? rejectedCount :
-                  accessRequests.length;
-                return (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={filter === item.id ? "selected" : ""}
-                    onClick={() => setFilter(item.id)}
-                  >
-                    {item.label}
-                    {count > 0 && <span className="cr-seg-count">{count}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </nav>
-      </div>
+    <section className="request-workspace triage-workspace clean-requests-workspace">
       {feedback && (
         <div className={`cr-feedback ${feedback.includes("sucesso") || feedback.includes("Senha") ? "is-ok" : "is-error"}`}>
           {feedback.includes("sucesso") || feedback.includes("Senha")
@@ -133,94 +100,106 @@ export function AccessRequestsView({
         </div>
       )}
 
-      <div className="cr-table-wrap">
-        {filtered.length === 0 ? (
-          <CrEmpty filter={filter} />
-        ) : (
-          <table className="cr-table">
-            <thead>
-              <tr>
-                <th>Organização</th>
-                <th>Tipo</th>
-                <th>E-mail</th>
-                <th>Telefone</th>
-                <th>Cidade / UF</th>
-                <th>Setor</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((item) => {
-                const sector = (teams.sectors || []).find(
-                  (s: AnyRecord) => normalizeText(s.name) === normalizeText(item.assignedSector),
-                );
-                const sectorName = sector?.name || item.assignedSector || "—";
-                const tone = statusTone(item.status || "PENDENTE");
-                return (
-                  <tr
-                    key={item.id}
-                    className="cr-table-row"
-                    onClick={() => openReview(item)}
-                    tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && openReview(item)}
-                  >
-                    <td className="cr-col-name">
-                      {item.organizationName || item.responsibleName || "Solicitante"}
-                    </td>
-                    <td>{item.requesterLabel || "—"}</td>
-                    <td>{item.email || "—"}</td>
-                    <td>{item.phone || "—"}</td>
-                    <td>{[item.city, item.state].filter(Boolean).join(" / ") || "—"}</td>
-                    <td>{sectorName}</td>
-                    <td>
-                      <span className={`cr-badge is-${tone}`}>{accessStatusLabel(item.status)}</span>
-                      {item.temporaryPassword && (
-                        <span className="cr-temp-pw">Senha: {item.temporaryPassword}</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      <div className="page-toolbar request-page-controls">
+        <nav className="request-nav" aria-label="Filtros de credenciamento">
+          <div className="request-filter-tabs">
+            {FILTERS.map((item) => {
+              const count =
+                item.id === "PENDENTE" ? pendingCount :
+                item.id === "APROVADO" ? approvedCount :
+                item.id === "RECUSADO" ? rejectedCount :
+                accessRequests.length;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={filter === item.id ? "selected" : ""}
+                  onClick={() => setFilter(item.id)}
+                >
+                  {item.label}<span>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+      </div>
+
+      <div className="triage-card-grid">
+        {filtered.length === 0 && (
+          <EmptyState title={emptyCopy[filter]?.title} text={emptyCopy[filter]?.text} />
         )}
+        {filtered.map((item) => {
+          const sector = (teams.sectors || []).find(
+            (s: AnyRecord) => normalizeText(s.name) === normalizeText(item.assignedSector),
+          );
+          const sectorName = sector?.name || item.assignedSector || "-";
+          const tone = statusTone(item.status || "PENDENTE");
+          const name = item.organizationName || item.responsibleName || "Solicitante";
+          return (
+            <article
+              className="triage-card clickable-triage-card"
+              key={item.id}
+              role="button"
+              tabIndex={0}
+              aria-label={`Abrir credenciamento de ${name}`}
+              onClick={() => openReview(item)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  openReview(item);
+                }
+              }}
+            >
+              <div className="tc-row cr-card-row">
+                <div className="tc-col tc-col--tutor">
+                  <span className="tc-label">Organização</span>
+                  <span className="tc-value">{name}</span>
+                </div>
+                <div className="tc-col tc-col--tipo">
+                  <span className="tc-label">Tipo</span>
+                  <span className="tc-value">{item.requesterLabel || "-"}</span>
+                </div>
+                <div className="tc-col">
+                  <span className="tc-label">E-mail</span>
+                  <span className="tc-value">{item.email || "-"}</span>
+                </div>
+                <div className="tc-col">
+                  <span className="tc-label">Telefone</span>
+                  <span className="tc-value">{item.phone || "-"}</span>
+                </div>
+                <div className="tc-col">
+                  <span className="tc-label">Cidade / UF</span>
+                  <span className="tc-value">{[item.city, item.state].filter(Boolean).join(" / ") || "-"}</span>
+                </div>
+                <div className="tc-col tc-col--responsavel">
+                  <span className="tc-label">Setor</span>
+                  <span className="tc-value">{sectorName}</span>
+                </div>
+                <div className="tc-col tc-col--status">
+                  <span className={`tc-result-badge tc-result-badge--${tone}`}>{accessStatusLabel(item.status)}</span>
+                  {item.temporaryPassword && (
+                    <span className="cr-temp-pw">Senha: {item.temporaryPassword}</span>
+                  )}
+                </div>
+              </div>
+            </article>
+          );
+        })}
       </div>
 
       {reviewing && (
-        <div className="modal-backdrop">
-          <div className="cr-modal" role="dialog" aria-modal="true">
-            <CrReviewModal
-              item={reviewing}
-              note={reviewNote}
-              onNoteChange={setReviewNote}
-              deciding={deciding}
-              onApprove={() => decide("APROVADO")}
-              onReject={() => decide("RECUSADO")}
-              onClose={() => setReviewing(null)}
-              teams={teams}
-            />
-          </div>
-        </div>
+        <CrReviewModal
+          item={reviewing}
+          note={reviewNote}
+          onNoteChange={setReviewNote}
+          deciding={deciding}
+          onApprove={() => decide("APROVADO")}
+          onReject={() => decide("RECUSADO")}
+          onClose={() => setReviewing(null)}
+          teams={teams}
+        />
       )}
     </section>
-  );
-}
-
-function CrEmpty({ filter }: { filter: string }) {
-  const msg =
-    filter === "PENDENTE" ? "Nenhuma solicitação pendente" :
-    filter === "APROVADO" ? "Nenhum credenciamento aprovado" :
-    filter === "RECUSADO" ? "Nenhum credenciamento recusado" :
-    "Nenhuma solicitação encontrada";
-
-  return (
-    <div className="cr-empty">
-      <div className="cr-empty-icon">
-        <ClipboardList size={28} strokeWidth={1.2} />
-      </div>
-      <strong>{msg}</strong>
-      <span>As solicitações enviadas pela home aparecerão aqui para análise.</span>
-    </div>
   );
 }
 
@@ -232,79 +211,91 @@ function CrReviewModal({ item, note, onNoteChange, deciding, onApprove, onReject
   );
   const sectorName = sector?.name || item.assignedSector || "Sem setor";
 
-  const stepIndex = item.status === "APROVADO" || item.status === "RECUSADO" ? 2 : 1;
-  const STEPS = ["Recebido", "Em análise", "Decisão"];
-
   return (
-    <>
-      <div className="cr-modal-head">
-        <div className="cr-modal-identity">
-          <div className="cr-modal-avatar">{getInitials(name)}</div>
-          <div>
-            <h3 className="cr-modal-name">{name}</h3>
-            {item.requesterLabel && <span className="cr-modal-type">{item.requesterLabel}</span>}
-          </div>
-        </div>
-        <div className="cr-modal-head-right">
-          <span className={`cr-badge is-${tone}`}>{accessStatusLabel(item.status)}</span>
-          <button className="cr-modal-close" type="button" onClick={onClose} aria-label="Fechar">
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-
-      <div className="cr-stepper">
-        {STEPS.map((step, i) => (
-          <div
-            key={step}
-            className={`cr-step${i <= stepIndex ? " is-active" : ""}${i < stepIndex ? " is-done" : ""}`}
-          >
-            <div className="cr-step-dot">
-              {i < stepIndex ? <CheckCircle2 size={13} /> : <span>{i + 1}</span>}
+    <div className="modal-backdrop">
+      <div className="ccm-modal" role="dialog" aria-modal="true">
+        <header className="ccm-header">
+          <div className="ccm-header-identity">
+            <div className="ccm-header-identity-text">
+              <span className="ccm-eyebrow">{item.requesterLabel || "Credenciamento"}</span>
+              <h2 className="ccm-headline">{name}</h2>
             </div>
-            <span className="cr-step-label">{step}</span>
-            {i < STEPS.length - 1 && <div className="cr-step-line" />}
+            <div className="ccm-header-actions">
+              <span className={`tc-result-badge tc-result-badge--${tone}`}>{accessStatusLabel(item.status)}</span>
+              <button className="ccm-close-btn" type="button" onClick={onClose} aria-label="Fechar">
+                <X size={17} />
+              </button>
+            </div>
           </div>
-        ))}
-      </div>
+        </header>
 
-      <div className="cr-modal-info">
-        {item.requesterLabel && (
-          <div className="cr-info-row"><span>Tipo</span><span>{item.requesterLabel}</span></div>
-        )}
-        <div className="cr-info-row"><span>Responsável</span><span>{item.responsibleName || "—"}</span></div>
-        <div className="cr-info-row"><span>E-mail</span><span>{item.email || "—"}</span></div>
-        {item.phone && <div className="cr-info-row"><span>Telefone</span><span>{item.phone}</span></div>}
-        {(item.city || item.state) && (
-          <div className="cr-info-row">
-            <span>Cidade / UF</span>
-            <span>{[item.city, item.state].filter(Boolean).join(" / ")}</span>
+        <div className="ccm-body">
+          <div className="ccm-section">
+            <p className="ccm-section-title">Dados enviados</p>
+            <div className="modal-form-grid">
+              <div className="field ccm-readonly-field">
+                <span>Tipo</span>
+                <div className="ccm-readonly-value">{item.requesterLabel || "-"}</div>
+              </div>
+              <div className="field ccm-readonly-field">
+                <span>Responsável</span>
+                <div className="ccm-readonly-value">{item.responsibleName || "-"}</div>
+              </div>
+              <div className="field ccm-readonly-field">
+                <span>E-mail</span>
+                <div className="ccm-readonly-value">{item.email || "-"}</div>
+              </div>
+              <div className="field ccm-readonly-field">
+                <span>Telefone</span>
+                <div className="ccm-readonly-value">{item.phone || "-"}</div>
+              </div>
+              <div className="field ccm-readonly-field">
+                <span>Cidade / UF</span>
+                <div className="ccm-readonly-value">{[item.city, item.state].filter(Boolean).join(" / ") || "-"}</div>
+              </div>
+              <div className="field ccm-readonly-field">
+                <span>Setor</span>
+                <div className="ccm-readonly-value">{sectorName}</div>
+              </div>
+              {item.intendedUse && (
+                <div className="field ccm-readonly-field ccm-readonly-field--wide">
+                  <span>Finalidade</span>
+                  <div className="ccm-readonly-value">{item.intendedUse}</div>
+                </div>
+              )}
+            </div>
           </div>
-        )}
-        <div className="cr-info-row"><span>Setor</span><span>{sectorName}</span></div>
-        {item.intendedUse && <div className="cr-info-row"><span>Finalidade</span><span>{item.intendedUse}</span></div>}
-        {item.reviewNote && <div className="cr-info-row"><span>Parecer anterior</span><span>{item.reviewNote}</span></div>}
-      </div>
 
-      <label className="cr-note-field">
-        <span>Observação / parecer técnico</span>
-        <textarea
-          value={note}
-          onChange={(e) => onNoteChange(e.target.value)}
-          placeholder="Descreva pendências, justificativa da aprovação ou motivo da recusa..."
-          rows={3}
-        />
-      </label>
+          <div className="ccm-section">
+            <p className="ccm-section-title">Parecer</p>
+            {item.reviewNote && (
+              <div className="ccm-prior-note">
+                <span>Parecer anterior</span>
+                <p>{item.reviewNote}</p>
+              </div>
+            )}
+            <label className="field">
+              <span>Observação / parecer técnico</span>
+              <textarea
+                value={note}
+                onChange={(e) => onNoteChange(e.target.value)}
+                placeholder="Descreva pendências, justificativa da aprovação ou motivo da recusa..."
+                rows={4}
+              />
+            </label>
+          </div>
+        </div>
 
-      <div className="cr-modal-actions">
-        <button className="cr-action-reject" type="button" onClick={onReject} disabled={deciding}>
-          <XCircle size={15} /> Recusar
-        </button>
-        <button className="cr-action-approve" type="button" onClick={onApprove} disabled={deciding}>
-          <ShieldCheck size={15} />
-          {deciding ? "Processando..." : "Aprovar e criar usuário"}
-        </button>
+        <footer className="ccm-footer">
+          <button className="secondary-action danger-action" type="button" onClick={onReject} disabled={deciding}>
+            <XCircle size={15} /> Recusar
+          </button>
+          <button className="primary-action" type="button" onClick={onApprove} disabled={deciding}>
+            <ShieldCheck size={15} />
+            {deciding ? "Processando..." : "Aprovar e criar usuário"}
+          </button>
+        </footer>
       </div>
-    </>
+    </div>
   );
 }

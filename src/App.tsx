@@ -637,6 +637,37 @@ export default function App() {
     const updated = await api.reviewAccessRequest(requestId, decision);
     const normalized = normalizeAccessRequest(updated);
     setAccessRequests((current) => current.map((item) => (item.id === normalized.id ? normalized : item)));
+
+    const createdUserId = updated.createdUserId || updated.created_user_id;
+    if (normalized.status === "APROVADO" && createdUserId) {
+      const sector = (teams.sectors || []).find(
+        (s: AnyRecord) => normalizeText(s.name) === normalizeText(normalized.assignedSector),
+      );
+      const sectorIds = sector ? [sector.id] : [];
+      setTeams((current) => {
+        const exists = (current.users || []).some((user) => user.id === createdUserId);
+        const entry = {
+          id: createdUserId,
+          name: normalized.responsibleName || normalized.organizationName || "Usuário",
+          email: normalized.email || "",
+          sectorIds,
+          sectorId: sectorIds[0] || "",
+          municipalityId: normalized.municipalityId || currentUser?.municipalityId || "",
+          role: normalized.requesterType === "ONG" ? "ong" : "protetor",
+          matricula: "",
+          cargo: "",
+          permissionGroupId: "",
+          active: true,
+        };
+        return {
+          ...current,
+          users: exists
+            ? current.users.map((user) => (user.id === createdUserId ? { ...user, ...entry } : user))
+            : [...(current.users || []), entry],
+        };
+      });
+    }
+
     return normalized;
   }
 
@@ -1199,6 +1230,7 @@ function normalizeAccessRequest(item: AnyRecord = {}): AnyRecord {
     requesterLabel: type?.label || requesterType || "Solicitante",
     organizationName: item.organizationName || item.organization_name || "",
     responsibleName: item.responsibleName || item.responsible_name || "",
+    municipalityId: item.municipalityId || item.municipality_id || "",
     intendedUse: item.intendedUse || item.intended_use || "",
     assignedSector: item.assignedSector || item.assigned_sector || type?.sector || "",
     reviewNote: item.reviewNote || item.review_note || "",
