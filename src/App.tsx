@@ -2007,7 +2007,6 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
             >
               <button className="public-animal-open-area" type="button" onClick={() => openAnimalModal(animal)}>
                 <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
-                  {highlighted && <span className="public-adoption-highlight-badge"><BadgeCheck size={12} /> Destaque</span>}
                   {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={24} />}
                 </div>
               </button>
@@ -9728,18 +9727,6 @@ function ConfigView({
           >
             <ModalHeader
               title={editingDocumentId ? "Editar documento" : "Criar documento"}
-              subtitle={
-                <span className="document-modal-status">
-                  <span className={`document-modal-status-dot ${newDocument.active !== false ? "is-active" : "is-inactive"}`} />
-                  <span className="document-modal-status-state">{newDocument.active !== false ? "Ativo" : "Inativo"}</span>
-                  {newDocument.name && (
-                    <>
-                      <span className="document-modal-status-sep">•</span>
-                      <span className="document-modal-status-name">{newDocument.name}</span>
-                    </>
-                  )}
-                </span>
-              }
               onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); }}
             />
 
@@ -9773,22 +9760,17 @@ function ConfigView({
               </div>
             </div>
             <div className="document-modal-body">
-              <section className="document-modal-panel">
-                <div className="document-section-heading">
-                  <span><ClipboardCheck size={15} /> Identificação</span>
-                </div>
-                <div className="document-identity-grid">
-                  <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residencia" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
-                  <label className="field document-sigla-field">
-                    <span>Sigla</span>
-                    <input
-                      value={newDocument.expectedDocument}
-                      placeholder="EX: CR"
-                      onChange={(event) => setNewDocument((current) => ({ ...current, expectedDocument: event.target.value.toUpperCase() }))}
-                    />
-                  </label>
-                </div>
-              </section>
+              <div className="document-identity-grid">
+                <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residencia" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
+                <label className="field document-sigla-field">
+                  <span>Sigla</span>
+                  <input
+                    value={newDocument.expectedDocument}
+                    placeholder="EX: CR"
+                    onChange={(event) => setNewDocument((current) => ({ ...current, expectedDocument: event.target.value.toUpperCase() }))}
+                  />
+                </label>
+              </div>
 
               <section className="document-modal-panel">
                 <div className="document-section-heading">
@@ -9811,7 +9793,7 @@ function ConfigView({
                 </div>
               </section>
               {newDocument.useAi !== false && (
-                <section className="document-modal-panel document-modal-panel--decision">
+                <section className="document-modal-panel">
                   <div className="document-section-heading">
                     <span><ShieldCheck size={15} /> Decisão automática</span>
                   </div>
