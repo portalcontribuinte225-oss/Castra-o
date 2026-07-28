@@ -47,8 +47,6 @@ export const api = {
   consultAnimalByMicrochip: (body) => request("POST", "/animals/consult", body),
   createAnimalDeathRequest: (animalId, body) => request("POST", `/animals/${animalId}/death`, body),
   createAnimalTransferRequest: (animalId, body) => request("POST", `/animals/${animalId}/transfer`, body),
-  createRequestDeathAction: (requestId, body) => request("POST", `/animals/requests/${requestId}/death`, body),
-  createRequestTransferAction: (requestId, body) => request("POST", `/animals/requests/${requestId}/transfer`, body),
 
   getAdoptions: (municipalityId?: string) => request("GET", municipalityId ? `/adoptions?municipalityId=${encodeURIComponent(municipalityId)}` : "/adoptions"),
   consultAdoptionsByCredentials: (cpf, validationKey, municipalityId) => request("POST", "/adoptions/consult", { cpf, validationKey, municipalityId }),

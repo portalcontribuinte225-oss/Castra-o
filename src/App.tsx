@@ -97,6 +97,7 @@ import {
   requestResultLabel,
   requestResultTag,
   requestTypeLabel,
+  RequestType,
   statusLabels,
   statuses,
   sumScheduleSlotsVacancies,
@@ -147,6 +148,7 @@ import {
 import { AccessRequestsView, accessStatusLabel } from "./features/accessRequests";
 import { AgendaView } from "./features/agenda";
 import { useRequestActions } from "./features/request-actions";
+import { getSpecialRequestSection, specialRequestConfirmLabel } from "./features/request-analysis-sections";
 import { DashboardView } from "./features/dashboard";
 import { ReportsView } from "./features/reports";
 
@@ -1291,7 +1293,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   const [svcLoading, setSvcLoading] = useState(false);
   const [svcError, setSvcError] = useState("");
   const [svcResult, setSvcResult] = useState("");
-  const [svcProcForm, setSvcProcForm] = useState({ type: "Castração", notes: "", animalMode: "other", otherMicrochip: "", otherAnimal: null as any, newName: "", newSpecies: "Cão", newSex: "Macho", newSize: "Pequeno" });
   const [svcTransferForm, setSvcTransferForm] = useState({ targetName: "", targetCpf: "", notes: "" });
   const [svcDeathForm, setSvcDeathForm] = useState({ date: "", cause: "", notes: "" });
   const [svcSaving, setSvcSaving] = useState(false);
@@ -1380,9 +1381,9 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     setSvcDeathForm({ date: "", cause: "", notes: "" });
 
     const alreadyIdentified = type !== "prontuario" && animalRecord?.animal && cpf && validationKey;
-    if (type === "procedure" && alreadyIdentified) {
+    if (type === "procedure") {
       const latestReq = Array.isArray(resultRequests) && resultRequests.length > 0 ? resultRequests[0] : null;
-      onRequestProcedure?.({ tutor: latestReq || { cpf, tutor_name: "" }, animal: animalRecord.animal });
+      onRequestProcedure?.({ tutor: latestReq || { cpf, tutor_name: "" }, animal: alreadyIdentified ? animalRecord.animal : null });
       closeActiveService();
       return;
     }
@@ -1391,8 +1392,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
       const latestReq = Array.isArray(resultRequests) && resultRequests.length > 0 ? resultRequests[0] : null;
       setSvcFoundTutor(latestReq || { cpf, tutor_name: "" });
       setSvcFoundAnimal(animalRecord.animal);
-      const preChip = animalRecord.animal.microchip || "";
-      setSvcProcForm({ type: "Castração", notes: "", animalMode: "other", otherMicrochip: preChip, otherAnimal: animalRecord.animal, newName: "", newSpecies: "Cão", newSex: "Macho", newSize: "Pequeno" });
       setSvcStep(2);
     } else {
       setSvcStep(1);
@@ -1401,7 +1400,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
       setSvcIdForm({ microchip: preChip, cpf: "", key: "" });
       setSvcFoundTutor(null);
       setSvcFoundAnimal(null);
-      setSvcProcForm({ type: "Castração", notes: "", animalMode: "other", otherMicrochip: "", otherAnimal: null, newName: "", newSpecies: "Cão", newSex: "Macho", newSize: "Pequeno" });
     }
   }
 
@@ -1442,76 +1440,12 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
       }
       const reqs = await api.consultRequestsByCredentials(cleanCpf, key, municipalityId);
       const latestReq = Array.isArray(reqs) && reqs.length > 0 ? reqs[0] : null;
-      if (activeServiceModal === "procedure") {
-        onRequestProcedure?.({ tutor: latestReq || { cpf: cleanCpf }, animal: null });
-        closeActiveService();
-        return;
-      }
       setSvcFoundTutor(latestReq || { cpf: cleanCpf });
       setSvcStep(2);
     } catch (err: any) {
       setSvcError(err.message || "Erro ao identificar. Verifique seus dados.");
     } finally {
       setSvcLoading(false);
-    }
-  }
-
-  async function lookupServiceOtherAnimal() {
-    const chip = svcProcForm.otherMicrochip.trim();
-    if (!chip) return;
-    setSvcLoading(true);
-    setSvcError("");
-    try {
-      const result = await api.consultAnimalByMicrochip({ microchip: chip });
-      setSvcProcForm((f) => ({ ...f, otherAnimal: result?.animal || null }));
-      if (!result?.animal) setSvcError("Animal não encontrado para este microchip.");
-    } catch {
-      setSvcError("Erro ao buscar animal.");
-      setSvcProcForm((f) => ({ ...f, otherAnimal: null }));
-    } finally {
-      setSvcLoading(false);
-    }
-  }
-
-  async function submitServiceProcedure(event) {
-    event.preventDefault();
-    const tutorCpf = onlyDigits(svcIdForm.cpf);
-    const tutor = svcFoundTutor || {};
-    const isOther = svcProcForm.animalMode === "other";
-    const isNew = svcProcForm.animalMode === "new";
-    if (isOther && !svcProcForm.otherAnimal) { setSvcError("Busque o microchip do animal antes de continuar."); return; }
-    const activeAnimal = isOther ? svcProcForm.otherAnimal
-      : isNew ? { name: svcProcForm.newName, species: svcProcForm.newSpecies, sex: svcProcForm.newSex, size: svcProcForm.newSize }
-      : {};
-    try {
-      setSvcSaving(true);
-      const created = await api.createRequest({
-        tutor_name: tutor.tutor_name || "",
-        tutor_email: tutor.tutor_email || tutor.email || "",
-        cpf: tutorCpf,
-        phone: tutor.phone || "",
-        address: tutor.address || "",
-        neighborhood: tutor.neighborhood || "",
-        city: tutor.city || "",
-        state: tutor.state || "",
-        cep: tutor.cep || "",
-        animal_id: activeAnimal.id,
-        animal_microchip: activeAnimal.microchip,
-        animal_name: activeAnimal.name,
-        species: activeAnimal.species,
-        size: activeAnimal.size,
-        request_type: svcProcForm.type,
-        notes: svcProcForm.notes,
-        tags: ["MICROCHIP"],
-        workflow_data: { animal_request_type: "procedure_from_service" },
-        animals: [{ id: activeAnimal.id, microchip: activeAnimal.microchip, name: activeAnimal.name, species: activeAnimal.species, sex: activeAnimal.sex, size: activeAnimal.size, procedure: svcProcForm.type }],
-      });
-      setSvcResult("Solicitação enviada para análise com sucesso.");
-      onRequestCreated?.(created, { openAdmin: true });
-    } catch (err: any) {
-      setSvcError(err.message || "Não foi possível criar a solicitação.");
-    } finally {
-      setSvcSaving(false);
     }
   }
 
@@ -1619,40 +1553,35 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
 
       {activeServiceModal && (() => {
         const isPront    = activeServiceModal === "prontuario";
-        const isProc     = activeServiceModal === "procedure";
         const isTransfer = activeServiceModal === "transfer";
         const isDeath    = activeServiceModal === "death";
 
         const iconMap: Record<string, React.ReactNode> = {
           prontuario: <PawPrint size={22} />,
-          procedure:  <ClipboardCheck size={22} />,
           transfer:   <RefreshCw size={22} />,
           death:      <AlertCircle size={22} />,
         };
         const colorMap: Record<string, string> = {
-          prontuario: "blue", procedure: "indigo", transfer: "amber", death: "red",
+          prontuario: "blue", transfer: "amber", death: "red",
         };
         const titleMap: Record<string, string> = {
           prontuario: "Prontuário animal",
-          procedure:  "Solicitar procedimento",
           transfer:   "Troca de tutor",
           death:      "Registrar óbito",
         };
         const subtitleMap: Record<string, string> = {
           prontuario: "Informe o microchip ou CPF + chave de validação do tutor.",
-          procedure:  svcStep === 1 ? "Identifique o tutor para continuar." : `Tutor: ${svcFoundTutor?.tutor_name || "identificado"}`,
           transfer:   svcStep === 1 ? "Identifique o tutor e o animal para continuar." : `Tutor atual: ${svcFoundTutor?.tutor_name || "identificado"}${svcFoundAnimal ? ` · ${svcFoundAnimal.name || svcFoundAnimal.microchip}` : ""}`,
           death:      svcStep === 1 ? "Identifique o tutor e o animal para continuar." : `Animal: ${svcFoundAnimal?.name || "identificado"} · Tutor: ${svcFoundTutor?.tutor_name || "identificado"}`,
         };
 
         const onSubmit = svcStep === 1 ? handleServiceIdentify
-          : isProc ? submitServiceProcedure
           : isTransfer ? submitServiceTransfer
           : submitServiceDeath;
 
         const primaryLabel = svcStep === 1
           ? (isPront ? (svcLoading ? "Consultando..." : "Consultar") : (svcLoading ? "Identificando..." : "Identificar"))
-          : (isProc ? (svcSaving ? "Enviando..." : "Solicitar") : isTransfer ? (svcSaving ? "Enviando..." : "Solicitar troca") : (svcSaving ? "Enviando..." : "Confirmar óbito"));
+          : (isTransfer ? (svcSaving ? "Enviando..." : "Solicitar troca") : (svcSaving ? "Enviando..." : "Confirmar óbito"));
 
         const isDestructive = isDeath && svcStep === 2;
 
@@ -1693,7 +1622,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
                         </label>
                       </div>
                     ) : (
-                      <div className={isProc ? "svc-grid-2" : "svc-grid-3"}>
+                      <div className="svc-grid-3">
                         <label className="field svc-field">
                           <span>CPF do tutor</span>
                           <input value={svcIdForm.cpf} onChange={(e) => setSvcIdForm((f) => ({ ...f, cpf: formatCpf(e.target.value) }))} placeholder="000.000.000-00" />
@@ -1710,53 +1639,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
                         )}
                       </div>
                     )}
-                  </>
-                ) : isProc ? (
-                  <>
-                    <div className="svc-animal-mode-row">
-                      <label className={`svc-mode-btn${svcProcForm.animalMode === "other" ? " active" : ""}`}>
-                        <input type="radio" name="svcAnimalMode" value="other" checked={svcProcForm.animalMode === "other"} onChange={() => setSvcProcForm((f) => ({ ...f, animalMode: "other", otherAnimal: null }))} />
-                        Buscar por microchip
-                      </label>
-                      <label className={`svc-mode-btn${svcProcForm.animalMode === "new" ? " active" : ""}`}>
-                        <input type="radio" name="svcAnimalMode" value="new" checked={svcProcForm.animalMode === "new"} onChange={() => setSvcProcForm((f) => ({ ...f, animalMode: "new" }))} />
-                        Novo animal
-                      </label>
-                    </div>
-                    {svcProcForm.animalMode === "other" && (
-                      <div className="svc-lookup-row">
-                        <label className="field svc-field" style={{ flex: 1 }}>
-                          <span>Microchip</span>
-                          <input value={svcProcForm.otherMicrochip} onChange={(e) => setSvcProcForm((f) => ({ ...f, otherMicrochip: e.target.value, otherAnimal: null }))} placeholder="Número do microchip" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), lookupServiceOtherAnimal())} />
-                        </label>
-                        <button type="button" className="secondary-action svc-lookup-btn" onClick={lookupServiceOtherAnimal} disabled={svcLoading}>{svcLoading ? "Buscando..." : "Buscar"}</button>
-                        {svcProcForm.otherAnimal && (
-                          <div className="svc-found-tag">
-                            <BadgeCheck size={14} />
-                            <strong>{svcProcForm.otherAnimal.name || "Sem nome"}</strong>
-                            <span>{[svcProcForm.otherAnimal.species, svcProcForm.otherAnimal.sex].filter(Boolean).join(" · ")}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {svcProcForm.animalMode === "new" && (
-                      <div className="svc-grid-4">
-                        <label className="field svc-field"><span>Nome</span><input value={svcProcForm.newName} onChange={(e) => setSvcProcForm((f) => ({ ...f, newName: e.target.value }))} placeholder="Opcional" /></label>
-                        <label className="field svc-field"><span>Espécie</span><select value={svcProcForm.newSpecies} onChange={(e) => setSvcProcForm((f) => ({ ...f, newSpecies: e.target.value }))}><option>Cão</option><option>Gato</option></select></label>
-                        <label className="field svc-field"><span>Sexo</span><select value={svcProcForm.newSex} onChange={(e) => setSvcProcForm((f) => ({ ...f, newSex: e.target.value }))}><option>Macho</option><option>Fêmea</option></select></label>
-                        <label className="field svc-field"><span>Porte</span><select value={svcProcForm.newSize} onChange={(e) => setSvcProcForm((f) => ({ ...f, newSize: e.target.value }))}><option>Pequeno</option><option>Médio</option><option>Grande</option></select></label>
-                      </div>
-                    )}
-                    <div className="svc-grid-2">
-                      <label className="field svc-field">
-                        <span>Procedimento</span>
-                        <select value={svcProcForm.type} onChange={(e) => setSvcProcForm((f) => ({ ...f, type: e.target.value }))}><option>Castração</option><option>Microchipagem</option><option>Castração e microchipagem</option></select>
-                      </label>
-                      <label className="field svc-field">
-                        <span>Observações</span>
-                        <textarea value={svcProcForm.notes} onChange={(e) => setSvcProcForm((f) => ({ ...f, notes: e.target.value }))} placeholder="Descreva a necessidade" rows={2} />
-                      </label>
-                    </div>
                   </>
                 ) : isTransfer ? (
                   <>
@@ -2518,7 +2400,20 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
             ) : activePublicService === "credential" ? (
               <PublicAccessRequestInline onSubmit={onAccessRequest} />
             ) : activePublicService === "report" ? (
-              <PublicReportPanel municipalityName={activeMunicipality?.name || "Sistema municipal"} />
+              <PublicReportPanel
+                municipalityName={activeMunicipality?.name || "Sistema municipal"}
+                municipalityId={selectedMunicipalityId}
+                onSubmit={async (payload) => {
+                  const created = await createRequest({
+                    ...payload,
+                    request_type: RequestType.COMPLAINT,
+                    municipality_id: selectedMunicipalityId,
+                  });
+                  const normalized = onRequestCreated?.(created, { openAdmin: true }) || normalizeRequest(created);
+                  setPublicServiceDone(normalized);
+                  return created;
+                }}
+              />
             ) : (
               <ValidationKeyConsultation
                 fallbackRequests={requests}
@@ -2845,7 +2740,39 @@ function PublicAccessRequestInline({ onSubmit }: AnyRecord) {
   );
 }
 
-function PublicReportPanel({ municipalityName = "Sistema municipal" }: AnyRecord) {
+function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }: AnyRecord) {
+  const [form, setForm] = useState({ name: "", contact: "", location: "", description: "" });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function submitReport(event) {
+    event.preventDefault();
+    if (!form.description.trim()) {
+      setError("Descreva a situação observada.");
+      return;
+    }
+    setError("");
+    setSaving(true);
+    try {
+      await onSubmit?.({
+        tutor_name: form.name.trim(),
+        phone: form.contact.trim(),
+        address: form.location.trim(),
+        notes: form.description.trim(),
+        workflow_data: {
+          reporter_name: form.name.trim(),
+          reporter_contact: form.contact.trim(),
+          location: form.location.trim(),
+          description: form.description.trim(),
+        },
+      });
+    } catch (err: any) {
+      setError(err.message || "Não foi possível registrar a denúncia.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <section className="public-inline-card public-report-inline">
       <div className="public-inline-heading">
@@ -2855,28 +2782,30 @@ function PublicReportPanel({ municipalityName = "Sistema municipal" }: AnyRecord
           <span>Registre uma denúncia para análise da equipe responsável.</span>
         </div>
       </div>
-      <div className="single-request-form clean-form">
+      <form className="single-request-form clean-form" onSubmit={submitReport}>
         <div className="two-column-fields">
           <label className="access-form-label">
             <span>Nome</span>
-            <div className="access-field"><input type="text" placeholder="Opcional" /></div>
+            <div className="access-field"><input type="text" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Opcional" /></div>
           </label>
           <label className="access-form-label">
             <span>Contato</span>
-            <div className="access-field"><input type="text" placeholder="Telefone ou email" /></div>
+            <div className="access-field"><input type="text" value={form.contact} onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))} placeholder="Telefone ou email" /></div>
           </label>
         </div>
         <label className="access-form-label">
           <span>Local</span>
-          <div className="access-field"><input type="text" placeholder={`Endereço ou referência em ${municipalityName}`} /></div>
+          <div className="access-field"><input type="text" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder={`Endereço ou referência em ${municipalityName}`} /></div>
         </label>
         <label className="access-form-label">
           <span>Descrição</span>
-          <div className="access-field"><textarea placeholder="Descreva a situação observada" rows={6} /></div>
+          <div className="access-field"><textarea value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Descreva a situação observada" rows={6} /></div>
         </label>
-      </div>
-      <p className="public-inline-note">Este canal ainda precisa ser conectado ao protocolo interno de denúncias.</p>
-      <div className="public-inline-actions"><button className="primary-action" type="button">Enviar denúncia</button></div>
+        {error && <p className="form-error">{error}</p>}
+        <div className="public-inline-actions">
+          <button className="primary-action" type="submit" disabled={saving}>{saving ? "Enviando..." : "Enviar denúncia"}</button>
+        </div>
+      </form>
     </section>
   );
 }
@@ -4517,6 +4446,8 @@ function AdminDashboard({
   teams = initialTeams,
   municipalities = [],
   globalSearch = "",
+  accessRequests = [],
+  setActive,
 }) {
   const [requestFilter, setRequestFilter] = useState("inbox");
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
@@ -4543,6 +4474,7 @@ function AdminDashboard({
     assumeFromPreview,
     rejectRequestFromProcess,
     confirmAttendanceFromProcess,
+    confirmSpecialRequest,
   } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
 
   const visibleRequests = useMemo(
@@ -4551,14 +4483,33 @@ function AdminDashboard({
       .filter((request) => matchesRequestSearch(request, globalSearch)),
     [requests, globalSearch],
   );
+  const visibleAccessRequests = useMemo(
+    () => (Array.isArray(accessRequests) ? accessRequests : [])
+      .filter((item) => matchesRequestSearch({ tutor: item.responsibleName, animals: [] }, globalSearch))
+      .map((item) => ({
+        __source: "access_request",
+        id: item.id,
+        protocol: String(item.id || "").slice(0, 8).toUpperCase() || "SEM-ID",
+        tutor: item.responsibleName || item.organizationName || "Solicitante",
+        animals: [{ name: item.organizationName || item.requesterLabel || "Credenciamento" }],
+        responsible: item.assignedSector || "",
+        preferredSchedule: "",
+        appointment: "",
+        status: item.status === "APROVADO" ? "REALIZADA" : item.status === "RECUSADO" ? "CANCELADA" : "NOVA",
+        tags: [],
+        rescheduleCount: 0,
+      })),
+    [accessRequests, globalSearch],
+  );
   const today = formatScheduleDate(new Date());
   const filterTabs = [
     {
       id: "inbox",
       label: "Novas",
-      requests: visibleRequests.filter(
-        (r) => r.status === "NOVA" && !r.tags.includes("ATRIBUIDA"),
-      ),
+      requests: [
+        ...visibleRequests.filter((r) => r.status === "NOVA" && !r.tags.includes("ATRIBUIDA")),
+        ...visibleAccessRequests.filter((r) => r.status === "NOVA"),
+      ],
     },
     {
       id: "analysis",
@@ -4643,18 +4594,24 @@ function AdminDashboard({
       </div>
       <div className="triage-card-grid">
         {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui."} />}
-        {activeRequests.map((request) => (
+        {activeRequests.map((request) => {
+          const isAccessRequest = request.__source === "access_request";
+          function openCard() {
+            if (isAccessRequest) setActive?.("credenciamento");
+            else openRequestPreview(request);
+          }
+          return (
           <article
             className="triage-card clickable-triage-card"
             key={request.id}
             role="button"
             tabIndex={0}
             aria-label={`Abrir solicitação #${request.protocol}`}
-            onClick={() => openRequestPreview(request)}
+            onClick={openCard}
             onKeyDown={(event) => {
               if (event.key === "Enter" || event.key === " ") {
                 event.preventDefault();
-                openRequestPreview(request);
+                openCard();
               }
             }}
           >
@@ -4673,7 +4630,7 @@ function AdminDashboard({
               </div>
               <div className="tc-col tc-col--tipo">
                 <span className="tc-label">Tipo</span>
-                <span className="tc-value">{requestTypeLabel(request)}</span>
+                <span className="tc-value">{isAccessRequest ? "Credenciamento" : requestTypeLabel(request)}</span>
               </div>
               <div className="tc-col tc-col--responsavel">
                 <span className="tc-label">Responsável</span>
@@ -4699,7 +4656,8 @@ function AdminDashboard({
               </div>
             </div>
           </article>
-        ))}
+          );
+        })}
       </div>
 
       {previewRequest && (
@@ -4718,6 +4676,7 @@ function AdminDashboard({
           onReschedule={rescheduleFromPreview}
           onAssign={assignFromPreview}
           onAssume={assumeFromPreview}
+          onConfirmSpecial={confirmSpecialRequest}
           patchRequest={patchRequest}
         />
       )}
@@ -4763,7 +4722,7 @@ function isAnimalPhotoDocument(d: AnyRecord = {}) {
   return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
 }
 
-export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
+export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -4793,9 +4752,12 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
 
   const canAnalyze = normalizedRequest.status === "NOVA";
   const isScheduleConfirmed = normalizedRequest.status === "AGENDADA";
-  const canUseProcedureTab = isScheduleConfirmed;
+  const specialSection = getSpecialRequestSection(normalizedRequest);
+  const isSpecialType = Boolean(specialSection);
+  const canUseProcedureTab = isScheduleConfirmed || (isSpecialType && canAnalyze);
   const canUseAttendanceActions = isScheduleConfirmed;
-  const procedureTabBlockReason = canUseProcedureTab ? "Procedimento e saúde" : "Disponível após confirmar a agenda";
+  const procedureTabLabel = isSpecialType ? requestTypeLabel(normalizedRequest) : "Procedimento e saúde";
+  const procedureTabBlockReason = canUseProcedureTab ? procedureTabLabel : "Disponível após confirmar a agenda";
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
   const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
   const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
@@ -5407,7 +5369,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                 title={procedureTabBlockReason}
                 onClick={() => { if (canUseProcedureTab) setModalTab("procedimento"); }}
               >
-                <FileText size={13} /> Procedimento e saúde
+                <FileText size={13} /> {procedureTabLabel}
               </button>
               <button
                 type="button"
@@ -5419,7 +5381,10 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
             </div>
           )}
 
-          {!isRescheduleMode && canUseProcedureTab && modalTab === "procedimento" && (
+          {!isRescheduleMode && canUseProcedureTab && modalTab === "procedimento" && isSpecialType && specialSection && (
+            specialSection({ request: normalizedRequest })
+          )}
+          {!isRescheduleMode && canUseProcedureTab && modalTab === "procedimento" && !isSpecialType && (
             <div className="prm-section prm-section--procedure">
               <div className="prm-section-block">
                 <p className="prm-section-title">Procedimento</p>
@@ -5522,7 +5487,18 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                   </button>
                 )}
               </div>
-              {activePanel !== "reject" && (
+              {activePanel !== "reject" && isSpecialType && (
+                <button
+                  className="prm-action-btn prm-action-btn--primary"
+                  type="button"
+                  disabled={blockWithoutAssignment}
+                  title={blockWithoutAssignment ? assignmentRequiredTitle : specialRequestConfirmLabel(normalizedRequest)}
+                  onClick={() => onConfirmSpecial?.(request)}
+                >
+                  <CheckCircle2 size={15} /> {specialRequestConfirmLabel(normalizedRequest)}
+                </button>
+              )}
+              {activePanel !== "reject" && !isSpecialType && (
                 <button
                   className="prm-action-btn prm-action-btn--primary"
                   type="button"
@@ -8539,7 +8515,7 @@ function ConfigView({
 
       {sectorModal && (
         <div className="modal-backdrop">
-          <form className="workflow-modal" onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
+          <form className="workflow-modal config-clean-modal config-sector-modal" onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
             <ModalHeader title={editingSectorId ? "Editar setor" : "Criar setor"} onClose={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }} />
             <div className="config-modal-options">
               <ConfigActiveToggle checked={newSectorActive} onChange={setNewSectorActive} />
@@ -8565,7 +8541,12 @@ function ConfigView({
                 ))}
               </div>
             </label>
-            <button className="primary-action" type="submit" disabled={!newSectorName.trim()}>{editingSectorId ? "Salvar" : "Criar setor"}</button>
+            <div className="form-actions config-clean-actions">
+              <button className="ghost-button" type="button" onClick={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }}>
+                Cancelar
+              </button>
+              <button className="primary-action" type="submit" disabled={!newSectorName.trim()}>{editingSectorId ? "Salvar" : "Criar setor"}</button>
+            </div>
           </form>
         </div>
       )}
@@ -8637,7 +8618,7 @@ function ConfigView({
 
       {permissionModal && (
         <div className="modal-backdrop">
-          <form className="workflow-modal" onSubmit={(event) => { event.preventDefault(); createPermissionGroup(); }}>
+          <form className="workflow-modal config-clean-modal config-permission-modal" onSubmit={(event) => { event.preventDefault(); createPermissionGroup(); }}>
             <ModalHeader
               title={editingPermissionGroupId ? "Editar grupo de permissão" : "Criar grupo de permissão"}
               onClose={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }}
@@ -8654,7 +8635,7 @@ function ConfigView({
               placeholder="Ex: Triagem documental"
               onChange={(value) => setNewPermissionGroup((current) => ({ ...current, name: value }))}
             />
-            <section className="agenda-modal-block">
+            <section className="agenda-modal-block config-clean-section">
               <strong>Menus liberados</strong>
               <div className="team-user-checklist">
                 {permissionMenuItems.map((item) => (
@@ -8669,7 +8650,7 @@ function ConfigView({
                 ))}
               </div>
             </section>
-            <section className="agenda-modal-block">
+            <section className="agenda-modal-block config-clean-section">
               <strong>Áreas de configuração</strong>
               <div className="team-user-checklist">
                 {permissionConfigItems.filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role)).map((item) => (
@@ -8684,9 +8665,14 @@ function ConfigView({
                 ))}
               </div>
             </section>
-            <button className="primary-action" type="submit" disabled={!newPermissionGroup.name?.trim()}>
-              {editingPermissionGroupId ? "Salvar grupo" : "Criar grupo"}
-            </button>
+            <div className="form-actions config-clean-actions">
+              <button className="ghost-button" type="button" onClick={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }}>
+                Cancelar
+              </button>
+              <button className="primary-action" type="submit" disabled={!newPermissionGroup.name?.trim()}>
+                {editingPermissionGroupId ? "Salvar" : "Criar grupo"}
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -9787,15 +9773,8 @@ function SimpleConfigList({ title, items, allItems = items, filterValue = "activ
 
 function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: AnyRecord) {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [procedureOpen, setProcedureOpen] = useState(false);
   const [deathOpen, setDeathOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
-  const [procedureForm, setProcedureForm] = useState({ request_type: "Castração", notes: "" });
-  const [procedureAnimalMode, setProcedureAnimalMode] = useState("current");
-  const [procedureOtherMicrochip, setProcedureOtherMicrochip] = useState("");
-  const [procedureOtherAnimal, setProcedureOtherAnimal] = useState(null as any);
-  const [procedureLookingUp, setProcedureLookingUp] = useState(false);
-  const [procedureNewAnimal, setProcedureNewAnimal] = useState({ name: "", species: "Cão", sex: "Macho", size: "Pequeno" });
   const [deathForm, setDeathForm] = useState({ death_date: "", death_cause: "", notes: "" });
   const [transferForm, setTransferForm] = useState({
     target_tutor_name: "",
@@ -9809,89 +9788,6 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
   const animal = record.animal || {};
   const tutor = record.tutor || {};
   const history = Array.isArray(record.history) ? record.history : [];
-
-  async function lookupProcedureAnimal() {
-    const chip = procedureOtherMicrochip.trim();
-    if (!chip) return;
-    try {
-      setProcedureLookingUp(true);
-      setFormStatus("");
-      const result = await api.consultAnimalByMicrochip({ microchip: chip });
-      const found = result?.animal || null;
-      setProcedureOtherAnimal(found);
-      if (!found) setFormStatus("Animal não encontrado para este microchip.");
-    } catch {
-      setFormStatus("Erro ao buscar animal.");
-      setProcedureOtherAnimal(null);
-    } finally {
-      setProcedureLookingUp(false);
-    }
-  }
-
-  async function submitProcedure(event) {
-    event.preventDefault();
-    const tutorCpf = onlyDigits(tutor.cpf || cpf);
-    if (tutorCpf.length !== 11) {
-      setFormStatus("CPF do tutor não está válido para abrir procedimento.");
-      return;
-    }
-    const activeAnimal =
-      procedureAnimalMode === "other" ? (procedureOtherAnimal || {})
-      : procedureAnimalMode === "new" ? procedureNewAnimal
-      : animal;
-    if (procedureAnimalMode === "other" && !procedureOtherAnimal) {
-      setFormStatus("Busque o microchip do animal antes de continuar.");
-      return;
-    }
-    if (procedureAnimalMode === "new" && !procedureNewAnimal.species) {
-      setFormStatus("Informe ao menos a espécie do animal.");
-      return;
-    }
-    try {
-      setSaving("procedure");
-      const created = await api.createRequest({
-        tutor_name: tutor.tutor_name || tutor.name || "",
-        tutor_email: tutor.tutor_email || tutor.email || "",
-        cpf: tutorCpf,
-        phone: tutor.phone || "",
-        address: tutor.address || "",
-        neighborhood: tutor.neighborhood || "",
-        city: tutor.city || "",
-        state: tutor.state || "",
-        cep: tutor.cep || "",
-        animal_id: activeAnimal.id,
-        animal_microchip: activeAnimal.microchip,
-        animal_name: activeAnimal.name,
-        species: activeAnimal.species,
-        size: activeAnimal.size,
-        request_type: procedureForm.request_type,
-        notes: procedureForm.notes,
-        tags: ["MICROCHIP"],
-        workflow_data: { animal_request_type: "procedure_from_record" },
-        animals: [{
-          id: activeAnimal.id,
-          microchip: activeAnimal.microchip,
-          name: activeAnimal.name,
-          species: activeAnimal.species,
-          sex: activeAnimal.sex,
-          size: activeAnimal.size,
-          procedure: procedureForm.request_type,
-        }],
-      });
-      setProcedureOpen(false);
-      setProcedureForm({ request_type: "Castração", notes: "" });
-      setProcedureAnimalMode("current");
-      setProcedureOtherMicrochip("");
-      setProcedureOtherAnimal(null);
-      setProcedureNewAnimal({ name: "", species: "Cão", sex: "Macho", size: "Pequeno" });
-      setFormStatus("Solicitação de procedimento enviada para análise.");
-      onRequestCreated?.(created);
-    } catch (err) {
-      setFormStatus(err.message || "Não foi possível solicitar o procedimento.");
-    } finally {
-      setSaving("");
-    }
-  }
 
   async function submitDeath(event) {
     event.preventDefault();
@@ -10024,113 +9920,6 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
         <InfoTile label="Eventos" value={`${history.length} registro(s)`} />
       </div>
 
-
-      {procedureOpen && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal animal-action-modal" onSubmit={submitProcedure} role="dialog" aria-modal="true">
-            <ModalHeader title="Solicitar procedimento" onClose={() => setProcedureOpen(false)} />
-
-            <div className="pac-tutor-banner">
-              <span className="pac-tutor-label">Tutor identificado</span>
-              <strong>{tutor.tutor_name || tutor.name || "Não informado"}</strong>
-              <span className="pac-tutor-cpf">{tutor.cpf ? `CPF ${tutor.cpf}` : ""}</span>
-            </div>
-
-            <div className="field">
-              <span className="field-label">Para qual animal?</span>
-              <div className="pac-animal-options">
-                <label className="pac-animal-option">
-                  <input type="radio" name="animalMode" value="current" checked={procedureAnimalMode === "current"} onChange={() => { setProcedureAnimalMode("current"); setProcedureOtherAnimal(null); setProcedureOtherMicrochip(""); }} />
-                  <div className="pac-animal-option-body">
-                    <strong>Este animal</strong>
-                    <span>{[animal.name, animal.species, animal.sex].filter(Boolean).join(" · ") || animal.microchip || "Animal atual"}</span>
-                  </div>
-                </label>
-                <label className="pac-animal-option">
-                  <input type="radio" name="animalMode" value="other" checked={procedureAnimalMode === "other"} onChange={() => setProcedureAnimalMode("other")} />
-                  <div className="pac-animal-option-body">
-                    <strong>Outro animal deste tutor</strong>
-                    <span>Busque pelo microchip</span>
-                  </div>
-                </label>
-                <label className="pac-animal-option">
-                  <input type="radio" name="animalMode" value="new" checked={procedureAnimalMode === "new"} onChange={() => setProcedureAnimalMode("new")} />
-                  <div className="pac-animal-option-body">
-                    <strong>Animal ainda não cadastrado</strong>
-                    <span>Preencha os dados básicos</span>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {procedureAnimalMode === "other" && (
-              <div className="pac-lookup-row">
-                <label className="field" style={{ flex: 1 }}>
-                  <span>Microchip do animal</span>
-                  <input value={procedureOtherMicrochip} onChange={(e) => { setProcedureOtherMicrochip(e.target.value); setProcedureOtherAnimal(null); }} placeholder="Número do microchip" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), lookupProcedureAnimal())} />
-                </label>
-                <button type="button" className="secondary-action" style={{ alignSelf: "flex-end" }} onClick={lookupProcedureAnimal} disabled={procedureLookingUp}>
-                  {procedureLookingUp ? "Buscando..." : "Buscar"}
-                </button>
-                {procedureOtherAnimal && (
-                  <div className="pac-found-animal">
-                    <strong>{procedureOtherAnimal.name || "Sem nome"}</strong>
-                    <span>{[procedureOtherAnimal.species, procedureOtherAnimal.sex, procedureOtherAnimal.size].filter(Boolean).join(" · ")}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {procedureAnimalMode === "new" && (
-              <div className="two-column-fields">
-                <label className="field">
-                  <span>Nome do animal</span>
-                  <input value={procedureNewAnimal.name} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, name: e.target.value }))} placeholder="Opcional" />
-                </label>
-                <label className="field">
-                  <span>Espécie</span>
-                  <select value={procedureNewAnimal.species} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, species: e.target.value }))}>
-                    <option>Cão</option>
-                    <option>Gato</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Sexo</span>
-                  <select value={procedureNewAnimal.sex} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, sex: e.target.value }))}>
-                    <option>Macho</option>
-                    <option>Fêmea</option>
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Porte</span>
-                  <select value={procedureNewAnimal.size} onChange={(e) => setProcedureNewAnimal((a) => ({ ...a, size: e.target.value }))}>
-                    <option>Pequeno</option>
-                    <option>Médio</option>
-                    <option>Grande</option>
-                  </select>
-                </label>
-              </div>
-            )}
-
-            <label className="field">
-              <span>Procedimento</span>
-              <select value={procedureForm.request_type} onChange={(event) => setProcedureForm((current) => ({ ...current, request_type: event.target.value }))}>
-                <option>Castração</option>
-                <option>Microchipagem</option>
-                <option>Castração e microchipagem</option>
-              </select>
-            </label>
-            <label className="field animal-form-notes">
-              <span>Observações</span>
-              <textarea value={procedureForm.notes} onChange={(event) => setProcedureForm((current) => ({ ...current, notes: event.target.value }))} placeholder="Descreva a necessidade do procedimento" />
-            </label>
-            <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => setProcedureOpen(false)}>Cancelar</button>
-              <button className="primary-action" type="submit" disabled={saving === "procedure"}>{saving === "procedure" ? "Enviando..." : "Solicitar"}</button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {deathOpen && (
         <div className="modal-backdrop">

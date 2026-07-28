@@ -492,6 +492,45 @@ router.patch("/:id", auth, async (req, res) => {
         if (animalRows[0]) animalId = animalRows[0].id;
       }
 
+      if (rows[0].request_type === "ANIMAL_OBITO" && animalId) {
+        try {
+          await pool.query(
+            "UPDATE animals SET status = 'OBITO', updated_at = NOW() WHERE id = $1 AND municipality_id = $2",
+            [animalId, rows[0].municipality_id],
+          );
+        } catch (deathErr) {
+          console.warn("Aviso: falha ao efetivar obito do animal:", deathErr.message);
+        }
+      } else if (rows[0].request_type === "TROCA_TUTOR" && animalId && rows[0].target_tutor_cpf) {
+        try {
+          await pool.query(
+            "UPDATE animal_tutors SET active = FALSE, ended_at = NOW() WHERE animal_id = $1 AND active = TRUE",
+            [animalId],
+          );
+          await pool.query(
+            `INSERT INTO animal_tutors (
+              animal_id, tutor_name, tutor_email, cpf, phone, address,
+              neighborhood, city, state, cep, active, started_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE, NOW())`,
+            [
+              animalId,
+              rows[0].target_tutor_name,
+              rows[0].target_tutor_email,
+              rows[0].target_tutor_cpf,
+              rows[0].target_tutor_phone,
+              rows[0].target_tutor_address,
+              rows[0].target_tutor_neighborhood,
+              rows[0].target_tutor_city,
+              rows[0].target_tutor_state,
+              rows[0].target_tutor_cep,
+            ],
+          );
+        } catch (transferErr) {
+          console.warn("Aviso: falha ao efetivar troca de tutor:", transferErr.message);
+        }
+      }
+
       if (animalId && performedProcedures) {
         try {
           await pool.query(

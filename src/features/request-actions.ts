@@ -160,6 +160,16 @@ export function useRequestActions({
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
 
+  async function confirmSpecialRequest(request: AnyRecord) {
+    if (!request) return;
+    const patch = { status: "REALIZADA" };
+    try {
+      await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}`);
+      showToast("Processo confirmado com sucesso", "success");
+    } catch { showToast("Erro ao confirmar processo", "error"); }
+    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+  }
+
   async function confirmAttendanceFromProcess(request: AnyRecord, data: AnyRecord = {}) {
     if (!request) return;
     const normalized = normalizeRequest(request);
@@ -206,5 +216,6 @@ export function useRequestActions({
     assumeFromPreview,
     rejectRequestFromProcess,
     confirmAttendanceFromProcess,
+    confirmSpecialRequest,
   };
 }

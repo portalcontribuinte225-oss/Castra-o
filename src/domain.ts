@@ -14,6 +14,29 @@ export const statusLabels: AnyRecord = {
   CANCELADA: "Cancelada",
 };
 
+export const RequestType = {
+  PROCEDURE: "PROCEDIMENTO",
+  ANIMAL_DEATH: "ANIMAL_OBITO",
+  TUTOR_TRANSFER: "TROCA_TUTOR",
+  COMPLAINT: "DENUNCIA",
+} as const;
+
+export const requestTypeDomainLabels: AnyRecord = {
+  [RequestType.PROCEDURE]: "Procedimento",
+  [RequestType.ANIMAL_DEATH]: "Óbito do animal",
+  [RequestType.TUTOR_TRANSFER]: "Troca de tutor",
+  [RequestType.COMPLAINT]: "Denúncia",
+};
+
+const REQUEST_TYPE_VALUES: string[] = Object.values(RequestType);
+
+export function normalizeRequestType(type = "") {
+  const value = String(type || "").trim();
+  if (REQUEST_TYPE_VALUES.includes(value)) return value;
+  // Legacy free-text request types are all treated as procedure requests
+  return RequestType.PROCEDURE;
+}
+
 export const workflowTagLabels: AnyRecord = {
   REAGENDADA: "Reagendada",
   ATRIBUIDA: "Atribuída",
