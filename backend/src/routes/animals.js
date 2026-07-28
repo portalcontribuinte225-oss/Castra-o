@@ -3,7 +3,7 @@ import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { optionalAuth } from "../middleware/auth.js";
 import { normalizeCpf } from "../utils.js";
-import { isGlobalUser } from "../tenant.js";
+import { isGlobalUser, isInternalUser, pickMunicipalityId } from "../tenant.js";
 
 const router = Router();
 
@@ -210,17 +210,18 @@ async function isUserAuthorizedForAnimal(client, user, animal) {
   if (!user) return false;
   if (isGlobalUser(user)) return true;
 
-  const municipalityId = user.municipalityId || user.municipality_id || null;
-  if (municipalityId) {
-    const { rows } = await client.query(
-      `SELECT 1
-       FROM animal_records
-       WHERE animal_id = $1
-         AND municipality_id = $2
-       LIMIT 1`,
-      [animal.id, municipalityId],
+  if (isInternalUser(user)) {
+    const municipalityId = user.municipalityId || user.municipality_id || null;
+    const { rows: recordRows } = await client.query(
+      "SELECT DISTINCT municipality_id FROM animal_records WHERE animal_id = $1 AND municipality_id IS NOT NULL",
+      [animal.id],
     );
-    if (rows[0]) return true;
+    // Animal sem histórico de prefeitura (ex: recém-identificado por microchip):
+    // qualquer usuário interno pode operar — será o primeiro vínculo registrado.
+    if (recordRows.length === 0) return true;
+    // Animal já vinculado a alguma prefeitura: só a equipe interna dessa mesma
+    // prefeitura pode operar, preservando isolamento multi-tenant.
+    return recordRows.some((row) => row.municipality_id === municipalityId);
   }
 
   const { rows } = await client.query(
@@ -451,13 +452,10 @@ router.post("/:id/death", optionalAuth, async (req, res) => {
       death_cause: deathCause || null,
     };
 
-    let municipalityId = req.user?.municipalityId || null;
+    const municipalityId = pickMunicipalityId(req);
     if (!municipalityId) {
-      const { rows: mRows } = await client.query(
-        "SELECT municipality_id FROM requests WHERE animal_id = $1 AND municipality_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
-        [animal.id],
-      );
-      municipalityId = mRows[0]?.municipality_id || null;
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
     }
 
     const { rows } = await client.query(
@@ -564,13 +562,10 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
       cep: pick(req.body?.target_tutor_cep, req.body?.targetTutorCep, req.body?.newTutorCep),
     };
     const workflowData = { animal_request_type: "transfer", target_tutor: target };
-    let municipalityId = req.user?.municipalityId || null;
+    const municipalityId = pickMunicipalityId(req);
     if (!municipalityId) {
-      const { rows: mRows } = await client.query(
-        "SELECT municipality_id FROM requests WHERE animal_id = $1 AND municipality_id IS NOT NULL ORDER BY created_at DESC LIMIT 1",
-        [animal.id],
-      );
-      municipalityId = mRows[0]?.municipality_id || null;
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
     }
 
     const { rows } = await client.query(

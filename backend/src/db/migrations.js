@@ -450,6 +450,11 @@ export async function runMigrations() {
       ON users (lower(email));
   `);
 
+  /* ── Nome do órgão/secretaria responsável, exibido como subtítulo do município ── */
+  await pool.query(`
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS department_name TEXT;
+  `);
+
   const adminEmail = process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD || process.env.VITE_ADMIN_PASSWORD;
   if (adminEmail && adminPassword) {

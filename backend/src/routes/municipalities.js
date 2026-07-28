@@ -71,6 +71,7 @@ router.post("/", auth, async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
   const address = String(req.body?.address || "").trim();
   const cep = String(req.body?.cep || "").trim();
+  const departmentName = String(req.body?.department_name || req.body?.departmentName || "").trim();
   const slug = slugify(req.body?.slug || name);
   if (!name || !slug) return res.status(400).json({ error: "Nome do municipio e obrigatorio." });
 
@@ -79,8 +80,8 @@ router.post("/", auth, async (req, res) => {
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `INSERT INTO municipalities (name, state, slug, contact, email, address, cep, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO municipalities (name, state, slug, contact, email, address, cep, department_name, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (slug)
        DO UPDATE SET
          name = EXCLUDED.name,
@@ -89,10 +90,11 @@ router.post("/", auth, async (req, res) => {
          email = EXCLUDED.email,
          address = EXCLUDED.address,
          cep = EXCLUDED.cep,
+         department_name = EXCLUDED.department_name,
          active = EXCLUDED.active,
          updated_at = NOW()
        RETURNING *`,
-      [name, state, slug, contact, email, address, cep, active],
+      [name, state, slug, contact, email, address, cep, departmentName, active],
     );
     const municipality = rows[0];
 
@@ -176,7 +178,7 @@ router.post("/", auth, async (req, res) => {
 
 // Non-global authenticated users can edit only contact/branding data for their
 // own municipality. Tenant identity and activation fields remain master/support-only.
-const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "contact", "email", "address", "cep"];
+const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "contact", "email", "address", "cep", "department_name"];
 const MUNICIPALITY_GLOBAL_EDIT_FIELDS = ["name", "state", "active", ...MUNICIPALITY_SELF_EDIT_FIELDS];
 
 router.patch("/:id", auth, async (req, res) => {
@@ -184,6 +186,10 @@ router.patch("/:id", auth, async (req, res) => {
   const ownMunicipalityId = req.user?.municipalityId || req.user?.municipality_id || null;
   if (!isGlobal && ownMunicipalityId !== req.params.id) {
     return res.status(403).json({ error: "Acesso restrito ao proprio municipio." });
+  }
+
+  if (req.body?.departmentName !== undefined && req.body?.department_name === undefined) {
+    req.body.department_name = req.body.departmentName;
   }
 
   const fields = [];

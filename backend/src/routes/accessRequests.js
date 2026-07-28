@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
-import { isGlobalUser } from "../tenant.js";
+import { isGlobalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 
 const router = Router();
@@ -62,11 +62,12 @@ router.post("/", async (req, res) => {
   const responsibleName = String(body.responsible_name || body.responsibleName || "").trim();
   const email = normalizeEmail(body.email);
   const assignedSector = String(body.assigned_sector || body.assignedSector || sectorByType[requesterType] || "").trim();
-  const municipalityId = body.municipality_id || body.municipalityId || null;
+  const municipalityId = pickMunicipalityId(req);
 
   if (!REQUESTER_TYPES.has(requesterType)) return res.status(400).json({ error: "Tipo de solicitante invalido." });
   if (!responsibleName) return res.status(400).json({ error: "Nome do responsavel e obrigatorio." });
   if (!email) return res.status(400).json({ error: "Email e obrigatorio." });
+  if (!municipalityId) return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
 
   try {
     const { rows } = await pool.query(

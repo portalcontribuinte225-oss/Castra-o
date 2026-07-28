@@ -68,6 +68,14 @@ export function isMunicipalAdmin(user = {}) {
   return normalizeRole(user.role) === MUNICIPALITY_ADMIN_ROLE;
 }
 
+// Roles de uso interno da prefeitura (equipe de atendimento, não credenciados externos)
+const INTERNAL_ROLES = new Set(["admin_municipal", "analista", "servidor_publico"]);
+
+/** Retorna true se o usuário é da equipe interna da prefeitura (não tutor/ong/protetor) */
+export function isInternalUser(user = {}) {
+  return isGlobalUser(user) || INTERNAL_ROLES.has(normalizeRole(user.role));
+}
+
 /** Retorna o nível numérico de um role (0 se desconhecido) */
 export function getRoleLevel(role = "") {
   return ROLE_LEVELS[normalizeRole(role)] ?? 0;

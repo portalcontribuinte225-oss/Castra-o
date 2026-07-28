@@ -835,6 +835,11 @@ export default function App() {
                 ? municipalities.find((m) => m.id === currentUser.municipalityId)?.name || "Sistema municipal"
                 : "Plataforma"}
             </strong>
+            {!isGlobalRole(currentUser.role) && municipalities.find((m) => m.id === currentUser.municipalityId)?.department_name && (
+              <span className="sidebar-brand-department">
+                {municipalities.find((m) => m.id === currentUser.municipalityId)?.department_name}
+              </span>
+            )}
           </div>
           <button
             className="sidebar-toggle-btn"
@@ -1293,7 +1298,18 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
   const [svcLoading, setSvcLoading] = useState(false);
   const [svcError, setSvcError] = useState("");
   const [svcResult, setSvcResult] = useState("");
-  const [svcTransferForm, setSvcTransferForm] = useState({ targetName: "", targetCpf: "", notes: "" });
+  const [svcTransferForm, setSvcTransferForm] = useState({
+    targetName: "",
+    targetCpf: "",
+    targetPhone: "",
+    targetEmail: "",
+    targetCep: "",
+    targetAddress: "",
+    targetNeighborhood: "",
+    targetCity: "",
+    targetState: "",
+    notes: "",
+  });
   const [svcDeathForm, setSvcDeathForm] = useState({ date: "", cause: "", notes: "" });
   const [svcSaving, setSvcSaving] = useState(false);
 
@@ -1377,7 +1393,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     setSvcError("");
     setSvcResult("");
     setSvcSaving(false);
-    setSvcTransferForm({ targetName: "", targetCpf: "", notes: "" });
+    setSvcTransferForm({ targetName: "", targetCpf: "", targetPhone: "", targetEmail: "", targetCep: "", targetAddress: "", targetNeighborhood: "", targetCity: "", targetState: "", notes: "" });
     setSvcDeathForm({ date: "", cause: "", notes: "" });
 
     const alreadyIdentified = type !== "prontuario" && animalRecord?.animal && cpf && validationKey;
@@ -1427,17 +1443,20 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         setActiveServiceModal(null);
         return;
       }
+      if (activeServiceModal === "transfer" || activeServiceModal === "death") {
+        const chip = svcIdForm.microchip.trim();
+        if (!chip) { setSvcError("Informe o microchip do animal."); return; }
+        const animalResult = await api.consultAnimalByMicrochip({ microchip: chip });
+        if (!animalResult?.animal) { setSvcError("Animal não encontrado para este microchip."); return; }
+        setSvcFoundAnimal(animalResult.animal);
+        setSvcFoundTutor(animalResult.tutor || null);
+        setSvcStep(2);
+        return;
+      }
       const cleanCpf = onlyDigits(svcIdForm.cpf);
       const key = svcIdForm.key.trim();
       if (cleanCpf.length !== 11) { setSvcError("Informe um CPF válido."); return; }
       if (!key) { setSvcError("Informe a chave de validação."); return; }
-      if (activeServiceModal === "transfer" || activeServiceModal === "death") {
-        const chip = svcIdForm.microchip.trim();
-        if (!chip) { setSvcError("Informe o microchip do animal."); return; }
-        const animalResult = await api.consultAnimalByMicrochip({ microchip: chip, cpf: cleanCpf, validationKey: key });
-        if (!animalResult?.animal) { setSvcError("Animal não encontrado para este microchip."); return; }
-        setSvcFoundAnimal(animalResult.animal);
-      }
       const reqs = await api.consultRequestsByCredentials(cleanCpf, key, municipalityId);
       const latestReq = Array.isArray(reqs) && reqs.length > 0 ? reqs[0] : null;
       setSvcFoundTutor(latestReq || { cpf: cleanCpf });
@@ -1449,6 +1468,30 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     }
   }
 
+  async function lookupTransferCep(value: string) {
+    const cleanCep = onlyDigits(value);
+    const maskedCep = formatCep(value);
+    setSvcTransferForm((f) => ({ ...f, targetCep: maskedCep }));
+
+    if (cleanCep.length !== 8) return;
+
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+      const data = await response.json();
+      if (data.erro) return;
+      setSvcTransferForm((f) => ({
+        ...f,
+        targetCep: maskedCep,
+        targetAddress: data.logradouro || f.targetAddress,
+        targetNeighborhood: data.bairro || f.targetNeighborhood,
+        targetCity: data.localidade || f.targetCity,
+        targetState: data.uf || f.targetState,
+      }));
+    } catch {
+      // Falha na consulta de CEP não bloqueia o preenchimento manual
+    }
+  }
+
   async function submitServiceTransfer(event) {
     event.preventDefault();
     if (!svcTransferForm.targetName.trim() || onlyDigits(svcTransferForm.targetCpf).length !== 11) { setSvcError("Informe nome e CPF válido do novo tutor."); return; }
@@ -1457,9 +1500,16 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
       const created = await api.createAnimalTransferRequest((svcFoundAnimal || {}).id, {
         target_tutor_name: svcTransferForm.targetName,
         target_tutor_cpf: onlyDigits(svcTransferForm.targetCpf),
+        target_tutor_phone: svcTransferForm.targetPhone,
+        target_tutor_email: svcTransferForm.targetEmail,
+        target_tutor_cep: svcTransferForm.targetCep,
+        target_tutor_address: svcTransferForm.targetAddress,
+        target_tutor_neighborhood: svcTransferForm.targetNeighborhood,
+        target_tutor_city: svcTransferForm.targetCity,
+        target_tutor_state: svcTransferForm.targetState,
         notes: svcTransferForm.notes,
-        cpf: onlyDigits(svcIdForm.cpf),
-        validationKey: svcIdForm.key,
+        cpf: svcFoundTutor?.cpf || "",
+        municipalityId,
       });
       setSvcResult("Solicitação de troca enviada para análise.");
       onRequestCreated?.(created, { openAdmin: true });
@@ -1479,8 +1529,8 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         death_date: svcDeathForm.date,
         death_cause: svcDeathForm.cause,
         notes: svcDeathForm.notes,
-        cpf: onlyDigits(svcIdForm.cpf),
-        validationKey: svcIdForm.key,
+        cpf: svcFoundTutor?.cpf || "",
+        municipalityId,
       });
       setSvcResult("Registro de óbito enviado para análise.");
       onRequestCreated?.(created, { openAdmin: true });
@@ -1603,7 +1653,12 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
               {/* ── Body ── */}
               <div className="svc-modal-body">
                 {svcResult ? (
-                  <p className="sms-status confirmed">{svcResult}</p>
+                  <>
+                    <p className="sms-status confirmed">{svcResult}</p>
+                    <div className="svc-modal-footer">
+                      <button type="button" className="primary-action" onClick={closeActiveService}>Voltar ao início</button>
+                    </div>
+                  </>
                 ) : svcStep === 1 ? (
                   <>
                     {isPront ? (
@@ -1624,32 +1679,60 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
                     ) : (
                       <div className="svc-grid-3">
                         <label className="field svc-field">
-                          <span>CPF do tutor</span>
-                          <input value={svcIdForm.cpf} onChange={(e) => setSvcIdForm((f) => ({ ...f, cpf: formatCpf(e.target.value) }))} placeholder="000.000.000-00" />
+                          <span>Microchip do animal</span>
+                          <input autoFocus value={svcIdForm.microchip} onChange={(e) => setSvcIdForm((f) => ({ ...f, microchip: e.target.value }))} placeholder="Número do microchip" />
                         </label>
-                        <label className="field svc-field">
-                          <span>Chave de validação</span>
-                          <input value={svcIdForm.key} onChange={(e) => setSvcIdForm((f) => ({ ...f, key: e.target.value.toUpperCase() }))} placeholder="Cole ou digite sua chave" />
-                        </label>
-                        {(isTransfer || isDeath) && (
-                          <label className="field svc-field">
-                            <span>Microchip do animal</span>
-                            <input value={svcIdForm.microchip} onChange={(e) => setSvcIdForm((f) => ({ ...f, microchip: e.target.value }))} placeholder="Número do microchip" />
-                          </label>
-                        )}
                       </div>
                     )}
                   </>
                 ) : isTransfer ? (
                   <>
-                    <div className="svc-grid-2">
+                    <div className="form-sub-card">
+                      <span className="form-sub-card-title">Novo tutor</span>
+                      <div className="svc-grid-2">
+                        <label className="field svc-field">
+                          <span>Nome</span>
+                          <input value={svcTransferForm.targetName} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetName: e.target.value }))} />
+                        </label>
+                        <label className="field svc-field">
+                          <span>CPF</span>
+                          <input value={svcTransferForm.targetCpf} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetCpf: formatCpf(e.target.value) }))} placeholder="000.000.000-00" />
+                        </label>
+                      </div>
+                      <div className="svc-grid-2">
+                        <label className="field svc-field">
+                          <span>Email</span>
+                          <input type="email" value={svcTransferForm.targetEmail} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetEmail: e.target.value }))} />
+                        </label>
+                        <label className="field svc-field">
+                          <span>Telefone</span>
+                          <input type="tel" value={svcTransferForm.targetPhone} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetPhone: formatPhone(e.target.value) }))} placeholder="(00) 00000-0000" />
+                        </label>
+                      </div>
+                    </div>
+                    <div className="form-sub-card">
+                      <span className="form-sub-card-title">Endereço</span>
+                      <div className="svc-grid-3">
+                        <label className="field svc-field">
+                          <span>CEP</span>
+                          <input value={svcTransferForm.targetCep} onChange={(e) => lookupTransferCep(e.target.value)} placeholder="00000-000" />
+                        </label>
+                        <label className="field svc-field">
+                          <span>Bairro</span>
+                          <input value={svcTransferForm.targetNeighborhood} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetNeighborhood: e.target.value }))} />
+                        </label>
+                        <label className="field svc-field">
+                          <span>UF</span>
+                          <input value={svcTransferForm.targetState} maxLength={2} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetState: e.target.value.toUpperCase() }))} placeholder="UF" />
+                        </label>
+                      </div>
                       <label className="field svc-field">
-                        <span>Nome do novo tutor</span>
-                        <input value={svcTransferForm.targetName} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetName: e.target.value }))} />
+                        <span>Endereço</span>
+                        <input value={svcTransferForm.targetAddress} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetAddress: e.target.value }))} placeholder="Rua, número, complemento" />
                       </label>
                       <label className="field svc-field">
-                        <span>CPF do novo tutor</span>
-                        <input value={svcTransferForm.targetCpf} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetCpf: formatCpf(e.target.value) }))} placeholder="000.000.000-00" />
+                        <span>Cidade</span>
+                        <input value={svcTransferForm.targetCity} onChange={(e) => setSvcTransferForm((f) => ({ ...f, targetCity: e.target.value }))} />
                       </label>
                     </div>
                     <label className="field svc-field">
@@ -2306,6 +2389,9 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
           )}
           <div>
             <strong>{activeMunicipality ? `Prefeitura de ${activeMunicipality.name}` : "Sistema municipal"}</strong>
+            {activeMunicipality?.department_name && (
+              <span className="public-topbar-department">{activeMunicipality.department_name}</span>
+            )}
             {municipalities.length > 0 && (
               <MunicipalitySelectorChip
                 municipalities={municipalities}
@@ -2398,7 +2484,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 initialSchedule={procedurePrefill?.schedule || ""}
               />
             ) : activePublicService === "credential" ? (
-              <PublicAccessRequestInline onSubmit={onAccessRequest} />
+              <PublicAccessRequestInline onSubmit={onAccessRequest} municipalityId={selectedMunicipalityId} />
             ) : activePublicService === "report" ? (
               <PublicReportPanel
                 municipalityName={activeMunicipality?.name || "Sistema municipal"}
@@ -2602,7 +2688,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   );
 }
 
-function PublicAccessRequestInline({ onSubmit }: AnyRecord) {
+function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
   const [form, setForm] = useState({
     requesterType: "ONG",
     organizationName: "",
@@ -2639,6 +2725,7 @@ function PublicAccessRequestInline({ onSubmit }: AnyRecord) {
         city: form.city,
         state: form.state,
         assigned_sector: selectedType.sector,
+        municipality_id: municipalityId,
       });
       setSent(true);
       setStatus("");
@@ -6846,9 +6933,41 @@ function ConfigView({
   const [newPermissionGroup, setNewPermissionGroup] = useState<AnyRecord>(emptyPermissionGroup);
   const [editingPermissionGroupId, setEditingPermissionGroupId] = useState(null);
   const [permissionModal, setPermissionModal] = useState(false);
+  const [permissionOpenSections, setPermissionOpenSections] = useState({ menus: false, config: false });
+  const permissionMenuById = Object.fromEntries(permissionMenuItems.map((item) => [item.id, item]));
+  const visiblePermissionConfigItems = permissionConfigItems.filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role));
+  const permissionCatalogSections = [
+    {
+      key: "attendance",
+      title: "Atendimento",
+      tone: "blue",
+      items: ["dashboard", "admin", "credenciamento", "agenda"].map((id) => ({ field: "allowedMenuItems", id, label: permissionMenuById[id]?.label || id })),
+    },
+    {
+      key: "adoption",
+      title: "Adoção",
+      tone: "green",
+      items: [{ field: "allowedMenuItems", id: "adocao", label: permissionMenuById.adocao?.label || "Adoção" }],
+    },
+    {
+      key: "reports",
+      title: "Relatórios",
+      tone: "sky",
+      items: [{ field: "allowedMenuItems", id: "relatorios", label: permissionMenuById.relatorios?.label || "Relatórios" }],
+    },
+    {
+      key: "settings",
+      title: "Configurações",
+      tone: "violet",
+      items: [
+        { field: "allowedMenuItems", id: "config", label: permissionMenuById.config?.label || "Configurações" },
+        ...visiblePermissionConfigItems.map((item) => ({ field: "allowedConfigItems", id: item.id, label: item.label })),
+      ],
+    },
+  ].map((section) => ({ ...section, items: section.items.filter((item) => item.label) }));
   const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
   const [newTeamUser, setNewTeamUser] = useState(emptyTeamUser);
-  const emptyMunicipalityForm = { name: "", state: "", active: true, brasao: "", contact: "", email: "", address: "", cep: "" };
+  const emptyMunicipalityForm = { name: "", state: "", active: true, brasao: "", contact: "", email: "", address: "", cep: "", departmentName: "" };
   const [newMunicipality, setNewMunicipality] = useState(emptyMunicipalityForm);
   const [editingMunicipalityId, setEditingMunicipalityId] = useState(null);
   const [municipalitySaving, setMunicipalitySaving] = useState(false);
@@ -7387,6 +7506,7 @@ function ConfigView({
         email: municipality.email || "",
         address: municipality.address || "",
         cep: municipality.cep || "",
+        departmentName: municipality.department_name || municipality.departmentName || "",
       });
     } else {
       setEditingMunicipalityId(null);
@@ -7629,6 +7749,7 @@ function ConfigView({
       setEditingPermissionGroupId(null);
       setNewPermissionGroup({ ...emptyPermissionGroup, municipalityId: configMunicipalityScopeId });
     }
+    setPermissionOpenSections({ menus: false, config: false });
     setPermissionModal(true);
   }
 
@@ -8515,42 +8636,82 @@ function ConfigView({
 
       {sectorModal && (
         <div className="modal-backdrop">
-          <form className="workflow-modal config-clean-modal config-sector-modal" onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
-            <ModalHeader title={editingSectorId ? "Editar setor" : "Criar setor"} onClose={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }} />
-            <div className="config-modal-options">
-              <ConfigActiveToggle checked={newSectorActive} onChange={setNewSectorActive} />
-            </div>
-            <Field label="Nome do setor" value={newSectorName} placeholder="Ex: Triagem documental" onChange={setNewSectorName} />
-            <label className="field">
-              <span>Vincular usuários</span>
-              <div className="team-user-checklist">
-                {sectorModalUsers.length === 0 && (
-                  <span className="helper-text">Nenhum usuário cadastrado ainda.</span>
-                )}
-                {sectorModalUsers.map((u) => (
-                  <label key={`${getItemMunicipalityId(u)}:${u.id}`} className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={pendingSectorUserIds.includes(u.id)}
-                      onChange={() => setPendingSectorUserIds((current) =>
-                        current.includes(u.id) ? current.filter((id) => id !== u.id) : [...current, u.id]
-                      )}
-                    />
-                    {u.name}{getUserSectorIds(u).length ? ` (setores atuais: ${getUserSectorNames(u, teams.sectors || [])})` : ""}
-                  </label>
-                ))}
+          <form className="workflow-modal config-sector-modal" onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
+            <header className="sector-modal-header">
+              <div className="sector-modal-titleblock">
+                <h2>{editingSectorId ? "Editar setor" : "Criar setor"}</h2>
+                <p>Organize vínculos internos e responsáveis por etapa.</p>
               </div>
-            </label>
-            <div className="form-actions config-clean-actions">
-              <button className="ghost-button" type="button" onClick={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }}>
-                Cancelar
+              <button className="modal-header-close" type="button" onClick={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }} aria-label="Fechar">
+                <X size={16} />
               </button>
-              <button className="primary-action" type="submit" disabled={!newSectorName.trim()}>{editingSectorId ? "Salvar" : "Criar setor"}</button>
+            </header>
+
+            <div className="sector-modal-body">
+              <label className="sector-status-panel">
+                <span>Ativo</span>
+                <input
+                  type="checkbox"
+                  checked={newSectorActive}
+                  onChange={(event) => setNewSectorActive(event.target.checked)}
+                />
+                <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
+              </label>
+
+              <label className="field sector-name-field">
+                <span>Nome do setor</span>
+                <input
+                  value={newSectorName}
+                  placeholder="Ex: Triagem documental"
+                  onChange={(event) => setNewSectorName(event.target.value)}
+                />
+              </label>
+
+              <section className="sector-links-panel">
+                <div className="sector-links-head">
+                  <strong>Vincular usuários</strong>
+                  <small>{pendingSectorUserIds.length} de {sectorModalUsers.length} selecionados</small>
+                </div>
+                <div className="sector-link-list">
+                  {sectorModalUsers.length === 0 && (
+                    <span className="helper-text">Nenhum usuário cadastrado ainda.</span>
+                  )}
+                  {sectorModalUsers.length > 0 && (
+                    <label className="sector-link-row sector-link-row--all">
+                      <span>Todos</span>
+                      <input
+                        className="sector-switch-input"
+                        type="checkbox"
+                        checked={sectorModalUsers.every((u) => pendingSectorUserIds.includes(u.id))}
+                        onChange={(event) => setPendingSectorUserIds(event.target.checked ? sectorModalUsers.map((u) => u.id) : [])}
+                      />
+                      <span className="sector-row-toggle" aria-hidden="true"><span /></span>
+                    </label>
+                  )}
+                  {sectorModalUsers.map((u) => (
+                    <label key={`${getItemMunicipalityId(u)}:${u.id}`} className="sector-link-row">
+                      <span>{u.name}{getUserSectorIds(u).length ? ` (setores atuais: ${getUserSectorNames(u, teams.sectors || [])})` : ""}</span>
+                      <input
+                        className="sector-switch-input"
+                        type="checkbox"
+                        checked={pendingSectorUserIds.includes(u.id)}
+                        onChange={() => setPendingSectorUserIds((current) =>
+                          current.includes(u.id) ? current.filter((id) => id !== u.id) : [...current, u.id]
+                        )}
+                      />
+                      <span className="sector-row-toggle" aria-hidden="true"><span /></span>
+                    </label>
+                  ))}
+                </div>
+              </section>
             </div>
+
+            <footer className="sector-modal-footer">
+              <button className="primary-action" type="submit" disabled={!newSectorName.trim()}>{editingSectorId ? "Salvar" : "Criar setor"}</button>
+            </footer>
           </form>
         </div>
       )}
-
       {configArea === "permissions" && (
         <div className="config-panel wide">
           <ConfigSectionHeader title={configAreaTitle} createLabel="Criar grupo" onCreate={() => openPermissionModal()}>
@@ -8618,71 +8779,100 @@ function ConfigView({
 
       {permissionModal && (
         <div className="modal-backdrop">
-          <form className="workflow-modal config-clean-modal config-permission-modal" onSubmit={(event) => { event.preventDefault(); createPermissionGroup(); }}>
-            <ModalHeader
-              title={editingPermissionGroupId ? "Editar grupo de permissão" : "Criar grupo de permissão"}
-              onClose={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }}
-            />
-            <div className="config-modal-options">
-              <ConfigActiveToggle
-                checked={newPermissionGroup.active !== false}
-                onChange={(active) => setNewPermissionGroup((current) => ({ ...current, active }))}
-              />
-            </div>
-            <Field
-              label="Nome do grupo"
-              value={newPermissionGroup.name}
-              placeholder="Ex: Triagem documental"
-              onChange={(value) => setNewPermissionGroup((current) => ({ ...current, name: value }))}
-            />
-            <section className="agenda-modal-block config-clean-section">
-              <strong>Menus liberados</strong>
-              <div className="team-user-checklist">
-                {permissionMenuItems.map((item) => (
-                  <label key={item.id} className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={(newPermissionGroup.allowedMenuItems || []).includes(item.id)}
-                      onChange={() => togglePermissionList("allowedMenuItems", item.id)}
-                    />
-                    {item.label}
-                  </label>
-                ))}
+          <form className="workflow-modal config-permission-modal" onSubmit={(event) => { event.preventDefault(); createPermissionGroup(); }}>
+            <header className="permission-modal-header">
+              <div className="permission-modal-titleblock">
+                <h2>{newPermissionGroup.name || (editingPermissionGroupId ? "Grupo de permissão" : "Novo grupo")}</h2>
+                <p>Grupo padrão com todas as permissões do catálogo habilitadas.</p>
+                <span>Criado em: {newPermissionGroup.createdAt || "sem registro"}</span>
               </div>
-            </section>
-            <section className="agenda-modal-block config-clean-section">
-              <strong>Áreas de configuração</strong>
-              <div className="team-user-checklist">
-                {permissionConfigItems.filter((item) => !item.globalOnly || isGlobalRole(currentUser?.role)).map((item) => (
-                  <label key={item.id} className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={(newPermissionGroup.allowedConfigItems || []).includes(item.id)}
-                      onChange={() => togglePermissionList("allowedConfigItems", item.id)}
-                    />
-                    {item.label}
-                  </label>
-                ))}
-              </div>
-            </section>
-            <div className="form-actions config-clean-actions">
-              <button className="ghost-button" type="button" onClick={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }}>
-                Cancelar
+              <button className="modal-header-close" type="button" onClick={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }} aria-label="Fechar">
+                <X size={16} />
               </button>
+            </header>
+
+            <div className="permission-modal-body">
+              <label className="permission-status-panel">
+                <span>Ativo</span>
+                <input
+                  type="checkbox"
+                  checked={newPermissionGroup.active !== false}
+                  onChange={(event) => setNewPermissionGroup((current) => ({ ...current, active: event.target.checked }))}
+                />
+                <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
+              </label>
+              <label className="field permission-name-field">
+                <span>Nome do grupo</span>
+                <input
+                  value={newPermissionGroup.name}
+                  placeholder="Ex: Triagem documental"
+                  onChange={(event) => setNewPermissionGroup((current) => ({ ...current, name: event.target.value }))}
+                />
+              </label>
+
+              <section className="permission-catalog-panel">
+                <div className="permission-catalog-head">
+                  <strong>Permissões</strong>
+                </div>
+
+                <div className="permission-group-list">
+                  {permissionCatalogSections.map((section) => {
+                    const selectedCount = section.items.filter((item) => (newPermissionGroup[item.field] || []).includes(item.id)).length;
+                    const isOpen = permissionOpenSections[section.key] === true;
+                    return (
+                      <section className={`permission-group-card permission-group-card--${section.tone}`} key={section.key}>
+                        <button
+                          className="permission-group-header"
+                          type="button"
+                          onClick={() => setPermissionOpenSections((current) => ({ ...current, [section.key]: !isOpen }))}
+                        >
+                          <span>
+                            <strong>{section.title}</strong>
+                            <small>{selectedCount} de {section.items.length} permissões</small>
+                          </span>
+                          <span className={`permission-group-toggle${isOpen ? " is-open" : ""}`}>
+                            {isOpen ? "Ocultar" : "Expandir"}
+                            <ChevronDown size={14} />
+                          </span>
+                        </button>
+                        {isOpen && (
+                          <div className="permission-checklist">
+                            {section.items.map((item) => (
+                              <label key={`${item.field}:${item.id}`} className="permission-check-row">
+                                <span>{item.label}</span>
+                                <input
+                                  className="permission-switch-input"
+                                  type="checkbox"
+                                  checked={(newPermissionGroup[item.field] || []).includes(item.id)}
+                                  onChange={() => togglePermissionList(item.field, item.id)}
+                                />
+                                <span className="permission-row-toggle" aria-hidden="true"><span /></span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    );
+                  })}
+                </div>
+              </section>
+            </div>
+
+            <footer className="permission-modal-footer">
               <button className="primary-action" type="submit" disabled={!newPermissionGroup.name?.trim()}>
-                {editingPermissionGroupId ? "Salvar" : "Criar grupo"}
+                Salvar
               </button>
-            </div>
+            </footer>
           </form>
         </div>
       )}
-
       {userModal && (
         <div className="modal-backdrop">
-          <form className="workflow-modal" onSubmit={async (e) => { e.preventDefault(); setUserSaveError(""); if (await createTeamUser()) setUserModal(false); }}>
+          <form className="workflow-modal config-user-modal" onSubmit={async (e) => { e.preventDefault(); setUserSaveError(""); if (await createTeamUser()) setUserModal(false); }}>
             <ModalHeader title={editingTeamUserId ? "Editar usuário" : "Criar usuário"} onClose={() => { setUserModal(false); setEditingTeamUserId(null); setSectorPickerOpen(false); setUserSaveError(""); }} />
-            <div className="config-modal-options">
-              <ConfigActiveToggle checked={newTeamUser.active !== false} onChange={(active) => setNewTeamUser((c) => ({ ...c, active }))} />
+            <div className="config-management-body">
+              <div className="config-modal-options">
+                <ConfigActiveToggle checked={newTeamUser.active !== false} onChange={(active) => setNewTeamUser((c) => ({ ...c, active }))} />
             </div>
             <Field label="Nome" value={newTeamUser.name} placeholder="Nome completo" onChange={(value) => setNewTeamUser((c) => ({ ...c, name: value }))} />
             <Field label="Email" value={newTeamUser.email} placeholder="email@dominio.com" onChange={(value) => setNewTeamUser((c) => ({ ...c, email: value }))} />
@@ -8781,9 +8971,12 @@ function ConfigView({
               <input type="password" value={newTeamUser.senha} placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"} onChange={(e) => setNewTeamUser((c) => ({ ...c, senha: e.target.value }))} />
             </label>
             {userSaveError && <p className="form-error-msg">{userSaveError}</p>}
-            <button className="primary-action" type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
+            </div>
+            <footer className="form-actions config-management-footer">
+              <button className="primary-action" type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
               {editingTeamUserId ? "Salvar" : "Criar usuário"}
             </button>
+            </footer>
           </form>
         </div>
       )}
@@ -9152,6 +9345,12 @@ function ConfigView({
               </p>
             )}
 
+            <Field
+              label="Nome do órgão / secretaria"
+              value={newMunicipality.departmentName}
+              placeholder="Ex: Secretaria de Meio Ambiente"
+              onChange={(value) => setNewMunicipality((current) => ({ ...current, departmentName: value }))}
+            />
             <div className="modal-form-grid">
               <Field label="Contato" value={newMunicipality.contact} placeholder="Telefone, WhatsApp ou setor responsável" onChange={(value) => setNewMunicipality((current) => ({ ...current, contact: value }))} />
               <label className="field">
@@ -9205,18 +9404,6 @@ function ConfigView({
               </p>
             )}
             <div className="form-actions">
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={() => {
-                  setConfigModal(null);
-                  setEditingMunicipalityId(null);
-                  setMunicipalitySaveStatus("");
-                  setNewMunicipality(emptyMunicipalityForm);
-                }}
-              >
-                Cancelar
-              </button>
               <button className="primary-action" type="submit" disabled={municipalitySaving || !newMunicipality.name.trim() || !newMunicipality.state.trim()}>
                 {municipalitySaving ? "Salvando..." : "Salvar"}
               </button>
@@ -9463,9 +9650,6 @@ function ConfigView({
             </div>
 
             <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); setAgendaSaving(false); setAgendaSaveStatus(""); }}>
-                Cancelar
-              </button>
               <button className="primary-action" type="submit" disabled={agendaSaving}>
                 {agendaSaving ? "Salvando..." : "Salvar"}
               </button>
@@ -9573,7 +9757,6 @@ function ConfigView({
               </div>
             </div>
             <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingRequestTypeId(null); setNewRequestType(emptyRequestType); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
             </div>
           </form>
@@ -9595,7 +9778,6 @@ function ConfigView({
             </div>
             <Field label="Nome" value={newSpecies.name} onChange={(value) => setNewSpecies((current) => ({ ...current, name: value }))} />
             <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingSpeciesId(null); setNewSpecies({ name: "", active: true }); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
             </div>
           </form>
@@ -9622,7 +9804,6 @@ function ConfigView({
               <Field label="Unidade" value={newSize.weightUnit} placeholder="kg" onChange={(value) => setNewSize((current) => ({ ...current, weightUnit: value }))} />
             </div>
             <div className="form-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingSizeId(null); setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true }); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
             </div>
           </form>
@@ -9726,7 +9907,6 @@ function ConfigView({
             </div>
 
             <div className="form-actions document-modal-actions">
-              <button className="ghost-button" type="button" onClick={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); }}>Cancelar</button>
               <button className="primary-action" type="submit">Salvar</button>
             </div>
           </form>

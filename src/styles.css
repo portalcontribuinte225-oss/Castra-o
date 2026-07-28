@@ -1215,6 +1215,13 @@ button:disabled {
   line-height: 1.2;
 }
 
+.public-topbar-department {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--muted, #6b7280);
+  line-height: 1.2;
+}
+
 
 .public-topbar-nav {
   display: flex;
@@ -1318,6 +1325,526 @@ button:disabled {
 }
 
 
+.modal-backdrop > .config-clean-modal {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #dbe5f1;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 22px 58px rgba(15, 23, 42, 0.18);
+}
+
+.modal-backdrop > :is(.config-sector-modal, .config-permission-modal, .config-user-modal) {
+  width: min(680px, calc(100vw - 32px));
+  height: var(--config-management-modal-height);
+  max-height: calc(100dvh - 32px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid #dbe5f1;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
+}
+
+.modal-backdrop > .config-sector-modal {
+  --config-management-modal-height: min(78dvh, 720px);
+}
+
+.modal-backdrop > .config-permission-modal {
+  --config-management-modal-height: min(92dvh, 900px);
+}
+
+.modal-backdrop > .config-user-modal {
+  --config-management-modal-height: min(86dvh, 820px);
+}
+
+:is(.sector-modal-header, .permission-modal-header, .config-user-modal > .modal-header) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 24px 14px;
+  border-bottom: 1px solid #eef2f6;
+  background: #ffffff;
+}
+
+:is(.sector-modal-titleblock, .permission-modal-titleblock, .config-user-modal .modal-header-text) {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+:is(.sector-modal-titleblock, .permission-modal-titleblock, .config-user-modal .modal-header-text) h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+:is(.sector-modal-titleblock, .permission-modal-titleblock, .config-user-modal .modal-header-text) :is(p, span) {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+:is(.sector-modal-body, .permission-modal-body, .config-management-body) {
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  overflow-y: auto;
+  padding: 20px 24px;
+  background: #ffffff;
+}
+
+:is(.sector-status-panel, .permission-status-panel, .config-management-body > .config-modal-options) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+:is(.sector-status-panel, .permission-status-panel) input,
+:is(.sector-switch-input, .permission-switch-input) {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+:is(.sector-status-panel, .permission-status-panel) .toggle-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background 0.16s ease;
+}
+
+:is(.sector-status-panel, .permission-status-panel) .toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  transition: transform 0.16s ease;
+}
+
+:is(.sector-status-panel, .permission-status-panel) input:checked + .toggle-track,
+:is(.sector-switch-input, .permission-switch-input):checked + :is(.sector-row-toggle, .permission-row-toggle) {
+  background: #4f46e5;
+}
+
+:is(.sector-status-panel, .permission-status-panel) input:checked + .toggle-track .toggle-thumb,
+:is(.sector-switch-input, .permission-switch-input):checked + :is(.sector-row-toggle, .permission-row-toggle) > span {
+  transform: translateX(16px);
+}
+
+:is(.sector-name-field, .permission-name-field) {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 16px;
+}
+
+:is(.sector-name-field, .permission-name-field) > span {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+:is(.sector-name-field, .permission-name-field) input {
+  width: 100%;
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid #dbe5f1;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.8rem;
+}
+
+:is(.sector-links-panel, .permission-catalog-panel) {
+  display: grid;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #f8fafc;
+}
+
+:is(.sector-links-head, .permission-catalog-head) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+:is(.sector-links-head, .permission-catalog-head) strong {
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sector-links-head small {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+:is(.sector-link-list, .permission-group-list) {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+:is(.sector-link-row, .permission-check-row) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 30px;
+  padding: 0;
+  border: 0;
+  color: #1f2937;
+  font-size: 0.82rem;
+  font-weight: 450;
+}
+
+:is(.sector-link-row, .permission-check-row) > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sector-link-row--all {
+  padding-bottom: 10px;
+  border-bottom: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-weight: 650;
+}
+
+:is(.sector-row-toggle, .permission-row-toggle) {
+  position: relative;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: #cbd5e1;
+  transition: background 0.16s ease;
+}
+
+:is(.sector-row-toggle, .permission-row-toggle) > span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+  transition: transform 0.16s ease;
+}
+
+:is(.sector-switch-input, .permission-switch-input):focus-visible + :is(.sector-row-toggle, .permission-row-toggle) {
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.16);
+}
+
+:is(.sector-modal-footer, .permission-modal-footer, .config-management-footer) {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #eef2f6;
+  background: #ffffff;
+}
+
+:is(.sector-modal-footer, .permission-modal-footer, .config-management-footer) .primary-action {
+  min-height: 38px;
+  border-radius: 999px;
+  padding-inline: 18px;
+  font-size: 0.78rem;
+  background: #e8f0fb;
+  border-color: #0f172a;
+  color: #0f172a;
+}
+
+.config-clean-modal > .modal-header {
+  position: relative;
+  top: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 16px 18px;
+  border: 0;
+  border-bottom: 1px solid #eef2f6;
+  border-radius: 12px 12px 0 0;
+  background: #ffffff;
+}
+
+.config-clean-modal .modal-header-text h2 {
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 650;
+  letter-spacing: 0;
+}
+
+.config-clean-modal .modal-header-close {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+}
+
+.config-clean-modal .modal-header-close:hover {
+  background: #fff1f2;
+  color: #e11d48;
+}
+
+.config-clean-modal > :not(.modal-header):not(.config-clean-actions) {
+  margin-inline: 18px;
+}
+
+.config-clean-modal .field {
+  gap: 6px;
+}
+
+.config-clean-modal .field > span {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.config-clean-modal .field input,
+.config-clean-modal .field select,
+.config-clean-modal .field textarea {
+  min-height: 34px;
+  border-color: #dbe5f1;
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 0.78rem;
+}
+
+.config-clean-modal .config-modal-options {
+  display: block;
+  margin-top: 14px;
+  margin-bottom: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.config-clean-modal .config-active-toggle {
+  display: flex;
+  flex-direction: row-reverse;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 42px;
+  padding: 10px 12px;
+  border: 1px solid #dbe5f1;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.config-clean-modal .config-active-toggle > span:last-child {
+  color: #334155;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.config-clean-modal .config-active-toggle .toggle-track {
+  width: 36px;
+  height: 20px;
+  background: #e2e8f0;
+}
+
+.config-clean-modal .config-active-toggle input:checked + .toggle-track {
+  background: #4f46e5;
+}
+
+.config-clean-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 16px 0 0;
+  padding: 14px 18px 16px;
+  border-top: 1px solid #eef2f6;
+  background: #ffffff;
+}
+
+.config-clean-actions .ghost-button,
+.config-clean-actions .primary-action {
+  min-height: 34px;
+  border-radius: 999px;
+  padding-inline: 16px;
+  font-size: 0.78rem;
+}
+
+.config-clean-actions .primary-action {
+  background: #4f46e5;
+  border-color: #4f46e5;
+}
+
+.config-clean-actions .primary-action:hover:not(:disabled) {
+  background: #4338ca;
+  border-color: #4338ca;
+}
+
+.config-clean-modal .checkbox-row {
+  min-height: 36px;
+  padding: 8px 10px;
+  border-bottom: 1px solid #eef2f6;
+  color: #1f2937;
+  font-size: 0.78rem;
+  font-weight: 450;
+}
+
+.config-clean-modal .checkbox-row:last-child {
+  border-bottom: 0;
+}
+
+.config-clean-modal .checkbox-row input {
+  width: 15px;
+  height: 15px;
+  accent-color: #4f46e5;
+}
+
+.config-clean-modal .checkbox-row > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.config-clean-modal .checkbox-row--all {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  color: #0f172a;
+  font-weight: 650;
+}
+
+.permission-group-card {
+  overflow: hidden;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.permission-group-card--blue {
+  border-color: #bfdbfe;
+  background: #eef4ff;
+}
+
+.permission-group-card--green {
+  border-color: #bbf7d0;
+  background: #ecfdf3;
+}
+
+.permission-group-card--sky {
+  border-color: #bae6fd;
+  background: #eef8ff;
+}
+
+.permission-group-card--violet {
+  border-color: #ddd6fe;
+  background: #f7f3ff;
+}
+
+.permission-group-header {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 0;
+  background: transparent;
+  color: #0f172a;
+  text-align: left;
+}
+
+.permission-group-header > span:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.permission-group-header strong {
+  color: #334155;
+  font-size: 0.74rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.permission-group-header small {
+  color: #64748b;
+  font-size: 0.68rem;
+  font-weight: 500;
+}
+
+.permission-group-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(79, 70, 229, 0.08);
+  color: #4f46e5;
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.permission-group-card--green .permission-group-toggle {
+  background: rgba(16, 185, 129, 0.12);
+  color: #047857;
+}
+
+.permission-group-card--sky .permission-group-toggle {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0369a1;
+}
+
+.permission-group-toggle svg {
+  transition: transform 0.15s ease;
+}
+
+.permission-group-toggle.is-open svg {
+  transform: rotate(180deg);
+}
+
+.permission-checklist {
+  display: grid;
+  gap: 10px;
+  padding: 14px 16px 16px;
+  border-top: 1px solid rgba(203, 213, 225, 0.75);
+  background: #ffffff;
+}
 .access-modal {
   position: relative;
   width: min(520px, calc(100vw - 24px));
@@ -7415,8 +7942,8 @@ main {
   width: min(780px, calc(100vw - 32px));
 }
 .config-modal.document-analysis-modal {
-  width: min(980px, calc(100vw - 24px));
-  height: min(94dvh, 900px);
+  width: min(1040px, calc(100vw - 24px));
+  height: min(96dvh, 960px);
   max-height: calc(100dvh - 24px);
   overflow: hidden;
   padding: 14px 18px 0;
@@ -7510,7 +8037,7 @@ main {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 7px 12px;
+  padding: 6px 12px;
 }
 
 .document-section-heading {
@@ -7574,7 +8101,7 @@ main {
 .document-criteria-column {
   display: flex;
   flex-direction: column;
-  height: clamp(300px, 42dvh, 430px);
+  height: clamp(340px, 48dvh, 560px);
   min-width: 0;
   padding: 8px;
   border: 1px solid #dbe5f1;
@@ -9461,7 +9988,7 @@ form textarea:focus {
 .ag-week {
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   background: #ffffff;
@@ -9570,7 +10097,7 @@ form textarea:focus {
 .ag-day {
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   background: #ffffff;
@@ -9778,7 +10305,7 @@ form textarea:focus {
 .ag-yr-month {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   padding: 12px;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -10418,7 +10945,7 @@ form textarea:focus {
 
   .opdash-root.is-estatisticas .opdash-statistics-main {
     min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 10px;
   }
 
@@ -10468,7 +10995,7 @@ form textarea:focus {
 
   .opdash-root.is-produtividade .opdash-productivity-main {
     min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 10px;
   }
 
@@ -10518,7 +11045,7 @@ form textarea:focus {
 
   .opdash-root.is-processos .opdash-process-main {
     min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 10px;
   }
 
@@ -10569,7 +11096,7 @@ form textarea:focus {
   .opdash-operation-main {
     min-height: 0;
     height: 100%;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 10px;
   }
 
@@ -10675,7 +11202,7 @@ form textarea:focus {
 
   .opdash-root.is-gestao .opdash-management-main {
     min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     gap: 10px;
   }
 
@@ -10753,7 +11280,7 @@ form textarea:focus {
 
   .opdash-root.is-territorio .opdash-territory-side {
     min-height: 0;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
     align-content: start;
     gap: 14px;
   }
@@ -17088,7 +17615,7 @@ form textarea:focus,
   .animal-detail-modal,
   .sector-picker-modal,
   .request-preview-modal
-),
+):not(.config-permission-modal):not(.config-sector-modal):not(.config-user-modal),
 .assign-modal {
   height: auto;
   max-height: calc(100dvh - 48px);
@@ -17099,7 +17626,7 @@ form textarea:focus,
 }
 
 
-.modal-backdrop > :is(.workflow-modal, .config-modal, .auth-modal, .request-preview-modal) {
+.modal-backdrop > :is(.workflow-modal, .config-modal, .auth-modal, .request-preview-modal):not(.config-permission-modal):not(.config-sector-modal):not(.config-user-modal) {
   padding: 18px 20px;
   gap: 12px;
 }
@@ -17256,10 +17783,36 @@ form textarea:focus,
   backdrop-filter: blur(8px);
 }
 
-.config-environment-modal > .form-actions .ghost-button,
 .config-environment-modal > .form-actions .primary-action {
   min-height: 38px;
   border-radius: 999px;
+}
+
+.modal-backdrop > .config-environment-modal:not(.document-analysis-modal):not(.agenda-config-modal) {
+  width: min(680px, calc(100vw - 32px));
+}
+
+.modal-backdrop > .request-type-modal.config-environment-modal {
+  width: min(780px, calc(100vw - 32px));
+}
+
+.config-environment-modal .config-modal-options {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.config-management-body > .config-modal-options {
+  margin: 0;
+}
+
+.config-management-body > .config-modal-options .config-active-toggle {
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 .config-modal-options .config-active-toggle,
@@ -23748,13 +24301,20 @@ form textarea:focus,
   color: #4f463f !important;
   box-shadow: none !important;
 }
-.brand-text span,
 .topbar-context-chip span {
   display: none !important;
 }
 
 .brand-text {
   align-content: center;
+}
+
+.sidebar-brand-department {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted, #6b7280);
+  line-height: 1.2;
+  margin-top: 2px;
 }
 
 .topbar-context-chip {
