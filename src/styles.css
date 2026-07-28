@@ -21947,10 +21947,10 @@ form textarea:focus,
 .public-service-panel .form-section {
   width: 100%;
   max-width: none;
-  padding: 12px;
-  border: 1px solid rgba(230, 221, 201, 0.92);
-  border-radius: 16px;
-  background: rgba(253, 250, 244, 0.46);
+  padding: 12px 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 
