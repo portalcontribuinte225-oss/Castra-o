@@ -7365,6 +7365,10 @@ main {
 }
 
 
+.reports-summary-panel {
+  padding: 4px 0 0;
+}
+
 .reports-breakdown-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(160px, 1fr));
@@ -16177,7 +16181,6 @@ main {
 
 
 .workspace-heading .toolbar,
-.reports-filter-grid,
 .config-management-bar,
 .whatsapp-statusbar,
 .adoption-hero-filters {
@@ -16188,7 +16191,11 @@ main {
 }
 
 
-.workspace-heading .toolbar,
+.workspace-heading .toolbar {
+  padding: 10px 12px;
+}
+
+
 .reports-filter-grid {
   padding: 10px 12px;
 }
@@ -22698,8 +22705,7 @@ form textarea:focus,
 
 .adoption-command-header,
 .adoption-control-panel,
-.adoption-nav-modern,
-.adoption-rail-card {
+.adoption-nav-modern {
   background: #ffffff;
   border: 1px solid #efeae0;
   box-shadow: none;
@@ -22850,7 +22856,7 @@ form textarea:focus,
 
 .adoption-board-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 296px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   align-items: start;
 }
@@ -22866,21 +22872,9 @@ form textarea:focus,
   gap: 14px;
 }
 
-.adoption-workspace .adoption-card-modern {
-  min-height: 0;
-  border: 0;
-  border-radius: 20px;
-  background: transparent;
-  padding: 8px;
-  box-shadow: none;
-  display: grid;
-  gap: 10px;
-  overflow: visible;
-}
-
-.adoption-workspace .adoption-card-modern:hover {
+.adoption-workspace .adoption-card-modern:hover .animal-photo {
   transform: translateY(-2px);
-  box-shadow: 0 16px 32px rgba(28, 25, 23, 0.08);
+  box-shadow: 0 16px 32px rgba(28, 25, 23, 0.16);
 }
 
 
@@ -22890,13 +22884,7 @@ form textarea:focus,
   position: relative;
   overflow: hidden;
   background: #f5f1e9;
-}
-
-.adoption-workspace .adoption-card-modern .animal-photo {
-  order: 0;
-  aspect-ratio: 4 / 3;
-  margin: 0;
-  border-radius: 16px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 
 .adoption-workspace .adoption-card-modern .animal-photo img,
@@ -22957,49 +22945,48 @@ form textarea:focus,
   font-weight: 700;
 }
 
-.adoption-card-body {
-  display: grid;
-  gap: 3px;
-  padding: 0 2px;
-}
-
-.adoption-card-body h3 {
-  margin: 0;
-  color: #1c1917;
-  font-size: 0.98rem;
-  font-weight: 750;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.adoption-card-body p,
-.adoption-card-body small {
-  margin: 0;
-  color: #9c948a;
-  font-size: 0.75rem;
-  line-height: 1.35;
-}
-
-
-.adoption-workspace .adoption-card-modern .adoption-card-actions .ghost-button,
-.adoption-workspace .adoption-card-modern .adoption-card-actions .secondary-action,
 .adoption-workspace .adoption-list-actions .ghost-button,
-.adoption-workspace .adoption-list-actions .secondary-action,
-.adoption-workspace .adoption-card-modern .adoption-card-delete-top {
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
-  border-radius: 999px;
-  padding: 0;
+.adoption-workspace .adoption-list-actions .secondary-action {
+  width: 32px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  border-radius: 999px !important;
+  padding: 0 !important;
   box-shadow: none;
 }
 
 .adoption-workspace .adoption-card-modern .adoption-card-delete-top {
-  position: static;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+  width: 26px;
+  height: 26px;
   border: 0;
-  background: #fff1f2;
+  background: rgba(255, 241, 242, 0.92);
   color: #b91c1c;
+  backdrop-filter: blur(6px);
+}
+
+.adoption-workspace .adoption-card-modern .adoption-interest-indicator {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  width: auto;
+  min-height: 26px;
+  margin: 0;
+  padding: 0 9px;
+  border: 0;
+  background: rgba(255, 255, 255, 0.92);
+  color: #6b6259;
+  backdrop-filter: blur(6px);
+  flex: 0 0 auto;
+}
+
+.adoption-workspace .adoption-card-modern .adoption-interest-indicator.has-interest {
+  background: rgba(233, 244, 238, 0.94);
+  color: #157a4e;
 }
 
 .adoption-workspace .adoption-interest-indicator {
@@ -23074,148 +23061,6 @@ form textarea:focus,
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.adoption-rail {
-  position: sticky;
-  top: 18px;
-  display: grid;
-  gap: 14px;
-}
-
-.adoption-rail-card {
-  border-radius: 22px;
-  padding: 16px;
-}
-
-.adoption-rail-card h3 {
-  margin: 0 0 12px;
-  color: #1c1917;
-  font-size: 0.86rem;
-  font-weight: 750;
-}
-
-.adoption-rail-list {
-  display: grid;
-  gap: 5px;
-}
-
-.adoption-rail-empty {
-  margin: 0;
-  color: #a69e93;
-  font-size: 0.8rem;
-}
-
-.adoption-rail-person,
-.adoption-visit-item {
-  width: 100%;
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
-  color: #1c1917;
-  padding: 8px;
-  display: grid;
-  text-align: left;
-  cursor: pointer;
-}
-
-.adoption-rail-person {
-  grid-template-columns: 32px minmax(0, 1fr);
-  column-gap: 9px;
-}
-
-.adoption-rail-person:hover,
-.adoption-visit-item:hover {
-  background: #fcfaf6;
-}
-
-.adoption-rail-person > span {
-  grid-row: span 2;
-  width: 32px;
-  height: 32px;
-  border-radius: 11px;
-  background: #f5f1e9;
-  color: #8a8177;
-  display: grid;
-  place-items: center;
-  font-size: 0.7rem;
-  font-weight: 800;
-}
-
-.adoption-rail-person strong,
-.adoption-visit-item strong {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.8rem;
-}
-
-.adoption-rail-person small,
-.adoption-visit-item small {
-  color: #a69e93;
-  font-size: 0.7rem;
-}
-
-.adoption-visit-item {
-  grid-template-columns: 54px minmax(0, 1fr);
-  column-gap: 9px;
-}
-
-.adoption-visit-item > span {
-  grid-row: span 2;
-  min-height: 38px;
-  border-radius: 12px;
-  background: #f5f1e9;
-  color: #6b6259;
-  display: grid;
-  place-items: center;
-  font-size: 0.68rem;
-  font-weight: 800;
-}
-
-.adoption-rail-highlight {
-  background: #1c1917;
-  color: #ffffff;
-  border-color: #1c1917;
-}
-
-.adoption-rail-highlight > div {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.adoption-rail-highlight h3,
-.adoption-rail-highlight p {
-  margin: 0;
-}
-
-.adoption-rail-highlight h3 {
-  color: #ffffff;
-}
-
-.adoption-rail-highlight svg {
-  color: #7fd2a6;
-}
-
-.adoption-rail-highlight p {
-  color: #b8b1a8;
-  font-size: 0.78rem;
-  line-height: 1.55;
-}
-
-.adoption-rail-highlight button {
-  width: 100%;
-  min-height: 38px;
-  margin-top: 12px;
-  border: 0;
-  border-radius: 999px;
-  background: #ffffff;
-  color: #1c1917;
-  font-weight: 700;
-  cursor: pointer;
 }
 
 .adoption-drawer-layer {
@@ -23416,17 +23261,6 @@ form textarea:focus,
   bottom: auto;
 }
 
-@media (max-width: 1120px) {
-  .adoption-board-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .adoption-rail {
-    position: static;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 760px) {
   .adoption-command-header,
   .adoption-control-panel {
@@ -23447,10 +23281,6 @@ form textarea:focus,
 
   .adoption-view-toggle {
     justify-content: center;
-  }
-
-  .adoption-rail {
-    grid-template-columns: 1fr;
   }
 
   .adoption-list-row {
@@ -23589,7 +23419,7 @@ form textarea:focus,
 .adoption-board-layout {
   grid-column: 1 / -1;
   grid-row: 2;
-  grid-template-columns: minmax(0, 1fr) 296px;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
   margin-top: 0;
 }
@@ -23602,120 +23432,93 @@ form textarea:focus,
 }
 
 .adoption-workspace .adoption-grid-modern {
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 18px;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 14px;
 }
 
 .adoption-workspace .adoption-card-modern {
-  border: 1px solid #e7dfd3;
-  border-radius: 22px;
-  padding: 10px;
+  border: 0;
+  border-radius: 18px;
+  padding: 0;
   background: transparent;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  grid-template-rows: auto auto;
-  align-items: center;
-  column-gap: 8px;
-  row-gap: 8px;
+  display: block;
 }
 
 .adoption-workspace .adoption-card-modern .animal-photo {
-  grid-column: 1 / -1;
-  grid-row: 1;
-  height: 172px;
+  position: relative;
+  width: 100%;
+  height: 210px;
   aspect-ratio: auto;
   margin: 0;
-  border: 1px dashed #b8afa4;
-  border-radius: 15px;
+  border: 0;
+  border-radius: 18px;
   background: #ebe7df;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
 }
 
-
-.adoption-card-body {
-  min-height: 38px;
-  padding: 0 6px;
+.adoption-workspace .adoption-card-modern .animal-photo .adoption-card-status {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
 }
 
-.adoption-card-body h3 {
-  font-size: 0.96rem;
-}
-
-.adoption-card-body p,
-.adoption-card-body small {
-  font-size: 0.73rem;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-body {
-  grid-column: 1;
-  grid-row: 2;
-  min-height: 31px;
-  padding: 0 0 0 6px;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-body h3 {
+.adoption-workspace .adoption-card-modern .adoption-card-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  margin: 0;
+  padding: 22px 12px 10px;
+  background: linear-gradient(to top, rgba(15, 12, 10, 0.75), rgba(15, 12, 10, 0));
+  color: #ffffff;
+  font-size: 0.98rem;
+  font-weight: 750;
+  text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.adoption-workspace .adoption-card-modern .adoption-card-body p,
-.adoption-workspace .adoption-card-modern .adoption-card-body small {
-  display: none;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-actions {
-  grid-column: 2;
-  grid-row: 2;
-  position: static;
-  inset: auto;
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 3;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 6px;
-  width: auto;
-  padding: 0;
-  margin: 0;
-  border-top: 0;
 }
 
-.adoption-workspace .adoption-card-modern .adoption-card-actions .adoption-interest-indicator,
-.adoption-workspace .adoption-card-modern .adoption-card-actions .adoption-card-delete-top {
-  display: none;
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions .ghost-button,
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions .secondary-action {
+  width: 30px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  border-radius: 999px !important;
+  padding: 0 !important;
+  box-shadow: none;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.88);
+  color: #44403c;
+  backdrop-filter: blur(6px);
 }
 
-.adoption-workspace .adoption-card-modern .adoption-card-actions .ghost-button,
-.adoption-workspace .adoption-card-modern .adoption-card-actions .secondary-action {
-  width: 31px;
-  height: 31px;
-  min-height: 31px;
-  border: 1px solid #ede5da;
-  background: #ffffff;
-  color: #5c554c;
-}
-
-.adoption-workspace .adoption-card-modern .adoption-card-actions .secondary-action {
-  border-color: #1c1917;
-  background: #1c1917;
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions .secondary-action {
+  background: rgba(37, 99, 235, 0.92);
   color: #ffffff;
 }
 
-.adoption-rail {
-  top: 20px;
-  gap: 16px;
-}
-
-.adoption-rail-card {
-  border-radius: 22px;
-  border-color: #e7dfd3;
-  padding: 18px;
-}
-
-.adoption-rail-highlight {
-  background: #1c1917;
-  border-color: #1c1917;
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions .ghost-button svg,
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions .secondary-action svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+  color: currentColor !important;
+  stroke: currentColor !important;
 }
 
 @media (max-width: 1180px) {
@@ -24220,6 +24023,13 @@ h6,
   border-color: var(--ui-border) !important;
   background: var(--surface) !important;
   box-shadow: var(--ui-shadow-line) !important;
+}
+
+/* !important sobrepõe o bloco de tema acima (.panel, .sidebar, .topbar, etc.), compartilhado com componentes fora de escopo desta tela */
+.reports-summary-panel {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
 
@@ -25406,18 +25216,13 @@ main,
 }
 /* Adoção: remove remaining beige and soften automatic highlight banner */
 .adoption-shell,
-.adoption-card-body h3,
-.adoption-list-info strong,
-.adoption-rail-card h3,
-.adoption-rail-person,
-.adoption-visit-item {
+.adoption-list-info strong {
   color: var(--ink-900, #111827) !important;
 }
 
 .adoption-command-header,
 .adoption-control-panel,
 .adoption-nav-modern,
-.adoption-rail-card,
 .adoption-list-row,
 .adoption-drawer-interest {
   border-color: var(--ui-border, #e2e8f0) !important;
@@ -25436,21 +25241,39 @@ main,
   color: var(--ink-600, #475569) !important;
 }
 
+.adoption-workspace .adoption-card-modern .adoption-interest-indicator {
+  border-color: transparent !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  color: var(--ink-600, #475569) !important;
+}
+
+.adoption-workspace .adoption-card-modern .adoption-interest-indicator.has-interest {
+  background: rgba(233, 244, 238, 0.94) !important;
+  color: #157a4e !important;
+}
+
 .adoption-view-toggle button,
 .adoption-nav-modern .adoption-filter-group button,
-.adoption-workspace .adoption-card-modern .adoption-card-actions .ghost-button,
-.adoption-workspace .adoption-card-modern .adoption-card-actions .secondary-action,
-.adoption-workspace .adoption-list-actions .ghost-button,
-.adoption-workspace .adoption-list-actions .secondary-action,
-.adoption-workspace .adoption-card-modern .adoption-card-delete-top {
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions .ghost-button,
+.adoption-workspace .adoption-list-actions .ghost-button {
   border-color: var(--ui-border, #e2e8f0) !important;
   background: var(--surface, #ffffff) !important;
   color: var(--ink-700, #334155) !important;
 }
 
-.adoption-nav-modern .adoption-filter-group button:hover:not(.selected),
-.adoption-rail-person:hover,
-.adoption-visit-item:hover {
+.adoption-workspace .adoption-list-actions .secondary-action {
+  border-color: var(--teal, #2563eb) !important;
+  background: var(--teal, #2563eb) !important;
+  color: #ffffff !important;
+}
+
+.adoption-workspace .adoption-card-modern .adoption-card-photo-actions .secondary-action {
+  border-color: var(--teal, #2563eb) !important;
+  background: var(--teal, #2563eb) !important;
+  color: #ffffff !important;
+}
+
+.adoption-nav-modern .adoption-filter-group button:hover:not(.selected) {
   border-color: #cbd5e1 !important;
   background: #f1f5f9 !important;
   color: var(--ink-900, #111827) !important;
@@ -25482,24 +25305,6 @@ main,
   color: #1e3a8a !important;
 }
 
-.adoption-rail-highlight {
-  border-color: #bfdbfe !important;
-  background: #eff6ff !important;
-  color: #1e3a8a !important;
-}
-
-.adoption-rail-highlight h3,
-.adoption-rail-highlight p,
-.adoption-rail-highlight span {
-  color: #1e3a8a !important;
-}
-
-.adoption-rail-highlight button {
-  border: 1px solid #93c5fd !important;
-  background: #ffffff !important;
-  color: #1e3a8a !important;
-}
-
 .adoption-card-status.is-progress {
   background: #e0f2fe !important;
   color: #075985 !important;
@@ -25508,96 +25313,6 @@ main,
 .adoption-card-status.is-adopted {
   background: #e2e8f0 !important;
   color: #334155 !important;
-}
-/* Adoção rail cards: remove beige chips and improve hierarchy */
-.adoption-rail-card:not(.adoption-rail-highlight) {
-  border-color: #dbe5f1 !important;
-  background: #ffffff !important;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-}
-
-.adoption-rail-card:not(.adoption-rail-highlight) h3 {
-  color: #0f172a !important;
-  font-size: 0.88rem !important;
-  letter-spacing: 0 !important;
-}
-
-.adoption-rail-list {
-  gap: 8px !important;
-}
-
-.adoption-rail-empty {
-  color: #64748b !important;
-}
-
-.adoption-rail-person,
-.adoption-visit-item {
-  min-height: 52px !important;
-  border: 1px solid transparent !important;
-  border-radius: 14px !important;
-  background: #ffffff !important;
-  color: #0f172a !important;
-  padding: 8px !important;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease !important;
-}
-
-.adoption-rail-person:hover,
-.adoption-visit-item:hover {
-  border-color: #bfdbfe !important;
-  background: #f8fbff !important;
-  transform: translateY(-1px) !important;
-}
-
-.adoption-rail-person > span,
-.adoption-visit-item > span {
-  border: 1px solid #bfdbfe !important;
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-  box-shadow: none !important;
-}
-
-.adoption-rail-person > span {
-  width: 34px !important;
-  height: 34px !important;
-  border-radius: 10px !important;
-  font-size: 0.68rem !important;
-}
-
-.adoption-visit-item > span {
-  width: 58px !important;
-  min-height: 38px !important;
-  border-radius: 10px !important;
-  font-size: 0.67rem !important;
-  text-align: center !important;
-}
-
-.adoption-rail-person strong,
-.adoption-visit-item strong {
-  color: #0f172a !important;
-  font-size: 0.82rem !important;
-  font-weight: 760 !important;
-}
-
-.adoption-rail-person small,
-.adoption-visit-item small {
-  color: #64748b !important;
-  font-size: 0.72rem !important;
-}
-
-.adoption-rail-highlight svg {
-  color: #2563eb !important;
-}
-.adoption-workspace .adoption-rail-card .adoption-rail-person > span,
-.adoption-workspace .adoption-rail-card .adoption-visit-item > span {
-  border-color: #bfdbfe !important;
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-}
-
-.adoption-workspace .adoption-rail-card .adoption-rail-person:hover,
-.adoption-workspace .adoption-rail-card .adoption-visit-item:hover {
-  border-color: #bfdbfe !important;
-  background: #f8fbff !important;
 }
 /* Adoção modal: neutral internal style, no beige remnants */
 .modal-backdrop .adoption-form-modal {
@@ -25717,7 +25432,6 @@ main,
 .request-card,
 .triage-card,
 .adoption-card,
-.adoption-rail-card,
 .cr-table,
 .config-workspace,
 .ag-root,
@@ -25935,8 +25649,7 @@ h3,
 .panel-header h3,
 .config-section-header h2,
 .config-section-header h3,
-.adoption-rail-card h3,
-.adoption-card-body h3,
+.adoption-card-name,
 .adoption-list-info strong,
 .cr-title,
 .ag-side-head h3,
@@ -25954,9 +25667,7 @@ h3,
 .metric-card strong,
 .summary-card strong,
 .cr-value,
-.ag-side-stat strong,
-.adoption-rail-person strong,
-.adoption-visit-item strong {
+.ag-side-stat strong {
   font-weight: var(--type-weight-number) !important;
   letter-spacing: 0 !important;
 }
@@ -25968,37 +25679,11 @@ small,
 .page-subtitle,
 .topbar-page-heading p,
 .workspace-heading p,
-.adoption-card-body p,
-.adoption-card-body small,
 .adoption-list-info span,
 .adoption-list-muted,
-.adoption-rail-person small,
-.adoption-visit-item small,
-.adoption-rail-empty,
 .sidebar-user-info span {
   font-weight: var(--type-weight-muted) !important;
   letter-spacing: 0 !important;
-}
-/* Adoção rail: keep scheduled visit date readable */
-.adoption-workspace .adoption-rail-card .adoption-visit-item {
-  grid-template-columns: 96px minmax(0, 1fr) !important;
-  column-gap: 10px !important;
-}
-
-.adoption-workspace .adoption-rail-card .adoption-visit-item > span {
-  width: 96px !important;
-  min-width: 96px !important;
-  max-width: 96px !important;
-  box-sizing: border-box !important;
-  padding: 0 6px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  white-space: nowrap !important;
-  overflow: hidden !important;
-  text-overflow: clip !important;
-  font-size: 0.64rem !important;
-  line-height: 1 !important;
 }
 /* Canonical primary/secondary actions */
 :root {

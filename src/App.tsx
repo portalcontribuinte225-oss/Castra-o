@@ -6148,16 +6148,6 @@ function AdoptionView({
     { value: "", label: "Todos", icon: Users },
     ...sexFilterOptions.map((sex) => ({ value: sex, label: sex, icon: Users })),
   ];
-  const recentInterestItems = adoptionAnimals
-    .flatMap((animal) => getAdoptionInterestList(animal).map((interest, index) => ({ animal, interest, index })))
-    .sort((left, right) => new Date(right.interest.created_at || 0).getTime() - new Date(left.interest.created_at || 0).getTime())
-    .slice(0, 4);
-  const visitItems = adoptionAnimals
-    .flatMap((animal) => getAdoptionInterestList(animal).map((interest, index) => ({ animal, interest, index })))
-    .filter((item) => item.interest.visit_date)
-    .sort((left, right) => new Date(`${left.interest.visit_date}T12:00:00`).getTime() - new Date(`${right.interest.visit_date}T12:00:00`).getTime())
-    .slice(0, 3);
-  const highlightedAnimal = sortAdoptionsForHighlight(availableAnimals).find(isAdoptionHighlighted);
   function getAnimalKey(animal) {
     return animal.id || animal.name;
   }
@@ -6613,44 +6603,49 @@ function AdoptionView({
               <div className="adoption-grid adoption-grid-modern">
                 {displayedAnimals.map((animal) => {
                   const interestCount = getAdoptionInterestList(animal).length;
-                  const daysInProgram = getAdoptionDaysInProgram(animal);
                   const displayName = animal.name || animal.animal_name || "Animal";
                   return (
                     <article className="adoption-card adoption-card-modern" key={animal.id || animal.name}>
-                      <div className={`animal-photo ${getAnimalGradient(animal)}`}>
+                      <button
+                        type="button"
+                        className={`animal-photo ${getAnimalGradient(animal)}`}
+                        onClick={() => setSelectedAdoptionAnimal(animal)}
+                        aria-label={`Abrir ficha de ${displayName}`}
+                      >
                         {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={44} />}
-                      </div>
-                      <div className="adoption-card-body">
-                        <h3>{displayName}</h3>
-                        <p>{[animal.species, animal.sex, animal.age].filter(Boolean).join(" - ") || "Dados basicos nao informados"}</p>
-                        {animal.animal_microchip && <small>chip {animal.animal_microchip}</small>}
-                        {daysInProgram !== null && <small>{daysInProgram} dias no programa</small>}
-                      </div>
+                        <h3 className="adoption-card-name">{displayName}</h3>
+                      </button>
+
                       {canManageAdoptions && (
-                        <div className="adoption-card-actions">
-                          <button className={interestCount > 0 ? "adoption-interest-indicator has-interest interest-button" : "adoption-interest-indicator interest-button"} type="button" onClick={() => openInterestsModal(animal)}>
-                            <Users size={13} />
-                            <span>{interestCount}</span>
-                          </button>
-                          <button className="ghost-button" type="button" onClick={() => setSelectedAdoptionAnimal(animal)} title="Ver ficha" aria-label="Ver ficha">
-                            <Eye size={16} />
-                          </button>
-                          <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar">
-                            <Edit3 size={16} />
-                          </button>
-                          {animal.status === ADOPTION_STATUS_ADOPTED ? (
-                            <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar">
-                              <RefreshCw size={16} />
-                            </button>
-                          ) : (
-                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adoção" aria-label="Concluir adoção">
-                              <CheckCircle2 size={16} />
-                            </button>
-                          )}
+                        <>
                           <button className="adoption-card-delete-top" type="button" aria-label="Excluir" onClick={() => deleteAnimal(animal)}>
                             <X size={14} />
                           </button>
-                        </div>
+                          <button
+                            className={interestCount > 0 ? "adoption-interest-indicator has-interest interest-button" : "adoption-interest-indicator interest-button"}
+                            type="button"
+                            onClick={() => openInterestsModal(animal)}
+                            title="Interessados"
+                            aria-label="Interessados"
+                          >
+                            <Users size={13} />
+                            <span>{interestCount}</span>
+                          </button>
+                          <div className="adoption-card-photo-actions">
+                            <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar">
+                              <Edit3 size={15} />
+                            </button>
+                            {animal.status === ADOPTION_STATUS_ADOPTED ? (
+                              <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar">
+                                <RefreshCw size={15} />
+                              </button>
+                            ) : (
+                              <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adoção" aria-label="Concluir adoção">
+                                <CheckCircle2 size={15} />
+                              </button>
+                            )}
+                          </div>
+                        </>
                       )}
                     </article>
                   );
@@ -6694,53 +6689,6 @@ function AdoptionView({
               </div>
             )}
           </div>
-
-          {canManageAdoptions && (
-            <aside className="adoption-rail" aria-label="Resumo operacional da adoção">
-              <div className="adoption-rail-card">
-                <h3>Aguardando triagem</h3>
-                <div className="adoption-rail-list">
-                  {recentInterestItems.length === 0 && <p className="adoption-rail-empty">Nenhum interessado recente.</p>}
-                  {recentInterestItems.map((item) => (
-                    <button className="adoption-rail-person" type="button" key={`${item.animal.id}-${item.index}`} onClick={() => openInterestsModal(item.animal)}>
-                      <span>{String(item.interest.name || "?").slice(0, 2).toUpperCase()}</span>
-                      <strong>{item.interest.name || "Interessado"}</strong>
-                      <small>{item.animal.name || item.animal.animal_name || "Animal"} - {formatAdoptionDate(item.interest.created_at) || "sem data"}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="adoption-rail-card">
-                <h3>Visitas agendadas</h3>
-                <div className="adoption-rail-list">
-                  {visitItems.length === 0 && <p className="adoption-rail-empty">Nenhuma visita agendada.</p>}
-                  {visitItems.map((item) => (
-                    <button className="adoption-visit-item" type="button" key={`visit-${item.animal.id}-${item.index}`} onClick={() => openInterestsModal(item.animal)}>
-                      <span>{formatAdoptionDate(item.interest.visit_date) || "--"}</span>
-                      <strong>{item.animal.name || item.animal.animal_name || "Animal"}</strong>
-                      <small>{item.interest.name || "Interessado"}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="adoption-rail-card adoption-rail-highlight">
-                <div>
-                  <BadgeCheck size={16} />
-                  <h3>Destaque automatico</h3>
-                </div>
-                {highlightedAnimal ? (
-                  <>
-                    <p>{highlightedAnimal.name || highlightedAnimal.animal_name || "Animal"} esta ha {getAdoptionDaysInProgram(highlightedAnimal)} dias no programa e tambem aparece em destaque na home.</p>
-                    <button type="button" onClick={() => setSelectedAdoptionAnimal(highlightedAnimal)}>Ver ficha</button>
-                  </>
-                ) : (
-                  <p>Nenhum animal disponivel passou de {ADOPTION_HIGHLIGHT_DAYS} dias no programa.</p>
-                )}
-              </div>
-            </aside>
-          )}
         </div>
       </div>
 

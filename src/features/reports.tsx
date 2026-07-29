@@ -255,7 +255,7 @@ export function ReportsView({
             <p className="reports-prm-error">{prmError}</p>
           )}
       </div>
-      <div className="panel wide">
+      <div className="panel wide reports-summary-panel">
         <div className="reports-breakdown-grid">
           {reportBreakdowns.map((group) => (
             <div className="reports-breakdown" key={group.title}>
