@@ -10835,6 +10835,17 @@ function drawProntuarioSectionTitle(page, title, y, ctx) {
   return y - 22;
 }
 
+// Mesma função acima, mas na paleta bege — usada só na página do Prontuário
+// (espelha a tela "Consultar prontuário", que não usa a paleta azul dos
+// demais documentos).
+function drawAnimalRecordSectionTitle(page, title, y, ctx) {
+  const { bold, margin, rgb } = ctx;
+  const hex = (h: string) => rgb(...hexToRgbTuple(h));
+  page.drawRectangle({ x: margin, y: y - 13, width: 3, height: 13, color: hex("#2b2420") });
+  page.drawText(pdfText(title), { x: margin + 9, y: y - 11, size: 8, font: bold, color: hex("#2b2420") });
+  return y - 22;
+}
+
 // Espelha .animal-record-header da tela "Consultar prontuário": card bege
 // (#f4f1ea / borda #e6ddc9) com avatar circular escuro, nome, resumo,
 // microchip/município e o chip de status verde no canto direito.
@@ -10876,25 +10887,42 @@ function drawAnimalRecordHeader(page, animalName, animalSummary, microchipLine, 
   return cardBottom - 16;
 }
 
-function drawProntuarioFields(page, rows, y, ctx, contentWidthOverride = 0) {
+function drawProntuarioFields(page, rows, y, ctx, contentWidthOverride = 0, colorOverride: { label: unknown; value: unknown } | null = null) {
   // rows: array of { label, value }[] — each inner array is one row of columns
   const { font, bold, colors, margin } = ctx;
+  const labelColor = colorOverride?.label ?? colors.muted;
+  const valueColor = colorOverride?.value ?? colors.ink;
   const contentW = contentWidthOverride || (page.getWidth() - margin * 2);
-  const rowH = 30;
+  const baseRowH = 30;
+  const valueLineH = 11;
+
+  // Cada linha do grid reserva 30px por padrão, mas o valor pode quebrar em
+  // até 2 linhas (wrapped.slice(0, 2)) — altura fixa deixava a 2ª linha do
+  // valor colada no label da próxima linha do grid.
+  const rowHeights = rows.map((cols) => {
+    const colW = contentW / cols.length;
+    const maxLines = Math.max(1, ...cols.map(({ value }) =>
+      Math.min(2, wrapPdfText(pdfText(String(value || "-")), Math.floor(colW / 5.5)).length)
+    ));
+    return Math.max(baseRowH, 12 + maxLines * valueLineH + 6);
+  });
+
+  let rowY = y;
   rows.forEach((cols, ri) => {
     const colW = contentW / cols.length;
+    const fy = rowY;
     cols.forEach(({ label, value }, ci) => {
       const x = margin + ci * colW;
-      const fy = y - ri * rowH;
-      page.drawText(pdfText(String(label || "")), { x, y: fy, size: 7, font: bold, color: colors.muted });
+      page.drawText(pdfText(String(label || "")), { x, y: fy, size: 7, font: bold, color: labelColor });
       const val = pdfText(String(value || "-"));
       const wrapped = wrapPdfText(val, Math.floor(colW / 5.5));
       wrapped.slice(0, 2).forEach((line, li) => {
-        page.drawText(line, { x, y: fy - 12 - li * 11, size: 9, font: bold, color: colors.ink });
+        page.drawText(line, { x, y: fy - 12 - li * valueLineH, size: 9, font: bold, color: valueColor });
       });
     });
+    rowY -= rowHeights[ri];
   });
-  return y - rows.length * rowH;
+  return y - rowHeights.reduce((sum, h) => sum + h, 0);
 }
 
 function drawProntuarioSummaryCards(page, cards, y, ctx) {
@@ -10988,8 +11016,10 @@ function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
       });
     }
     currentPage.drawCircle({ x: lineX, y: nodeY, size: markerRadius, color: markerBg, borderColor: dividerColor, borderWidth: 0.6 });
-    currentPage.drawText(pdfText(ev.iconLabel || "•"), {
-      x: lineX - (ev.iconLabel?.length || 1) * 2.4,
+    const iconText = pdfText(ev.iconLabel || "•");
+    const iconWidth = bold.widthOfTextAtSize(iconText, 8);
+    currentPage.drawText(iconText, {
+      x: lineX - iconWidth / 2,
       y: nodeY - 3,
       size: 8,
       font: bold,
@@ -11131,6 +11161,12 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
   const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
 
+  // Paleta bege da tela "Consultar prontuário" — usada em todo este
+  // documento em vez da paleta azul genérica dos demais PDFs.
+  const beigeLine = rgb(...hexToRgbTuple("#e6ddc9"));
+  const beigeMuted = rgb(...hexToRgbTuple("#93887a"));
+  const beigeInk = rgb(...hexToRgbTuple("#2b2420"));
+
   const page = output.addPage(pageSize);
   const microchipLine = `Microchip: ${animal.microchip || req.animalMicrochip || "não informado"}${historyMunicipalitiesList.length ? "   ·   " + historyMunicipalitiesList.join(", ") : ""}`;
   let y = drawAnimalRecordHeader(page, animal.name, animalSummary, microchipLine, statusLabel, ctx);
@@ -11160,17 +11196,17 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
       { label: "MUNICÍPIOS", value: historyMunicipalitiesList.join(", ") || "Não informado" },
       { label: "EVENTOS", value: `${historyList.length} registro(s)` },
     ],
-  ], y, ctx);
+  ], y, ctx, 0, { label: beigeMuted, value: beigeInk });
   y -= 4;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: beigeLine });
   y -= 16;
 
   // ── HISTÓRICO DO ANIMAL (espelha .animal-history da tela, mesma continuidade) ──
   const historyTitle = historyList.length
     ? "HISTÓRICO DO ANIMAL"
     : "HISTÓRICO DO PROCESSO";
-  y = drawProntuarioSectionTitle(page, historyTitle, y, ctx);
-  page.drawText(pdfText(`${historyList.length} evento(s) registrado(s) para este microchip`), { x: margin, y: y + 8, size: 7.5, font, color: colors.muted });
+  y = drawAnimalRecordSectionTitle(page, historyTitle, y, ctx);
+  page.drawText(pdfText(`${historyList.length} evento(s) registrado(s) para este microchip`), { x: margin, y: y + 8, size: 7.5, font, color: beigeMuted });
   y -= 8;
 
   const tlEvents: { date: string; title: string; details: string[]; done: boolean; tone: string; iconLabel: string }[] = [];
@@ -11259,7 +11295,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   // nota de rodapé quando sem microchip
   if (!animal.microchip && !req.animalMicrochip) {
     finalPage.drawText("* Histórico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
-      x: margin, y: margin + 40, size: 7, font, color: colors.muted,
+      x: margin, y: margin + 40, size: 7, font, color: beigeMuted,
     });
   }
 
