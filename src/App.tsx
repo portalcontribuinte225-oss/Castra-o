@@ -10967,17 +10967,89 @@ const prmHistoryEventLabel = (type: string) => ({
   ADOCAO: "Adoção confirmada",
 } as AnyRecord)[type] || type || "Evento";
 
+// Resolve animal/tutor/status/histórico numa fonte única, sem passar por
+// normalizeRequest (que sintetiza um animal "Não informado" quando não há
+// request.animals — isso mascarava os dados reais vindos de fullHistory).
+// Prioriza a request quando ela tem dados reais de uma solicitação específica;
+// senão usa fullHistory (fluxo de consulta por microchip).
+function resolveProntuarioData(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
+  const hasRealRequest = Boolean(request?.id || request?.protocol || (Array.isArray(request?.animals) && request.animals.length));
+  const req = hasRealRequest ? normalizeRequest(request) : {};
+  const wf: AnyRecord = request.workflowData || request.workflow_data || {};
+
+  const histAnimal: AnyRecord = fullHistory?.animal || {};
+  const histTutor: AnyRecord = fullHistory?.tutor || {};
+  const historyList: AnyRecord[] = Array.isArray(fullHistory?.history) ? fullHistory.history : [];
+
+  const animal: AnyRecord = (Array.isArray(req.animals) && req.animals[0]) || histAnimal;
+
+  const tutorName = hasRealRequest
+    ? (req.tutor || "Não informado")
+    : (histTutor.tutor_name || histTutor.name || "Não informado");
+  const tutorCpf = hasRealRequest ? req.cpf : histTutor.cpf;
+  const tutorPhone = hasRealRequest ? req.phone : (histTutor.phone || histTutor.celular);
+  const tutorEmail = hasRealRequest ? req.email : (histTutor.tutor_email || histTutor.email);
+  const tutorAddressLine = hasRealRequest
+    ? [
+        [req.address, req.number].filter(Boolean).join(", "),
+        req.neighborhood,
+        req.city && req.state ? `${req.city}/${req.state}` : (req.city || req.state || ""),
+        req.cep ? `CEP ${req.cep}` : "",
+      ].filter(Boolean).join(" - ")
+    : [histTutor.address, histTutor.neighborhood, histTutor.city, histTutor.state].filter(Boolean).join(", ");
+
+  const animalMicrochip = (histAnimal.microchip || req.animalMicrochip || animal.microchip || "").trim();
+  const status = hasRealRequest ? req.status : "";
+  const statusLabel = statusLabels[status] || status || "Sem status";
+
+  const latestHistoryItem = historyList[0] || null;
+  const nextScheduledHistoryItem = historyList.find((item) => (
+    (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA") && getAnimalHistorySchedule(item)
+  )) || null;
+  const latestProcedureItem = historyList.find((item) => (
+    ["CIRURGIA_REALIZADA", "SOLICITACAO_PROCEDIMENTO"].includes(item.type)
+  )) || null;
+  const historyMunicipalitiesList = [...new Set(historyList.map(getAnimalHistoryMunicipality).filter(Boolean))];
+
+  const historyDocuments = historyList.flatMap((entry) => entry?.data?.registration?.documents || []);
+  const animalPhotoDoc = getUserUploadedProcessDocuments(req.documents || []).find(isAnimalPhotoDocument)
+    || getUserUploadedProcessDocuments(historyDocuments).find(isAnimalPhotoDocument);
+  const animalPhotoDataUrl = animalPhotoDoc ? getDocumentPreviewSource(animalPhotoDoc) : "";
+
+  return {
+    req, wf, animal, historyList, hasRealRequest,
+    tutorName,
+    tutorCpfMasked: maskCpf(tutorCpf || "") || "-",
+    tutorContact: [tutorPhone, tutorEmail].filter(Boolean).join(" · ") || "Não informado",
+    tutorAddressLine: tutorAddressLine || "Endereço não informado",
+    animalMicrochip,
+    statusLabel,
+    animalSummary: [animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização",
+    latestHistoryItem,
+    nextScheduledHistoryItem,
+    latestProcedureItem,
+    historyMunicipalitiesList,
+    animalPhotoDataUrl,
+  };
+}
+
 async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
   const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
-  const req = normalizeRequest(request);
-  const wf: AnyRecord = request.workflowData || request.workflow_data || {};
   const output = await PDFDocument.create();
   const font = await output.embedFont(StandardFonts.Helvetica);
   const bold = await output.embedFont(StandardFonts.HelveticaBold);
 
+  const data = resolveProntuarioData(request, fullHistory);
+  const {
+    req, wf, animal, historyList, hasRealRequest,
+    tutorName, tutorCpfMasked, tutorContact, tutorAddressLine,
+    animalMicrochip, statusLabel, animalSummary,
+    latestHistoryItem, nextScheduledHistoryItem, latestProcedureItem,
+    historyMunicipalitiesList, animalPhotoDataUrl,
+  } = data;
+
   const isRealizada = req.status === "REALIZADA";
   const isCancelada = req.status === "CANCELADA";
-  const statusLabel = statusLabels[req.status] || req.status || "Sem status";
 
   const statusColorMap: AnyRecord = {
     NOVA: rgb(0.45, 0.52, 0.57),
@@ -10999,53 +11071,13 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   const pageSize: [number, number] = [595.28, 841.89];
   const contentW = 595.28 - margin * 2;
 
-  const histAnimal: AnyRecord = fullHistory?.animal || {};
-  const histTutor: AnyRecord = fullHistory?.tutor || {};
-  const animals = Array.isArray(req.animals) ? req.animals : [];
-  const animal: AnyRecord = animals[0] || histAnimal;
-
-  const fullAddr = [
-    [req.address, req.number].filter(Boolean).join(", "),
-    req.neighborhood,
-    req.city && req.state ? `${req.city}/${req.state}` : (req.city || req.state || ""),
-    req.cep ? `CEP ${req.cep}` : "",
-  ].filter(Boolean).join(" - ");
-
   const scheduleAddress = [req.scheduleLocationName, req.scheduleAddress, req.scheduleMunicipality]
     .filter(Boolean).join(" - ");
-
   const microchipApplied = String(wf.attendanceMicrochip || "").trim();
   const prescription = String(wf.attendancePrescription || "").trim();
   const attendanceNote = String(req.attendanceNote || "").trim();
   const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
   const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
-
-  const animalMicrochip = (fullHistory?.animal?.microchip || req.animalMicrochip || animal.microchip || "").trim();
-
-  // request.documents only covers the specific request passed in; callers that only have
-  // the animal's aggregated history (fullHistory, no request) still need the photo, so fall
-  // back to the most recent request in that history that has one attached.
-  const historyDocuments = (fullHistory?.history || [])
-    .flatMap((entry: AnyRecord) => entry?.data?.registration?.documents || []);
-  const animalPhotoDoc = getUserUploadedProcessDocuments(req.documents).find(isAnimalPhotoDocument)
-    || getUserUploadedProcessDocuments(historyDocuments).find(isAnimalPhotoDocument);
-  const animalPhotoDataUrl = getDocumentPreviewSource(animalPhotoDoc || {});
-
-  // ── dados derivados iguais aos exibidos em AnimalRecordPanel (tela "Consultar prontuário") ──
-  const fullHistoryList = Array.isArray(fullHistory?.history) ? fullHistory.history : [];
-  const animalSummary = [animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização";
-  const tutorName = req.tutor || histTutor.name || histTutor.tutor_name || "Não informado";
-  const tutorContact = [req.phone || histTutor.phone || histTutor.celular, req.email || histTutor.email].filter(Boolean).join(" · ") || "Não informado";
-  const tutorAddressLine = fullAddr || [histTutor.address, histTutor.neighborhood, histTutor.city, histTutor.state].filter(Boolean).join(", ") || "Endereço não informado";
-  const latestHistoryItem = fullHistoryList[0] || null;
-  const nextScheduledHistoryItem = fullHistoryList.find((item: AnyRecord) => (
-    (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA") && getAnimalHistorySchedule(item)
-  ));
-  const latestProcedureItem = fullHistoryList.find((item: AnyRecord) => (
-    ["CIRURGIA_REALIZADA", "SOLICITACAO_PROCEDIMENTO"].includes(item.type)
-  ));
-  const historyMunicipalitiesList = [...new Set(fullHistoryList.map(getAnimalHistoryMunicipality).filter(Boolean))];
-  const tutorCpfMasked = maskCpf(req.cpf || histTutor.cpf || "") || "-";
 
   const page = output.addPage(pageSize);
   let y = drawProntuarioHeader(page, req.protocol, statusLabel, statusColor, ctx, animalMicrochip);
@@ -11092,7 +11124,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
     [
       { label: "ÚLTIMO PROCEDIMENTO", value: latestProcedureItem ? prmHistoryEventLabel(latestProcedureItem.type) : "Não informado" },
       { label: "MUNICÍPIOS", value: historyMunicipalitiesList.join(", ") || "Não informado" },
-      { label: "EVENTOS", value: `${fullHistoryList.length} registro(s)` },
+      { label: "EVENTOS", value: `${historyList.length} registro(s)` },
     ],
   ], y, ctx);
   y -= 4;
@@ -11104,7 +11136,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
   // ── PÁGINA 2: histórico ───────────────────────────────────────────
   const page2 = output.addPage(pageSize);
-  const historyTitle = fullHistory?.history?.length
+  const historyTitle = historyList.length
     ? "HISTÓRICO COMPLETO DO ANIMAL"
     : "HISTÓRICO DO PROCESSO";
   let y2 = drawProntuarioHeader(
@@ -11131,9 +11163,9 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
   const tlEvents: { date: string; title: string; details: string[]; done: boolean }[] = [];
 
-  if (fullHistory?.history?.length) {
+  if (historyList.length) {
     // histórico completo via /animals/consult — todos os eventos do animal
-    const sortedHistory = [...fullHistory.history].sort((a, b) => {
+    const sortedHistory = [...historyList].sort((a, b) => {
       const da = new Date(a.occurred_at || a.created_at || 0).getTime();
       const db = new Date(b.occurred_at || b.created_at || 0).getTime();
       return da - db;
@@ -11153,8 +11185,8 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
         done: true,
       });
     }
-  } else {
-    // fallback: apenas o processo atual
+  } else if (hasRealRequest) {
+    // fallback: apenas o processo atual (sem histórico agregado do animal)
     const openDate = req.createdAt ? new Date(req.createdAt).toLocaleDateString("pt-BR") : "-";
     const openTime = req.createdAt ? new Date(req.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
     const scheduleDate = req.preferredSchedule || req.appointment || "-";
@@ -11212,9 +11244,8 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   drawRequestPdfFooter(page2, "Prontuário emitido pelo sistema municipal", "Página 2 de 2", ctx);
 
   const bytes = await output.save();
-  const animalName = animal.name || histAnimal.name || "";
-  const animalMicrochipFinal = animalMicrochip || "";
-  const fileName = ["Prontuário", animalName, animalMicrochipFinal || req.protocol || ""]
+  const animalName = animal.name || "";
+  const fileName = ["Prontuário", animalName, animalMicrochip || req.protocol || ""]
     .filter(Boolean).join(" ").trim() + ".pdf";
   return {
     documentName: "Prontuário do animal",
