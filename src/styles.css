@@ -8367,8 +8367,27 @@ main {
 
 .request-type-steps-toggles {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px 24px;
+  flex-direction: column;
+  gap: 12px;
+}
+
+
+.request-type-step-toggle {
+  align-items: flex-start;
+}
+
+
+.request-type-step-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+
+.request-type-step-toggle-text small {
+  font-weight: 400;
+  color: #93887a;
+  font-size: 0.76rem;
 }
 
 

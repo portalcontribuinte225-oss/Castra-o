@@ -7282,6 +7282,9 @@ function ConfigView({
         overrideDailyLimit: Boolean(payload.overrideDailyLimit),
         municipalityId: payload.municipalityId || configMunicipalityScopeId,
         documents: selectedDocuments,
+        stepTutor: payload.stepTutor !== false,
+        stepAgenda: payload.stepAgenda !== false,
+        stepDocuments: true,
       },
     ]);
   }
@@ -9769,7 +9772,7 @@ function ConfigView({
             onSubmit={(event) => {
               event.preventDefault();
               if (editingRequestTypeId) {
-                patchRequestType(editingRequestTypeId, newRequestType);
+                patchRequestType(editingRequestTypeId, { ...newRequestType, stepDocuments: true });
               } else {
                 createRequestType(newRequestType);
               }
@@ -9806,6 +9809,35 @@ function ConfigView({
                 <span>Sobrepor limite</span>
               </label>
             </div>
+            <div className="request-type-steps-section">
+              <span className="request-type-steps-label">Etapas do cadastro</span>
+              <div className="request-type-steps-toggles">
+                <label className="toggle-switch config-active-toggle request-type-step-toggle">
+                  <input
+                    type="checkbox"
+                    checked={newRequestType.stepTutor !== false}
+                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepTutor: e.target.checked }))}
+                  />
+                  <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  <span className="request-type-step-toggle-text">
+                    <span>Dados do tutor</span>
+                    <small>Desativar oculta esta etapa no cadastro público.</small>
+                  </span>
+                </label>
+                <label className="toggle-switch config-active-toggle request-type-step-toggle">
+                  <input
+                    type="checkbox"
+                    checked={newRequestType.stepAgenda !== false}
+                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepAgenda: e.target.checked }))}
+                  />
+                  <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  <span className="request-type-step-toggle-text">
+                    <span>Agenda</span>
+                    <small>Desativar oculta esta etapa no cadastro público.</small>
+                  </span>
+                </label>
+              </div>
+            </div>
             <Field label="Nome" value={newRequestType.name} placeholder="Ex: Castração" onChange={(value) => setNewRequestType((current) => ({ ...current, name: value }))} />
             {newRequestType.charged && (
               <div className="billing-grid">
@@ -9828,38 +9860,6 @@ function ConfigView({
                 })
               }
             />
-            <div className="request-type-steps-section">
-              <span className="request-type-steps-label">Etapas do cadastro</span>
-              <div className="request-type-steps-toggles">
-                <label className="toggle-switch config-active-toggle">
-                  <input
-                    type="checkbox"
-                    checked={newRequestType.stepTutor !== false}
-                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepTutor: e.target.checked }))}
-                  />
-                  <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  <span>Dados do tutor</span>
-                </label>
-                <label className="toggle-switch config-active-toggle">
-                  <input
-                    type="checkbox"
-                    checked={newRequestType.stepAgenda !== false}
-                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepAgenda: e.target.checked }))}
-                  />
-                  <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  <span>Agenda</span>
-                </label>
-                <label className="toggle-switch config-active-toggle">
-                  <input
-                    type="checkbox"
-                    checked={newRequestType.stepDocuments !== false}
-                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepDocuments: e.target.checked }))}
-                  />
-                  <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  <span>Documentos</span>
-                </label>
-              </div>
-            </div>
             <div className="form-actions">
               <button className="primary-action" type="submit">Salvar</button>
             </div>
