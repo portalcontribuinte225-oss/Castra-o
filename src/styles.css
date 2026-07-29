@@ -22128,11 +22128,6 @@ form textarea:focus,
   flex: 0 0 auto;
 }
 
-.public-inline-icon.danger {
-  background: #fff1f2;
-  color: #b91c1c;
-}
-
 .public-inline-actions {
   display: flex;
   justify-content: flex-start;
