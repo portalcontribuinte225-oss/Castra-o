@@ -10911,44 +10911,50 @@ function drawProntuarioSummaryCards(page, cards, y, ctx) {
   return y - cardH;
 }
 
-function drawProntuarioTimeline(page, events, y, ctx) {
-  // events: { date, title, details[], done }[]
+// Desenha a timeline em fluxo contínuo: quando o evento não cabe mais na
+// página atual, abre uma página de continuação (sem repetir o cabeçalho
+// grande do documento) e segue desenhando a partir do topo.
+function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
   const { font, bold, colors, margin } = ctx;
   const lineX = margin + 70;
   const contentX = lineX + 16;
   const eventH = 36;
   const r = 4;
+  const bottomLimit = margin + 40;
+  const topStart = pageSize[1] - margin - 20;
+
+  let currentPage = page;
 
   events.forEach((ev, i) => {
-    const nodeY = y - i * eventH - 8;
-    // connector line
-    if (i < events.length - 1) {
-      page.drawLine({
+    if (y - eventH < bottomLimit) {
+      currentPage = output.addPage(pageSize);
+      y = topStart;
+    }
+    const nodeY = y - 8;
+    const isLastOnPage = i === events.length - 1 || y - eventH - eventH < bottomLimit;
+    if (i < events.length - 1 && !isLastOnPage) {
+      currentPage.drawLine({
         start: { x: lineX, y: nodeY - r - 1 },
         end: { x: lineX, y: nodeY - eventH + r + 1 },
         thickness: 1,
         color: ev.done ? colors.blue : colors.line,
       });
     }
-    // node circle
-    page.drawCircle({ x: lineX, y: nodeY, size: r + 1.5, color: colors.white });
-    page.drawCircle({ x: lineX, y: nodeY, size: r, color: ev.done ? colors.blue : colors.line });
+    currentPage.drawCircle({ x: lineX, y: nodeY, size: r + 1.5, color: colors.white });
+    currentPage.drawCircle({ x: lineX, y: nodeY, size: r, color: ev.done ? colors.blue : colors.line });
 
-    // date (left of line)
     if (ev.date) {
-      page.drawText(pdfText(ev.date), { x: margin, y: nodeY + 3, size: 7.5, font, color: colors.muted });
+      currentPage.drawText(pdfText(ev.date), { x: margin, y: nodeY + 3, size: 7.5, font, color: colors.muted });
     }
-
-    // title (right of line)
-    page.drawText(pdfText(ev.title), { x: contentX, y: nodeY + 4, size: 9, font: bold, color: ev.done ? colors.ink : colors.muted });
-
-    // detail lines
+    currentPage.drawText(pdfText(ev.title), { x: contentX, y: nodeY + 4, size: 9, font: bold, color: ev.done ? colors.ink : colors.muted });
     (ev.details || []).forEach((detail, di) => {
-      page.drawText(pdfText(String(detail)), { x: contentX, y: nodeY - 8 - di * 11, size: 8, font, color: colors.muted });
+      currentPage.drawText(pdfText(String(detail)), { x: contentX, y: nodeY - 8 - di * 11, size: 8, font, color: colors.muted });
     });
+
+    y -= eventH;
   });
 
-  return y - events.length * eventH - 8;
+  return { page: currentPage, y };
 }
 
 function drawProntuarioSectionBand(page, title, y, _bg, _text, ctx, _right = "") {
@@ -10999,8 +11005,7 @@ function resolveProntuarioData(request: AnyRecord = {}, fullHistory: AnyRecord |
     : [histTutor.address, histTutor.neighborhood, histTutor.city, histTutor.state].filter(Boolean).join(", ");
 
   const animalMicrochip = (histAnimal.microchip || req.animalMicrochip || animal.microchip || "").trim();
-  const status = hasRealRequest ? req.status : "";
-  const statusLabel = statusLabels[status] || status || "Sem status";
+  const statusLabel = String(animal.status || "ativo").toUpperCase();
 
   const latestHistoryItem = historyList[0] || null;
   const nextScheduledHistoryItem = historyList.find((item) => (
@@ -11051,13 +11056,14 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   const isRealizada = req.status === "REALIZADA";
   const isCancelada = req.status === "CANCELADA";
 
-  const statusColorMap: AnyRecord = {
-    NOVA: rgb(0.45, 0.52, 0.57),
-    AGENDADA: rgb(0.08, 0.48, 0.72),
-    REALIZADA: rgb(0.07, 0.44, 0.22),
-    CANCELADA: rgb(0.75, 0.18, 0.18),
+  // Badge do topo mostra o status do animal (igual ao chip "ATIVO" da tela),
+  // não o status da solicitação.
+  const animalStatusColorMap: AnyRecord = {
+    ATIVO: rgb(0.07, 0.44, 0.22),
+    OBITO: rgb(0.75, 0.18, 0.18),
+    INATIVO: rgb(0.45, 0.52, 0.57),
   };
-  const statusColor = statusColorMap[req.status] || statusColorMap.NOVA;
+  const statusColor = animalStatusColorMap[statusLabel] || animalStatusColorMap.ATIVO;
 
   const colors = {
     ink: rgb(0.07, 0.12, 0.18),
@@ -11129,37 +11135,15 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   ], y, ctx);
   y -= 4;
   page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
+  y -= 16;
 
-  void y;
-  drawRequestPdfFooter(page, "Prontuário emitido pelo sistema municipal", "Página 1 de 2", ctx);
-
-  // ── PÁGINA 2: histórico ───────────────────────────────────────────
-  const page2 = output.addPage(pageSize);
+  // ── HISTÓRICO DO ANIMAL (espelha .animal-history da tela, mesma continuidade) ──
   const historyTitle = historyList.length
-    ? "HISTÓRICO COMPLETO DO ANIMAL"
+    ? "HISTÓRICO DO ANIMAL"
     : "HISTÓRICO DO PROCESSO";
-  let y2 = drawProntuarioHeader(
-    page2, req.protocol, statusLabel, statusColor, ctx, animalMicrochip,
-    historyTitle,
-  );
-  y2 -= 10;
-
-  // ── DADOS CLÍNICOS ───────────────────────────────────────────────
-  y2 = drawProntuarioSectionTitle(page2, "DADOS CLÍNICOS", y2, ctx);
-  y2 -= 6;
-  y2 = drawProntuarioFields(page2, [
-    [
-      { label: "DOENÇAS PRÉ-EXISTENTES", value: animal.doencas || "Não informado" },
-      { label: "ALERGIAS CONHECIDAS", value: animal.alergias || "Não informado" },
-    ],
-  ], y2, ctx);
-  y2 -= 8;
-  page2.drawLine({ start: { x: margin, y: y2 }, end: { x: margin + contentW, y: y2 }, thickness: 0.4, color: colors.line });
-  y2 -= 14;
-
-  y2 = drawProntuarioSectionTitle(page2, historyTitle, y2, ctx);
-  y2 -= 12;
+  y = drawProntuarioSectionTitle(page, historyTitle, y, ctx);
+  page.drawText(pdfText(`${historyList.length} evento(s) registrado(s) para este microchip`), { x: margin, y: y + 8, size: 7.5, font, color: colors.muted });
+  y -= 8;
 
   const tlEvents: { date: string; title: string; details: string[]; done: boolean }[] = [];
 
@@ -11231,17 +11215,20 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
     }
   }
 
-  y2 = drawProntuarioTimeline(page2, tlEvents, y2, ctx);
+  const timelineResult = drawProntuarioTimeline(output, page, tlEvents, y, ctx, pageSize);
+  const finalPage = timelineResult.page;
 
   // nota de rodapé quando sem microchip
   if (!animalMicrochip) {
-    page2.drawText("* Histórico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
-      x: margin, y: margin + 20, size: 7, font, color: colors.muted,
+    finalPage.drawText("* Histórico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
+      x: margin, y: margin + 40, size: 7, font, color: colors.muted,
     });
   }
 
-  void y2;
-  drawRequestPdfFooter(page2, "Prontuário emitido pelo sistema municipal", "Página 2 de 2", ctx);
+  const allPages = output.getPages();
+  allPages.forEach((pg, index) => {
+    drawRequestPdfFooter(pg, "Prontuário emitido pelo sistema municipal", `Página ${index + 1} de ${allPages.length}`, ctx);
+  });
 
   const bytes = await output.save();
   const animalName = animal.name || "";
