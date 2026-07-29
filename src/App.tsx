@@ -2257,21 +2257,6 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
       });
       const data = await res.json();
       if (!res.ok) { setResetError(data.error || "Erro ao enviar código"); return; }
-      const serviceId = import.meta.env.VITE_EMAILJS_SERVICE_ID;
-      const templateId = import.meta.env.VITE_EMAILJS_TEMPLATE_ID;
-      const publicKey = import.meta.env.VITE_EMAILJS_PUBLIC_KEY;
-      if (serviceId && templateId && publicKey && data.code) {
-        await fetch("https://api.emailjs.com/api/v1.0/email/send", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            service_id: serviceId,
-            template_id: templateId,
-            user_id: publicKey,
-            template_params: { to_email: resetEmail.trim(), reset_code: data.code },
-          }),
-        });
-      }
       setResetStep("code");
     } catch (err) {
       setResetError("Falha na conexão. Tente novamente.");

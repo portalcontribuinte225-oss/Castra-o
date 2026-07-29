@@ -1,6 +1,7 @@
 import { Router } from "express";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { randomInt } from "node:crypto";
 import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
 import {
@@ -13,6 +14,10 @@ import {
   normalizeRole,
 } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
+import { sendResetCodeEmail } from "../services/email.js";
+
+// Throttle in-memory por e-mail (reseta em restart do processo) — evita reenvio antes de 60s.
+const resetRequestThrottle = new Map();
 
 const router = Router();
 
@@ -235,17 +240,29 @@ router.put("/users", auth, async (req, res) => {
 router.post("/forgot-password", async (req, res) => {
   const email = String(req.body.email || "").trim().toLowerCase();
   if (!email) return res.status(400).json({ error: "E-mail obrigatorio" });
+
+  const now = Date.now();
+  const lastRequest = resetRequestThrottle.get(email);
+  if (lastRequest && now - lastRequest < 60_000) {
+    return res.json({ ok: true }); // resposta idêntica ao sucesso — não revela throttle
+  }
+
   const client = await pool.connect();
   try {
     const { rows } = await client.query("SELECT id FROM users WHERE lower(email) = $1", [email]);
     if (!rows[0]) return res.json({ ok: true }); // não revela se e-mail existe
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const code = String(randomInt(100000, 1000000));
     const expires = new Date(Date.now() + 15 * 60 * 1000);
     await client.query(
       "UPDATE users SET reset_code = $1, reset_code_expires_at = $2 WHERE id = $3",
       [code, expires, rows[0].id],
     );
-    res.json({ ok: true, code });
+    resetRequestThrottle.set(email, now);
+    const emailResult = await sendResetCodeEmail({ toEmail: email, code });
+    if (emailResult.status === "failed") {
+      console.error(`[forgot-password] Falha ao enviar e-mail para ${email}:`, emailResult.reason);
+    }
+    res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   } finally {
