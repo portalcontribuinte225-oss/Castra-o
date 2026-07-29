@@ -2943,13 +2943,6 @@ function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }:
 
   return (
     <section className="public-inline-card public-report-inline">
-      <div className="public-inline-heading">
-        <span className="public-inline-icon danger"><AlertCircle size={18} /></span>
-        <div>
-          <strong>Denunciar</strong>
-          <span>Registre uma denúncia para análise da equipe responsável.</span>
-        </div>
-      </div>
       <form className="single-request-form clean-form" onSubmit={submitReport}>
         <div className="form-sub-card">
           <span className="form-sub-card-title">Denunciante</span>

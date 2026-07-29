@@ -22226,6 +22226,12 @@ form textarea:focus,
   max-width: none;
 }
 
+.public-report-inline.public-inline-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
 .public-service-panel .nr-topbar-stepper {
   width: 100%;
   min-width: 0;
