@@ -6,11 +6,10 @@
   "scripts": {
     "dev": "concurrently -n FRONT,BACK -c cyan,green \"npm run dev:frontend\" \"node backend/src/server.js\"",
     "dev:frontend": "vite --host 0.0.0.0 --port 5175",
-    "dev:build-watch": "concurrently -n FRONT,BACK -c cyan,green \"vite build --watch\" \"node backend/src/server.js\"",
     "start": "npm run build && npm --prefix backend start",
     "build": "vite build",
     "typecheck": "tsc --project tsconfig.json --noEmit",
-    "preview": "npm run build && npm --prefix backend start"
+    "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -23,6 +22,7 @@
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "concurrently": "^9.2.1",
+    "sharp": "^0.35.3",
     "typescript": "^6.0.3"
   }
 }

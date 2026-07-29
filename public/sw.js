@@ -1,5 +1,11 @@
-const CACHE_NAME = "castragestao-v6";
-const STATIC_ASSETS = ["/manifest.webmanifest", "/pwa-icon.svg"];
+const CACHE_NAME = "castragestao-v7";
+const STATIC_ASSETS = [
+  "/manifest.webmanifest",
+  "/pwa-icon.svg",
+  "/pwa-icon-192.png",
+  "/pwa-icon-512.png",
+  "/apple-touch-icon.png",
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
