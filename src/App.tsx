@@ -2246,8 +2246,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const [resetSuccess, setResetSuccess] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
 
-  async function sendResetCode(event) {
-    event.preventDefault();
+  async function requestResetCode() {
     setResetError("");
     setResetLoading(true);
     try {
@@ -2264,6 +2263,11 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     } finally {
       setResetLoading(false);
     }
+  }
+
+  async function sendResetCode(event) {
+    event.preventDefault();
+    await requestResetCode();
   }
 
   async function confirmReset(event) {
@@ -2626,9 +2630,14 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                   </label>
 
                   {resetStep === "email" && (
-                    <button className="primary-action" type="submit" disabled={resetLoading}>
-                      {resetLoading ? "Enviando..." : "Enviar código"}
-                    </button>
+                    <>
+                      <button className="primary-action" type="submit" disabled={resetLoading}>
+                        {resetLoading ? "Enviando..." : "Enviar código"}
+                      </button>
+                      <button className="ghost-button" type="button" onClick={() => { setResetScreen(false); setResetError(""); }}>
+                        Voltar ao login
+                      </button>
+                    </>
                   )}
 
                   {resetStep === "code" && (
@@ -2666,8 +2675,8 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                         />
                       </label>
                       <div className="reset-form-actions">
-                        <button className="ghost-button" type="button" onClick={() => { setResetStep("email"); setResetCode(""); setResetError(""); }}>
-                          Reenviar código
+                        <button className="ghost-button" type="button" disabled={resetLoading} onClick={() => { setResetCode(""); requestResetCode(); }}>
+                          {resetLoading ? "Reenviando..." : "Reenviar código"}
                         </button>
                         <button className="primary-action" type="submit" disabled={resetLoading}>
                           {resetLoading ? "Salvando..." : "Redefinir senha"}
@@ -8921,107 +8930,107 @@ function ConfigView({
             />
             <div className="config-management-body">
               <Field label="Nome" value={newTeamUser.name} placeholder="Nome completo" onChange={(value) => setNewTeamUser((c) => ({ ...c, name: value }))} />
-            <Field label="Email" value={newTeamUser.email} placeholder="email@dominio.com" onChange={(value) => setNewTeamUser((c) => ({ ...c, email: value }))} />
-            {isGlobalRole(currentUser?.role) && (() => {
-              const munStates = [...new Set(activeMunicipalities.map((m) => m.state).filter(Boolean))].sort();
-              const filteredMuns = municipalityStateFilter
-                ? activeMunicipalities.filter((m) => m.state === municipalityStateFilter)
-                : activeMunicipalities;
-              return (
-                <div className="municipality-selects">
-                  <label className="field">
-                    <span>Estado</span>
-                    <select
-                      value={municipalityStateFilter}
-                      onChange={(e) => {
-                        setMunicipalityStateFilter(e.target.value);
-                        setNewTeamUser((c) => ({ ...c, municipalityId: "", sectorIds: [], permissionGroupId: "" }));
-                      }}
-                    >
-                      <option value="">Selecione o estado</option>
-                      {munStates.map((s) => (
-                        <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="field">
-                    <span>Município</span>
-                    <select
-                      value={newTeamUser.municipalityId}
-                      onChange={(e) => {
-                        const munId = e.target.value;
-                        const mun = activeMunicipalities.find((m) => String(m.id) === munId);
-                        const defaultGroup = permissionGroups.find((group) =>
-                          getItemMunicipalityId(group) === munId && group.active !== false
-                        );
-                        setMunicipalityStateFilter(mun?.state || "");
-                        setNewTeamUser((c) => ({
-                          ...c,
-                          municipalityId: munId,
-                          sectorIds: [],
-                          permissionGroupId: defaultGroup?.id || "",
-                        }));
-                      }}
-                    >
-                      <option value="">Selecione o município</option>
-                      {filteredMuns.map((m) => (
-                        <option key={m.id} value={m.id}>{m.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              );
-            })()}
-            <label className="field">
-              <span>Setores vinculados</span>
-              <div className="sector-input-box">
-                {selectedTeamSectors.map((sector) => (
-                  <span className="sector-tag" key={`${getItemMunicipalityId(sector)}:${sector.id}`}>
-                    {sector.name}
-                    <button
-                      type="button"
-                      aria-label={`Remover ${sector.name}`}
-                      onClick={() => setNewTeamUser((current) => ({
-                        ...current,
-                        sectorIds: (current.sectorIds || []).filter((id) => id !== sector.id),
-                      }))}
-                    >
-                      <X size={11} />
-                    </button>
-                  </span>
-                ))}
-                <button type="button" className="sector-add-btn" aria-label="Adicionar setor" onClick={() => setSectorPickerOpen(true)}>
-                  <Plus size={14} />
-                </button>
-              </div>
-            </label>
-            <Field label="N° Matrícula" value={newTeamUser.matricula} placeholder="Ex: 00123" onChange={(value) => setNewTeamUser((c) => ({ ...c, matricula: value }))} />
-            <Field label="Cargo" value={newTeamUser.role} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, role: value }))} />
-            <label className="field">
-              <span>Grupo de permissão</span>
-              <select
-                value={newTeamUser.permissionGroupId || ""}
-                onChange={(event) => setNewTeamUser((current) => ({ ...current, permissionGroupId: event.target.value }))}
-              >
-                <option value="">Sem grupo</option>
-                {permissionGroups
-                  .filter((group) => group.active !== false)
-                  .filter((group) => !newTeamUser.municipalityId || !getItemMunicipalityId(group) || getItemMunicipalityId(group) === newTeamUser.municipalityId)
-                  .map((group) => (
-                    <option key={group.id} value={group.id}>{group.name}</option>
+              <Field label="Email" value={newTeamUser.email} placeholder="email@dominio.com" onChange={(value) => setNewTeamUser((c) => ({ ...c, email: value }))} />
+              {isGlobalRole(currentUser?.role) && (() => {
+                const munStates = [...new Set(activeMunicipalities.map((m) => m.state).filter(Boolean))].sort();
+                const filteredMuns = municipalityStateFilter
+                  ? activeMunicipalities.filter((m) => m.state === municipalityStateFilter)
+                  : activeMunicipalities;
+                return (
+                  <div className="municipality-selects">
+                    <label className="field">
+                      <span>Estado</span>
+                      <select
+                        value={municipalityStateFilter}
+                        onChange={(e) => {
+                          setMunicipalityStateFilter(e.target.value);
+                          setNewTeamUser((c) => ({ ...c, municipalityId: "", sectorIds: [], permissionGroupId: "" }));
+                        }}
+                      >
+                        <option value="">Selecione o estado</option>
+                        {munStates.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Município</span>
+                      <select
+                        value={newTeamUser.municipalityId}
+                        onChange={(e) => {
+                          const munId = e.target.value;
+                          const mun = activeMunicipalities.find((m) => String(m.id) === munId);
+                          const defaultGroup = permissionGroups.find((group) =>
+                            getItemMunicipalityId(group) === munId && group.active !== false
+                          );
+                          setMunicipalityStateFilter(mun?.state || "");
+                          setNewTeamUser((c) => ({
+                            ...c,
+                            municipalityId: munId,
+                            sectorIds: [],
+                            permissionGroupId: defaultGroup?.id || "",
+                          }));
+                        }}
+                      >
+                        <option value="">Selecione o município</option>
+                        {filteredMuns.map((m) => (
+                          <option key={m.id} value={m.id}>{m.name}</option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+                );
+              })()}
+              <label className="field">
+                <span>Setores vinculados</span>
+                <div className="sector-input-box">
+                  {selectedTeamSectors.map((sector) => (
+                    <span className="sector-tag" key={`${getItemMunicipalityId(sector)}:${sector.id}`}>
+                      {sector.name}
+                      <button
+                        type="button"
+                        aria-label={`Remover ${sector.name}`}
+                        onClick={() => setNewTeamUser((current) => ({
+                          ...current,
+                          sectorIds: (current.sectorIds || []).filter((id) => id !== sector.id),
+                        }))}
+                      >
+                        <X size={11} />
+                      </button>
+                    </span>
                   ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Senha de login</span>
-              <input type="password" value={newTeamUser.senha} placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"} onChange={(e) => setNewTeamUser((c) => ({ ...c, senha: e.target.value }))} />
-            </label>
-            {userSaveError && <p className="form-error-msg">{userSaveError}</p>}
+                  <button type="button" className="sector-add-btn" aria-label="Adicionar setor" onClick={() => setSectorPickerOpen(true)}>
+                    <Plus size={14} />
+                  </button>
+                </div>
+              </label>
+              <Field label="N° Matrícula" value={newTeamUser.matricula} placeholder="Ex: 00123" onChange={(value) => setNewTeamUser((c) => ({ ...c, matricula: value }))} />
+              <Field label="Cargo" value={newTeamUser.role} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, role: value }))} />
+              <label className="field">
+                <span>Grupo de permissão</span>
+                <select
+                  value={newTeamUser.permissionGroupId || ""}
+                  onChange={(event) => setNewTeamUser((current) => ({ ...current, permissionGroupId: event.target.value }))}
+                >
+                  <option value="">Sem grupo</option>
+                  {permissionGroups
+                    .filter((group) => group.active !== false)
+                    .filter((group) => !newTeamUser.municipalityId || !getItemMunicipalityId(group) || getItemMunicipalityId(group) === newTeamUser.municipalityId)
+                    .map((group) => (
+                      <option key={group.id} value={group.id}>{group.name}</option>
+                    ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Senha de login</span>
+                <input type="password" value={newTeamUser.senha} placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"} onChange={(e) => setNewTeamUser((c) => ({ ...c, senha: e.target.value }))} />
+              </label>
+              {userSaveError && <p className="form-error-msg">{userSaveError}</p>}
             </div>
-            <footer className="form-actions config-management-footer">
+            <footer className="config-management-footer">
               <button className="primary-action" type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
-              {editingTeamUserId ? "Salvar" : "Criar usuário"}
-            </button>
+                {editingTeamUserId ? "Salvar" : "Criar usuário"}
+              </button>
             </footer>
           </form>
         </div>
