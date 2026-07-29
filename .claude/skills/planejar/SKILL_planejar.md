@@ -3,624 +3,137 @@ name: planejar
 description: Planeja a implementação de uma solução a partir de um arquivo Markdown (.md). Use quando o usuário fornecer/linkar um .md com especificação, user story, requisitos, critérios de aceite, endpoints, UI/UX ou regras de negócio e pedir um plano de implementação antes de codar.
 ---
 
-
 # Planejar implementação a partir de um .md
 
-Planejamento é um processo iterativo.
+Planejamento é um processo iterativo. A primeira versão do plano é uma proposta — não versão final. O usuário deve revisar, corrigir, reduzir ou expandir o escopo antes de o plano ser salvo.
 
-A primeira versão do plano deve ser tratada como proposta de implementação e não como versão final.
+Esta skill **não implementa código**. O objetivo é entender o escopo, identificar impactos no monorepo e salvar um plano em `.portal/plans/`. A implementação só começa quando o usuário chamar `/implementar` — em uma invocação separada, nunca na mesma resposta.
 
-O usuário deve ter oportunidade de revisar, corrigir, reduzir escopo ou adicionar requisitos antes que o plano seja persistido.
-
-Você é responsável por planejar a implementação de uma feature antes de qualquer alteração de código.
-
-Esta skill NÃO deve implementar código.
-
-O objetivo é entender completamente o escopo, identificar impactos no monorepo e salvar um plano de implementação em um arquivo Markdown dentro de `.portal/plans/`.
+**Atenção — erro comum a evitar:** quando o usuário aprovar o plano (responder "1", "sim", "aprovado" etc.), a única ação permitida é salvar o arquivo `.md` em `.portal/plans/` e encerrar. "Aprovar o plano" NUNCA significa "pode começar a codar" — mesmo que o usuário tenha aprovado com entusiasmo ou o plano pareça simples. Se a mensagem de aprovação não citar explicitamente `/implementar`, não escreva nem edite nenhum arquivo de código.
 
 ---
 
 ## Entrada esperada
 
-O usuário deve fornecer ou linkar um arquivo `.md` com o contexto da feature.
-
-Exemplos:
-
 ```txt
 /planejar FEATURE_FILE=docs/features/emissao-alvara.md
-```
-
-```txt
 /planejar docs/features/novo-relatorio.md
 ```
 
+---
+
+## Fluxo obrigatório
+
 ```txt
-Use a skill planejar com o arquivo docs/features/cadastro-contribuinte.md
+1. Ler o .md da feature
+2. Ler /AGENT.md (sempre)
+3. Ler frontend/AGENT.md (se houver impacto no frontend)
+4. Ler backend/AGENT.md (se houver impacto no backend)
+5. Investigar padrões existentes no projeto
+6. Classificar escopo
+7. Gerar plano preliminar
+8. Apresentar plano ao usuário
+9. Receber feedback e ajustar se necessário
+10. Solicitar aprovação explícita
+11. Salvar em .portal/plans/{nome}.md
+12. Encerrar — aguardar /implementar
 ```
 
 ---
 
 ## Regras obrigatórias
 
-Antes de criar o plano:
-
-1. Leia completamente o arquivo `.md` fornecido pelo usuário.
-2. Leia o `AGENT.md` da raiz do projeto.
-3. Identifique se a implementação exige alterações em:
-   - frontend
-   - backend
-   - ambos
-   - banco de dados
-   - infra/deploy
-   - documentação
-   - testes
-4. Se houver impacto no frontend, leia também `frontend/AGENT.md`.
-5. Se houver impacto no backend, leia também `backend/AGENT.md`.
-6. Se houver impacto em banco de dados, considere as regras do backend e as regras operacionais da raiz.
-7. Não implemente código nesta etapa.
-8. Não execute migrations.
-9. Não altere arquivos fora da pasta `.portal/plans/`, a menos que o usuário peça explicitamente.
-10. Crie um plano claro, revisável e usável pela skill `implementar`.
-11. Se a feature substituir algo existente, liste explicitamente o que deve ser **deletado** na seção "O que será removido" — nunca planejar ocultação (flag, comentário, `display:none`) como substituto de remoção.
-
----
-
-## Objetivo da análise
-
-Ao ler a especificação, entenda:
-
-- qual problema a feature resolve
-- qual é o comportamento esperado
-- quais usuários/roles são afetados
-- quais telas são afetadas
-- quais endpoints são necessários
-- quais dados precisam ser lidos/criados/alterados
-- se existe impacto multi-tenant/prefeitura
-- se existe impacto em permissões/autorização
-- se existe impacto em relatórios/PDFs
-- se existe impacto em performance
-- se existe impacto em deploy/env vars
-- quais testes serão necessários
-- quais riscos existem
-
----
-
-## Leitura dos AGENT.md
-
-A leitura dos AGENT.md deve seguir esta hierarquia:
-
-1. `/AGENT.md`
-   - regras globais
-   - git flow
-   - deploy
-   - CI/CD
-   - monorepo safety
-   - produção (este projeto não usa branch `staging`)
-
-2. `/frontend/AGENT.md`
-   - somente se houver impacto no frontend
-   - React
-   - React Query
-   - query keys
-   - hooks
-   - forms
-   - UX
-   - testes frontend
-
-3. `/backend/AGENT.md`
-   - somente se houver impacto no backend
-   - multi-tenant
-   - banco de dados
-   - Drizzle
-   - relatórios
-   - PDFs
-   - testes backend
-
-Se a feature for fullstack, leia todos os AGENT.md relevantes.
-
----
-
-## Análise de escopo
-
-Classifique a feature como uma das opções:
-
-```txt
-frontend-only
-backend-only
-fullstack
-backend + database
-frontend + backend + database
-infra/deploy
-documentação
-```
-
-Explique o motivo da classificação.
+1. Ler completamente o `.md` fornecido antes de qualquer análise.
+2. Ler `/AGENT.md` sempre, sem exceção.
+3. Ler `frontend/AGENT.md` se houver impacto no frontend.
+4. Ler `backend/AGENT.md` se houver impacto no backend.
+5. Não implementar código nesta etapa.
+6. Não executar migrations.
+7. Não alterar arquivos fora de `.portal/plans/`.
+8. Não salvar o plano sem aprovação explícita do usuário.
+9. Não chamar `/implementar` — quem decide quando implementar é o usuário.
+10. Se a feature substituir algo existente, listar explicitamente o que deve ser **deletado** na seção "O que será removido" — nunca planejar ocultação (`display:none`, `if(false)`, flag desativada, bloco comentado) como substituto de remoção.
 
 ---
 
 ## Investigação do projeto
 
-Antes de escrever o plano, inspecione o projeto para encontrar padrões existentes.
+Antes de escrever o plano, inspecionar o projeto para encontrar padrões existentes:
 
-Procure por:
-
-- módulos similares
-- rotas similares
-- hooks similares
-- schemas similares
-- query keys similares
-- services similares
-- repositories similares
-- testes similares
+- módulos, rotas, hooks, schemas, query keys, services, repositories similares
 - componentes reutilizáveis
-- padrões de validação
-- padrões de erro
-- padrões de permissão
-- padrões de relatório/PDF
+- padrões de validação, erro, permissão, relatório/PDF
 
-Não invente uma arquitetura nova se já existir um padrão equivalente.
+Não inventar arquitetura nova se já existir padrão equivalente.
 
 ---
 
-## Aprovação obrigatória antes de salvar
+## Classificação de escopo
 
-Após concluir a análise e gerar o plano preliminar, a skill NÃO deve criar imediatamente o arquivo em `.portal/plans/`.
-
-Ela deve primeiro apresentar o plano ao usuário para revisão.
-
-Fluxo obrigatório:
+Classificar como uma das opções e explicar o motivo:
 
 ```txt
-Ler contexto
-→ Analisar projeto
-→ Gerar plano preliminar
-→ Apresentar plano ao usuário
-→ Receber feedback
-→ Ajustar plano se necessário
-→ Solicitar aprovação explícita
-→ Salvar arquivo
+frontend-only | backend-only | fullstack | backend + database
+frontend + backend + database | infra/deploy | documentação
 ```
 
 ---
 
-## Apresentação do plano
+## Apresentação do plano preliminar
 
-Antes de salvar qualquer arquivo, apresentar ao usuário:
+Antes de salvar, apresentar ao usuário:
 
-### Classificação
+- **Classificação** — qual camada é afetada
+- **Resumo** — o que será implementado, áreas afetadas, riscos principais
+- **O que será removido** — lista explícita do que deve ser deletado (não ocultado)
+- **Estratégia** — etapas numeradas
+- **Arquivos provavelmente afetados**
+- **Riscos**
+- **Perguntas em aberto**
 
-Exemplo:
-
-```txt
-Classificação:
-frontend + backend + database
-```
-
-### Resumo
-
-Explicar brevemente:
-
-* o que será implementado
-* quais áreas serão afetadas
-* quais riscos foram identificados
-
-### Estratégia proposta
-
-Apresentar as etapas principais.
-
-Exemplo:
-
-```txt
-1. Ajustar schema
-2. Criar endpoint
-3. Atualizar service
-4. Atualizar frontend
-5. Adicionar testes
-```
-
-### Arquivos provavelmente afetados
-
-Listar os principais arquivos ou diretórios identificados.
-
-### Riscos
-
-Listar riscos relevantes.
-
-### Perguntas em aberto
-
-Listar dúvidas identificadas.
-
----
-
-## Solicitação de confirmação
-
-Após apresentar o plano, perguntar explicitamente:
-
-```txt
-O plano faz sentido?
-
-Deseja:
-
-1. Aprovar o plano e salvar em `.portal/plans/`
-2. Solicitar alterações no plano
-3. Cancelar o planejamento
-```
-
----
-
-## Proibição de salvar sem aprovação
-
-A skill NÃO deve criar arquivos em:
-
-```txt
-.portal/plans/
-```
-
-sem aprovação explícita do usuário.
-
-Aprovação explícita inclui respostas como:
-
-```txt
-sim
-aprovado
-pode salvar
-salve o plano
-prosseguir
-```
-
----
-
-## Ajustes antes da aprovação
-
-Caso o usuário solicite alterações:
-
-* atualizar o plano
-* reapresentar o plano completo
-* solicitar nova aprovação
-
-Não salvar versões intermediárias.
-
----
-
-## Salvamento do plano
-
-Somente após aprovação explícita:
-
-1. Gerar o arquivo final.
-2. Salvar em:
-
-```txt
-.portal/plans/{nome-do-plano}.md
-```
-
-3. Informar:
-
-```txt
-Plano aprovado e salvo.
-
-Arquivo:
-.portal/plans/{nome-do-plano}.md
-```
-
----
-
-## Menu de decisão do usuário
-
-Após apresentar o plano preliminar, a skill deve exibir obrigatoriamente as opções abaixo:
+Ao final, exibir obrigatoriamente:
 
 ```txt
 Escolha uma opção:
 
-1. Aprovar e salvar o plano em `.portal/plans/`
+1. Aprovar e salvar o plano em .portal/plans/ (isso NÃO inicia a implementação)
 2. Ajustar o plano antes de salvar
-3. Reduzir o escopo do plano
-4. Expandir o escopo do plano
+3. Reduzir o escopo
+4. Expandir o escopo
 5. Cancelar o planejamento
 ```
 
-## Regras de saída
+Se o usuário solicitar ajustes: atualizar, reapresentar completo, solicitar nova aprovação. Não salvar versões intermediárias.
 
-Se o plano ainda não foi aprovado:
-
-* não criar arquivo
-* não modificar arquivos do projeto
-* não iniciar implementação
-* não chamar a skill `implementar`
-
-Se o plano foi aprovado:
-
-* salvar o arquivo
-* informar o caminho
-* encerrar a skill
-
-A skill continua proibida de implementar código.
-
+Se o usuário responder com a opção 1 (ou equivalente como "sim"/"aprovado"/"pode salvar"), a única ação é gerar e salvar o `.md` — nunca editar código nessa mesma resposta, mesmo que o plano seja pequeno e a tentação seja "só resolver de uma vez".
 
 ---
 
-## Estrutura obrigatória do plano
+## Salvamento
 
-O arquivo do plano deve seguir esta estrutura:
+Somente após aprovação explícita (`sim`, `aprovado`, `pode salvar`, `prosseguir`):
 
-```md
-# Plano de Implementação: {Nome da Feature}
+1. Gerar o arquivo usando [TEMPLATE_planejar.md](TEMPLATE_planejar.md) como estrutura.
+2. Salvar em `.portal/plans/{nome-do-plano}.md`.
+3. Informar o caminho e encerrar — nenhuma outra ação.
 
-## Origem
-
-- Arquivo de especificação: `{FEATURE_FILE}`
-- Data do planejamento: `{DATA_ATUAL}`
-- Classificação: `frontend-only | backend-only | fullstack | backend + database | frontend + backend + database | infra/deploy | documentação`
-
-## Resumo
-
-Explique em poucas frases o que será implementado e por quê.
-
-## Escopo
-
-### Dentro do escopo
-
-- Item 1
-- Item 2
-
-### Fora do escopo
-
-- Item 1
-- Item 2
-
-## Leitura de contexto
-
-Liste os arquivos de contexto lidos:
-
-- `/AGENT.md`
-- `/frontend/AGENT.md` se aplicável
-- `/backend/AGENT.md` se aplicável
-- arquivo `.md` da feature
-- arquivos relevantes encontrados no projeto
-
-## Impacto por área
-
-### Frontend
-
-Descreva alterações necessárias no frontend, se houver.
-
-Inclua:
-
-- telas
-- componentes
-- hooks
-- query keys
-- forms
-- validações
-- estados de loading/error/empty
-- testes
-
-Se não houver impacto, escreva: `Sem impacto esperado`.
-
-### Backend
-
-Descreva alterações necessárias no backend, se houver.
-
-Inclua:
-
-- rotas/endpoints
-- services
-- repositories
-- validações
-- permissões
-- regras multi-tenant
-- relatórios/PDFs
-- testes
-
-Se não houver impacto, escreva: `Sem impacto esperado`.
-
-### Banco de dados
-
-Descreva alterações de banco, se houver.
-
-Inclua:
-
-- tabelas
-- colunas
-- índices
-- migrations necessárias
-- riscos
-
-Se não houver impacto, escreva: `Sem impacto esperado`.
-
-Importante: este plano não autoriza executar migrations automaticamente.
-
-### Infra/Deploy
-
-Descreva impactos em infra/deploy, se houver.
-
-Inclua:
-
-- env vars
-- Render
-- build
-- jobs
-- workers
-- storage
-- filas
-- timeouts
-
-Se não houver impacto, escreva: `Sem impacto esperado`.
-
-## Arquivos provavelmente afetados
-
-Liste arquivos ou diretórios prováveis.
-
-Exemplo:
-
-- `frontend/src/hooks/...`
-- `frontend/src/pages/...`
-- `backend/src/modules/...`
-- `backend/src/db/schema/...`
-
-## O que será removido
-
-Liste explicitamente tudo que deve ser **deletado** como parte desta implementação — não ocultado, não comentado, não desativado por flag: deletado.
-
-Inclua:
-
-- funções/métodos substituídos pela nova implementação
-- componentes que serão trocados por versões novas
-- rotas/endpoints que serão substituídos ou extintos
-- estilos CSS que pertencem ao elemento/componente removido
-- tipos/interfaces que deixarão de existir
-- colunas/tabelas de banco que serão descontinuadas (com aviso de migration manual)
-- feature flags criadas para o rollout desta feature (a remover após go-live)
-- imports que ficarão órfãos após a remoção
-
-Se não houver nada a remover, escrever explicitamente: `Nenhuma remoção prevista nesta implementação.`
-
-> **Atenção para a skill `implementar`:** cada item desta lista deve ser **deletado do arquivo**, não comentado, não envolto em `if (false)`, não ocultado com `display: none` ou flag desativada. Se a remoção gerar erro de compilação, o erro deve ser corrigido — não suprimido com `@ts-ignore` ou `eslint-disable`.
-
-## Estratégia de implementação
-
-Descreva o passo a passo recomendado para a skill `implementar`.
-
-Use etapas numeradas.
-
-## Regras de negócio identificadas
-
-Liste regras de negócio extraídas do `.md`.
-
-## Regras multi-tenant e segurança
-
-Descreva os cuidados necessários.
-
-Inclua especialmente:
-
-- origem confiável do tenant/prefeitura
-- permissões necessárias
-- prevenção de vazamento entre prefeituras
-- validações backend
-- impacto em relatórios/PDFs
-
-## Validações necessárias
-
-Liste validações de input, regras de formulário, schemas, params, query strings e payloads.
-
-## Testes necessários
-
-Liste os testes recomendados:
-
-### Frontend
-
-- teste 1
-- teste 2
-
-### Backend
-
-- teste 1
-- teste 2
-
-### E2E
-
-- teste 1
-- teste 2
-
-## Comandos de validação sugeridos
-
-Liste comandos prováveis, de acordo com o impacto.
-
-Exemplo:
-
-```bash
-npm run lint
-npm run typecheck
-npm run test
-npm run build
-
-npm --prefix frontend run lint
-npm --prefix frontend run typecheck
-npm --prefix frontend run test
-npm --prefix frontend run build
-
-npm --prefix backend run lint
-npm --prefix backend run typecheck
-npm --prefix backend run test
-npm --prefix backend run build
-```
-
-## Riscos e pontos de atenção
-
-Liste riscos técnicos e operacionais.
-
-Exemplos:
-
-- risco de vazamento multi-tenant
-- risco de timeout em PDF
-- risco de quebrar contrato frontend/backend
-- risco de alterar migrations antigas
-- risco de afetar produção (commit/push são feitos direto em `main`, não há `staging`)
-
-## Perguntas em aberto
-
-Liste dúvidas que precisam de confirmação antes ou durante a implementação.
-
-Se não houver dúvidas, escreva:
-
-`Nenhuma pergunta em aberto identificada.`
-
-## Critérios de aceite do plano
-
-A implementação deve ser considerada pronta quando:
-
-- critério 1
-- critério 2
-- critério 3
-
-## Observações para a skill implementar
-
-Inclua instruções diretas para a próxima etapa.
-
-Exemplo:
-
-- Usar este plano como fonte principal de contexto.
-- Não executar migrations sem confirmação explícita.
-- Seguir `/AGENT.md`, `/frontend/AGENT.md` e/ou `/backend/AGENT.md`.
-- Manter alterações pequenas e focadas.
-- Atualizar testes conforme descrito.
-```
+A skill encerra aqui, na mesma resposta em que o `.md` é salvo. Não editar/criar arquivos de código. Não rodar lint/typecheck/build do projeto. Não iniciar implementação. Não chamar `/implementar` — mesmo implicitamente. Se quiser implementar, o usuário deve invocar `/implementar` explicitamente numa mensagem separada.
 
 ---
 
-## Regras sobre banco de dados e migrations
+## Regras de banco de dados
 
-Durante o planejamento:
+- Identificar se migrations serão necessárias e descrever os riscos.
+- **Não executar migrations** nem gerar `ALTER TABLE`/`DROP COLUMN` automaticamente.
+- Incluir no plano: *"Migrations não devem ser executadas sem confirmação explícita — o ambiente pode estar apontando para produção."*
 
-- identifique se migrations serão necessárias
-- descreva quais mudanças de schema parecem necessárias
-- descreva riscos
-- mas NÃO execute migrations
-- NÃO gere migration automaticamente, a menos que o usuário peça explicitamente
+---
 
-Inclua no plano:
+## Anti-patterns
 
-```md
-Atenção: migrations não devem ser executadas sem confirmação explícita do usuário, pois o ambiente atual pode estar apontando para produção.
-```
-
-
-## Anti-patterns desta skill
-
-Evite:
-
-- planejar "desativar" código em vez de removê-lo — se algo será substituído, o plano deve listar explicitamente o que será deletado, não ocultado (sem `display: none`, `if (false)`, comentários, flags fixas em `false` ou `return null` como substituto de deleção)
-- implementar código durante o planejamento
-- alterar arquivos fora de `.portal/plans/`
-- ignorar AGENT.md relevantes
-- assumir que a feature é frontend-only ou backend-only sem verificar
-- ignorar impacto multi-tenant
-- ignorar impacto em banco de dados
-- criar plano genérico demais
-- deixar de registrar riscos
-- deixar de registrar dúvidas
-- executar migrations
-- rodar comandos destrutivos
-- alterar `.env`
-- alterar CI/CD
-- abrir PR
-- fazer commit
+- Planejar "desativar" em vez de deletar — se algo será substituído, o plano lista o que será removido, não ocultado
+- Implementar código durante o planejamento
+- Alterar arquivos fora de `.portal/plans/`
+- Ignorar AGENT.md relevantes
+- Assumir escopo sem verificar impacto multi-tenant ou banco de dados
+- Executar migrations, rodar comandos destrutivos, alterar `.env`, CI/CD, abrir PR ou fazer commit
