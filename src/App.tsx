@@ -10862,16 +10862,27 @@ function drawProntuarioSummaryCards(page, cards, y, ctx) {
   const contentW = page.getWidth() - margin * 2;
   const gap = 10;
   const colW = (contentW - gap * (cards.length - 1)) / cards.length;
-  const cardH = 48;
+  const baseCardH = 48;
+  const secondaryLineH = 9;
 
-  cards.forEach(({ label, primary, secondary }, ci) => {
+  // `secondary` (ex.: endereço) pode precisar de 2 linhas — altura fixa
+  // cortava a segunda linha silenciosamente quando o texto não cabia.
+  const cardsWithLines = cards.map(({ label, primary, secondary }) => ({
+    label, primary, secondary,
+    primaryLines: wrapPdfText(pdfText(String(primary || "-")), Math.floor(colW / 5.5)),
+    secondaryLines: wrapPdfText(pdfText(String(secondary || "-")), Math.floor(colW / 5)).slice(0, 2),
+  }));
+  const maxSecondaryLines = Math.max(1, ...cardsWithLines.map((c) => c.secondaryLines.length));
+  const cardH = baseCardH + (maxSecondaryLines - 1) * secondaryLineH;
+
+  cardsWithLines.forEach(({ label, primaryLines, secondaryLines }, ci) => {
     const x = margin + ci * (colW + gap);
     page.drawRectangle({ x, y: y - cardH, width: colW, height: cardH, borderColor: colors.line, borderWidth: 0.6, color: colors.white });
     page.drawText(pdfText(String(label || "")), { x: x + 8, y: y - 14, size: 6.5, font: bold, color: colors.muted });
-    const primaryLines = wrapPdfText(pdfText(String(primary || "-")), Math.floor(colW / 5.5));
     page.drawText(primaryLines[0] || "-", { x: x + 8, y: y - 27, size: 9, font: bold, color: colors.ink });
-    const secondaryLines = wrapPdfText(pdfText(String(secondary || "-")), Math.floor(colW / 5));
-    page.drawText(secondaryLines[0] || "-", { x: x + 8, y: y - 39, size: 7.5, font, color: colors.muted });
+    secondaryLines.forEach((line, li) => {
+      page.drawText(line, { x: x + 8, y: y - 39 - li * secondaryLineH, size: 7.5, font, color: colors.muted });
+    });
   });
 
   return y - cardH;
@@ -10884,20 +10895,29 @@ function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
   const { font, bold, colors, margin } = ctx;
   const lineX = margin + 70;
   const contentX = lineX + 16;
-  const eventH = 36;
+  const baseEventH = 36;
+  const detailLineH = 11;
   const r = 4;
   const bottomLimit = margin + 40;
   const topStart = pageSize[1] - margin - 20;
 
+  // Altura mínima fixa (nó + título) mais uma linha por item de `details`,
+  // já que a quantidade de detalhes por evento é variável (protocolo, status,
+  // nota do evento) — usar altura fixa aqui sobrepõe o próximo evento sempre
+  // que um evento tiver mais de 1 linha de detalhe.
+  const eventHeightOf = (ev) => Math.max(baseEventH, 16 + (ev.details?.length || 0) * detailLineH + 10);
+
   let currentPage = page;
 
   events.forEach((ev, i) => {
+    const eventH = eventHeightOf(ev);
     if (y - eventH < bottomLimit) {
       currentPage = output.addPage(pageSize);
       y = topStart;
     }
     const nodeY = y - 8;
-    const isLastOnPage = i === events.length - 1 || y - eventH - eventH < bottomLimit;
+    const nextEventH = i < events.length - 1 ? eventHeightOf(events[i + 1]) : 0;
+    const isLastOnPage = i === events.length - 1 || y - eventH - nextEventH < bottomLimit;
     if (i < events.length - 1 && !isLastOnPage) {
       currentPage.drawLine({
         start: { x: lineX, y: nodeY - r - 1 },
@@ -10914,7 +10934,7 @@ function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
     }
     currentPage.drawText(pdfText(ev.title), { x: contentX, y: nodeY + 4, size: 9, font: bold, color: ev.done ? colors.ink : colors.muted });
     (ev.details || []).forEach((detail, di) => {
-      currentPage.drawText(pdfText(String(detail)), { x: contentX, y: nodeY - 8 - di * 11, size: 8, font, color: colors.muted });
+      currentPage.drawText(pdfText(String(detail)), { x: contentX, y: nodeY - 8 - di * detailLineH, size: 8, font, color: colors.muted });
     });
 
     y -= eventH;
