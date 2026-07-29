@@ -1,4 +1,4 @@
-export async function sendResetCodeEmail({ toEmail, code }) {
+export async function sendResetCodeEmail({ toEmail, toName, code }) {
   const serviceId = process.env.EMAILJS_SERVICE_ID;
   const templateId = process.env.EMAILJS_TEMPLATE_ID;
   const publicKey = process.env.EMAILJS_PUBLIC_KEY;
@@ -12,7 +12,7 @@ export async function sendResetCodeEmail({ toEmail, code }) {
     service_id: serviceId,
     template_id: templateId,
     user_id: publicKey,
-    template_params: { to_email: toEmail, reset_code: code },
+    template_params: { to_email: toEmail, to_name: toName || toEmail, codigo_recuperacao: code },
   };
   if (privateKey) body.accessToken = privateKey;
 

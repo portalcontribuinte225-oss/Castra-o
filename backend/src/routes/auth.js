@@ -249,7 +249,7 @@ router.post("/forgot-password", async (req, res) => {
 
   const client = await pool.connect();
   try {
-    const { rows } = await client.query("SELECT id FROM users WHERE lower(email) = $1", [email]);
+    const { rows } = await client.query("SELECT id, name FROM users WHERE lower(email) = $1", [email]);
     if (!rows[0]) return res.json({ ok: true }); // não revela se e-mail existe
     const code = String(randomInt(100000, 1000000));
     const expires = new Date(Date.now() + 15 * 60 * 1000);
@@ -258,7 +258,7 @@ router.post("/forgot-password", async (req, res) => {
       [code, expires, rows[0].id],
     );
     resetRequestThrottle.set(email, now);
-    const emailResult = await sendResetCodeEmail({ toEmail: email, code });
+    const emailResult = await sendResetCodeEmail({ toEmail: email, toName: rows[0].name, code });
     if (emailResult.status === "failed") {
       console.error(`[forgot-password] Falha ao enviar e-mail para ${email}:`, emailResult.reason);
     }
