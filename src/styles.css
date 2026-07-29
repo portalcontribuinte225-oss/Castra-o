@@ -2612,6 +2612,12 @@ button:disabled {
   display: grid;
   grid-template-columns: 30px minmax(0, 1fr);
   gap: 10px;
+  padding-bottom: 14px;
+}
+
+
+.animal-history-item:not(:last-child) {
+  border-bottom: 1px solid #e6ddc9;
 }
 
 
@@ -2619,7 +2625,7 @@ button:disabled {
   position: absolute;
   left: 14px;
   top: 29px;
-  bottom: -14px;
+  bottom: 0;
   width: 2px;
   background: #dbe5ee;
   content: "";
@@ -2634,17 +2640,15 @@ button:disabled {
   height: 30px;
   place-items: center;
   border-radius: 999px;
-  background: #e2e8f0;
-  color: #475569;
+  background: #f4f1ea;
+  border: 1px solid #e6ddc9;
+  color: #93887a;
 }
 
 
 .animal-history-content {
   min-width: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fbfdff;
-  padding: 10px 12px;
+  padding: 4px 0 0;
 }
 
 
@@ -14178,30 +14182,6 @@ body * {
 .cons-service-card:hover { border-color: #bfe0cf; box-shadow: 0 2px 8px rgba(31,138,95,0.1); }
 .cons-service-card.danger:hover { border-color: #ddb0a0; box-shadow: 0 2px 8px rgba(181,72,47,0.1); }
 
-/* Verde para os serviços normais; terracota reservado só para "Registrar óbito"
-   (ação destrutiva) — decisão confirmada com o usuário, ver plano
-   alinhar-prontuario-mockup-v4.md. */
-.cons-svc-icon {
-  width: 40px; height: 40px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-}
-.cons-svc-icon.blue,
-.cons-svc-icon.indigo,
-.cons-svc-icon.amber {
-  background: #eaf3ee;
-  color: #1f8a5f;
-}
-.cons-svc-icon.red {
-  background: #f5e6df;
-  color: #b5482f;
-}
-
-.cons-svc-body { flex: 1; display: grid; gap: 2px; min-width: 0; }
-.cons-svc-body strong { font-size: 0.86rem; color: #2b2420; }
-.cons-svc-body span   { font-size: 0.75rem; color: #93887a; }
-
-.cons-svc-arrow { color: #b0a894; flex-shrink: 0; }
-
 /* ── Service Modal (GED layout) ────────────────────── */
 .svc-modal {
   background: #ffffff;
@@ -14214,61 +14194,18 @@ body * {
   box-shadow: 0 20px 60px rgba(43,36,32,0.18);
 }
 
-.svc-modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 20px 24px 18px;
-  border-bottom: 1px solid #e6ddc9;
-  flex-shrink: 0;
-}
-
-.svc-modal-title {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
-}
-
-.svc-modal-h {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #2b2420;
-  margin: 0 0 2px;
-}
-
-.svc-modal-sub {
-  font-size: 0.78rem;
-  color: #93887a;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.svc-close-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  background: #f1ede3;
-  border-radius: 50%;
-  color: #93887a;
-  cursor: pointer;
-  transition: background 0.12s;
-  flex-shrink: 0;
-}
-.svc-close-btn:hover { background: #e6ddc9; color: #2b2420; }
-
 .svc-modal-body {
   padding: 24px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.svc-step-context {
+  font-size: 0.84rem;
+  color: #64748b;
+  margin: 0;
 }
 
 /* field override inside service modal */
@@ -14918,11 +14855,6 @@ body * {
 .animal-record-panel {
   display: grid;
   gap: 14px;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  background: #ffffff;
-  padding: 18px;
-  box-shadow: none;
 }
 
 
@@ -14958,6 +14890,12 @@ body * {
 }
 
 
+.animal-record-avatar-photo {
+  object-fit: cover;
+  background: #e6ddc9;
+}
+
+
 .animal-record-header .eyebrow {
   color: #93887a;
   font-size: 0.72rem;
@@ -14979,9 +14917,13 @@ body * {
 
 
 .animal-record-meta span {
-  border-color: #e6ddc9;
-  background: #ffffff;
-  color: #2b2420;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #93887a;
 }
 
 
@@ -15109,56 +15051,6 @@ body * {
   padding: 12px;
 }
 
-.prontuario-action-cards {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-}
-
-.prontuario-action-card {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #ffffff;
-  text-align: left;
-  cursor: pointer;
-  transition: box-shadow 0.15s, border-color 0.15s;
-  width: 100%;
-}
-
-.prontuario-action-card:hover {
-  border-color: #93c5fd;
-  box-shadow: 0 2px 8px rgba(37,99,235,0.08);
-}
-
-.prontuario-action-card.danger:hover {
-  border-color: #fca5a5;
-  box-shadow: 0 2px 8px rgba(220,38,38,0.08);
-}
-
-.pac-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.pac-icon.blue  { background: #eff6ff; color: #2563eb; }
-.pac-icon.amber { background: #fffbeb; color: #d97706; }
-.pac-icon.red   { background: #fef2f2; color: #dc2626; }
-
-.pac-body { flex: 1; display: grid; gap: 2px; min-width: 0; }
-.pac-body strong { font-size: 0.88rem; color: #12384c; }
-.pac-body span   { font-size: 0.76rem; color: #6b7f8d; }
-
-.pac-arrow { color: #d1d5db; flex-shrink: 0; }
-
 .animal-record-actions > div:first-child {
   display: grid;
   gap: 2px;
@@ -15177,16 +15069,6 @@ body * {
 }
 
 
-.animal-history {
-  display: grid;
-  gap: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
-  background: #ffffff;
-  padding: 14px;
-}
-
-
 .animal-history-heading h4 {
   margin: 0;
   color: #12384c;
@@ -15196,14 +15078,6 @@ body * {
 .animal-history-heading p {
   margin: 2px 0 0;
   color: #6b7f8d;
-}
-
-
-.animal-history-item {
-  border: 1px solid #e1edf4;
-  border-radius: 10px;
-  background: #fbfdff;
-  padding: 12px;
 }
 
 
@@ -15420,11 +15294,6 @@ body * {
   .public-request-detail-hero {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-
-  .animal-record-panel {
-    padding: 12px;
   }
 
 
@@ -15980,7 +15849,6 @@ main {
 .detail-card,
 .workflow-modal,
 .empty-state,
-.animal-record-panel,
 .animal-record-summary-card,
 .animal-record-grid .info-tile,
 .process-history-card,
@@ -20566,7 +20434,6 @@ main {
 .workflow-modal,
 .config-modal,
 .empty-state,
-.animal-record-panel,
 .animal-record-summary-card,
 .animal-record-grid .info-tile,
 .process-history-card,
@@ -21792,17 +21659,12 @@ form textarea:focus,
 }
 
 
-/* Tela "Prontuário" (ValidationKeyConsultation, uso exclusivo): .animal-record-panel/
+/* Tela "Prontuário" (ValidationKeyConsultation, uso exclusivo):
    .animal-record-summary-card/.animal-record-grid .info-tile também aparecem num
    seletor agrupado do design system do staff (".summary-card, .report-card, ...
-   .animal-record-panel { border: var(--ui-border) ... }"), então sobrepomos aqui em
-   vez de editar aquele grupo compartilhado. */
-.animal-record-panel {
-  border-color: #e6ddc9;
-  border-radius: 18px;
-  box-shadow: 0 8px 22px rgba(43, 36, 32, 0.06);
-}
-
+   { border: var(--ui-border) ... }"), então sobrepomos aqui em vez de editar
+   aquele grupo compartilhado. .animal-record-panel foi removido desse grupo
+   (não deve ter fundo/borda de card — o conteúdo fica solto na tela). */
 .animal-record-summary-card,
 .animal-record-grid .info-tile {
   border-color: #e6ddc9;
@@ -22068,10 +21930,6 @@ form textarea:focus,
 .public-service-panel .svc-panel--inline .svc-modal-body {
   overflow: visible;
   padding: 0;
-}
-
-.public-service-panel .svc-panel--inline .svc-modal-header {
-  padding: 0 0 14px;
 }
 
 .public-service-panel .nr-home-btn,

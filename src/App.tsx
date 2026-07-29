@@ -1642,24 +1642,9 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         const isTransfer = activeServiceModal === "transfer";
         const isDeath    = activeServiceModal === "death";
 
-        const iconMap: Record<string, React.ReactNode> = {
-          prontuario: <PawPrint size={22} />,
-          transfer:   <RefreshCw size={22} />,
-          death:      <AlertCircle size={22} />,
-        };
-        const colorMap: Record<string, string> = {
-          prontuario: "blue", transfer: "amber", death: "red",
-        };
-        const titleMap: Record<string, string> = {
-          prontuario: "Prontuário animal",
-          transfer:   "Troca de tutor",
-          death:      "Registrar óbito",
-        };
-        const subtitleMap: Record<string, string> = {
-          prontuario: "Informe o microchip ou CPF + chave de validação do tutor.",
-          transfer:   svcStep === 1 ? "Identifique o tutor e o animal para continuar." : `Tutor atual: ${svcFoundTutor?.tutor_name || "identificado"}${svcFoundAnimal ? ` · ${svcFoundAnimal.name || svcFoundAnimal.microchip}` : ""}`,
-          death:      svcStep === 1 ? "Identifique o tutor e o animal para continuar." : `Animal: ${svcFoundAnimal?.name || "identificado"} · Tutor: ${svcFoundTutor?.tutor_name || "identificado"}`,
-        };
+        const identifiedSubtitle = isTransfer
+          ? `Tutor atual: ${svcFoundTutor?.tutor_name || "identificado"}${svcFoundAnimal ? ` · ${svcFoundAnimal.name || svcFoundAnimal.microchip}` : ""}`
+          : `Animal: ${svcFoundAnimal?.name || "identificado"} · Tutor: ${svcFoundTutor?.tutor_name || "identificado"}`;
 
         const onSubmit = svcStep === 1 ? handleServiceIdentify
           : isTransfer ? submitServiceTransfer
@@ -1675,19 +1660,11 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
           <div className="svc-inline-shell">
             <form className="svc-modal svc-panel--inline" onSubmit={onSubmit} role="region">
 
-              {/* ── Header ── */}
-              <div className="svc-modal-header">
-                <div className="svc-modal-title">
-                  <div className={`cons-svc-icon ${colorMap[activeServiceModal]}`}>{iconMap[activeServiceModal]}</div>
-                  <div>
-                    <h3 className="svc-modal-h">{titleMap[activeServiceModal]}</h3>
-                    <p className="svc-modal-sub">{subtitleMap[activeServiceModal]}</p>
-                  </div>
-                </div>
-              </div>
-
               {/* ── Body ── */}
               <div className="svc-modal-body">
+                {!svcResult && svcStep === 2 && (isTransfer || isDeath) && (
+                  <p className="svc-step-context">{identifiedSubtitle}</p>
+                )}
                 {svcResult ? (
                   <>
                     <p className="sms-status confirmed">{svcResult}</p>
@@ -10159,13 +10136,21 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
   const tutorName = tutor.tutor_name || tutor.name || "Não informado";
   const tutorContact = [tutor.phone, tutor.tutor_email].filter(Boolean).join(" · ") || "Não informado";
 
+  const historyDocuments = history.flatMap((entry: AnyRecord) => entry?.data?.registration?.documents || []);
+  const animalPhotoDoc = getUserUploadedProcessDocuments(historyDocuments).find(isAnimalPhotoDocument);
+  const animalPhotoDataUrl = animalPhotoDoc ? getDocumentPreviewSource(animalPhotoDoc) : "";
+
   return (
     <section className="animal-record-panel">
       <div className="animal-record-header">
         <div className="animal-record-identity">
-          <div className="animal-record-avatar" aria-hidden="true">
-            <AnimalIcon size={28} />
-          </div>
+          {animalPhotoDataUrl ? (
+            <img className="animal-record-avatar animal-record-avatar-photo" src={animalPhotoDataUrl} alt={animal.name || "Foto do animal"} />
+          ) : (
+            <div className="animal-record-avatar" aria-hidden="true">
+              <AnimalIcon size={28} />
+            </div>
+          )}
           <div>
             <h3>{animal.name || "Animal sem nome"}</h3>
             <p>{animalSummary}</p>
@@ -10905,6 +10890,27 @@ function drawProntuarioFields(page, rows, y, ctx, contentWidthOverride = 0) {
   return y - rows.length * rowH;
 }
 
+function drawProntuarioSummaryCards(page, cards, y, ctx) {
+  // cards: { label, primary, secondary }[] — espelha .animal-record-summary-card da tela
+  const { font, bold, colors, margin } = ctx;
+  const contentW = page.getWidth() - margin * 2;
+  const gap = 10;
+  const colW = (contentW - gap * (cards.length - 1)) / cards.length;
+  const cardH = 48;
+
+  cards.forEach(({ label, primary, secondary }, ci) => {
+    const x = margin + ci * (colW + gap);
+    page.drawRectangle({ x, y: y - cardH, width: colW, height: cardH, borderColor: colors.line, borderWidth: 0.6, color: colors.white });
+    page.drawText(pdfText(String(label || "")), { x: x + 8, y: y - 14, size: 6.5, font: bold, color: colors.muted });
+    const primaryLines = wrapPdfText(pdfText(String(primary || "-")), Math.floor(colW / 5.5));
+    page.drawText(primaryLines[0] || "-", { x: x + 8, y: y - 27, size: 9, font: bold, color: colors.ink });
+    const secondaryLines = wrapPdfText(pdfText(String(secondary || "-")), Math.floor(colW / 5));
+    page.drawText(secondaryLines[0] || "-", { x: x + 8, y: y - 39, size: 7.5, font, color: colors.muted });
+  });
+
+  return y - cardH;
+}
+
 function drawProntuarioTimeline(page, events, y, ctx) {
   // events: { date, title, details[], done }[]
   const { font, bold, colors, margin } = ctx;
@@ -10998,10 +11004,6 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   const animals = Array.isArray(req.animals) ? req.animals : [];
   const animal: AnyRecord = animals[0] || histAnimal;
 
-  const animalBreed = animal.breedType === "Definida"
-    ? (animal.breedDescription || "Definida")
-    : (animal.breedType || "");
-
   const fullAddr = [
     [req.address, req.number].filter(Boolean).join(", "),
     req.neighborhood,
@@ -11029,80 +11031,103 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
     || getUserUploadedProcessDocuments(historyDocuments).find(isAnimalPhotoDocument);
   const animalPhotoDataUrl = getDocumentPreviewSource(animalPhotoDoc || {});
 
+  // ── dados derivados iguais aos exibidos em AnimalRecordPanel (tela "Consultar prontuário") ──
+  const fullHistoryList = Array.isArray(fullHistory?.history) ? fullHistory.history : [];
+  const animalSummary = [animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização";
+  const tutorName = req.tutor || histTutor.name || histTutor.tutor_name || "Não informado";
+  const tutorContact = [req.phone || histTutor.phone || histTutor.celular, req.email || histTutor.email].filter(Boolean).join(" · ") || "Não informado";
+  const tutorAddressLine = fullAddr || [histTutor.address, histTutor.neighborhood, histTutor.city, histTutor.state].filter(Boolean).join(", ") || "Endereço não informado";
+  const latestHistoryItem = fullHistoryList[0] || null;
+  const nextScheduledHistoryItem = fullHistoryList.find((item: AnyRecord) => (
+    (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA") && getAnimalHistorySchedule(item)
+  ));
+  const latestProcedureItem = fullHistoryList.find((item: AnyRecord) => (
+    ["CIRURGIA_REALIZADA", "SOLICITACAO_PROCEDIMENTO"].includes(item.type)
+  ));
+  const historyMunicipalitiesList = [...new Set(fullHistoryList.map(getAnimalHistoryMunicipality).filter(Boolean))];
+  const tutorCpfMasked = maskCpf(req.cpf || histTutor.cpf || "") || "-";
+
   const page = output.addPage(pageSize);
   let y = drawProntuarioHeader(page, req.protocol, statusLabel, statusColor, ctx, animalMicrochip);
   y -= 10;
 
-  // ── ANIMAL ──────────────────────────────────────────────────────
-  y = drawProntuarioSectionTitle(page, "IDENTIFICAÇÃO DO ANIMAL", y, ctx);
-  y -= 6;
+  // ── CABEÇALHO DO ANIMAL (espelha .animal-record-header da tela) ──
   const photoBoxW = 72;
-  const photoBoxH = 96;
+  const photoBoxH = 72;
   const photoGap = 14;
-  const identificationFieldsW = animalPhotoDataUrl ? contentW - photoBoxW - photoGap : contentW;
-  const identificationTopY = y;
+  const identityTopY = y;
+  const identityTextW = animalPhotoDataUrl ? contentW - photoBoxW - photoGap : contentW;
+  page.drawText(pdfText(wrapPdfText(pdfText(animal.name || "Animal sem nome"), Math.floor(identityTextW / 8))[0] || "-"), { x: margin, y, size: 14, font: bold, color: colors.ink });
+  y -= 16;
+  page.drawText(pdfText(wrapPdfText(pdfText(animalSummary), Math.floor(identityTextW / 5.5))[0] || "-"), { x: margin, y, size: 9, font, color: colors.muted });
+  y -= 14;
+  const microchipLine = `Microchip: ${animal.microchip || req.animalMicrochip || "não informado"}${historyMunicipalitiesList.length ? "   ·   " + historyMunicipalitiesList.join(", ") : ""}`;
+  page.drawText(pdfText(wrapPdfText(pdfText(microchipLine), Math.floor(identityTextW / 5))[0] || "-"), { x: margin, y, size: 8, font, color: colors.muted });
+  if (animalPhotoDataUrl) {
+    await drawProntuarioPhotoBox(output, page, animalPhotoDataUrl, margin + identityTextW + photoGap, identityTopY - 10, photoBoxW, photoBoxH, ctx);
+  }
+  y -= 18;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 16;
+
+  // ── 3 CARDS DE RESUMO (espelha .animal-record-summary da tela) ──
+  y = drawProntuarioSummaryCards(page, [
+    { label: "TUTOR ATUAL", primary: tutorName, secondary: tutorCpfMasked },
+    { label: "CONTATO", primary: tutorContact, secondary: tutorAddressLine },
+    {
+      label: "SITUAÇÃO",
+      primary: latestHistoryItem ? prmHistoryEventLabel(latestHistoryItem.type) : "Sem eventos",
+      secondary: latestHistoryItem?.occurred_at ? formatDateTime(latestHistoryItem.occurred_at) : "Sem data registrada",
+    },
+  ], y, ctx);
+  y -= 10;
+
+  // ── GRID DE 6 INFO-TILES (espelha .animal-record-grid da tela) ──
   y = drawProntuarioFields(page, [
     [
-      { label: "NOME", value: animal.name || "-" },
-      { label: "ESPÉCIE", value: animal.species || "-" },
-      { label: "SEXO", value: animal.sex || "-" },
-      { label: "PORTE", value: animal.size || "-" },
+      { label: "MICROCHIP", value: animal.microchip || "Não informado" },
+      { label: "ESPÉCIE / SEXO / PORTE", value: animalSummary },
+      { label: "PRÓXIMA AGENDA", value: nextScheduledHistoryItem ? getAnimalHistorySchedule(nextScheduledHistoryItem) : "Sem agenda" },
     ],
     [
-      { label: "RAÇA", value: animalBreed || "-" },
-      { label: "NASCIMENTO / IDADE", value: animal.birthDate || animal.age || "-" },
-      { label: "COR / PELAGEM", value: animal.color || "-" },
-      { label: "MICROCHIP", value: animal.microchip || req.animalMicrochip || "-" },
+      { label: "ÚLTIMO PROCEDIMENTO", value: latestProcedureItem ? prmHistoryEventLabel(latestProcedureItem.type) : "Não informado" },
+      { label: "MUNICÍPIOS", value: historyMunicipalitiesList.join(", ") || "Não informado" },
+      { label: "EVENTOS", value: `${fullHistoryList.length} registro(s)` },
     ],
-    [
-      { label: "PROCEDIMENTO SOLICITADO", value: animal.procedure || requestTypeLabel(req) || "-" },
-      { label: "ORIGEM DA SOLICITAÇÃO", value: req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcão" : "Portal público" },
-      { label: "TIPO DE ANIMAL", value: req.type || "-" },
-      { label: "SETOR RESPONSÁVEL", value: req.assignedSectorName || "-" },
-    ],
-  ], y, ctx, identificationFieldsW);
-  if (animalPhotoDataUrl) {
-    await drawProntuarioPhotoBox(output, page, animalPhotoDataUrl, margin + identificationFieldsW + photoGap, identificationTopY + 4, photoBoxW, photoBoxH, ctx);
-  }
-  y -= 14;
+  ], y, ctx);
+  y -= 4;
   page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
+  void y;
+  drawRequestPdfFooter(page, "Prontuário emitido pelo sistema municipal", "Página 1 de 2", ctx);
+
+  // ── PÁGINA 2: histórico ───────────────────────────────────────────
+  const page2 = output.addPage(pageSize);
+  const historyTitle = fullHistory?.history?.length
+    ? "HISTÓRICO COMPLETO DO ANIMAL"
+    : "HISTÓRICO DO PROCESSO";
+  let y2 = drawProntuarioHeader(
+    page2, req.protocol, statusLabel, statusColor, ctx, animalMicrochip,
+    historyTitle,
+  );
+  y2 -= 10;
+
   // ── DADOS CLÍNICOS ───────────────────────────────────────────────
-  y = drawProntuarioSectionTitle(page, "DADOS CLÍNICOS", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
+  y2 = drawProntuarioSectionTitle(page2, "DADOS CLÍNICOS", y2, ctx);
+  y2 -= 6;
+  y2 = drawProntuarioFields(page2, [
     [
       { label: "DOENÇAS PRÉ-EXISTENTES", value: animal.doencas || "Não informado" },
       { label: "ALERGIAS CONHECIDAS", value: animal.alergias || "Não informado" },
     ],
-  ], y, ctx);
-  y -= 14;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
+  ], y2, ctx);
+  y2 -= 8;
+  page2.drawLine({ start: { x: margin, y: y2 }, end: { x: margin + contentW, y: y2 }, thickness: 0.4, color: colors.line });
+  y2 -= 14;
 
-  // ── TUTOR ────────────────────────────────────────────────────────
-  y = drawProntuarioSectionTitle(page, "TUTOR / RESPONSÁVEL", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "NOME COMPLETO", value: req.tutor || histTutor.name || histTutor.tutor_name || "-" },
-      { label: "CPF", value: req.cpf || histTutor.cpf || "-" },
-      { label: "CELULAR", value: req.phone || histTutor.phone || histTutor.celular || "-" },
-      { label: "EMAIL", value: req.email || histTutor.email || "-" },
-    ],
-    [{ label: "ENDEREÇO COMPLETO", value: fullAddr || "-" }],
-  ], y, ctx);
-  y -= 14;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  // ── HISTORICO (timeline) ─────────────────────────────────────────
-  const historyTitle = fullHistory?.history?.length
-    ? "HISTÓRICO COMPLETO DO ANIMAL"
-    : "HISTÓRICO DO PROCESSO";
-  y = drawProntuarioSectionTitle(page, historyTitle, y, ctx);
-  y -= 12;
+  y2 = drawProntuarioSectionTitle(page2, historyTitle, y2, ctx);
+  y2 -= 12;
 
   const tlEvents: { date: string; title: string; details: string[]; done: boolean }[] = [];
 
@@ -11174,17 +11199,17 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
     }
   }
 
-  y = drawProntuarioTimeline(page, tlEvents, y, ctx);
+  y2 = drawProntuarioTimeline(page2, tlEvents, y2, ctx);
 
   // nota de rodapé quando sem microchip
   if (!animalMicrochip) {
-    page.drawText("* Histórico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
+    page2.drawText("* Histórico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
       x: margin, y: margin + 20, size: 7, font, color: colors.muted,
     });
   }
 
-  void y;
-  drawRequestPdfFooter(page, "Prontuário emitido pelo sistema municipal", "Página 1", ctx);
+  void y2;
+  drawRequestPdfFooter(page2, "Prontuário emitido pelo sistema municipal", "Página 2 de 2", ctx);
 
   const bytes = await output.save();
   const animalName = animal.name || histAnimal.name || "";
