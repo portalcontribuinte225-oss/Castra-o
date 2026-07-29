@@ -61,6 +61,7 @@ Antes de criar o plano:
 8. Não execute migrations.
 9. Não altere arquivos fora da pasta `.portal/plans/`, a menos que o usuário peça explicitamente.
 10. Crie um plano claro, revisável e usável pela skill `implementar`.
+11. Se a feature substituir algo existente, liste explicitamente o que deve ser **deletado** na seção "O que será removido" — nunca planejar ocultação (flag, comentário, `display:none`) como substituto de remoção.
 
 ---
 
@@ -456,6 +457,25 @@ Exemplo:
 - `backend/src/modules/...`
 - `backend/src/db/schema/...`
 
+## O que será removido
+
+Liste explicitamente tudo que deve ser **deletado** como parte desta implementação — não ocultado, não comentado, não desativado por flag: deletado.
+
+Inclua:
+
+- funções/métodos substituídos pela nova implementação
+- componentes que serão trocados por versões novas
+- rotas/endpoints que serão substituídos ou extintos
+- estilos CSS que pertencem ao elemento/componente removido
+- tipos/interfaces que deixarão de existir
+- colunas/tabelas de banco que serão descontinuadas (com aviso de migration manual)
+- feature flags criadas para o rollout desta feature (a remover após go-live)
+- imports que ficarão órfãos após a remoção
+
+Se não houver nada a remover, escrever explicitamente: `Nenhuma remoção prevista nesta implementação.`
+
+> **Atenção para a skill `implementar`:** cada item desta lista deve ser **deletado do arquivo**, não comentado, não envolto em `if (false)`, não ocultado com `display: none` ou flag desativada. Se a remoção gerar erro de compilação, o erro deve ser corrigido — não suprimido com `@ts-ignore` ou `eslint-disable`.
+
 ## Estratégia de implementação
 
 Descreva o passo a passo recomendado para a skill `implementar`.
@@ -588,6 +608,7 @@ Atenção: migrations não devem ser executadas sem confirmação explícita do 
 
 Evite:
 
+- planejar "desativar" código em vez de removê-lo — se algo será substituído, o plano deve listar explicitamente o que será deletado, não ocultado (sem `display: none`, `if (false)`, comentários, flags fixas em `false` ou `return null` como substituto de deleção)
 - implementar código durante o planejamento
 - alterar arquivos fora de `.portal/plans/`
 - ignorar AGENT.md relevantes

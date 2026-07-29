@@ -1,21 +1,24 @@
 ---
 name: limpar
-description: Revisão analítica para remover resíduo típico de código gerado por IA — funções/estilos duplicados, versões sobrepostas (v1/v2 convivendo), comentários e anotações antigas, heranças/props obsoletas, código morto e nomenclatura fora do padrão (não inglês). Cobre frontend, backend e banco de dados (tabelas/colunas não utilizadas). Gera um relatório de achados com arquivo:linha; NÃO edita nada sem aprovação explícita do usuário. Use quando o usuário pedir "revisão de limpeza", "código sobre código", "remover duplicação", "limpar código morto", "deixar pronto pra produção" ou similar.
+description: Analytical dead code and duplication audit for AI-generated codebases — detects dead code, code duplication, overlapping versions (v1/v2 coexistence), stale comments, obsolete props/interfaces, debug artifacts, orphaned routes, unused dependencies, misplaced code, unnecessary abstractions, forgotten feature flags, inconsistent patterns, redundant defensive guards, hardcoded values, incomplete removals masked with !important/specificity overrides, and concealed rather than removed code (display:none, if(false), commented-out blocks, disabled flags used to hide instead of delete). Covers frontend, backend, and database schema (orphaned tables/columns). Produces a findings report with file:line references; operates in report-only mode — no edits without explicit user approval. Trigger when user says "limpeza", "código sobre código", "remover duplicação", "dead code", "deixar pronto pra produção", "código bagunçado" or similar.
 ---
 
 # Objetivo
 
-Depois de muitas iterações de IA sobre o mesmo código, é comum sobrar: função nova ao lado da antiga (que ninguém apagou), estilo CSS duplicado em `styles.css`, comentário explicando um comportamento que já não existe, prop/interface herdada de uma versão anterior do componente, `console.log` de debug, TODO esquecido.
+Após múltiplas iterações de IA sobre o mesmo código, é comum acumular: function nova ao lado da antiga (que nunca foi removida), estilo CSS duplicado em `styles.css`, stale comment descrevendo comportamento que não existe mais, obsolete prop herdada de uma versão anterior do componente, `console.log` esquecido, feature flag cujo rollout já terminou.
 
-Esta skill varre o código em busca desse resíduo e devolve um **relatório de achados**. Ela não decide sozinha o que sai do projeto — quem decide é o usuário.
+Esta skill executa um dead code and duplication audit sobre o código e retorna um **findings report**. Ela opera em **report-only mode** — nenhuma edição é feita sem aprovação explícita do usuário.
 
-Isso é diferente de `/code-review` (foca em bugs) e de `/simplify` (aplica simplificação direto). Esta skill é só sobre **resíduo/duplicação/lixo de produção**, e é sempre report-only.
+Diferença em relação a outras skills:
+- `/code-review` → foca em bugs e correctness
+- `/simplify` → aplica simplificação diretamente
+- `/limpar` → exclusivamente **resíduo, duplication, dead code** — sempre report-only até aprovação
 
 ---
 
-# Escopo da revisão
+# Scope Resolution
 
-Por padrão, revisar o **diff atual**:
+Por padrão, auditar o **diff atual**:
 
 ```bash
 git status
@@ -24,134 +27,157 @@ git diff --staged
 git diff main...HEAD
 ```
 
-Se o usuário indicar um arquivo ou pasta explicitamente (ex.: `/limpar src/components/Agenda` ou `/limpar backend/src/routes`), revisar tudo ali, mesmo sem mudanças recentes — útil para "limpeza geral" de um módulo antigo.
+Se o usuário indicar um arquivo ou pasta explicitamente (ex.: `/limpar src/components/Agenda`), auditar tudo ali independente de mudanças recentes — útil para limpeza geral de módulo legado.
 
-Ao revisar o diff, **ler o arquivo inteiro**, não só o hunk. Duplicação e sobreposição de versões só aparecem quando se vê o arquivo completo — o hunk mostra a função nova, mas a antiga (que devia ter sido removida) fica fora do diff.
+Ao revisar o diff, **ler o arquivo inteiro**, não só o hunk. Code duplication e version coexistence só aparecem com visão completa do arquivo — o hunk mostra a função nova, mas a antiga (dead code) fica fora do diff.
 
-O escopo cobre **frontend, backend e banco de dados**:
+**Scope por camada:**
 
-- Frontend (`src/`): componentes, hooks, estilos.
-- Backend (`backend/src/routes`, `backend/src/services`, `backend/src/middleware`): rotas, serviços, middlewares.
-- Banco de dados (`backend/src/db/migrations.js`): tabelas/colunas definidas ali. Este projeto não usa Drizzle nem uma pasta de migrations históricas — é um único arquivo com `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` idempotente. Ver seção "Revisão de banco de dados" abaixo antes de reportar qualquer coisa aqui.
+- Frontend (`src/`): componentes, hooks, estilos
+- Backend (`backend/src/routes`, `backend/src/services`, `backend/src/middleware`): rotas, services, middlewares
+- Database (`backend/src/db/migrations.js`): orphaned tables/columns — ver seção "Database Audit" abaixo antes de reportar qualquer achado aqui
 
-Se o escopo tocar o backend, ler também `backend/AGENT.md` quando existir.
+Se o scope tocar o backend, ler também `backend/AGENT.md` quando existir.
 
 ---
 
-# Fluxo obrigatório
+# Fluxo Obrigatório
 
 ```txt
-determinar escopo (diff ou caminho indicado)
-→ ler arquivos completos envolvidos
-→ procurar cada categoria de resíduo (ver CATEGORIAS.md)
-→ para cada achado, confirmar com grep no repo inteiro antes de reportar
-→ classificar por categoria e confiança
-→ apresentar relatório ao usuário
-→ perguntar quais achados aplicar
-→ aplicar só os aprovados (Edit), um de cada vez
+1. scope resolution (diff ou caminho indicado)
+2. ler arquivos completos envolvidos
+3. executar symbol search (grep) monorepo-wide para cada candidato
+4. auditar cada categoria de resíduo (ver CATEGORIAS.md)
+5. classificar achados por categoria e confidence level
+6. apresentar findings report ao usuário
+7. perguntar quais achados aplicar (explicit approval gate)
+8. aplicar apenas os aprovados, um por vez
+9. rodar lint/typecheck pass no scope afetado
 ```
 
-Leia [CATEGORIAS.md](CATEGORIAS.md) para o catálogo completo do que procurar, com exemplos.
+Leia [CATEGORIAS.md](CATEGORIAS.md) para o catálogo completo de categorias com exemplos.
 
 ---
 
-# Confirmar antes de reportar (evitar falso positivo)
+# False Positive Prevention
 
-Antes de marcar algo como "morto" ou "duplicado":
+Antes de marcar qualquer símbolo como dead code ou duplicate:
 
-- Rodar `grep`/busca pelo nome do símbolo em todo o repositório (não só na pasta atual) — import dinâmico, uso em teste ou em outro pacote do monorepo (`frontend/`, `backend/`) invalida o achado.
-- Código legado em português (ver seção "English-Only Codebase" do `/AGENT.md`) **não é automaticamente código morto** — só reportar como resíduo se de fato não for mais referenciado em lugar nenhum.
-- Duas funções parecidas só contam como "duplicadas" se fizerem a mesma coisa — validar a lógica antes de propor merge.
-- Se não tiver certeza, reportar com confiança "suspeita" em vez de "confirmado", e explicar a dúvida.
+- Executar **monorepo-wide symbol search** (`grep` pelo nome exportado em `frontend/` e `backend/`) — dynamic import, uso em teste, ou consumo por outro pacote do monorepo invalida o achado
+- Código legado em português (ver "English-Only Codebase" no `/AGENT.md`) **não é automaticamente dead code** — só reportar se não houver nenhuma referência no repositório
+- Duas funções parecidas só configuram code duplication se executarem a mesma lógica — validar o corpo antes de propor merge
+- Em caso de dúvida, classificar como `suspected` com explicação da incerteza, nunca como `confirmed`
 
-## Buscar especificamente remoções incompletas resolvidas com `!important`
+## Incomplete Removal Masked com `!important`
 
-Categoria de alto valor neste projeto (`styles.css` tem ~26 mil linhas com muita duplicação entre módulos `ag-`, `cr-`, `reports-`, etc.): `grep` por `!important` no diff/escopo revisado e, para cada ocorrência, verificar se o comentário ao lado (quando existir) menciona "sobrepor", "vencer" ou "fora de escopo" uma regra específica. Se a regra "vencida" pertence ao mesmo módulo/componente que está sendo limpo (não é de fato de outro componente inalcançável), isso é resíduo de remoção incompleta — ver categoria 13 em [CATEGORIAS.md](CATEGORIAS.md). A correção correta quase sempre é remover a classe do seletor combinado compartilhado, não manter as duas regras competindo.
-
----
-
-# Revisão de banco de dados
-
-Tratamento especial — dados são muito mais caros de recuperar do que código.
-
-- Ler `backend/src/db/migrations.js` para ver o schema (tabelas/colunas atuais).
-- Para cada tabela/coluna, `grep` pelo nome em `backend/src/routes`, `backend/src/services` e no frontend (payloads/respostas de API) — se não aparecer em nenhum SELECT/INSERT/UPDATE/response, é candidata a não utilizada.
-- Achado de banco **nunca** é classificado como "confirmado" — sempre "suspeita", mesmo com grep limpo, porque pode haver dado histórico ou consumo fora do repo (relatório externo, export, integração).
-- **Nunca editar `migrations.js`, gerar `ALTER TABLE`/`DROP COLUMN`, nem propor rodar qualquer migration** — isso é sempre manual e sempre exige decisão explícita do usuário, coluna por coluna. O papel desta skill aqui é só apontar o que parece órfão.
-- Reportar separadamente de código: "Tabela/coluna `X` não referenciada em nenhuma query encontrada — confirmar manualmente antes de qualquer alteração de schema."
+Alto valor neste projeto (`styles.css` ~26k linhas, forte duplicação entre módulos `ag-`, `cr-`, `reports-`): executar `grep` por `!important` no diff/scope e, para cada ocorrência, verificar se o comentário adjacente menciona "sobrepor", "vencer" ou "fora de escopo" uma regra específica. Se a regra "vencida" pertence ao mesmo módulo sendo auditado, isso é **incomplete removal** (categoria 13 em CATEGORIAS.md) — a correção correta é remover a classe do combined selector compartilhado, não manter duas regras em conflito com specificity override.
 
 ---
 
-# Revisão de nomenclatura (inglês)
+# Database Audit
 
-Ver seção "English-Only Codebase" do `/AGENT.md`: código novo deve usar nomes em inglês; código legado em português é dívida técnica aceita, não é para ser reescrito em massa sem pedido explícito.
+Tratamento especial — dados têm custo de recuperação muito maior que código.
+
+- Ler `backend/src/db/migrations.js` para mapear o schema atual (tabelas/colunas)
+- Para cada tabela/coluna, executar symbol search em `backend/src/routes`, `backend/src/services` e no frontend (API payloads/responses) — ausência em todo SELECT/INSERT/UPDATE/response é sinal de orphaned schema
+- Achados de database **nunca** recebem confidence level `confirmed` — sempre `suspected`, mesmo com grep limpo, pois pode haver consumo externo ao repo (relatório externo, export, integração de terceiros)
+- **Nunca editar `migrations.js`, gerar `ALTER TABLE`/`DROP COLUMN`, nem propor execução de migration** — decisão sempre manual, coluna por coluna, pelo usuário
+- Reportar separadamente do código: `"Table/column X — no references found in any query. Confirm manually before any schema change."`
+
+---
+
+# Naming Convention Audit
+
+Ver "English-Only Codebase" no `/AGENT.md`: código novo deve usar identificadores em inglês; código legado em português é technical debt aceita, não deve ser reescrita em massa sem pedido explícito.
 
 Nesta skill:
 
-- Verificar apenas os arquivos **dentro do escopo revisado** (diff atual, ou caminho indicado pelo usuário).
-- Reportar identificador em português (função, variável, classe, tipo, arquivo, tabela/coluna nova) **apenas se for código novo/recente** (parte do diff) — não sinalizar código legado intocado só por estar em português.
-- Se o usuário pedir explicitamente uma auditoria de nomenclatura de um módulo inteiro (não só o diff), aí sim listar todos os identificadores em português daquele módulo como achados de nomenclatura — mas isso é sempre suspeita/sugestão, nunca renomeado automaticamente (renomear em massa pode quebrar contrato frontend/backend).
+- Auditar naming conventions **apenas dentro do scope revisado** (diff atual ou caminho indicado)
+- Reportar identifier em português (função, variável, classe, tipo, arquivo, tabela/coluna) **somente se for código novo/recente** — não sinalizar legado intocado
+- Se o usuário pedir auditoria explícita de nomenclatura de um módulo inteiro, listar todos os identifiers em português como achados de naming convention — sempre `suspected`, nunca renomeado automaticamente (risco de quebrar contrato frontend/backend)
 
 ---
 
-# Formato do relatório
+# Formato do Findings Report
 
-Agrupar por categoria, ordenado por confiança (confirmado antes de suspeita). Para cada achado:
+Agrupar por categoria, ordenado por confidence level (`confirmed` antes de `suspected`). Para cada achado:
 
 ```md
 ### [categoria] arquivo:linha
-**O quê:** descrição curta do resíduo.
-**Evidência:** trecho relevante ou resultado do grep que confirma (ex.: "0 outras referências no repo").
-**Confiança:** confirmado | suspeita
-**Recomendação:** remover / unificar com X / atualizar comentário
+**What:** descrição curta do resíduo.
+**Evidence:** resultado do symbol search ou trecho que confirma (ex.: "0 references found monorepo-wide").
+**Confidence:** confirmed | suspected
+**Recommendation:** remove / merge with X / update stale comment / move to correct layer
 ```
 
-Ao final, um resumo:
+Ao final, summary obrigatório:
 
 ```md
-## Resumo
-- N achados confirmados
-- N achados suspeitos (peça revisão manual)
-- Nenhuma alteração foi feita — aguardando aprovação
+## Summary
+- N confirmed findings
+- N suspected findings (manual review required)
+- Report-only mode — no changes applied — awaiting explicit approval
 ```
 
 ---
 
-# Aprovação e aplicação
+# Explicit Approval Gate e Aplicação
 
-Depois do relatório, perguntar explicitamente:
+Após o findings report, perguntar:
 
 ```txt
 Quais achados quer que eu aplique?
 
-1. Todos os confirmados
+1. Todos os confirmed
 2. Selecionar individualmente
 3. Nenhum agora (só o relatório)
 ```
 
-Só editar arquivos depois de aprovação explícita, e só os itens aprovados — nunca aplicar em massa itens marcados como "suspeita" sem confirmação item a item.
+Editar arquivos apenas após approval explícita, e apenas os itens aprovados — nunca aplicar em massa itens `suspected` sem confirmação individual.
 
-**Fase de aplicação (depois da aprovação):** o usuário não quer ver código/diff aqui. Responda `codando...`, aplique as edições em silêncio, sem narrar cada arquivo. Minimize o número de chamadas de ferramenta (agrupe edições relacionadas, evite reler o mesmo trecho). Ao terminar, resuma em poucas linhas — achados aplicados vs. pulados, resultado de lint/typecheck — sem colar código, terminando com "o que fazer agora?". A fase de relatório (antes da aprovação) continua completa como descrito acima — é o entregável desta skill, não deve ser resumida. Nota: o painel de atividade de ferramentas da interface (preview de Read/Edit/Bash) é automático e não pode ser suprimido por esta skill, mesmo na fase de aplicação silenciosa.
+**Fase de aplicação (após approval):** responder `codando...` e aplicar as edições em segundo plano, sem narrar cada arquivo ou colar diffs no chat. Minimizar tool calls (agrupar edições relacionadas, evitar reler o mesmo trecho). Ao concluir, resumir em poucas linhas: achados aplicados vs. pulados, resultado do lint/typecheck pass — sem código, encerrando com "o que fazer agora?".
 
-Depois de aplicar, rodar lint/typecheck do escopo afetado (ver `/AGENT.md` — `npm run lint`, `npm run typecheck`, ou os equivalentes com `--prefix frontend`/`--prefix backend`) para garantir que a remoção não quebrou nada.
+A fase de findings report (antes da approval) continua completa — é o entregável principal desta skill, não deve ser resumida.
 
-Esta skill não faz commit nem push — isso é papel da skill `finalizar`.
+Após aplicar, executar lint/typecheck pass do scope afetado (ver `/AGENT.md` — `npm run lint`, `npm run typecheck`, ou equivalentes com `--prefix frontend`/`--prefix backend`) para garantir que nenhuma remoção quebrou o build.
+
+Esta skill não executa commit nem push — isso é responsabilidade da skill `finalizar`.
 
 ---
 
 # Proibições
 
-- Não editar nada antes da aprovação explícita do usuário.
-- Não marcar código legado em português como morto, nem como "nomenclatura errada", só por estar em português.
-- Não tocar em `.env`, CI/CD, lockfiles.
-- Não editar `backend/src/db/migrations.js`, nem gerar/rodar `ALTER TABLE`, `DROP COLUMN` ou qualquer migration.
-- Não fazer commit/push.
-- Não remover código só porque "parece" não-idiomático — o critério é resíduo/duplicação/lixo, não estilo pessoal.
-- Não renomear identificadores em massa sem pedido explícito do usuário (risco de quebrar contrato frontend/backend).
+- Não editar nada antes da explicit approval do usuário
+- Não classificar código legado em português como dead code ou naming convention violation por estar em português
+- Não tocar em `.env`, CI/CD, lockfiles
+- Não editar `backend/src/db/migrations.js` nem gerar/executar `ALTER TABLE`, `DROP COLUMN` ou qualquer migration
+- Não fazer commit/push
+- Não remover código por parecer não-idiomático — o critério é resíduo/duplication/dead code, não preferência de estilo
+- Não renomear identifiers em massa sem pedido explícito (risco de quebrar contrato frontend/backend)
 
 ---
 
-# Quando parar e pedir intervenção
+# Concealed Rather Than Removed
 
-- Achado com alto impacto (ex.: remover algo usado em rota pública ou fluxo multi-tenant) mesmo que grep não mostre uso — perguntar antes.
-- Dúvida se uma "duplicação" é na verdade uma variação intencional (ex.: validação diferente por role) — reportar como suspeita, não como confirmado.
+Padrão comum em refatorações feitas por IA: em vez de deletar o código substituído, a IA o **oculta** — deixando dead code disfarçado que infla o bundle, confunde leitura e nunca é limpo naturalmente.
+
+Verificar ativamente no diff/scope:
+
+- `display: none` / `visibility: hidden` / `opacity: 0` adicionados onde o elemento deveria ter sido removido do JSX
+- `{false && <Component />}` ou `{null && ...}` — componente nunca renderiza
+- `if (false) { ... }` ou `if (0) { ... }` em lógica JS/TS
+- Blocos inteiros comentados (`/* código antigo */`, `// TODO: remover`)
+- `return null` no topo de um componente que deveria ter sido deletado
+- Feature flag criada com valor fixo `false` para "desativar" em vez de remover
+- `enabled: false` / `active: false` em objeto de config sem plano de reativação
+- `// @ts-ignore` ou `// eslint-disable` adicionados para suprimir erro de código que deveria ter saído
+
+Ver categoria 18 em [CATEGORIAS.md](CATEGORIAS.md).
+
+---
+
+# Quando Parar e Pedir Intervenção
+
+- Achado com alto impacto (ex.: remover símbolo usado em rota pública ou fluxo multi-tenant) mesmo com symbol search limpo — perguntar antes de aplicar
+- Dúvida se uma aparente duplication é variação intencional (ex.: validação diferente por role/tenant) — reportar como `suspected`, nunca `confirmed`
+- Achado em database schema com qualquer indício de consumo externo — reportar como `suspected` e recomendar validação manual
