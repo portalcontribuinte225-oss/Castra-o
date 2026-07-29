@@ -10779,6 +10779,17 @@ async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord
   };
 }
 
+// Paleta bege da tela "Consultar prontuário" — fonte única, reaproveitada por
+// todas as funções de desenho do PDF do Prontuário (que não usam a paleta
+// azul genérica dos demais documentos).
+const ANIMAL_RECORD_COLORS = {
+  ink: "#2b2420",
+  muted: "#93887a",
+  line: "#e6ddc9",
+  bg: "#f4f1ea",
+  cardBorder: "#e5e7eb",
+};
+
 function drawProntuarioHeader(page, protocol, statusLabel, statusColor, ctx, microchip = "", docTitle = "PRONTUÁRIO DO ANIMAL", idOverride = "") {
   const { font, bold, colors, margin } = ctx;
   const pageW = page.getWidth();
@@ -10828,21 +10839,12 @@ function drawProntuarioHeader(page, protocol, statusLabel, statusColor, ctx, mic
   return divY - 14;
 }
 
-function drawProntuarioSectionTitle(page, title, y, ctx) {
+function drawProntuarioSectionTitle(page, title, y, ctx, colorOverride: unknown = null) {
   const { bold, colors, margin } = ctx;
-  page.drawRectangle({ x: margin, y: y - 13, width: 3, height: 13, color: colors.blue });
-  page.drawText(pdfText(title), { x: margin + 9, y: y - 11, size: 8, font: bold, color: colors.ink });
-  return y - 22;
-}
-
-// Mesma função acima, mas na paleta bege — usada só na página do Prontuário
-// (espelha a tela "Consultar prontuário", que não usa a paleta azul dos
-// demais documentos).
-function drawAnimalRecordSectionTitle(page, title, y, ctx) {
-  const { bold, margin, rgb } = ctx;
-  const hex = (h: string) => rgb(...hexToRgbTuple(h));
-  page.drawRectangle({ x: margin, y: y - 13, width: 3, height: 13, color: hex("#2b2420") });
-  page.drawText(pdfText(title), { x: margin + 9, y: y - 11, size: 8, font: bold, color: hex("#2b2420") });
+  const barColor = colorOverride ?? colors.blue;
+  const textColor = colorOverride ?? colors.ink;
+  page.drawRectangle({ x: margin, y: y - 13, width: 3, height: 13, color: barColor });
+  page.drawText(pdfText(title), { x: margin + 9, y: y - 11, size: 8, font: bold, color: textColor });
   return y - 22;
 }
 
@@ -10851,8 +10853,13 @@ function drawAnimalRecordSectionTitle(page, title, y, ctx) {
 // microchip/município e o chip de status verde no canto direito.
 function drawAnimalRecordHeader(page, animalName, animalSummary, microchipLine, statusLabel, ctx) {
   const { font, bold, margin, rgb } = ctx;
+  const beige = {
+    bg: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.bg)),
+    border: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.line)),
+    ink: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink)),
+    muted: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted)),
+  };
   const hex = (h: string) => rgb(...hexToRgbTuple(h));
-  const beige = { bg: hex("#f4f1ea"), border: hex("#e6ddc9"), ink: hex("#2b2420"), muted: hex("#93887a") };
   const pageW = page.getWidth();
   const contentW = pageW - margin * 2;
   const cardH = 76;
@@ -10928,11 +10935,10 @@ function drawProntuarioFields(page, rows, y, ctx, contentWidthOverride = 0, colo
 function drawProntuarioSummaryCards(page, cards, y, ctx) {
   // cards: { label, primary, secondary }[] — espelha .animal-record-summary-card da tela
   const { font, bold, margin, rgb } = ctx;
-  const hex = (h: string) => rgb(...hexToRgbTuple(h));
-  const cardBorder = hex("#e5e7eb");
-  const cardInk = hex("#2b2420");
-  const cardMuted = hex("#93887a");
-  const cardWhite = hex("#ffffff");
+  const cardBorder = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.cardBorder));
+  const cardInk = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink));
+  const cardMuted = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted));
+  const cardWhite = rgb(1, 1, 1);
   const contentW = page.getWidth() - margin * 2;
   const gap = 10;
   const colW = (contentW - gap * (cards.length - 1)) / cards.length;
@@ -10971,15 +10977,15 @@ const PRONTUARIO_TIMELINE_TONE_COLORS: Record<string, { bg: string; ink: string 
   transfer: { bg: "#f1f5f9", ink: "#475569" },
   success: { bg: "#dcfce7", ink: "#166534" },
   scheduled: { bg: "#dbeafe", ink: "#1d4ed8" },
-  neutral: { bg: "#f4f1ea", ink: "#93887a" },
+  neutral: { bg: ANIMAL_RECORD_COLORS.bg, ink: ANIMAL_RECORD_COLORS.muted },
 };
 
 function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
   const { font, bold, margin, rgb } = ctx;
   const hex = (h: string) => rgb(...hexToRgbTuple(h));
-  const ink = hex("#2b2420");
-  const muted = hex("#93887a");
-  const dividerColor = hex("#e6ddc9");
+  const ink = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink));
+  const muted = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted));
+  const dividerColor = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.line));
   const markerRadius = 12;
   const lineX = margin + markerRadius;
   const contentX = lineX + markerRadius + 12;
@@ -10988,11 +10994,19 @@ function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
   const bottomLimit = margin + 40;
   const topStart = pageSize[1] - margin - 20;
 
-  // Altura mínima fixa (nó + título) mais uma linha por item de `details`,
-  // já que a quantidade de detalhes por evento é variável (protocolo, status,
-  // nota do evento) — usar altura fixa aqui sobrepõe o próximo evento sempre
-  // que um evento tiver mais de 1 linha de detalhe.
-  const eventHeightOf = (ev) => Math.max(baseEventH, 16 + (ev.details?.length || 0) * detailLineH + 10);
+  // Altura do bloco de um evento: distância do nó (topo) até a última linha
+  // de texto desenhada (título em nodeY+markerRadius-21, detalhes a partir de
+  // nodeY+markerRadius-33, cada um 11px abaixo do anterior), mais uma folga
+  // fixa para a divisória não colidir com a última linha. A fórmula anterior
+  // não acompanhava essa posição real e a divisória cortava o texto.
+  const eventHeightOf = (ev) => {
+    const detailsCount = ev.details?.length || 0;
+    const lastTextOffsetFromNode = detailsCount > 0
+      ? markerRadius - 33 - (detailsCount - 1) * detailLineH // relativo a nodeY
+      : markerRadius - 21; // só o título
+    const neededHeight = markerRadius - lastTextOffsetFromNode + 14; // + folga até a divisória
+    return Math.max(baseEventH, neededHeight);
+  };
 
   let currentPage = page;
 
@@ -11047,10 +11061,6 @@ function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
   });
 
   return { page: currentPage, y };
-}
-
-function drawProntuarioSectionBand(page, title, y, _bg, _text, ctx, _right = "") {
-  return drawProntuarioSectionTitle(page, title, y, ctx);
 }
 
 const prmHistoryEventLabel = (type: string) => ({
@@ -11163,9 +11173,9 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
 
   // Paleta bege da tela "Consultar prontuário" — usada em todo este
   // documento em vez da paleta azul genérica dos demais PDFs.
-  const beigeLine = rgb(...hexToRgbTuple("#e6ddc9"));
-  const beigeMuted = rgb(...hexToRgbTuple("#93887a"));
-  const beigeInk = rgb(...hexToRgbTuple("#2b2420"));
+  const beigeLine = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.line));
+  const beigeMuted = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted));
+  const beigeInk = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink));
 
   const page = output.addPage(pageSize);
   const microchipLine = `Microchip: ${animal.microchip || req.animalMicrochip || "não informado"}${historyMunicipalitiesList.length ? "   ·   " + historyMunicipalitiesList.join(", ") : ""}`;
@@ -11205,9 +11215,10 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   const historyTitle = historyList.length
     ? "HISTÓRICO DO ANIMAL"
     : "HISTÓRICO DO PROCESSO";
-  y = drawAnimalRecordSectionTitle(page, historyTitle, y, ctx);
-  page.drawText(pdfText(`${historyList.length} evento(s) registrado(s) para este microchip`), { x: margin, y: y + 8, size: 7.5, font, color: beigeMuted });
-  y -= 8;
+  const historyTitleTopY = y;
+  y = drawProntuarioSectionTitle(page, historyTitle, y, ctx, beigeInk);
+  page.drawText(pdfText(`${historyList.length} evento(s) registrado(s) para este microchip`), { x: margin, y: historyTitleTopY - 24, size: 7.5, font, color: beigeMuted });
+  y -= 10;
 
   const tlEvents: { date: string; title: string; details: string[]; done: boolean; tone: string; iconLabel: string }[] = [];
 
