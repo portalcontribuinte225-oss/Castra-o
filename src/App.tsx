@@ -97,6 +97,7 @@ import {
   requestHasTag,
   requestResultLabel,
   requestResultTag,
+  requestTypeDomainLabels,
   requestTypeLabel,
   RequestType,
   statusLabels,
@@ -3100,24 +3101,6 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadingProntuario, setDownloadingProntuario] = useState(false);
 
-  async function downloadRelatorioProcessual(request: AnyRecord) {
-    if (downloadingId) return;
-    setDownloadingId(request.id);
-    try {
-      const bundle = await generateRelatorioProcessualPdf(request);
-      if (bundle?.dataUrl) {
-        const a = document.createElement("a");
-        a.href = bundle.dataUrl;
-        a.download = bundle.fileName || `relatorio-${request.protocol || request.id}.pdf`;
-        a.click();
-      }
-    } catch (err) {
-      console.error("Erro ao gerar relatório:", err);
-    } finally {
-      setDownloadingId(null);
-    }
-  }
-
   async function downloadProntuario() {
     if (downloadingProntuario || !animalRecord) return;
     setDownloadingProntuario(true);
@@ -3193,15 +3176,6 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
                 <span className="request-card-date">{request.appointment || request.preferredSchedule || request.createdAt}</span>
               </div>
               <div className="request-card-actions">
-                <button
-                  className="icon-btn-flat"
-                  type="button"
-                  title="Relatório processual"
-                  disabled={!!downloadingId}
-                  onClick={() => downloadRelatorioProcessual(request)}
-                >
-                  <Download size={15} />
-                </button>
                 <button className="ghost-button" type="button" onClick={() => setDetailsRequest(request)}>
                   Detalhes
                   <ChevronRight size={16} />
@@ -4889,7 +4863,6 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [downloadLoadingId, setDownloadLoadingId] = useState("");
-  const [bundleLoading, setBundleLoading] = useState(false);
   const [confirmingSchedule, setConfirmingSchedule] = useState(false);
   const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | "confirmComplaint" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
@@ -4935,11 +4908,20 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     .map(normalizeDocumentType)
     .filter((dt) => dt.active !== false && wasDocumentConfiguredForRequest(dt, normalizedRequest));
 
+  const normalizedRequestTypeValue = normalizeRequestType(normalizedRequest.request_type || normalizedRequest.type);
+  const requestDocumentKindByType: AnyRecord = {
+    [RequestType.TUTOR_TRANSFER]: "tutor-transfer-request",
+    [RequestType.ANIMAL_DEATH]: "death-registration-request",
+    [RequestType.COMPLAINT]: "complaint-request",
+  };
+  const requestDocumentKind = requestDocumentKindByType[normalizedRequestTypeValue] || "request";
+  const requestDocumentLabel = requestTypeDomainLabels[normalizedRequestTypeValue] || "Requerimento municipal";
+
   const requerimento = {
     id: `requerimento-${request.protocol || request.id || "processo"}`,
-    kind: "request",
-    nome: `Requerimento ${request.protocol || ""}.pdf`.trim(),
-    tipo: "Requerimento municipal",
+    kind: requestDocumentKind,
+    nome: `${requestDocumentLabel} ${request.protocol || ""}.pdf`.trim(),
+    tipo: requestDocumentLabel,
     status: "Gerado",
     available: true,
     required: false,
@@ -5143,30 +5125,6 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
       console.error("Erro ao baixar documento:", err);
     } finally {
       setDownloadLoadingId("");
-    }
-  }
-
-  async function handleRelatorioProcessual() {
-    setBundleLoading(true);
-    try {
-      const bundle = await generateRelatorioProcessualPdf(request);
-      if (bundle?.dataUrl) {
-        const anchor = window.document.createElement("a");
-        anchor.href = bundle.dataUrl;
-        anchor.download = bundle.fileName || `relatorio-${request.protocol || request.id || "processo"}.pdf`;
-        anchor.click();
-      }
-    } catch (error) {
-      console.error("Erro ao gerar relatorio processual:", error);
-      const fallback = await generateFallbackBundlePdf(request, error);
-      if (fallback?.dataUrl) {
-        const anchor = window.document.createElement("a");
-        anchor.href = fallback.dataUrl;
-        anchor.download = fallback.fileName || `relatorio-${request.protocol || request.id || "processo"}.pdf`;
-        anchor.click();
-      }
-    } finally {
-      setBundleLoading(false);
     }
   }
 
@@ -5512,10 +5470,6 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
             </div>
             <div className="prm-header-actions">
               <StatusBadge status={normalizedRequest.status} />
-              <button className="prm-pdf-btn" type="button" disabled={bundleLoading} onClick={handleRelatorioProcessual}>
-                <Download size={13} />
-                {bundleLoading ? "Preparando..." : "Relatório"}
-              </button>
               <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
                 <X size={17} />
               </button>
@@ -10784,6 +10738,33 @@ async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord
       dataUrl: await createRequestPdfDataUrl(request),
     };
   }
+  if (item.kind === "tutor-transfer-request") {
+    return {
+      documentName: "Troca de tutor",
+      fileName: `Troca de tutor ${request.protocol || ""}.pdf`.trim(),
+      fileType: "application/pdf",
+      eyebrow: "Troca de tutor",
+      dataUrl: await createTutorTransferPdfDataUrl(request),
+    };
+  }
+  if (item.kind === "death-registration-request") {
+    return {
+      documentName: "Registro de óbito",
+      fileName: `Registro de obito ${request.protocol || ""}.pdf`.trim(),
+      fileType: "application/pdf",
+      eyebrow: "Óbito",
+      dataUrl: await createDeathRegistrationPdfDataUrl(request),
+    };
+  }
+  if (item.kind === "complaint-request") {
+    return {
+      documentName: "Denúncia",
+      fileName: `Denuncia ${request.protocol || ""}.pdf`.trim(),
+      fileType: "application/pdf",
+      eyebrow: "Denúncia",
+      dataUrl: await createComplaintPdfDataUrl(request),
+    };
+  }
 
   const document = item.document || {};
   const dataUrl = getDocumentPreviewSource(document);
@@ -11024,10 +11005,10 @@ function resolveProntuarioData(request: AnyRecord = {}, fullHistory: AnyRecord |
 }
 
 async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
-  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
+  const { PDFDocument, rgb } = await importPdfLib();
   const output = await PDFDocument.create();
-  const font = await output.embedFont(StandardFonts.Helvetica);
-  const bold = await output.embedFont(StandardFonts.HelveticaBold);
+  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(output, rgb);
+  const ctx = { font, bold, colors, rgb, margin };
 
   const data = resolveProntuarioData(request, fullHistory);
   const {
@@ -11050,16 +11031,6 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   };
   const statusColor = animalStatusColorMap[statusLabel] || animalStatusColorMap.ATIVO;
 
-  const colors = {
-    ink: rgb(0.07, 0.12, 0.18),
-    muted: rgb(0.38, 0.47, 0.55),
-    blue: rgb(0.05, 0.45, 0.69),
-    line: rgb(0.88, 0.92, 0.95),
-    white: rgb(1, 1, 1),
-  };
-  const margin = 40;
-  const ctx = { font, bold, colors, rgb, margin };
-  const pageSize: [number, number] = [595.28, 841.89];
   const contentW = 595.28 - margin * 2;
 
   const scheduleAddress = [req.scheduleLocationName, req.scheduleAddress, req.scheduleMunicipality]
@@ -11238,445 +11209,229 @@ async function generateAndDownloadProntuario(fullHistory: AnyRecord) {
   }
 }
 
-function buildProcessEvents(request: AnyRecord): AnyRecord[] {
-  const req = normalizeRequest(request);
-  const wf: AnyRecord = request.workflowData || request.workflow_data || {};
-  const events: AnyRecord[] = [];
-
-  const fmt = (d: string | undefined) =>
-    d ? new Date(d).toLocaleDateString("pt-BR") + " " + new Date(d).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "-";
-  const fmtDate = (d: string | undefined) =>
-    d ? new Date(d).toLocaleDateString("pt-BR") : "-";
-
-  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
-  const scheduleAddress = [req.scheduleLocationName, req.scheduleAddress, req.scheduleMunicipality].filter(Boolean).join(" - ");
-
-  // 1. Requerimento submetido — sempre (LEFT)
-  events.push({
-    label: "Requerimento submetido",
-    actor: req.tutor || "Tutor",
-    date: fmt(req.createdAt),
-    details: [
-      `Procedimento: ${requestTypeLabel(req) || "-"}`,
-      `Origem: ${req.origin === "INTERNA" || req.origin === "BALCAO" ? "Interna / Balcão" : "Portal público"}`,
-      `Protocolo: #${req.protocol || "-"}`,
-      animal.name ? `Animal: ${animal.name} (${[animal.species, animal.sex].filter(Boolean).join(", ")})` : "",
-    ].filter(Boolean),
-    side: "left",
-    color: "blue",
-  });
-
-  // 2. Documentos enviados — se houver (LEFT)
-  const docs = getUserUploadedProcessDocuments(request.documents);
-  if (docs.length > 0) {
-    const docLines = docs.map((d) => {
-      const name = d.documentName || d.fileName || "Documento";
-      const status = d.status === "approved" ? "aprovado" : d.status === "rejected" ? "recusado" : "enviado";
-      return `${pdfText(name)} — ${status}`;
-    });
-    events.push({
-      label: "Documentos enviados",
-      actor: req.tutor || "Tutor",
-      date: fmtDate(req.createdAt),
-      details: docLines,
-      side: "left",
-      color: "gray",
-    });
-  }
-
-  // 3. Atribuição ao setor — se tiver setor ou tag ATRIBUIDA (RIGHT)
-  if (requestHasTag(req, "ATRIBUIDA") || req.assignedSectorName) {
-    events.push({
-      label: "Atribuição ao setor",
-      actor: req.assignedSectorName || req.responsible || "Equipe",
-      date: fmtDate(req.createdAt),
-      details: [
-        req.assignedSectorName ? `Setor: ${req.assignedSectorName}` : "",
-        req.responsible ? `Responsável: ${req.responsible}` : "",
-        requestHasTag(req, "PRIORIDADE") ? "Marcado como PRIORIDADE" : "",
-      ].filter(Boolean),
-      side: "right",
-      color: "amber",
-    });
-  }
-
-  // 4. Mutirão — se tag MUTIRAO (RIGHT)
-  if (requestHasTag(req, "MUTIRAO")) {
-    events.push({
-      label: "Incluído em mutirão",
-      actor: req.assignedSectorName || "Equipe",
-      date: fmtDate(req.preferredSchedule || req.appointment),
-      details: ["Solicitação vinculada a mutirão de castração"],
-      side: "right",
-      color: "purple",
-    });
-  }
-
-  // 5. Agendamento — se tiver data (RIGHT)
-  const schedDate = req.preferredSchedule || req.appointment;
-  if (schedDate) {
-    const slotTime = wf.scheduleTime || wf.scheduleSlotTime || "";
-    events.push({
-      label: requestHasTag(req, "REAGENDADA") ? "Reagendamento" : "Agendamento",
-      actor: req.assignedSectorName || req.responsible || "Equipe",
-      date: fmtDate(req.createdAt),
-      details: [
-        `Data agendada: ${fmtDate(schedDate)}${slotTime ? " as " + slotTime : ""}`,
-        scheduleAddress ? `Local: ${scheduleAddress}` : "",
-        wf.previousSchedule ? `Data anterior: ${fmtDate(wf.previousSchedule)}` : "",
-      ].filter(Boolean),
-      side: "right",
-      color: requestHasTag(req, "REAGENDADA") ? "yellow" : "blue",
-    });
-  }
-
-  // 6. Retorno do tutor — se tag RETORNO_TUTOR (LEFT)
-  if (requestHasTag(req, "RETORNO_TUTOR")) {
-    events.push({
-      label: "Retorno do tutor",
-      actor: req.tutor || "Tutor",
-      date: "-",
-      details: ["Tutor entrou em contato para acompanhamento"],
-      side: "left",
-      color: "gray",
-    });
-  }
-
-  // 7. Movimentações do history[] — com notas
-  const rawHistory: AnyRecord[] = Array.isArray(request.history) ? request.history : [];
-  for (const item of rawHistory) {
-    if (!item.notes && !item.by) continue;
-    events.push({
-      label: "Movimentacao",
-      actor: item.by || "Sistema",
-      date: item.at ? fmt(item.at) : "-",
-      details: [item.notes ? pdfText(String(item.notes)) : ""].filter(Boolean),
-      side: item.by ? "right" : "left",
-      color: "gray",
-    });
-  }
-
-  // 8. Procedimento realizado (RIGHT)
-  if (req.status === "REALIZADA") {
-    const microchipApplied = String(wf.attendanceMicrochip || "").trim();
-    const attendanceNote = String(req.attendanceNote || wf.attendanceNote || "").trim();
-    events.push({
-      label: "Procedimento realizado",
-      actor: req.responsible || req.assignedSectorName || "Equipe",
-      date: fmt(wf.attendedAt || schedDate),
-      details: [
-        microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: não registrado",
-        wf.performedProcedures ? `Procedimentos: ${pdfText(wf.performedProcedures)}` : "",
-        attendanceNote ? `Obs.: ${pdfText(attendanceNote)}` : "",
-      ].filter(Boolean),
-      side: "right",
-      color: "green",
-    });
-    const prescription = String(wf.attendancePrescription || "").trim();
-    if (prescription) {
-      events.push({
-        label: "Receita prescrita",
-        actor: req.responsible || "Veterinario",
-        date: fmt(wf.attendedAt || schedDate),
-        details: wrapPdfText(pdfText(prescription), 44).slice(0, 6),
-        side: "right",
-        color: "teal",
-      });
-    }
-  }
-
-  // 9. Cancelamento (RIGHT)
-  if (req.status === "CANCELADA") {
-    const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
-    const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
-    events.push({
-      label: "Processo cancelado",
-      actor: req.assignedSectorName || req.responsible || "Sistema",
-      date: fmtDate(req.updatedAt || req.createdAt),
-      details: [
-        cancelReason ? `Motivo: ${pdfText(cancelReason)}` : "Motivo: nao informado",
-        cancelNote ? `Obs.: ${pdfText(cancelNote)}` : "",
-      ].filter(Boolean),
-      side: "right",
-      color: "red",
-    });
-  }
-
-  return events;
-}
-
-function drawProcessBubble(page, bubble: AnyRecord, y: number, ctx: AnyRecord): number {
-  const { font, bold, colors, rgb, margin } = ctx;
-  const pageW = page.getWidth();
-  const contentW = pageW - margin * 2;
-  const bubbleW = 320;
-  const isLeft = bubble.side === "left";
-  const x = isLeft ? margin : margin + contentW - bubbleW;
-
-  const colorMap: AnyRecord = {
-    blue:   rgb(0.05, 0.45, 0.69),
-    green:  rgb(0.07, 0.44, 0.22),
-    teal:   rgb(0.05, 0.38, 0.38),
-    red:    rgb(0.75, 0.18, 0.18),
-    amber:  rgb(0.72, 0.42, 0.05),
-    yellow: rgb(0.60, 0.48, 0.02),
-    purple: rgb(0.42, 0.18, 0.62),
-    gray:   rgb(0.38, 0.47, 0.55),
-  };
-  const accentColor = colorMap[bubble.color] || colorMap.gray;
-  const bgLeft  = rgb(0.96, 0.97, 1.00);
-  const bgRight = rgb(0.95, 0.99, 0.97);
-  const bg = isLeft ? bgLeft : bgRight;
-
-  const detailLines: string[] = (bubble.details as string[]).flatMap((d) =>
-    wrapPdfText(pdfText(d), 44)
-  );
-  const headerH = 32;
-  const lineH = 13;
-  const padV = 8;
-  const bubbleH = headerH + padV + detailLines.length * lineH + padV;
-
-  // background
-  page.drawRectangle({ x, y: y - bubbleH, width: bubbleW, height: bubbleH, color: bg });
-  // accent bar
-  page.drawRectangle({ x, y: y - bubbleH, width: 3, height: bubbleH, color: accentColor });
-  // label
-  page.drawText(pdfText(bubble.label), { x: x + 10, y: y - 14, size: 8, font: bold, color: colors.ink });
-  // date (right-aligned in bubble)
-  const dateStr = pdfText(bubble.date);
-  page.drawText(dateStr, { x: x + bubbleW - 6 - dateStr.length * 4.5, y: y - 14, size: 7, font, color: colors.muted });
-  // actor
-  page.drawText(pdfText(bubble.actor), { x: x + 10, y: y - 26, size: 7, font, color: accentColor });
-  // divider
-  page.drawLine({
-    start: { x: x + 3, y: y - 33 },
-    end: { x: x + bubbleW, y: y - 33 },
-    thickness: 0.3,
-    color: rgb(0.82, 0.88, 0.93),
-  });
-  // details
-  let textY = y - headerH - padV;
-  for (const line of detailLines) {
-    page.drawText(line, { x: x + 10, y: textY, size: 8, font, color: colors.ink });
-    textY -= lineH;
-  }
-
-  return y - bubbleH - 10;
-}
-
-async function generateRelatorioProcessualPdf(request: AnyRecord = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
-  const req = normalizeRequest(request);
-  const output = await PDFDocument.create();
-  const font = await output.embedFont(StandardFonts.Helvetica);
-  const bold = await output.embedFont(StandardFonts.HelveticaBold);
-
-  const statusLabel = statusLabels[req.status] || req.status || "Sem status";
-  const statusColorMap: AnyRecord = {
-    NOVA: rgb(0.45, 0.52, 0.57),
-    AGENDADA: rgb(0.08, 0.48, 0.72),
-    REALIZADA: rgb(0.07, 0.44, 0.22),
-    CANCELADA: rgb(0.75, 0.18, 0.18),
-  };
-  const statusColor = statusColorMap[req.status] || statusColorMap.NOVA;
-
-  const colors = {
-    ink: rgb(0.07, 0.12, 0.18),
-    muted: rgb(0.38, 0.47, 0.55),
-    blue: rgb(0.05, 0.45, 0.69),
-    line: rgb(0.88, 0.92, 0.95),
-    white: rgb(1, 1, 1),
-  };
-  const margin = 40;
+async function createTutorTransferPdfDataUrl(request: AnyRecord = {}) {
+  const { PDFDocument, rgb } = await importPdfLib();
+  const pdf = await PDFDocument.create();
+  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
   const ctx = { font, bold, colors, rgb, margin };
-  const pageSize: [number, number] = [595.28, 841.89];
-  const pageH = 841.89;
   const contentW = 595.28 - margin * 2;
 
-  const animals = Array.isArray(req.animals) ? req.animals : [];
-  const animal: AnyRecord = animals[0] || {};
+  const req = normalizeRequest(request);
+  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
+  const docLabel = requestTypeDomainLabels[RequestType.TUTOR_TRANSFER];
 
-  let page = output.addPage(pageSize);
+  const page = pdf.addPage(pageSize);
   let y = drawProntuarioHeader(
-    page, req.protocol, statusLabel, statusColor, ctx, "",
-    "RELATORIO PROCESSUAL",
+    page, req.protocol, docLabel, rgb(0.05, 0.45, 0.69), ctx, "",
+    "TROCA DE TUTOR",
     pdfText(`Protocolo: #${req.protocol || "-"}`)
   );
   y -= 10;
 
-  // ── Linha de identificação compacta ─────────────────────────────
-  const idParts = [
-    req.tutor ? `Tutor: ${pdfText(req.tutor)}` : "",
-    animal.name ? `Animal: ${pdfText(animal.name)}${animal.species ? ` (${pdfText(animal.species)})` : ""}` : "",
-    requestTypeLabel(req) ? `Tipo: ${pdfText(requestTypeLabel(req))}` : "",
-    req.assignedSectorName ? `Setor: ${pdfText(req.assignedSectorName)}` : "",
-  ].filter(Boolean).join("   ·   ");
-  if (idParts) {
-    page.drawText(idParts, { x: margin, y, size: 8, font, color: colors.muted });
-    y -= 14;
-  }
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.6, color: colors.line });
+  y = drawProntuarioSectionTitle(page, "DADOS DA SOLICITAÇÃO", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "TIPO DE SOLICITAÇÃO", value: docLabel },
+      { label: "DATA DA SOLICITAÇÃO", value: req.createdAt ? formatDateTime(req.createdAt) : "-" },
+    ],
+    [
+      { label: "MOTIVO", value: req.notes || "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
-  // ── Título da seção de tramitações ───────────────────────────────
-  y = drawProntuarioSectionTitle(page, "TRAMITAÇÕES DO PROCESSO", y, ctx);
+  y = drawProntuarioSectionTitle(page, "TUTOR ATUAL", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "NOME COMPLETO", value: req.tutor || "-" },
+      { label: "CPF", value: req.cpf || "-" },
+      { label: "CELULAR", value: req.phone || "-" },
+      { label: "EMAIL", value: req.email || "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
-  // ── Bolhas de tramitação ─────────────────────────────────────────
-  const events = buildProcessEvents(request);
-  let pageNum = 1;
-  for (const bubble of events) {
-    const detailLines: string[] = (bubble.details as string[]).flatMap((d: string) =>
-      wrapPdfText(pdfText(d), 44)
-    );
-    const bubbleH = 32 + 8 + detailLines.length * 13 + 8 + 10;
-    if (y - bubbleH < margin + 50) {
-      drawRequestPdfFooter(page, "Relatório processual emitido pelo sistema municipal", `Página ${pageNum}`, ctx);
-      page = output.addPage(pageSize);
-      pageNum += 1;
-      y = pageH - margin - 20;
-    }
-    y = drawProcessBubble(page, bubble, y, ctx);
-  }
+  y = drawProntuarioSectionTitle(page, "NOVO TUTOR", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "NOME COMPLETO", value: req.targetTutorName || "-" },
+      { label: "CPF", value: req.targetTutorCpf || "-" },
+      { label: "CELULAR", value: req.targetTutorPhone || "-" },
+      { label: "EMAIL", value: req.targetTutorEmail || "-" },
+    ],
+    [
+      { label: "CEP", value: req.targetTutorCep || "-" },
+      { label: "ENDEREÇO", value: req.targetTutorAddress || "-" },
+      { label: "BAIRRO", value: req.targetTutorNeighborhood || "-" },
+    ],
+    [
+      { label: "CIDADE", value: req.targetTutorCity || "-" },
+      { label: "UF", value: req.targetTutorState || "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
 
-  if (events.length === 0) {
-    page.drawText("Nenhuma tramitacao registrada para este processo.", {
-      x: margin, y, size: 9, font, color: colors.muted,
-    });
-    y -= 20;
-  }
+  y = drawProntuarioSectionTitle(page, "DADOS DO ANIMAL", y, ctx);
+  y -= 6;
+  drawProntuarioFields(page, [
+    [
+      { label: "NOME", value: animal.name || "-" },
+      { label: "ESPÉCIE", value: animal.species || "-" },
+      { label: "MICROCHIP", value: animal.microchip || req.animalMicrochip || "-" },
+    ],
+  ], y, ctx);
 
-  drawRequestPdfFooter(page, "Relatório processual emitido pelo sistema municipal", `Página ${pageNum}`, ctx);
-  void y;
-
-  const documents = getUserUploadedProcessDocuments(request.documents);
-  for (const document of documents) {
-    const dataUrl = getDocumentPreviewSource(document);
-    const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
-    if (!dataUrl) {
-      await appendUnsupportedAttachmentPage(output, {
-        title: document.documentName || "Documento anexado",
-        fileName: document.fileName || "Arquivo sem prévia",
-        StandardFonts,
-        rgb,
-      });
-      continue;
-    }
-    try {
-      if (mimeType === "application/pdf") { await appendPdfDataUrl(output, dataUrl); continue; }
-      if (mimeType?.startsWith("image/")) { await appendImageDataUrl(output, dataUrl, mimeType); continue; }
-    } catch {
-      console.warn("Aviso: anexo ignorado no relatorio processual:", document.fileName);
-    }
-    await appendUnsupportedAttachmentPage(output, {
-      title: document.documentName || "Documento anexado",
-      fileName: document.fileName || "Arquivo sem prévia",
-      StandardFonts,
-      rgb,
-    });
-  }
-
-  const bytes = await output.save();
-  return {
-    documentName: "Relatório processual",
-    fileName: `Relatório ${req.protocol || ""}`.trim() + ".pdf",
-    fileType: "application/pdf",
-    dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
-  };
+  drawRequestPdfFooter(page, "Troca de tutor", "Página 1 de 1", ctx);
+  return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
 }
 
-async function generateDocumentBundlePdf(request: AnyRecord = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
-  const output = await PDFDocument.create();
-  try {
-    const requestDataUrl = await createRequestPdfDataUrl(request);
-    await appendPdfDataUrl(output, requestDataUrl);
-  } catch (error) {
-    await appendUnsupportedAttachmentPage(output, {
-      title: "Requerimento municipal",
-      fileName: `Não foi possível gerar o requerimento do processo ${request.protocol || ""}`.trim(),
-      StandardFonts,
-      rgb,
-    });
-  }
+async function createDeathRegistrationPdfDataUrl(request: AnyRecord = {}) {
+  const { PDFDocument, rgb } = await importPdfLib();
+  const pdf = await PDFDocument.create();
+  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
+  const ctx = { font, bold, colors, rgb, margin };
+  const contentW = 595.28 - margin * 2;
 
-  const documents = getUserUploadedProcessDocuments(request.documents);
-  for (const document of documents) {
-    const dataUrl = getDocumentPreviewSource(document);
-    const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
-    if (!dataUrl) {
-      await appendUnsupportedAttachmentPage(output, {
-        title: document.documentName || "Documento anexado",
-        fileName: document.fileName || "Arquivo sem prévia",
-        StandardFonts,
-        rgb,
-      });
-      continue;
-    }
-    try {
-      if (mimeType === "application/pdf") {
-        await appendPdfDataUrl(output, dataUrl);
-        continue;
-      }
-      if (mimeType?.startsWith("image/")) {
-        await appendImageDataUrl(output, dataUrl, mimeType);
-        continue;
-      }
-    } catch (error) {
-      console.warn("Aviso: anexo ignorado na juntada:", error);
-    }
-    await appendUnsupportedAttachmentPage(output, {
-      title: document.documentName || "Documento anexado",
-      fileName: document.fileName || "Arquivo sem prévia",
-      StandardFonts,
-      rgb,
-    });
-  }
+  const req = normalizeRequest(request);
+  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
+  const docLabel = requestTypeDomainLabels[RequestType.ANIMAL_DEATH];
 
-  const bytes = await output.save();
-  return {
-    documentName: "Juntada do processo",
-    fileName: `Juntada ${request.protocol || ""}.pdf`.trim(),
-    fileType: "application/pdf",
-    eyebrow: "Juntada",
-    dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
-  };
+  const page = pdf.addPage(pageSize);
+  let y = drawProntuarioHeader(
+    page, req.protocol, docLabel, rgb(0.05, 0.45, 0.69), ctx, "",
+    "REGISTRO DE ÓBITO",
+    pdfText(`Protocolo: #${req.protocol || "-"}`)
+  );
+  y -= 10;
+
+  y = drawProntuarioSectionTitle(page, "DADOS DA SOLICITAÇÃO", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "TIPO DE SOLICITAÇÃO", value: docLabel },
+      { label: "DATA DA SOLICITAÇÃO", value: req.createdAt ? formatDateTime(req.createdAt) : "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page, "TUTOR", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "NOME COMPLETO", value: req.tutor || "-" },
+      { label: "CPF", value: req.cpf || "-" },
+      { label: "CELULAR", value: req.phone || "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page, "DADOS DO ANIMAL", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "NOME", value: animal.name || "-" },
+      { label: "ESPÉCIE", value: animal.species || "-" },
+      { label: "MICROCHIP", value: animal.microchip || req.animalMicrochip || "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page, "REGISTRO DE ÓBITO", y, ctx);
+  y -= 6;
+  drawProntuarioFields(page, [
+    [
+      { label: "DATA DO ÓBITO", value: req.deathDate || "-" },
+      { label: "CAUSA MORTIS", value: req.deathCause || "-" },
+    ],
+    [
+      { label: "OBSERVAÇÕES", value: req.notes || "-" },
+    ],
+  ], y, ctx);
+
+  drawRequestPdfFooter(page, "Registro de óbito", "Página 1 de 1", ctx);
+  return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
 }
 
-async function generateFallbackBundlePdf(request: AnyRecord = {}, error = null) {
-  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
-  const output = await PDFDocument.create();
-  await appendUnsupportedAttachmentPage(output, {
-    title: "Juntada do processo",
-    fileName: `Não foi possível preparar a juntada ${request.protocol || ""}`.trim(),
-    StandardFonts,
-    rgb,
-  });
-  const bytes = await output.save();
-  return {
-    documentName: "Juntada do processo",
-    fileName: `Juntada ${request.protocol || ""}.pdf`.trim(),
-    fileType: "application/pdf",
-    eyebrow: "Juntada",
-    dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
-  };
+async function createComplaintPdfDataUrl(request: AnyRecord = {}) {
+  const { PDFDocument, rgb } = await importPdfLib();
+  const pdf = await PDFDocument.create();
+  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
+  const ctx = { font, bold, colors, rgb, margin };
+  const contentW = 595.28 - margin * 2;
+
+  const req = normalizeRequest(request);
+  const docLabel = requestTypeDomainLabels[RequestType.COMPLAINT];
+  const occurrenceAddress = [req.address, req.neighborhood, req.city, req.state].filter(Boolean).join(" - ");
+
+  const page = pdf.addPage(pageSize);
+  let y = drawProntuarioHeader(
+    page, req.protocol, docLabel, rgb(0.05, 0.45, 0.69), ctx, "",
+    "DENÚNCIA",
+    pdfText(`Protocolo: #${req.protocol || "-"}`)
+  );
+  y -= 10;
+
+  y = drawProntuarioSectionTitle(page, "DADOS DA SOLICITAÇÃO", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "TIPO DE SOLICITAÇÃO", value: docLabel },
+      { label: "DATA DA SOLICITAÇÃO", value: req.createdAt ? formatDateTime(req.createdAt) : "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page, "DADOS DO DENUNCIANTE", y, ctx);
+  y -= 6;
+  y = drawProntuarioFields(page, [
+    [
+      { label: "NOME COMPLETO", value: req.tutor || "-" },
+      { label: "CPF", value: req.cpf || "-" },
+      { label: "CELULAR", value: req.phone || "-" },
+      { label: "EMAIL", value: req.email || "-" },
+    ],
+    [
+      { label: "ENDEREÇO DA OCORRÊNCIA", value: occurrenceAddress || "-" },
+    ],
+  ], y, ctx);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
+  y -= 14;
+
+  y = drawProntuarioSectionTitle(page, "RELATO", y, ctx);
+  y -= 6;
+  drawProntuarioFields(page, [
+    [
+      { label: "DESCRIÇÃO", value: req.complaintDescription || "-" },
+    ],
+  ], y, ctx);
+
+  drawRequestPdfFooter(page, "Denúncia", "Página 1 de 1", ctx);
+  return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
 }
 
 async function createRequestPdfDataUrl(request: AnyRecord = {}) {
-  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
+  const { PDFDocument, rgb } = await importPdfLib();
   const pdf = await PDFDocument.create();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const colors = {
-    ink: rgb(0.07, 0.12, 0.18),
-    muted: rgb(0.38, 0.47, 0.55),
-    blue: rgb(0.05, 0.45, 0.69),
-    line: rgb(0.88, 0.92, 0.95),
-    white: rgb(1, 1, 1),
-  };
-  const margin = 40;
+  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
   const ctx = { font, bold, colors, rgb, margin };
-  const pageSize: [number, number] = [595.28, 841.89];
   const contentW = 595.28 - margin * 2;
 
   const req = normalizeRequest(request);
@@ -11855,7 +11610,7 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
   drawProntuarioFields(page2, [
     [
       { label: "ACEITE REGISTRADO POR", value: req.tutor || "-" },
-      { label: "CPF", value: maskCpf(req.cpf || "") || "-" },
+      { label: "CPF", value: req.cpf || "-" },
       { label: "DATA / HORA", value: formatDateTime(signedAt) },
       { label: "MÉTODO", value: "Li e aceito" },
     ],
@@ -12068,6 +11823,29 @@ function importPdfLib(): Promise<typeof import("pdf-lib")> {
   });
 }
 
+const A4_PAGE_SIZE: [number, number] = [595.28, 841.89];
+
+type PdfRgbFn = Awaited<ReturnType<typeof importPdfLib>>["rgb"];
+
+function getPdfColors(rgb: PdfRgbFn) {
+  return {
+    ink: rgb(0.07, 0.12, 0.18),
+    muted: rgb(0.38, 0.47, 0.55),
+    blue: rgb(0.05, 0.45, 0.69),
+    line: rgb(0.88, 0.92, 0.95),
+    white: rgb(1, 1, 1),
+  };
+}
+
+async function createPdfDocContext(pdf: AnyRecord, rgb: PdfRgbFn) {
+  const { StandardFonts } = await importPdfLib();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const margin = 40;
+  const colors = getPdfColors(rgb);
+  return { font, bold, colors, rgb, margin, pageSize: A4_PAGE_SIZE };
+}
+
 async function appendPdfDataUrl(targetPdf, dataUrl) {
   const { PDFDocument } = await importPdfLib();
   const sourcePdf = await PDFDocument.load(dataUrlToUint8Array(dataUrl));
@@ -12080,7 +11858,7 @@ async function appendImageDataUrl(targetPdf, dataUrl, mimeType = "") {
   const image = mimeType.includes("png")
     ? await targetPdf.embedPng(bytes)
     : await targetPdf.embedJpg(bytes);
-  const page = targetPdf.addPage([595.28, 841.89]);
+  const page = targetPdf.addPage(A4_PAGE_SIZE);
   const margin = 36;
   const availableWidth = page.getWidth() - margin * 2;
   const availableHeight = page.getHeight() - margin * 2;
@@ -12096,7 +11874,7 @@ async function appendImageDataUrl(targetPdf, dataUrl, mimeType = "") {
 }
 
 async function appendUnsupportedAttachmentPage(targetPdf, { title, fileName, StandardFonts, rgb }) {
-  const page = targetPdf.addPage([595.28, 841.89]);
+  const page = targetPdf.addPage(A4_PAGE_SIZE);
   const font = await targetPdf.embedFont(StandardFonts.Helvetica);
   page.drawText(pdfText(title).slice(0, 70), { x: 48, y: 780, size: 16, font, color: rgb(0.06, 0.21, 0.31) });
   page.drawText(pdfText(fileName).slice(0, 90), { x: 48, y: 752, size: 11, font, color: rgb(0.25, 0.32, 0.38) });

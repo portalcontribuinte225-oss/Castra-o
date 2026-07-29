@@ -501,6 +501,18 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     rawHistory: Array.isArray(request.history) ? request.history : [],
     history,
     animals,
+    targetTutorName: request.targetTutorName || request.target_tutor_name || "",
+    targetTutorCpf: request.targetTutorCpf || request.target_tutor_cpf || "",
+    targetTutorPhone: request.targetTutorPhone || request.target_tutor_phone || "",
+    targetTutorEmail: request.targetTutorEmail || request.target_tutor_email || "",
+    targetTutorAddress: request.targetTutorAddress || request.target_tutor_address || "",
+    targetTutorNeighborhood: request.targetTutorNeighborhood || request.target_tutor_neighborhood || "",
+    targetTutorCity: request.targetTutorCity || request.target_tutor_city || "",
+    targetTutorState: request.targetTutorState || request.target_tutor_state || "",
+    targetTutorCep: request.targetTutorCep || request.target_tutor_cep || "",
+    deathDate: request.deathDate || request.death_date || "",
+    deathCause: request.deathCause || request.death_cause || "",
+    complaintDescription: request.complaintDescription || request.notes || "",
   };
 }
 
