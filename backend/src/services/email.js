@@ -12,7 +12,7 @@ export async function sendResetCodeEmail({ toEmail, toName, code }) {
     service_id: serviceId,
     template_id: templateId,
     user_id: publicKey,
-    template_params: { to_email: toEmail, to_name: toName || toEmail, codigo_recuperacao: code },
+    template_params: { to_email: toEmail, to_name: toName || toEmail, codigo_recuperacao: code, validade: "15 minutos" },
   };
   if (privateKey) body.accessToken = privateKey;
 
