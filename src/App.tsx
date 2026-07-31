@@ -10709,8 +10709,8 @@ const PDF_BASE_STYLES = `
   .data-item { border: 1px solid #e8f1f5; border-radius: 8px; background: #f8fbfd; padding: 8px; }
   .data-item span { display: block; color: #64748b; margin-bottom: 4px; }
   .data-item strong { font-size: 12px; }
-  .animal-card { margin-top: 10px; border: 1px solid #fed7aa; border-radius: 10px; padding: 10px; background: #fff7ed; }
-  .animal-card-title { color: #9a3412; font-weight: 800; margin-bottom: 8px; }
+  .animal-card { margin-top: 10px; border: 1px solid #dbe5f1; border-radius: 10px; padding: 10px; background: #f8fafc; }
+  .animal-card-title { color: #0f172a; font-weight: 800; margin-bottom: 8px; }
   .footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; color: #64748b; font-size: 10px; }
   @page { size: A4; margin: 12mm; }
   .pdf-page { page-break-after: always; min-height: 250mm; display: flex; flex-direction: column; }
@@ -10788,14 +10788,14 @@ async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord
   };
 }
 
-// Paleta bege da tela "Consultar prontuário" — fonte única, reaproveitada por
+// Paleta neutra da tela "Consultar prontuário" — fonte única, reaproveitada por
 // todas as funções de desenho do PDF do Prontuário (que não usam a paleta
 // azul genérica dos demais documentos).
 const ANIMAL_RECORD_COLORS = {
-  ink: "#2b2420",
-  muted: "#93887a",
-  line: "#e6ddc9",
-  bg: "#f4f1ea",
+  ink: "#0f172a",
+  muted: "#64748b",
+  line: "#dbe5f1",
+  bg: "#f8fafc",
   cardBorder: "#e5e7eb",
 };
 
@@ -10857,8 +10857,8 @@ function drawProntuarioSectionTitle(page, title, y, ctx, colorOverride: unknown 
   return y - 22;
 }
 
-// Espelha .animal-record-header da tela "Consultar prontuário": card bege
-// (#f4f1ea / borda #e6ddc9) com avatar circular escuro, nome, resumo,
+// Espelha .animal-record-header da tela "Consultar prontuário": card neutro
+// (#f8fafc / borda #dbe5f1) com avatar circular escuro, nome, resumo,
 // microchip/município e o chip de status verde no canto direito.
 function drawAnimalRecordHeader(page, animalName, animalSummary, microchipLine, statusLabel, ctx) {
   const { font, bold, margin, rgb } = ctx;
@@ -11180,7 +11180,7 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
   const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
   const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
 
-  // Paleta bege da tela "Consultar prontuário" — usada em todo este
+  // Paleta neutra da tela "Consultar prontuário" — usada em todo este
   // documento em vez da paleta azul genérica dos demais PDFs.
   const beigeLine = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.line));
   const beigeMuted = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted));
