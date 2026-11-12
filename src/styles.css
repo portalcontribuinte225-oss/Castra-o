@@ -25881,3 +25881,89 @@ small,
     display: grid !important;
   }
 }
+
+/* Modal "Nova solicitação": etapas centralizadas, com espaçamento e sem sobreposição.
+   .nr-stepper estava como display:block (gap/justify não valiam) e os botões herdavam
+   a borda outset do navegador, com o passo atual sem padding. */
+.internal-request-modal .nr-shell--internal .nr-stepper {
+  width: 100%;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.internal-request-modal .nr-shell--internal .nr-step {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: none;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.internal-request-modal .nr-shell--internal .nr-step--current {
+  padding: 0 16px;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #0f2744;
+}
+
+.internal-request-modal .nr-shell--internal .nr-step--done {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #0f766e;
+}
+
+.internal-request-modal .nr-shell--internal .nr-step-circle {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+}
+
+.internal-request-modal .nr-shell--internal .nr-step-label {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  font-size: 0.8rem;
+}
+
+.internal-request-modal .nr-shell--internal .nr-step-connector {
+  flex: 0 0 24px;
+  display: block;
+  width: 24px;
+  min-width: 0;
+  max-width: 24px;
+  height: 2px;
+  margin: 0;
+  border-radius: 2px;
+}
+
+@media (max-width: 760px) {
+  .internal-request-modal .nr-shell--internal .nr-stepper {
+    gap: 8px;
+  }
+
+  .internal-request-modal .nr-shell--internal .nr-step,
+  .internal-request-modal .nr-shell--internal .nr-step--current {
+    padding: 0 6px;
+  }
+
+  .internal-request-modal .nr-shell--internal .nr-step-label,
+  .internal-request-modal .nr-shell--internal .nr-step-connector {
+    display: none;
+  }
+}
