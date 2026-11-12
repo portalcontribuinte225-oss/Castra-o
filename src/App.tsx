@@ -84,7 +84,6 @@ import {
   initialWhatsappSettings,
   WHATSAPP_TEMPLATE_VARS,
   isPastScheduleDay,
-  isRequestOnScheduleDate,
   mergeTags,
   normalizeDocumentType,
   normalizeRequest,
@@ -156,6 +155,11 @@ import { useRequestActions } from "./features/request-actions";
 import { getSpecialRequestSection, specialRequestConfirmLabel } from "./features/request-analysis-sections";
 import { DashboardView } from "./features/dashboard";
 import { ReportsView } from "./features/reports";
+import { ActiveFiltersBar } from "./features/request-filters/active-filters-bar";
+import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-filters/request-filters";
+import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
+import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
+import { useRequestFilterResults, useRequestFilters } from "./features/request-filters/use-request-filters";
 
 type ConfigTabItem = {
   id: string;
@@ -4593,9 +4597,9 @@ function AdminDashboard({
   accessRequests = [],
   setActive,
 }) {
-  const [requestFilter, setRequestFilter] = useState("inbox");
+  const { filters: requestFilters, actions: requestFilterActions } = useRequestFilters();
+  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
-  const [todayOnly, setTodayOnly] = useState(false);
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
@@ -4621,17 +4625,19 @@ function AdminDashboard({
     confirmSpecialRequest,
   } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
 
+  const normalizedRequests = useMemo(
+    () => (Array.isArray(requests) ? requests : []).map(normalizeRequest),
+    [requests],
+  );
   const visibleRequests = useMemo(
-    () => (Array.isArray(requests) ? requests : [])
-      .map(normalizeRequest)
-      .filter((request) => matchesRequestSearch(request, globalSearch)),
-    [requests, globalSearch],
+    () => normalizedRequests.filter((request) => matchesRequestSearch(request, globalSearch)),
+    [normalizedRequests, globalSearch],
   );
   const visibleAccessRequests = useMemo(
     () => (Array.isArray(accessRequests) ? accessRequests : [])
       .filter((item) => matchesRequestSearch({ tutor: item.responsibleName, animals: [] }, globalSearch))
       .map((item) => ({
-        __source: "access_request",
+        __source: ACCESS_REQUEST_SOURCE,
         id: item.id,
         protocol: String(item.id || "").slice(0, 8).toUpperCase() || "SEM-ID",
         tutor: item.responsibleName || item.organizationName || "Solicitante",
@@ -4646,55 +4652,24 @@ function AdminDashboard({
     [accessRequests, globalSearch],
   );
   const today = formatScheduleDate(new Date());
-  const filterTabs = [
-    {
-      id: "inbox",
-      label: "Novas",
-      requests: [
-        ...visibleRequests.filter((r) => r.status === "NOVA" && !r.tags.includes("ATRIBUIDA")),
-        ...visibleAccessRequests.filter((r) => r.status === "NOVA"),
-      ],
-    },
-    {
-      id: "analysis",
-      label: "Em análise",
-      requests: visibleRequests.filter(
-        (r) => r.status === "NOVA" && r.tags.includes("ATRIBUIDA"),
-      ),
-    },
-    {
-      id: "scheduled",
-      label: "Agendadas",
-      requests: visibleRequests.filter(
-        (r) => r.status === "AGENDADA" && !r.tags.includes("REAGENDADA"),
-      ),
-    },
-    {
-      id: "rescheduled",
-      label: "Reagendadas",
-      requests: visibleRequests.filter(
-        (r) => r.status === "AGENDADA" && r.tags.includes("REAGENDADA"),
-      ),
-    },
-    {
-      id: "done",
-      label: "Realizadas",
-      requests: visibleRequests.filter(
-        (r) => r.status === "REALIZADA",
-      ),
-    },
-    {
-      id: "canceled",
-      label: "Canceladas",
-      requests: visibleRequests.filter(
-        (r) => r.status === "CANCELADA",
-      ),
-    },
-    { id: "all", label: "Todas", requests: visibleRequests },
-  ];
-  const todayRequests = visibleRequests.filter((r) => isRequestOnScheduleDate(r, today));
-  const activeTab = filterTabs.find((tab) => tab.id === requestFilter) || filterTabs[0];
-  const activeRequests = todayOnly ? todayRequests : activeTab.requests;
+  const listItems = useMemo(
+    () => [...visibleRequests, ...visibleAccessRequests],
+    [visibleRequests, visibleAccessRequests],
+  );
+  const {
+    activeRequests,
+    counts: filterCounts,
+    typeOptions,
+    assigneeOptions,
+    pills: filterPills,
+  } = useRequestFilterResults({
+    filters: requestFilters,
+    normalizedRequests,
+    listItems,
+    users: teams.users,
+    today,
+  });
+  const emptyMessage = getEmptyListMessage(requestFilters);
   async function notAttendedRequest(request) {
     const patch = { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Não compareceu" } };
     try {
@@ -4714,32 +4689,32 @@ function AdminDashboard({
             </button>
           </div>
 
-          <nav className="request-nav" aria-label="Filtros de solicitações">
-            <div className="request-filter-tabs">
-              {filterTabs.map((tab) => (
-                <button key={tab.id} type="button" data-tab={tab.id} className={!todayOnly && requestFilter === tab.id ? "selected" : ""} onClick={() => { setRequestFilter(tab.id); setTodayOnly(false); }}>
-                  {tab.label}<span>{tab.requests.length}</span>
-                </button>
-              ))}
-            </div>
-            <div className="request-today-segment">
-              <button
-                type="button"
-                className={todayOnly ? "selected" : ""}
-                aria-pressed={todayOnly}
-                onClick={() => setTodayOnly((current) => !current)}
-              >
-                <CalendarDays size={14} />
-                Hoje
-                <span>{todayRequests.length}</span>
-              </button>
-            </div>
-          </nav>
+          <RequestFiltersToolbar
+            filters={requestFilters}
+            counts={filterCounts}
+            activePillCount={filterPills.length}
+            drawerOpen={filtersDrawerOpen}
+            onSelectChip={requestFilterActions.selectChip}
+            onToggleToday={requestFilterActions.toggleToday}
+            onOpenDrawer={() => setFiltersDrawerOpen(true)}
+          />
       </div>
+      <ActiveFiltersBar
+        pills={filterPills}
+        onClearDimension={requestFilterActions.clearDimension}
+        onClearAll={requestFilterActions.clearAll}
+      />
       <div className="triage-card-grid">
-        {activeRequests.length === 0 && <EmptyState title={todayOnly ? "Nenhuma agenda para hoje" : "Nenhuma solicitação nesta etapa"} text={todayOnly ? "Solicitações sem agendamento para hoje não entram neste recorte." : "Quando houver registros, eles aparecerão aqui."} />}
+        {activeRequests.length === 0 && (
+          <EmptyState
+            title={emptyMessage.title}
+            text={emptyMessage.text}
+            action={emptyMessage.canClear ? "Limpar filtros" : undefined}
+            onAction={requestFilterActions.clearAll}
+          />
+        )}
         {activeRequests.map((request) => {
-          const isAccessRequest = request.__source === "access_request";
+          const isAccessRequest = request.__source === ACCESS_REQUEST_SOURCE;
           function openCard() {
             if (isAccessRequest) setActive?.("credenciamento");
             else openRequestPreview(request);
@@ -4803,6 +4778,21 @@ function AdminDashboard({
           );
         })}
       </div>
+
+      {filtersDrawerOpen && (
+        <RequestFiltersDrawer
+          filters={requestFilters}
+          counts={filterCounts}
+          typeOptions={typeOptions}
+          assigneeOptions={assigneeOptions}
+          resultCount={activeRequests.length}
+          onToggleStage={requestFilterActions.toggleStage}
+          onToggleType={requestFilterActions.toggleType}
+          onToggleAssignee={requestFilterActions.toggleAssignee}
+          onClearAll={requestFilterActions.clearAll}
+          onClose={() => setFiltersDrawerOpen(false)}
+        />
+      )}
 
       {previewRequest && (
         <RequestPreviewModal

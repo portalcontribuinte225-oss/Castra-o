@@ -1,0 +1,211 @@
+/* Request list filters: drawer body/footer and the active-filter pills.
+   The drawer shell reuses the .ag-drawer* classes defined in styles.css. */
+
+/* The shell is shared with the agenda drawer (z-index 80/81, untouched here);
+   this variant sits above .mobile-bottom-nav and .sidebar (z-index 200) so the footer stays reachable on mobile. */
+.ag-drawer-overlay.request-filters-overlay {
+  z-index: 210;
+}
+
+.ag-drawer.request-filters-drawer {
+  z-index: 211;
+}
+
+.request-filters-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 22px;
+  padding: 18px 22px 24px;
+  overflow-y: auto;
+}
+
+.request-filters-group {
+  display: grid;
+  gap: 8px;
+}
+
+.request-filters-group-title {
+  margin: 0;
+  color: var(--ink-500, #64748b);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.request-filters-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-border, #e2e8f0);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--ink-500, #64748b);
+}
+
+.request-filters-search:focus-within {
+  border-color: #0f766e;
+}
+
+.request-filters-search svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+}
+
+.request-filters-search input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--ink-900, #111827);
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.request-filters-list {
+  display: grid;
+  gap: 2px;
+  max-height: 264px;
+  overflow-y: auto;
+}
+
+.request-filters-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 36px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  color: var(--ink-700, #334155);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.request-filters-option:hover {
+  background: var(--ink-50, #f1f5f9);
+}
+
+.request-filters-option input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  accent-color: #0f766e;
+}
+
+.request-filters-option span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.request-filters-option small {
+  color: var(--ink-500, #64748b);
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.request-filters-option.is-empty {
+  opacity: 0.6;
+}
+
+.request-filters-empty {
+  margin: 0;
+  padding: 6px 10px;
+  color: var(--ink-500, #64748b);
+  font-size: 0.85rem;
+}
+
+.request-filters-footer {
+  display: flex;
+  gap: 10px;
+  padding: 14px 22px;
+  border-top: 1px solid #edf2f7;
+  background: #ffffff;
+}
+
+.request-filters-clear-all,
+.request-filters-apply {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.request-filters-clear-all {
+  border: 1px solid var(--ui-border, #e2e8f0);
+  background: #ffffff;
+  color: var(--ink-700, #334155);
+}
+
+.request-filters-clear-all:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.request-filters-apply {
+  flex: 1 1 auto;
+  border: 1px solid transparent;
+  background: #0f766e;
+  color: #ffffff;
+}
+
+.request-filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.request-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-border, #e2e8f0);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--ink-700, #334155);
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.request-filter-pill:hover {
+  background: var(--ink-50, #f1f5f9);
+}
+
+.request-filter-pill svg {
+  flex: 0 0 auto;
+  width: 12px;
+  height: 12px;
+}
+
+.request-filters-clear {
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--ink-500, #64748b);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: underline;
+  cursor: pointer;
+}

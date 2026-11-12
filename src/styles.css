@@ -24528,7 +24528,7 @@ main,
 }
 
 .request-page-controls .request-filter-tabs {
-  flex: 1 1 0 !important;
+  flex: 1 1 auto !important;
   width: auto !important;
   min-width: 0 !important;
 }
