@@ -4690,16 +4690,17 @@ function AdminDashboard({
           </div>
 
           <RequestFiltersToolbar
-            filters={requestFilters}
-            counts={filterCounts}
+            todayOnly={requestFilters.todayOnly}
+            todayCount={filterCounts.today}
             activePillCount={filterPills.length}
             drawerOpen={filtersDrawerOpen}
-            onSelectChip={requestFilterActions.selectChip}
             onToggleToday={requestFilterActions.toggleToday}
             onOpenDrawer={() => setFiltersDrawerOpen(true)}
           />
       </div>
       <ActiveFiltersBar
+        filters={requestFilters}
+        resultCount={activeRequests.length}
         pills={filterPills}
         onClearDimension={requestFilterActions.clearDimension}
         onClearAll={requestFilterActions.clearAll}

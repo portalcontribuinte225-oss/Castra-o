@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { normalizeText } from "../../utils";
-import { RequestFilterDimension, isRequestFiltersEmpty, requestFilterDimensionLabels } from "./request-filters";
+import {
+  RequestFilterDimension,
+  formatRequestCount,
+  isRequestFiltersEmpty,
+  requestFilterDimensionLabels,
+} from "./request-filters";
 import type { RequestFacetCounts, RequestFilterOption, RequestListFilters } from "./request-filters";
-import { requestStageLabels, requestStageOrder } from "./request-stage";
+import { requestStageOptions } from "./request-stage";
 import type { RequestStage } from "./request-stage";
 import "./request-filters.css";
 
 const SEARCH_MIN_OPTIONS = 7;
-
-const stageOptions: { value: RequestStage; label: string }[] = requestStageOrder.map((stage) => ({
-  value: stage,
-  label: requestStageLabels[stage],
-}));
 
 interface FilterGroupProps<T extends string> {
   title: string;
@@ -137,7 +137,7 @@ export function RequestFiltersDrawer({
         <div className="request-filters-body">
           <FilterGroup
             title={requestFilterDimensionLabels[RequestFilterDimension.STAGES]}
-            options={stageOptions}
+            options={requestStageOptions}
             selected={filters.stages}
             counts={counts.stages}
             onToggle={onToggleStage}
@@ -168,7 +168,7 @@ export function RequestFiltersDrawer({
             Limpar
           </button>
           <button type="button" className="request-filters-apply" onClick={onClose}>
-            Ver {resultCount} {resultCount === 1 ? "solicitação" : "solicitações"}
+            Ver {formatRequestCount(resultCount)}
           </button>
         </div>
       </aside>

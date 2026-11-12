@@ -1,14 +1,6 @@
 import type { AnyRecord } from "../../types";
 import { isRequestOnScheduleDate, requestTypeLabel } from "../../domain";
-import {
-  RequestChipId,
-  RequestStage,
-  getRequestStage,
-  isSameStageSet,
-  requestStageChips,
-  requestStageLabels,
-  requestStageOrder,
-} from "./request-stage";
+import { RequestStage, getRequestStage, requestStageOptions, requestStageOrder } from "./request-stage";
 
 export const ACCESS_REQUEST_SOURCE = "access_request";
 export const UNASSIGNED_ASSIGNEE_KEY = "__unassigned__";
@@ -47,7 +39,6 @@ export interface RequestFilterOption {
 }
 
 export interface RequestFacetCounts {
-  chips: Record<RequestChipId, number>;
   stages: Record<RequestStage, number>;
   today: number;
   types: Record<string, number>;
@@ -65,8 +56,9 @@ export interface EmptyListMessage {
   canClear: boolean;
 }
 
+// Every group empty means "show everything".
 export const initialRequestFilters: RequestListFilters = {
-  stages: [RequestStage.INBOX],
+  stages: [],
   types: [],
   assignees: [],
   todayOnly: false,
@@ -78,6 +70,13 @@ interface ItemFacets {
   typeKey: string;
   assigneeKey: string;
   isToday: boolean;
+}
+
+interface OmittedFilters {
+  stages?: boolean;
+  types?: boolean;
+  assignees?: boolean;
+  today?: boolean;
 }
 
 function isAccessRequestItem(item: AnyRecord): boolean {
@@ -113,20 +112,21 @@ function matchesToday(facets: ItemFacets, todayOnly: boolean): boolean {
   return !todayOnly || facets.isToday;
 }
 
+function matchesFilters(facets: ItemFacets, filters: RequestListFilters, omit: OmittedFilters = {}): boolean {
+  return (
+    (omit.stages || matchesStages(facets, filters.stages))
+    && (omit.types || matchesTypes(facets, filters.types))
+    && (omit.assignees || matchesAssignees(facets, filters.assignees))
+    && (omit.today || matchesToday(facets, filters.todayOnly))
+  );
+}
+
 export function filterRequestItems(
   items: AnyRecord[],
   filters: RequestListFilters,
   context: RequestFilterContext,
 ): AnyRecord[] {
-  return items.filter((item) => {
-    const facets = describeItem(item, context.today);
-    return (
-      matchesStages(facets, filters.stages)
-      && matchesTypes(facets, filters.types)
-      && matchesAssignees(facets, filters.assignees)
-      && matchesToday(facets, filters.todayOnly)
-    );
-  });
+  return items.filter((item) => matchesFilters(describeItem(item, context.today), filters));
 }
 
 function countBy<K extends string>(keys: readonly K[], count: (key: K) => number): Record<K, number> {
@@ -137,35 +137,31 @@ function countBy<K extends string>(keys: readonly K[], count: (key: K) => number
   return result;
 }
 
-// Each count answers "how many items would the list show if this option were applied",
-// considering every other active filter and ignoring the option's own dimension.
-// Stage chips and the "today" count intentionally ignore the today toggle and the current stage selection.
+// Each count answers "how many items would the list show if this option were applied":
+// every other active filter is considered and the option's own filter group is ignored.
 export function buildRequestFacetCounts(
   items: AnyRecord[],
   filters: RequestListFilters,
   context: RequestFilterContext,
 ): RequestFacetCounts {
   const facetsList = items.map((item) => describeItem(item, context.today));
-  const matchesTypeAndAssignee = (facets: ItemFacets) =>
-    matchesTypes(facets, filters.types) && matchesAssignees(facets, filters.assignees);
-  const countStages = (stages: RequestStage[]) =>
-    facetsList.filter((facets) => matchesStages(facets, stages) && matchesTypeAndAssignee(facets)).length;
+  const count = (predicate: (facets: ItemFacets) => boolean) => facetsList.filter(predicate).length;
 
   const types: Record<string, number> = {};
   const assignees: Record<string, number> = {};
   facetsList.forEach((facets) => {
     if (facets.isAccessRequest) return;
-    if (!matchesStages(facets, filters.stages) || !matchesToday(facets, filters.todayOnly)) return;
-    if (matchesAssignees(facets, filters.assignees)) types[facets.typeKey] = (types[facets.typeKey] || 0) + 1;
-    if (matchesTypes(facets, filters.types)) assignees[facets.assigneeKey] = (assignees[facets.assigneeKey] || 0) + 1;
+    if (matchesFilters(facets, filters, { types: true })) types[facets.typeKey] = (types[facets.typeKey] || 0) + 1;
+    if (matchesFilters(facets, filters, { assignees: true })) {
+      assignees[facets.assigneeKey] = (assignees[facets.assigneeKey] || 0) + 1;
+    }
   });
 
   return {
-    chips: countBy(requestStageChips.map((chip) => chip.id), (id) => countStages(
-      requestStageChips.find((chip) => chip.id === id)?.stages ?? [],
+    stages: countBy(requestStageOrder, (stage) => count(
+      (facets) => matchesStages(facets, [stage]) && matchesFilters(facets, filters, { stages: true }),
     )),
-    stages: countBy(requestStageOrder, (stage) => countStages([stage])),
-    today: facetsList.filter((facets) => matchesToday(facets, true) && matchesTypeAndAssignee(facets)).length,
+    today: count((facets) => facets.isToday && matchesFilters(facets, filters, { today: true })),
     types,
     assignees,
   };
@@ -245,12 +241,6 @@ export function isRequestFiltersEmpty(filters: RequestListFilters): boolean {
     && !filters.todayOnly;
 }
 
-// A stage selection needs its own pill only when no chip already represents it.
-function hasCustomStageSelection(filters: RequestListFilters): boolean {
-  if (filters.stages.length === 0) return false;
-  return filters.todayOnly || !requestStageChips.some((chip) => isSameStageSet(chip.stages, filters.stages));
-}
-
 function summarizeLabels(labels: string[]): string {
   const visible = labels.slice(0, MAX_PILL_VALUES).join(", ");
   const hidden = labels.length - MAX_PILL_VALUES;
@@ -267,30 +257,24 @@ function buildOptionPill(
   return { dimension, label: `${requestFilterDimensionLabels[dimension]}: ${summarizeLabels(labels)}` };
 }
 
+// The "today" toggle has its own button state, so it never gets a pill.
 export function buildActiveFilterPills(
   filters: RequestListFilters,
   options: { types: RequestFilterOption[]; assignees: RequestFilterOption[] },
 ): ActiveFilterPill[] {
-  const pills: ActiveFilterPill[] = [];
-  if (hasCustomStageSelection(filters)) {
-    const labels = requestStageOrder
-      .filter((stage) => filters.stages.includes(stage))
-      .map((stage) => requestStageLabels[stage]);
-    pills.push({
-      dimension: RequestFilterDimension.STAGES,
-      label: `${requestFilterDimensionLabels[RequestFilterDimension.STAGES]}: ${summarizeLabels(labels)}`,
-    });
-  }
-  const typePill = buildOptionPill(RequestFilterDimension.TYPES, options.types, filters.types);
-  const assigneePill = buildOptionPill(RequestFilterDimension.ASSIGNEES, options.assignees, filters.assignees);
-  if (typePill) pills.push(typePill);
-  if (assigneePill) pills.push(assigneePill);
-  return pills;
+  return [
+    buildOptionPill(RequestFilterDimension.STAGES, requestStageOptions, filters.stages),
+    buildOptionPill(RequestFilterDimension.TYPES, options.types, filters.types),
+    buildOptionPill(RequestFilterDimension.ASSIGNEES, options.assignees, filters.assignees),
+  ].filter((pill): pill is ActiveFilterPill => pill !== null);
+}
+
+export function formatRequestCount(count: number): string {
+  return `${count} ${count === 1 ? "solicitação" : "solicitações"}`;
 }
 
 export function getEmptyListMessage(filters: RequestListFilters): EmptyListMessage {
-  const isFiltered = filters.types.length > 0 || filters.assignees.length > 0 || hasCustomStageSelection(filters);
-  if (isFiltered) {
+  if (filters.stages.length > 0 || filters.types.length > 0 || filters.assignees.length > 0) {
     return {
       title: "Nenhuma solicitação encontrada",
       text: "Nenhuma solicitação corresponde aos filtros selecionados.",
@@ -305,7 +289,7 @@ export function getEmptyListMessage(filters: RequestListFilters): EmptyListMessa
     };
   }
   return {
-    title: "Nenhuma solicitação nesta etapa",
+    title: "Nenhuma solicitação encontrada",
     text: "Quando houver registros, eles aparecerão aqui.",
     canClear: false,
   };

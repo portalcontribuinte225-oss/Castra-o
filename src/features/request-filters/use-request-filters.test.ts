@@ -1,75 +1,44 @@
 import { describe, expect, it } from "vitest";
-import { RequestFilterDimension } from "./request-filters";
+import { RequestFilterDimension, initialRequestFilters } from "./request-filters";
+import type { RequestListFilters } from "./request-filters";
 import { RequestStage } from "./request-stage";
-import {
-  RequestFiltersActionType,
-  initialRequestFiltersState,
-  requestFiltersReducer,
-} from "./use-request-filters";
-import type { RequestFiltersAction, RequestFiltersState } from "./use-request-filters";
+import { RequestFiltersActionType, requestFiltersReducer } from "./use-request-filters";
+import type { RequestFiltersAction } from "./use-request-filters";
 
-function apply(state: RequestFiltersState, ...actions: RequestFiltersAction[]): RequestFiltersState {
+function apply(state: RequestListFilters, ...actions: RequestFiltersAction[]): RequestListFilters {
   return actions.reduce(requestFiltersReducer, state);
 }
 
-const toggleToday: RequestFiltersAction = { type: RequestFiltersActionType.TOGGLE_TODAY };
-
 describe("requestFiltersReducer", () => {
-  it("starts on the inbox stage", () => {
-    expect(initialRequestFiltersState.filters).toEqual({
-      stages: [RequestStage.INBOX],
-      types: [],
-      assignees: [],
-      todayOnly: false,
-    });
+  it("starts with everything unfiltered", () => {
+    expect(initialRequestFilters).toEqual({ stages: [], types: [], assignees: [], todayOnly: false });
   });
 
-  it("selecting a chip replaces the stages and turns today off", () => {
-    const state = apply(
-      initialRequestFiltersState,
-      toggleToday,
-      { type: RequestFiltersActionType.SELECT_CHIP, stages: [RequestStage.DONE, RequestStage.CANCELED] },
-    );
-    expect(state.filters.stages).toEqual([RequestStage.DONE, RequestStage.CANCELED]);
-    expect(state.filters.todayOnly).toBe(false);
-    expect(state.stagesBeforeToday).toBeNull();
-  });
-
-  it("turning today on clears the stages and turning it off restores them", () => {
-    const on = apply(initialRequestFiltersState, toggleToday);
-    expect(on.filters).toMatchObject({ todayOnly: true, stages: [] });
-    const off = apply(on, toggleToday);
-    expect(off.filters).toMatchObject({ todayOnly: false, stages: [RequestStage.INBOX] });
-    expect(off.stagesBeforeToday).toBeNull();
-  });
-
-  it("keeps stages picked while today was on when turning it off", () => {
-    const state = apply(
-      initialRequestFiltersState,
-      toggleToday,
-      { type: RequestFiltersActionType.TOGGLE_STAGE, stage: RequestStage.SCHEDULED },
-      toggleToday,
-    );
-    expect(state.filters).toMatchObject({ todayOnly: false, stages: [RequestStage.SCHEDULED] });
+  it("toggles today without touching the other groups", () => {
+    const withTypes = apply(initialRequestFilters, { type: RequestFiltersActionType.TOGGLE_TYPE, value: "Ninhada" });
+    const on = apply(withTypes, { type: RequestFiltersActionType.TOGGLE_TODAY });
+    expect(on).toEqual({ stages: [], types: ["Ninhada"], assignees: [], todayOnly: true });
+    expect(apply(on, { type: RequestFiltersActionType.TOGGLE_TODAY })).toEqual(withTypes);
   });
 
   it("combines today with a stage selection", () => {
     const state = apply(
-      initialRequestFiltersState,
-      toggleToday,
+      initialRequestFilters,
+      { type: RequestFiltersActionType.TOGGLE_TODAY },
       { type: RequestFiltersActionType.TOGGLE_STAGE, stage: RequestStage.SCHEDULED },
     );
-    expect(state.filters).toMatchObject({ todayOnly: true, stages: [RequestStage.SCHEDULED] });
+    expect(state).toMatchObject({ todayOnly: true, stages: [RequestStage.SCHEDULED] });
   });
 
   it("toggles stage, type and assignee values without touching the other groups", () => {
     const added = apply(
-      initialRequestFiltersState,
+      initialRequestFilters,
+      { type: RequestFiltersActionType.TOGGLE_STAGE, stage: RequestStage.INBOX },
       { type: RequestFiltersActionType.TOGGLE_STAGE, stage: RequestStage.ANALYSIS },
       { type: RequestFiltersActionType.TOGGLE_TYPE, value: "Ninhada" },
       { type: RequestFiltersActionType.TOGGLE_ASSIGNEE, value: "u1" },
     );
-    expect(added.filters).toEqual({
+    expect(added).toEqual({
       stages: [RequestStage.INBOX, RequestStage.ANALYSIS],
       types: ["Ninhada"],
       assignees: ["u1"],
@@ -81,51 +50,45 @@ describe("requestFiltersReducer", () => {
       { type: RequestFiltersActionType.TOGGLE_TYPE, value: "Ninhada" },
       { type: RequestFiltersActionType.TOGGLE_ASSIGNEE, value: "u1" },
     );
-    expect(removed.filters).toEqual({ stages: [RequestStage.ANALYSIS], types: [], assignees: [], todayOnly: false });
+    expect(removed).toEqual({ stages: [RequestStage.ANALYSIS], types: [], assignees: [], todayOnly: false });
   });
 
   it("clears a single group", () => {
     const base = apply(
-      initialRequestFiltersState,
+      initialRequestFilters,
+      { type: RequestFiltersActionType.TOGGLE_STAGE, stage: RequestStage.INBOX },
       { type: RequestFiltersActionType.TOGGLE_TYPE, value: "Ninhada" },
       { type: RequestFiltersActionType.TOGGLE_ASSIGNEE, value: "u1" },
     );
-    const clearedTypes = apply(base, {
-      type: RequestFiltersActionType.CLEAR_DIMENSION,
-      dimension: RequestFilterDimension.TYPES,
-    });
-    expect(clearedTypes.filters).toMatchObject({ types: [], assignees: ["u1"], stages: [RequestStage.INBOX] });
-    const clearedStages = apply(base, {
-      type: RequestFiltersActionType.CLEAR_DIMENSION,
-      dimension: RequestFilterDimension.STAGES,
-    });
-    expect(clearedStages.filters).toMatchObject({ stages: [], types: ["Ninhada"] });
-    const clearedAssignees = apply(base, {
-      type: RequestFiltersActionType.CLEAR_DIMENSION,
-      dimension: RequestFilterDimension.ASSIGNEES,
-    });
-    expect(clearedAssignees.filters).toMatchObject({ assignees: [], types: ["Ninhada"] });
+    expect(
+      apply(base, { type: RequestFiltersActionType.CLEAR_DIMENSION, dimension: RequestFilterDimension.STAGES }),
+    ).toMatchObject({ stages: [], types: ["Ninhada"], assignees: ["u1"] });
+    expect(
+      apply(base, { type: RequestFiltersActionType.CLEAR_DIMENSION, dimension: RequestFilterDimension.TYPES }),
+    ).toMatchObject({ stages: [RequestStage.INBOX], types: [], assignees: ["u1"] });
+    expect(
+      apply(base, { type: RequestFiltersActionType.CLEAR_DIMENSION, dimension: RequestFilterDimension.ASSIGNEES }),
+    ).toMatchObject({ stages: [RequestStage.INBOX], types: ["Ninhada"], assignees: [] });
   });
 
-  it("clearing everything shows all requests instead of going back to the inbox", () => {
+  it("clearing everything also turns today off", () => {
     const state = apply(
-      initialRequestFiltersState,
-      toggleToday,
+      initialRequestFilters,
+      { type: RequestFiltersActionType.TOGGLE_TODAY },
       { type: RequestFiltersActionType.TOGGLE_TYPE, value: "Ninhada" },
       { type: RequestFiltersActionType.CLEAR_ALL },
     );
-    expect(state.filters).toEqual({ stages: [], types: [], assignees: [], todayOnly: false });
-    expect(state.stagesBeforeToday).toBeNull();
+    expect(state).toEqual({ stages: [], types: [], assignees: [], todayOnly: false });
   });
 
   it("does not mutate the previous state", () => {
-    const before = JSON.stringify(initialRequestFiltersState);
+    const before = JSON.stringify(initialRequestFilters);
     apply(
-      initialRequestFiltersState,
+      initialRequestFilters,
       { type: RequestFiltersActionType.TOGGLE_STAGE, stage: RequestStage.DONE },
       { type: RequestFiltersActionType.TOGGLE_TYPE, value: "Ninhada" },
-      toggleToday,
+      { type: RequestFiltersActionType.TOGGLE_TODAY },
     );
-    expect(JSON.stringify(initialRequestFiltersState)).toBe(before);
+    expect(JSON.stringify(initialRequestFilters)).toBe(before);
   });
 });

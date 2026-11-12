@@ -17,14 +17,7 @@ import type {
   RequestListFilters,
 } from "./request-filters";
 
-export interface RequestFiltersState {
-  filters: RequestListFilters;
-  // Stages selected before "today" was turned on, restored when it is turned off again.
-  stagesBeforeToday: RequestStage[] | null;
-}
-
 export enum RequestFiltersActionType {
-  SELECT_CHIP = "selectChip",
   TOGGLE_TODAY = "toggleToday",
   TOGGLE_STAGE = "toggleStage",
   TOGGLE_TYPE = "toggleType",
@@ -34,18 +27,12 @@ export enum RequestFiltersActionType {
 }
 
 export type RequestFiltersAction =
-  | { type: RequestFiltersActionType.SELECT_CHIP; stages: RequestStage[] }
   | { type: RequestFiltersActionType.TOGGLE_TODAY }
   | { type: RequestFiltersActionType.TOGGLE_STAGE; stage: RequestStage }
   | { type: RequestFiltersActionType.TOGGLE_TYPE; value: string }
   | { type: RequestFiltersActionType.TOGGLE_ASSIGNEE; value: string }
   | { type: RequestFiltersActionType.CLEAR_DIMENSION; dimension: RequestFilterDimension }
   | { type: RequestFiltersActionType.CLEAR_ALL };
-
-export const initialRequestFiltersState: RequestFiltersState = {
-  filters: initialRequestFilters,
-  stagesBeforeToday: null,
-};
 
 function toggleValue<T>(values: T[], value: T): T[] {
   return values.includes(value) ? values.filter((current) => current !== value) : [...values, value];
@@ -64,44 +51,29 @@ function clearDimension(filters: RequestListFilters, dimension: RequestFilterDim
   }
 }
 
-// Turning "today" on drops the stage selection (it shows everything scheduled today);
-// turning it off restores the previous stages unless the user picked new ones meanwhile.
-function toggleToday(state: RequestFiltersState): RequestFiltersState {
-  const { filters } = state;
-  if (filters.todayOnly) {
-    const stages = filters.stages.length > 0 ? filters.stages : state.stagesBeforeToday ?? [];
-    return { filters: { ...filters, stages, todayOnly: false }, stagesBeforeToday: null };
-  }
-  return { filters: { ...filters, stages: [], todayOnly: true }, stagesBeforeToday: filters.stages };
-}
-
-export function requestFiltersReducer(state: RequestFiltersState, action: RequestFiltersAction): RequestFiltersState {
-  const { filters } = state;
+export function requestFiltersReducer(filters: RequestListFilters, action: RequestFiltersAction): RequestListFilters {
   switch (action.type) {
-    case RequestFiltersActionType.SELECT_CHIP:
-      return { filters: { ...filters, stages: [...action.stages], todayOnly: false }, stagesBeforeToday: null };
     case RequestFiltersActionType.TOGGLE_TODAY:
-      return toggleToday(state);
+      return { ...filters, todayOnly: !filters.todayOnly };
     case RequestFiltersActionType.TOGGLE_STAGE:
-      return { ...state, filters: { ...filters, stages: toggleValue(filters.stages, action.stage) } };
+      return { ...filters, stages: toggleValue(filters.stages, action.stage) };
     case RequestFiltersActionType.TOGGLE_TYPE:
-      return { ...state, filters: { ...filters, types: toggleValue(filters.types, action.value) } };
+      return { ...filters, types: toggleValue(filters.types, action.value) };
     case RequestFiltersActionType.TOGGLE_ASSIGNEE:
-      return { ...state, filters: { ...filters, assignees: toggleValue(filters.assignees, action.value) } };
+      return { ...filters, assignees: toggleValue(filters.assignees, action.value) };
     case RequestFiltersActionType.CLEAR_DIMENSION:
-      return { ...state, filters: clearDimension(filters, action.dimension) };
+      return clearDimension(filters, action.dimension);
     case RequestFiltersActionType.CLEAR_ALL:
-      return { filters: { stages: [], types: [], assignees: [], todayOnly: false }, stagesBeforeToday: null };
+      return initialRequestFilters;
     default:
-      return state;
+      return filters;
   }
 }
 
 export function useRequestFilters() {
-  const [state, dispatch] = useReducer(requestFiltersReducer, initialRequestFiltersState);
+  const [filters, dispatch] = useReducer(requestFiltersReducer, initialRequestFilters);
   const actions = useMemo(
     () => ({
-      selectChip: (stages: RequestStage[]) => dispatch({ type: RequestFiltersActionType.SELECT_CHIP, stages }),
       toggleToday: () => dispatch({ type: RequestFiltersActionType.TOGGLE_TODAY }),
       toggleStage: (stage: RequestStage) => dispatch({ type: RequestFiltersActionType.TOGGLE_STAGE, stage }),
       toggleType: (value: string) => dispatch({ type: RequestFiltersActionType.TOGGLE_TYPE, value }),
@@ -112,7 +84,7 @@ export function useRequestFilters() {
     }),
     [],
   );
-  return { filters: state.filters, actions };
+  return { filters, actions };
 }
 
 export interface RequestFilterResults {

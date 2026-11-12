@@ -432,3 +432,17 @@ A implementação deve ser considerada pronta quando:
 - Deletar tudo que está em "O que será removido" — não ocultar, não comentar, não sobrepor com `!important`.
 - Não registrar credenciais, tokens ou dados pessoais em arquivos, commits ou relatórios.
 - Atualizar/criar os testes conforme "Testes necessários"; ao final, relatar o resultado real de `typecheck`, `build` e `test`, e declarar explicitamente o que **não** foi verificado.
+
+---
+
+## Atualização (2026-11-12): chips removidos, lista única
+
+Depois da primeira entrega, decidiu-se tirar os chips de etapa e deixar uma lista única controlada pelos filtros. Onde este plano fala em chips (5 presets, "Todas", estado inicial "Novas", restauração da etapa ao desligar "Hoje"), vale o que está abaixo:
+
+- A tela abre com **todas as solicitações** (nenhum filtro ativo). A etapa passa a ser só o grupo "Etapa" do drawer.
+- Sem chips, a barra tem "Hoje" e "Filtros". "Hoje" virou um filtro comum (E com os demais), sem a regra de ignorar/restaurar a etapa.
+- Todas as contagens (etapas, Hoje, tipos, responsáveis) seguem a mesma regra: consideram todos os outros filtros e ignoram o próprio grupo — equivalem ao que a lista mostraria ao aplicar a opção.
+- Faixa sempre visível acima da lista: "N solicitações" + pílulas dos filtros ativos + "Limpar filtros" (só quando há filtro).
+- Credenciamentos: regra inalterada (só aparecem com "Novas" marcada e sem Tipo/Responsável/Hoje); ficam fora da lista sem filtro, como em "Todas" antes.
+- CSS: nenhuma regra removida — a tela de Credenciamentos usa as mesmas classes (`request-nav`, `request-filter-tabs`, `request-page-controls`). A correção mobile de `.request-page-controls .request-filter-tabs` (commit `ecd097a`) vale para as duas telas.
+- Permissões de visibilidade ("quem pode ver o quê") ficam para uma próxima etapa. As opções dos filtros saem só da lista que a tela já recebe; uma restrição aplicada antes dela vale para os filtros sem mudança.
