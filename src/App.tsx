@@ -160,6 +160,7 @@ import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-f
 import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
 import { useRequestFilterResults, useRequestFilters } from "./features/request-filters/use-request-filters";
+import { RequestStep, getVisibleSteps } from "./features/request-steps/request-steps";
 
 type ConfigTabItem = {
   id: string;
@@ -3410,7 +3411,7 @@ function NewRequest({
   const [expandedAnimal, setExpandedAnimal] = useState(0);
   const [accepted, setAccepted] = useState(false);
   const [documentUploads, setDocumentUploads] = useState<AnyRecord>({});
-  const [formStep, setFormStep] = useState(internalSimple ? 0 : 1);
+  const [formStep, setFormStep] = useState<RequestStep>(internalSimple ? RequestStep.TUTOR : RequestStep.ANIMAL);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
@@ -3438,9 +3439,8 @@ function NewRequest({
     .filter((type) => type.name.trim() && type.active !== false)
     .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
   const selectedRequestType = configuredRequestTypes.find((type) => type.name === requestData.type) || null;
-  const typeStepTutor = selectedRequestType?.stepTutor !== false;
-  const typeStepAgenda = selectedRequestType?.stepAgenda !== false;
-  const typeStepDocuments = selectedRequestType?.stepDocuments !== false;
+  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [selectedRequestType] });
+  const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
   const selectedTypeDocuments = (selectedRequestType?.documents || [])
     .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
@@ -3453,28 +3453,6 @@ function NewRequest({
     .some((upload: AnyRecord) => upload?.status === "attached" && upload?.aiVerdict === "rejected");
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
-  const formSteps = (internalSimple
-    ? [
-        { step: 0, label: "Tutor" },
-        { step: 1, label: "Animal" },
-        { step: 2, label: "Agenda" },
-        { step: 3, label: "Finalização" },
-      ]
-    : skipTutorStep
-    ? [
-        { step: 1, label: "Animal" },
-        { step: 2, label: "Agenda" },
-        { step: 3, label: "Documentos" },
-      ]
-    : [
-        { step: 1, label: "Animal" },
-        { step: 0, label: "Tutor" },
-        { step: 2, label: "Agenda" },
-        { step: 3, label: "Documentos" },
-      ]).filter((item) => !(internalSimple && item.step === 3))
-    .filter((item) => !(!internalSimple && item.step === 0 && !typeStepTutor))
-    .filter((item) => !(!internalSimple && item.step === 2 && !typeStepAgenda))
-    .filter((item) => !(!internalSimple && item.step === 3 && !typeStepDocuments));
   const currentStepIndex = Math.max(formSteps.findIndex((item) => item.step === formStep), 0);
   function selectedScheduleHasCapacity() {
     if (!requestData.schedule) return false;
@@ -3562,9 +3540,9 @@ function NewRequest({
     const issues = [];
     const filledAnimals = animals.length > 0 ? animals : [{}];
 
-    if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
-    if (!internalSimple && typeStepAgenda && !requestData.schedule) issues.push("Escolha uma data disponível.");
-    else if (!internalSimple && typeStepAgenda && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
+    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
+    if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !requestData.schedule) issues.push("Escolha uma data disponível.");
+    else if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
     if (configuredRequestTypes.length > 0 && !requestData.type) issues.push("Selecione o tipo de solicitação.");
     filledAnimals.forEach((animal, index) => {
       const label = filledAnimals.length > 1 ? ` do animal ${index + 1}` : " do animal";
@@ -3573,8 +3551,8 @@ function NewRequest({
       if (!animal.size) issues.push(`Selecione o porte${label}.`);
       if (!animal.breedType) issues.push(`Informe se a raça é definida ou indefinida${label}.`);
     });
-    if (!internalSimple && typeStepDocuments && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
-    if (!internalSimple && typeStepDocuments && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
+    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
+    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
     if (requestData.cpf && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
     if (requestData.phone && !isValidPhone(requestData.phone)) issues.push("Informe um telefone válido com DDD.");
 
@@ -3582,11 +3560,11 @@ function NewRequest({
   }
 
   function getStepIssues(step = formStep) {
-    if (step === 0) {
+    if (step === RequestStep.TUTOR) {
       return [];
     }
 
-    if (step === 1) {
+    if (step === RequestStep.ANIMAL) {
       return animals
         .flatMap((animal, index) => [
           index === 0 && configuredRequestTypes.length > 0 && !requestData.type,
@@ -3598,12 +3576,12 @@ function NewRequest({
         .filter(Boolean);
     }
 
-    if (step === 2) {
+    if (step === RequestStep.SCHEDULE) {
       return [!requestData.schedule || !selectedScheduleHasCapacity()].filter(Boolean);
     }
 
-    if (step === 3) {
-      return [typeStepDocuments && !requiredDocsApproved, typeStepDocuments && !accepted, typeStepDocuments && hasUploadNeedingReplacement].filter(Boolean);
+    if (step === RequestStep.DOCUMENTS) {
+      return [!requiredDocsApproved, !accepted, hasUploadNeedingReplacement].filter(Boolean);
     }
 
     return [];
@@ -4007,7 +3985,7 @@ function NewRequest({
 
           {submissionError && <p className="form-error">{submissionError}</p>}
           <div className="single-request-form clean-form">
-          {formStep === 0 && <FormSection title="Tutor">
+          {formStep === RequestStep.TUTOR && <FormSection title="Tutor">
             {publicFlow ? (
               <>
                 <div className="form-sub-card">
@@ -4131,7 +4109,7 @@ function NewRequest({
             )}
           </FormSection>}
 
-          {formStep === 1 && <FormSection title="Dados do animal">
+          {formStep === RequestStep.ANIMAL && <FormSection title="Dados do animal">
 
             {animals.map((animal, index) => {
               const isOpen = animals.length === 1 || expandedAnimal === index;
@@ -4288,7 +4266,7 @@ function NewRequest({
             </div>
           </FormSection>}
 
-          {formStep === 2 && <FormSection title="Agenda">
+          {formStep === RequestStep.SCHEDULE && <FormSection title="Agenda">
             <PublicSchedulePicker
               requests={requests}
               scheduleDays={scheduleDays}
@@ -4309,7 +4287,7 @@ function NewRequest({
             )}
           </FormSection>}
 
-          {!internalSimple && formStep === 3 && <FormSection title="Documentos e termo">
+          {!internalSimple && formStep === RequestStep.DOCUMENTS && <FormSection title="Documentos e termo">
             <div className="form-sub-card documents-step-card">
               <div className="documents-step-header">
                 <span className="form-sub-card-title">Documentos e termo</span>
@@ -4388,7 +4366,7 @@ function NewRequest({
                 Voltar
               </button>
             )}
-            {formStep === 1 && (
+            {formStep === RequestStep.ANIMAL && (
               <button className="anm-add-btn" type="button" onClick={addAnimal}>
                 Adicionar animal
               </button>
