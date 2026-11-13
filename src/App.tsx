@@ -153,7 +153,7 @@ import {
 } from "./utils";
 import { AccessRequestsView, accessStatusLabel } from "./features/accessRequests";
 import { AgendaView } from "./features/agenda";
-import { useRequestActions } from "./features/request-actions";
+import { canEditRequests, useRequestActions } from "./features/request-actions";
 import { getSpecialRequestSection, specialRequestConfirmLabel } from "./features/request-analysis-sections";
 import { DashboardView } from "./features/dashboard";
 import { ReportsView } from "./features/reports";
@@ -168,6 +168,14 @@ import { findSpeciesIdByName, getBreedOptions } from "./features/breeds/breeds";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
 import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./features/request-steps/request-steps";
+import { FollowUpStep } from "./features/request-follow-up/follow-up-step";
+import { buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./features/request-follow-up/follow-up";
+import { FollowUpSummary } from "./features/request-follow-up/follow-up-summary";
+import type { FollowUpValue } from "./features/request-follow-up/follow-up";
+import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-policy";
+import { NotificationSettings } from "./features/notifications/notification-settings";
+import type { NotificationResult } from "./features/notifications/notification-results";
+import { configsAllowStep } from "../shared/notification-contract.js";
 
 type ConfigTabItem = {
   id: string;
@@ -615,8 +623,8 @@ export default function App() {
         request_type: payload.requestType || payload.request_type,
         municipality: payload.municipality,
         notes: payload.notes,
-        tutor_name: payload.tutor || currentUser?.name || "",
-        tutor_email: payload.email || currentUser?.email || "",
+        tutor_name: payload.tutor ?? currentUser?.name ?? "",
+        tutor_email: payload.email ?? currentUser?.email ?? "",
         cpf: payload.cpf || "",
         phone: payload.phone || "",
         cep: payload.cep || "",
@@ -2487,10 +2495,11 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 <CheckCircle2 size={52} />
                 <h3>Solicitação enviada!</h3>
                 <p>Protocolo oficial: <strong>{publicServiceDone.protocol}</strong></p>
+                <FollowUpSummary value={(publicServiceDone.workflow_data || publicServiceDone.workflowData)?.followUp} />
                 <div className="success-validation-key">
                   <span>Chave de validação</span>
                   <strong>{publicServiceDone.validationKey || publicServiceDone.validation_key}</strong>
-                  <small>Use CPF + chave de validação para consultar o andamento.</small>
+                  <small>{publicServiceDone.cpf ? "Use CPF + chave de validação para consultar o andamento." : "Guarde seu protocolo e esta chave de validação."}</small>
                 </div>
                 <div className="public-service-success-actions">
                   <button className="primary-action" type="button" onClick={closePublicService}>Voltar ao início</button>
@@ -3400,13 +3409,13 @@ function NewRequest({
     else if (!isNaN(end)) subtitle = `Até ${s.weightEnd} ${unit}`;
     return { value: s.name, label: s.name, subtitle };
   });
-  const skipTutorStep = currentUser.role === "tutor" && currentUser.profileComplete;
+  const skipTutorStep = currentUser.role === "tutor" && currentUser.profileComplete && isValidCpf(currentUser.cpf || "");
   const [requestData, setRequestData] = useState({
     tutor: canManagePublicAnimalFlows(currentUser.role) ? "" : currentUser.name,
     neighborhood: currentUser.neighborhood || "",
     address: currentUser.address || "",
     cpf: currentUser.cpf || "",
-    email: currentUser.email,
+    email: currentUser.email || "",
     cep: currentUser.cep || "",
     number: currentUser.number || "",
     city: currentUser.city || "",
@@ -3451,6 +3460,19 @@ function NewRequest({
   const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
   const [submissionError, setSubmissionError] = useState("");
+  const [followUp, setFollowUp] = useState<FollowUpValue>(emptyFollowUp);
+  const followUpMunicipalityId = selectedMunicipalityId || requestData.municipalityId || currentUser.municipalityId || "";
+  const followUpPolicy = useFollowUpPolicy(followUpMunicipalityId, !internalSimple);
+
+  useEffect(() => {
+    setFollowUp({ ...emptyFollowUp });
+  }, [followUpMunicipalityId]);
+
+  useEffect(() => {
+    if (followUpPolicy.ready && !followUpPolicy.phoneEnabled) {
+      setFollowUp((current) => current.phone ? { ...current, phone: "" } : current);
+    }
+  }, [followUpPolicy.ready, followUpPolicy.phoneEnabled]);
 
   useEffect(() => {
     if (initialSchedule) {
@@ -3478,6 +3500,7 @@ function NewRequest({
   const selectedIdentificationType = resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
   const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [selectedRequestType, selectedIdentificationType] });
   const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
+  const requiresTutorIdentity = internalSimple || currentUser.role === "tutor" || configsAllowStep([selectedRequestType, selectedIdentificationType], "stepTutor");
   const selectedTypeDocuments = (selectedRequestType?.documents || [])
     .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
@@ -3604,15 +3627,23 @@ function NewRequest({
     });
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
-    if (requestData.cpf && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
+    if ((requiresTutorIdentity || requestData.cpf) && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
     if (requestData.phone && !isValidPhone(requestData.phone)) issues.push("Informe um telefone válido com DDD.");
+    if (!internalSimple) {
+      if (!followUpPolicy.ready) issues.push(followUpPolicy.error || "Aguarde o carregamento dos canais de acompanhamento.");
+      issues.push(...getFollowUpIssues(followUp, followUpPolicy.phoneEnabled));
+    }
 
     return issues;
   }
 
   function getStepIssues(step = formStep) {
     if (step === RequestStep.TUTOR) {
-      return [];
+      return requiresTutorIdentity && !isValidCpf(requestData.cpf) ? [true] : [];
+    }
+
+    if (step === RequestStep.FOLLOW_UP) {
+      return [!followUpPolicy.ready, ...getFollowUpIssues(followUp, followUpPolicy.phoneEnabled)].filter(Boolean);
     }
 
     if (step === RequestStep.ANIMAL) {
@@ -3826,7 +3857,7 @@ function NewRequest({
       ? { latitude: requestData.latitude, longitude: requestData.longitude }
       : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
     const localPayload = {
-      tutor: requestData.tutor || currentUser.name,
+      tutor: requestData.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
       neighborhood: requestData.neighborhood || "Bairro não informado",
       address:
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
@@ -3897,7 +3928,7 @@ function NewRequest({
     ];
     const identificationPayload = selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {};
     const localPayload = {
-      tutor: requestData.tutor || currentUser.name,
+      tutor: requestData.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
       neighborhood: requestData.neighborhood || "Bairro não informado",
       address:
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
@@ -3911,7 +3942,7 @@ function NewRequest({
       email: requestData.email || "",
       cep: requestData.cep || "",
       preferredSchedule: requestData.schedule || "",
-      municipalityId: requestData.municipalityId || selectedScheduleDay?.municipalityId || "",
+      municipalityId: followUpMunicipalityId || selectedScheduleDay?.municipalityId || "",
       scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleLocationName: selectedScheduleDay?.locationName || "",
@@ -3929,6 +3960,7 @@ function NewRequest({
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         ...identificationPayload,
+        followUp: buildFollowUpPayload(followUp, followUpPolicy.phoneEnabled),
       },
       animals: animals.map((animal, index) => ({
         ...animal,
@@ -4043,7 +4075,7 @@ function NewRequest({
             {publicFlow ? (
               <>
                 <div className="form-sub-card">
-                  <span className="form-sub-card-title">Responsável e contato</span>
+                  <span className="form-sub-card-title">Responsável</span>
                   <div className="access-field" data-label="Nome completo">
                     <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
                   </div>
@@ -4059,14 +4091,6 @@ function NewRequest({
                           <span className="cadunico-check-box" />
                         </label>
                       </div>
-                    </div>
-                  </div>
-                  <div className="two-column-fields">
-                    <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
-                      <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
-                    </div>
-                    <div className="access-field" data-label="Telefone">
-                      <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
                     </div>
                   </div>
                 </div>
@@ -4148,7 +4172,7 @@ function NewRequest({
                   {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
                 </div>
 
-                <div className="form-sub-card">
+                {internalSimple && <div className="form-sub-card">
                   <span className="form-sub-card-title">Contato</span>
                   <div className="two-column-fields">
                     <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
@@ -4158,7 +4182,7 @@ function NewRequest({
                       <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
                     </div>
                   </div>
-                </div>
+                </div>}
               </>
             )}
           </FormSection>}
@@ -4424,6 +4448,9 @@ function NewRequest({
               </div>
             </div>
           </FormSection>}
+          {formStep === RequestStep.FOLLOW_UP && <FormSection title="Acompanhamento">
+            <FollowUpStep value={followUp} onChange={setFollowUp} phoneEnabled={followUpPolicy.phoneEnabled} loading={followUpPolicy.loading} error={followUpPolicy.error} onRetry={followUpPolicy.retry} showErrors={submitAttempted || followUp.enabled === true} />
+          </FormSection>}
           </div>
           {submissionError && <p className="form-error nr-bottom-error">{submissionError}</p>}
           <div className={`nr-nav-row${currentStepIndex === formSteps.length - 1 ? " nr-nav-row--final" : ""}`}>
@@ -4454,7 +4481,7 @@ function NewRequest({
               <button
                 className="nr-topbar-continue primary-action"
                 type="button"
-                disabled={submitting}
+                disabled={submitting || (!internalSimple && (!followUpPolicy.ready || getFollowUpIssues(followUp, followUpPolicy.phoneEnabled).length > 0))}
                 onClick={submit}
               >
                 {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
@@ -4846,6 +4873,7 @@ function AdminDashboard({
       {previewRequest && (
         <RequestPreviewModal
           request={previewRequest}
+          readOnly={!canEditRequests(currentUser?.role)}
           requestTypes={requestTypes}
           scheduleDays={activeScheduleDays}
           sectors={activeSectors}
@@ -4906,7 +4934,7 @@ function isAnimalPhotoDocument(d: AnyRecord = {}) {
   return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
 }
 
-export function RequestPreviewModal({ request, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
+export function RequestPreviewModal({ request, readOnly = true, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -4935,13 +4963,14 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     userId: normalizedRequest.assignedUserId || "",
   });
 
-  const canAnalyze = normalizedRequest.status === "NOVA";
+  const isAwaitingReview = normalizedRequest.status === "NOVA";
+  const canAnalyze = !readOnly && isAwaitingReview;
   const isScheduleConfirmed = normalizedRequest.status === "AGENDADA";
   const specialSection = getSpecialRequestSection(normalizedRequest);
   const isSpecialType = Boolean(specialSection);
   const isComplaint = normalizeRequestType(normalizedRequest.request_type || normalizedRequest.type) === RequestType.COMPLAINT;
-  const canUseProcedureTab = isScheduleConfirmed || (isSpecialType && canAnalyze);
-  const canUseAttendanceActions = isScheduleConfirmed;
+  const canUseProcedureTab = isScheduleConfirmed || (isSpecialType && isAwaitingReview);
+  const canUseAttendanceActions = !readOnly && isScheduleConfirmed;
   const procedureTabLabel = isSpecialType ? requestTypeLabel(normalizedRequest) : "Procedimento e saúde";
   const procedureTabBlockReason = canUseProcedureTab ? procedureTabLabel : "Disponível após confirmar a agenda";
   const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
@@ -5219,7 +5248,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
   async function handleEvidenceUpload(event) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !patchRequest) return;
+    if (readOnly || !file || !patchRequest) return;
     setUploadingEvidence(true);
     try {
       const dataUrl = await readFileAsDataUrl(file);
@@ -5246,6 +5275,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     if (!canConfirmSchedule || confirmingSchedule) return;
     setConfirmingSchedule(true);
     try {
+      let documentNotificationResults: NotificationResult[] = [];
       const decisions = Object.entries(docDecisions).filter(([, decision]) => decision === "approved" || decision === "rejected");
       if (decisions.length && patchRequest) {
         const currentDocuments = Array.isArray(request.documents) ? request.documents : [];
@@ -5263,9 +5293,10 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
             message: document.message || (decision === "approved" ? "Documento aprovado manualmente na conferência." : "Documento recusado manualmente na conferência."),
           };
         });
-        await patchRequest(request.id, { documents: updatedDocuments }, "Documentos conferidos antes da agenda");
+        const reviewed = await patchRequest(request.id, { documents: updatedDocuments }, "Documentos conferidos antes da agenda");
+        documentNotificationResults = Array.isArray(reviewed?.notificationResults) ? reviewed.notificationResults : [];
       }
-      onApprove?.(request);
+      await onApprove?.(request, documentNotificationResults);
     } finally {
       setConfirmingSchedule(false);
     }
@@ -5500,7 +5531,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
     );
   }
 
-  const isRescheduleMode = activePanel === "reschedule";
+  const isRescheduleMode = !readOnly && activePanel === "reschedule";
 
   return (
     <div className="modal-backdrop">
@@ -5606,6 +5637,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                     <span>Microchip</span>
                     <input
                       value={attendanceData.microchip}
+                      readOnly={readOnly}
                       onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
                       placeholder="Código aplicado ou lido"
                     />
@@ -5615,6 +5647,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                     <input
                       type="text"
                       value={attendanceData.note}
+                      readOnly={readOnly}
                       onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
                       placeholder="Observações do atendimento"
                     />
@@ -5628,6 +5661,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                     <span>Doenças pré-existentes</span>
                     <textarea
                       value={animalData.doencas}
+                      readOnly={readOnly}
                       onChange={(e) => setAnimalData((d) => ({ ...d, doencas: e.target.value }))}
                       placeholder="Ex: diabetes, displasia, cardiopatia..."
                       rows={2}
@@ -5637,6 +5671,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                     <span>Alergias conhecidas</span>
                     <textarea
                       value={animalData.alergias}
+                      readOnly={readOnly}
                       onChange={(e) => setAnimalData((d) => ({ ...d, alergias: e.target.value }))}
                       placeholder="Ex: alergia a penicilina, sensibilidade a frango..."
                       rows={2}
@@ -5652,10 +5687,10 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
                 <p className="prm-section-label">Documentos</p>
                 <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
               </div>
-              <label className="ghost-button prm-evidence-upload-btn">
+              {!readOnly && <label className="ghost-button prm-evidence-upload-btn">
                 <input type="file" onChange={handleEvidenceUpload} disabled={uploadingEvidence} hidden />
                 {uploadingEvidence ? "Anexando..." : "Anexar evidência"}
-              </label>
+              </label>}
               {anexos.length > 0 ? (
                 <>
                   {renderAttachments()}
@@ -5773,7 +5808,7 @@ export function RequestPreviewModal({ request, onClose, onApprove, onReject, onA
             </>
           )}
           {!canAnalyze && !canUseAttendanceActions && (
-            <p className="prm-muted-note">Nenhuma ação pendente.</p>
+            <p className="prm-muted-note">{readOnly ? "Visualização somente leitura." : "Nenhuma ação pendente."}</p>
           )}
           </footer>
         )}
@@ -9136,7 +9171,8 @@ function ConfigView({
           : null;
         return (
           <div className="config-panel wide">
-            <PanelHeader title="WhatsApp por município" />
+            <PanelHeader title="Canais de notificação por município" />
+            <NotificationSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
 
             {configMunicipalityScopeId && (
               <div className="whatsapp-statusbar">

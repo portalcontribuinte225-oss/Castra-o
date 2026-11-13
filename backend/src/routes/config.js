@@ -6,6 +6,12 @@ import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
 import { testProviderKey } from "./ai.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
+import {
+  NOTIFICATIONS_CONFIG_KEY,
+  buildDefaultNotificationConfig,
+  normalizeNotificationConfig,
+  validateNotificationConfig,
+} from "../../../shared/notification-contract.js";
 
 const router = Router();
 
@@ -15,6 +21,7 @@ const BREEDS_CONFIG_KEY = "castragestao:breeds";
 const DEFAULT_CONFIG_VALUE_BUILDERS = {
   [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes,
   [BREEDS_CONFIG_KEY]: () => [],
+  [NOTIFICATIONS_CONFIG_KEY]: buildDefaultNotificationConfig,
 };
 
 // Keys de configuração que expõem dados sensíveis (usuários, permissões)
@@ -38,7 +45,14 @@ const GLOBAL_ONLY_CONFIG_KEYS = new Set([
 // own row through municipality_id; operational roles cannot write here.
 const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "ai",
+  "castragestao:request-types",
+  IDENTIFICATION_TYPES_CONFIG_KEY,
+  NOTIFICATIONS_CONFIG_KEY,
+  "whatsapp",
+  "whatsapp_quota",
 ]);
+
+const MUNICIPAL_ONLY_CONFIG_KEYS = new Set(MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS);
 
 // ── Validadores de estrutura para chaves críticas ─────────────────────────
 
@@ -106,10 +120,9 @@ router.get("/:key", optionalAuth, async (req, res) => {
 
   const municipalityId = pickMunicipalityId(req);
 
-  // A config de IA nunca tem uma linha de plataforma compartilhada — cada
-  // município só pode ler a própria chave. Sem município, não há nada a ler.
-  if (key === "ai" && !municipalityId) {
-    return res.json(null);
+  if (MUNICIPAL_ONLY_CONFIG_KEYS.has(key) && !municipalityId) {
+    if (key === "ai") return res.json(null);
+    return res.status(400).json({ error: "Selecione um município para consultar esta configuração." });
   }
 
   const query = municipalityId
@@ -142,14 +155,14 @@ router.put("/:key", auth, async (req, res) => {
     return res.status(403).json({ error: "Configuração restrita à administração municipal." });
   }
 
-  const municipalityId = isGlobalUser(req.user)
-    ? (req.query?.municipalityId || req.query?.municipality_id || req.body?.municipalityId || req.body?.municipality_id || null)
-    : req.user.municipalityId;
+  const municipalityId = pickMunicipalityId(req);
 
-  // A config de IA nunca tem uma linha de plataforma compartilhada — exige
-  // sempre um município real, tanto para master/suporte quanto admin municipal.
-  if (key === "ai" && !municipalityId) {
-    return res.status(400).json({ error: "Selecione um município para configurar a IA." });
+  if (MUNICIPAL_ONLY_CONFIG_KEYS.has(key) && !municipalityId) {
+    return res.status(400).json({ error: "Selecione um município para salvar esta configuração." });
+  }
+  if (key === NOTIFICATIONS_CONFIG_KEY) {
+    const validationError = validateNotificationConfig(req.body);
+    if (validationError) return res.status(400).json({ error: validationError });
   }
 
   // Valida estrutura para chaves críticas de permissão
@@ -163,7 +176,12 @@ router.put("/:key", auth, async (req, res) => {
   }
 
   const client = await pool.connect();
+  let quotaTransaction = false;
   try {
+    if (key === "whatsapp_quota") {
+      await client.query("BEGIN");
+      quotaTransaction = true;
+    }
     const value = await prepareConfigValue(key, req.body, municipalityId, client);
 
     // A IA só pode ficar ativa com uma chave testada e aceita pelo provedor.
@@ -196,7 +214,7 @@ router.put("/:key", auth, async (req, res) => {
     );
 
     // Auditoria para chaves sensíveis/críticas — nunca inclui o valor de secrets
-    if (AUDITED_CONFIG_KEYS.has(key)) {
+    if (AUDITED_CONFIG_KEYS.has(key) || MUNICIPAL_ONLY_CONFIG_KEYS.has(key)) {
       await logAudit(client, {
         ...auditCtx(req),
         municipalityId,
@@ -209,8 +227,13 @@ router.put("/:key", auth, async (req, res) => {
       });
     }
 
+    if (quotaTransaction) {
+      await client.query("COMMIT");
+      quotaTransaction = false;
+    }
     res.json({ ...rows[0], value: publicConfigValue(key, rows[0].value) });
   } catch (err) {
+    if (quotaTransaction) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
@@ -220,6 +243,7 @@ router.put("/:key", auth, async (req, res) => {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function publicConfigValue(key, value = {}) {
+  if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
   if (key === "whatsapp") {
     const accessToken = String(value.accessToken || "").trim();
@@ -231,10 +255,12 @@ function publicConfigValue(key, value = {}) {
 }
 
 async function prepareConfigValue(key, value = {}, municipalityId = null, client) {
+  if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
   const query = municipalityId
     ? { text: "SELECT value FROM config WHERE key=$1 AND municipality_id=$2", values: [key, municipalityId] }
     : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: [key] };
+  if (key === "whatsapp_quota") query.text += " FOR UPDATE";
   const db = client || pool;
   const { rows } = await db.query(query.text, query.values);
   const current = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};

@@ -13,17 +13,18 @@ describe("getVisibleSteps", () => {
       { step: RequestStep.TUTOR, label: "Tutor" },
       { step: RequestStep.SCHEDULE, label: "Agenda" },
       { step: RequestStep.DOCUMENTS, label: "Documentos" },
+      { step: RequestStep.FOLLOW_UP, label: "Acompanhamento" },
     ]);
   });
 
   it("hides only the step whose toggle is false", () => {
-    expect(steps({ configs: [{ stepTutor: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.DOCUMENTS]);
-    expect(steps({ configs: [{ stepAgenda: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.DOCUMENTS]);
-    expect(steps({ configs: [{ stepDocuments: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE]);
+    expect(steps({ configs: [{ stepTutor: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
+    expect(steps({ configs: [{ stepAgenda: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
+    expect(steps({ configs: [{ stepDocuments: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP]);
   });
 
   it("always keeps the animal step", () => {
-    expect(steps({ configs: [{ stepTutor: false, stepAgenda: false, stepDocuments: false }] })).toEqual([RequestStep.ANIMAL]);
+    expect(steps({ configs: [{ stepTutor: false, stepAgenda: false, stepDocuments: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.FOLLOW_UP]);
   });
 
   it("skips the tutor step even when the config allows it", () => {
@@ -31,6 +32,7 @@ describe("getVisibleSteps", () => {
       RequestStep.ANIMAL,
       RequestStep.SCHEDULE,
       RequestStep.DOCUMENTS,
+      RequestStep.FOLLOW_UP,
     ]);
   });
 
@@ -51,7 +53,20 @@ describe("getVisibleSteps", () => {
       RequestStep.TUTOR,
       RequestStep.SCHEDULE,
       RequestStep.DOCUMENTS,
+      RequestStep.FOLLOW_UP,
     ]);
+  });
+
+  it("keeps follow-up last for every public toggle combination", () => {
+    for (const stepTutor of [true, false]) {
+      for (const stepAgenda of [true, false]) {
+        for (const stepDocuments of [true, false]) {
+          const visible = steps({ configs: [{ stepTutor, stepAgenda, stepDocuments }] });
+          expect(visible[visible.length - 1]).toBe(RequestStep.FOLLOW_UP);
+          expect(visible.filter((step) => step === RequestStep.FOLLOW_UP)).toHaveLength(1);
+        }
+      }
+    }
   });
 });
 

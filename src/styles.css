@@ -25996,3 +25996,58 @@ small,
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
+.follow-up-card {
+  max-width: 660px;
+  display: grid;
+  gap: 16px;
+}
+
+.follow-up-card h3,
+.follow-up-card p {
+  margin: 0;
+}
+
+.follow-up-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  border: 1px solid var(--border, #dce4e0);
+  padding: 16px;
+  border-radius: 12px;
+}
+
+.follow-up-choice legend {
+  padding: 0 6px;
+  font-weight: 600;
+}
+
+.follow-up-choice input {
+  accent-color: var(--primary, #277d5c);
+}
+
+.follow-up-fields,
+.notification-template-fields {
+  display: grid;
+  gap: 14px;
+}
+
+.follow-up-notice {
+  padding: 16px;
+  border-radius: 12px;
+  background: #fff6e5;
+  color: #78561d;
+}
+
+.notification-settings {
+  margin: 0 0 24px;
+  padding: 20px;
+  border: 1px solid var(--border, #dce4e0);
+  border-radius: 12px;
+}
+
+.notification-settings fieldset {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border, #dce4e0);
+  border-radius: 10px;
+}

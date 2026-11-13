@@ -1,8 +1,11 @@
+import { configsAllowStep } from "../../../shared/notification-contract.js";
+
 export enum RequestStep {
   TUTOR = 0,
   ANIMAL = 1,
   SCHEDULE = 2,
   DOCUMENTS = 3,
+  FOLLOW_UP = 4,
 }
 
 export const requestStepLabels: Record<RequestStep, string> = {
@@ -10,6 +13,7 @@ export const requestStepLabels: Record<RequestStep, string> = {
   [RequestStep.ANIMAL]: "Animal",
   [RequestStep.SCHEDULE]: "Agenda",
   [RequestStep.DOCUMENTS]: "Documentos",
+  [RequestStep.FOLLOW_UP]: "Acompanhamento",
 };
 
 // Keys are persisted in existing configuration data: do not rename.
@@ -37,6 +41,7 @@ const publicStepOrder: RequestStep[] = [
   RequestStep.TUTOR,
   RequestStep.SCHEDULE,
   RequestStep.DOCUMENTS,
+  RequestStep.FOLLOW_UP,
 ];
 
 const stepToggleKeys: Partial<Record<RequestStep, keyof StepToggles>> = {
@@ -53,7 +58,7 @@ function toStepItem(step: RequestStep): RequestStepItem {
 function isAllowedByConfigs(step: RequestStep, configs: VisibleStepsInput["configs"]): boolean {
   const toggleKey = stepToggleKeys[step];
   if (!toggleKey) return true;
-  return configs.every((config) => config?.[toggleKey] !== false);
+  return configsAllowStep(configs, toggleKey);
 }
 
 export function getVisibleSteps({ internal, skipTutor, configs }: VisibleStepsInput): RequestStepItem[] {
@@ -67,6 +72,7 @@ export function getVisibleSteps({ internal, skipTutor, configs }: VisibleStepsIn
 
 export function summarizeVisibleSteps(configs: VisibleStepsInput["configs"]): string {
   return getVisibleSteps({ internal: false, skipTutor: false, configs })
+    .filter((item) => item.step !== RequestStep.FOLLOW_UP)
     .map((item) => item.label)
     .join(", ");
 }

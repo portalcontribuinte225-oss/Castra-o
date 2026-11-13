@@ -2,9 +2,12 @@ import { Router } from "express";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
-import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
-import { isGlobalUser, requireMunicipality } from "../tenant.js";
-import { notifyScheduleConfirmation, whatsappHistoryNote } from "../services/whatsapp.js";
+import { normalizeCpf, isValidCpf } from "../utils.js";
+import { isGlobalUser, isInternalUser, requireMunicipality } from "../tenant.js";
+import { DeliveryStatus } from "../../../shared/notification-contract.js";
+import { loadRequestSettings } from "../repositories/request-settings.js";
+import { prepareRequestSubmission, mergeProtectedWorkflow } from "../services/request-submission.js";
+import { notifyRequestChanges } from "../services/request-change-notifications.js";
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(["NOVA", "AGENDADA", "REALIZADA", "CANCELADA"]);
@@ -180,26 +183,12 @@ router.post("/", optionalAuth, async (req, res) => {
   try {
     await client.query("BEGIN");
 
+    const settings = await loadRequestSettings(municipalityId, client);
+    const { cpf, workflow, requestType, internal } = prepareRequestSubmission({
+      body, user: req.user, municipalityId,
+      workflow: parseJsonObject(body.workflow_data || body.workflowData), settings,
+    });
     const protocol = await nextProtocol(client);
-    const requestType = pick(body.request_type, body.requestType, body.requestTypeId, body.type);
-    const isComplaint = requestType === "DENUNCIA";
-    const cpf = pick(body.cpf, body.tutor_cpf);
-    const cleanCpf = normalizeCpf(cpf);
-    if (!isValidCpf(cleanCpf)) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ error: isComplaint ? "CPF valido e obrigatorio para registrar a denuncia." : "CPF valido e obrigatorio para gerar codigo do tutor." });
-    }
-    if (isComplaint) {
-      const tutorName = pick(body.tutor_name, body.tutorName, body.tutor);
-      if (!tutorName || !String(tutorName).trim()) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Nome do denunciante e obrigatorio." });
-      }
-      if (!isValidPhone(body.phone)) {
-        await client.query("ROLLBACK");
-        return res.status(400).json({ error: "Informe um telefone valido em Contato." });
-      }
-    }
     const validationKey = await validationKeyForCpf(client, cpf);
     const animals = Array.isArray(body.animals) ? body.animals : [];
     const firstAnimal = animals[0] || {};
@@ -289,10 +278,10 @@ router.post("/", optionalAuth, async (req, res) => {
         parseSignedAt(pick(body.signed_at, body.signedAt)),
         JSON.stringify(Array.isArray(body.documents) ? body.documents : []),
         JSON.stringify(Array.isArray(body.tags) ? body.tags : []),
-        JSON.stringify(parseJsonObject(body.workflow_data || body.workflowData)),
+        JSON.stringify(workflow),
         pick(body.latitude, body.lat) || null,
         pick(body.longitude, body.lng) || null,
-        pick(body.origin, req.user ? "INTERNA" : "PUBLICA") || "PUBLICA",
+        internal ? "INTERNA" : "PUBLICA",
         Boolean(body.is_confidential || body.isConfidential),
       ]
     );
@@ -316,13 +305,14 @@ router.post("/", optionalAuth, async (req, res) => {
     res.status(201).json(rows[0]);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar a solicitação." });
   } finally {
     client.release();
   }
 });
 
 router.patch("/:id", auth, async (req, res) => {
+  if (!isInternalUser(req.user)) return res.status(403).json({ error: "Operação restrita à equipe de atendimento." });
   const body = req.body || {};
   const historyNote = body.history_note || body.historyNote || "";
   const workflowKeys = [
@@ -400,21 +390,29 @@ router.patch("/:id", auth, async (req, res) => {
     return res.status(400).json({ error: "Nenhum campo válido." });
   }
 
+  const client = await pool.connect();
+  let committed = false;
+  let released = false;
+  let savedRequest;
   try {
+    await client.query("BEGIN");
     const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
     const scopeValues = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
-    const { rows: existingRows } = await pool.query(
-      `SELECT status, schedule_date, tags, workflow_data, municipality_id FROM requests WHERE id = $1${scope}`,
+    const { rows: existingRows } = await client.query(
+      `SELECT * FROM requests WHERE id = $1${scope} FOR UPDATE`,
       scopeValues,
     );
-    if (!existingRows[0]) return res.status(404).json({ error: "Não encontrado" });
+    if (!existingRows[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Não encontrado" });
+    }
 
     const currentWorkflow = parseJsonObject(existingRows[0].workflow_data);
-    const nextWorkflow = { ...currentWorkflow, ...workflowPatch };
+    const nextWorkflow = mergeProtectedWorkflow(currentWorkflow, workflowPatch);
     const preparedEntries = dedupedEntries.map(([key, value]) => {
       if (key === "animals" || key === "documents") return [key, JSON.stringify(Array.isArray(value) ? value : [])];
       if (key === "tags") return [key, JSON.stringify(mergeTags(existingRows[0].tags, value))];
-      if (key === "workflow_data") return [key, JSON.stringify({ ...nextWorkflow, ...parseJsonObject(value) })];
+      if (key === "workflow_data") return [key, JSON.stringify(mergeProtectedWorkflow(nextWorkflow, parseJsonObject(value)))];
       if (key === "signed_at") return [key, parseSignedAt(value)];
       return [key, value];
     });
@@ -441,52 +439,16 @@ router.patch("/:id", auth, async (req, res) => {
       updateScope = ` AND municipality_id = $${values.length}`;
     }
 
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       `UPDATE requests SET ${setParts.join(", ")}, updated_at = NOW() WHERE id = $${idParam}${updateScope} RETURNING *`,
       values
     );
-    if (!rows[0]) return res.status(404).json({ error: "Não encontrado" });
-
-    const scheduleDateWasPatched =
-      body.schedule_date !== undefined ||
-      body.preferredSchedule !== undefined ||
-      body.appointment !== undefined;
-    const scheduleDateChanged =
-      scheduleDateWasPatched &&
-      String(rows[0].schedule_date || "") !== String(existingRows[0].schedule_date || "");
-    const isScheduleConfirmation =
-      rows[0].status === "AGENDADA" &&
-      existingRows[0].status !== "AGENDADA";
-    const isScheduleRescheduleConfirmation =
-      rows[0].status === "AGENDADA" &&
-      existingRows[0].status === "AGENDADA" &&
-      scheduleDateChanged;
+    await client.query("COMMIT");
+    committed = true;
+    savedRequest = rows[0];
+    client.release();
+    released = true;
     const isNewAttendance = rows[0].status === "REALIZADA" && existingRows[0].status !== "REALIZADA";
-
-    if (isScheduleConfirmation || isScheduleRescheduleConfirmation) {
-      try {
-        const notification = await notifyScheduleConfirmation(rows[0]);
-        const note = whatsappHistoryNote(notification, isScheduleRescheduleConfirmation ? "reschedule" : "confirmation");
-        const notificationEntry = [{ status: rows[0].status, notes: note, by: "sistema", at: new Date() }];
-        await pool.query(
-          "UPDATE requests SET history = history || $1::jsonb, updated_at = NOW() WHERE id = $2",
-          [JSON.stringify(notificationEntry), rows[0].id],
-        );
-        rows[0].history = [...parseJsonArray(rows[0].history), ...notificationEntry];
-      } catch (err) {
-        const notificationEntry = [{
-          status: rows[0].status,
-          notes: `WhatsApp: falha inesperada ao preparar confirmação. ${err.message || ""}`.trim(),
-          by: "sistema",
-          at: new Date(),
-        }];
-        await pool.query(
-          "UPDATE requests SET history = history || $1::jsonb, updated_at = NOW() WHERE id = $2",
-          [JSON.stringify(notificationEntry), rows[0].id],
-        );
-        rows[0].history = [...parseJsonArray(rows[0].history), ...notificationEntry];
-      }
-    }
 
     if (isNewAttendance) {
       const wf = parseJsonObject(rows[0].workflow_data);
@@ -499,9 +461,9 @@ router.patch("/:id", auth, async (req, res) => {
         const clean = String(rows[0].animal_microchip).toUpperCase().replace(/[^A-Z0-9]/g, "");
         const { rows: animalRows } = await pool.query(
           `SELECT id FROM animals
-           WHERE regexp_replace(upper(COALESCE(microchip, '')), '[^A-Z0-9]', '', 'g') = $1
+           WHERE regexp_replace(upper(COALESCE(microchip, '')), '[^A-Z0-9]', '', 'g') = $1 AND municipality_id = $2
            LIMIT 1`,
-          [clean],
+          [clean, rows[0].municipality_id],
         );
         if (animalRows[0]) animalId = animalRows[0].id;
       }
@@ -570,9 +532,20 @@ router.patch("/:id", auth, async (req, res) => {
       }
     }
 
+    rows[0].notificationResults = await notifyRequestChanges(existingRows[0], rows[0], {
+      loadSettings: loadRequestSettings,
+      appendHistory: (entries, id, municipalityId) => pool.query(
+        "UPDATE requests SET history = COALESCE(history, '[]'::jsonb) || $1::jsonb WHERE id = $2 AND municipality_id = $3",
+        [JSON.stringify(entries), id, municipalityId],
+      ),
+    });
     res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (committed) return res.json({ ...savedRequest, notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
+    if (!committed) await client.query("ROLLBACK").catch(() => {});
+    res.status(500).json({ error: "Não foi possível atualizar a solicitação." });
+  } finally {
+    if (!released) client.release();
   }
 });
 

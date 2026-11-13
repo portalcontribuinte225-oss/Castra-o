@@ -1,6 +1,13 @@
 import { useState } from "react";
 import type { AnyRecord } from "../types";
 import { countUsedVacancies, isPastScheduleDay, mergeTags, normalizeRequest } from "../domain";
+import { getNotificationNotice } from "./notifications/notification-results";
+import type { NotificationResult } from "./notifications/notification-results";
+import { normalizeText } from "../utils";
+
+export function canEditRequests(role = ""): boolean {
+  return ["master", "suporte", "admin_municipal", "analista", "servidor_publico"].includes(normalizeText(role));
+}
 
 export function getPerformedProceduresLabel(request: AnyRecord = {}) {
   const animals = Array.isArray(request.animals) ? request.animals : [];
@@ -43,12 +50,9 @@ export function useRequestActions({
     .filter((day: AnyRecord) => day.active !== false && !isPastScheduleDay(day.date))
     .map((day: AnyRecord) => ({ ...day, remaining: Math.max((day.vacancies || 0) - countUsedVacancies(requests, day.date), 0) }));
 
-  function checkWhatsappToast(updated: AnyRecord) {
-    const history: AnyRecord[] = Array.isArray(updated?.history) ? updated.history : [];
-    const last = [...history].reverse().find((h) => String(h.notes || "").includes("WhatsApp:"));
-    if (!last) return;
-    if (String(last.notes).includes("enviado")) showToast(`WhatsApp enviado com sucesso`, "success");
-    else if (String(last.notes).includes("falha")) showToast(`WhatsApp: falha no envio. Verifique as configurações.`, "error");
+  function showNotificationNotice(updated: AnyRecord, precedingResults: NotificationResult[] = []) {
+    const notice = getNotificationNotice(updated?.notificationResults, precedingResults);
+    if (notice) showToast(notice.message, notice.type);
   }
 
   function openRequest(request: AnyRecord) {
@@ -60,12 +64,12 @@ export function useRequestActions({
     setPreviewRequest(null);
   }
 
-  async function approveRequest(request: AnyRecord) {
+  async function approveRequest(request: AnyRecord, precedingResults: NotificationResult[] = []) {
     const patch = { status: "AGENDADA" };
     try {
       const updated = await patchRequest?.(request.id, patch, `Agenda confirmada por ${currentUser.name}`);
       showToast("Agenda confirmada com sucesso", "success");
-      checkWhatsappToast(updated);
+      showNotificationNotice(updated, precedingResults);
     } catch { showToast("Erro ao confirmar agenda", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
@@ -95,7 +99,7 @@ export function useRequestActions({
     try {
       const updated = await patchRequest?.(request.id, patch, `Reagendada por ${currentUser.name}: ${request.preferredSchedule || "sem data"} -> ${date}${note ? `. Motivo: ${note}` : ""}`);
       showToast(`Processo reagendado para ${date}`, "success");
-      checkWhatsappToast(updated);
+      showNotificationNotice(updated);
     } catch { showToast("Erro ao reagendar processo", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
@@ -166,8 +170,9 @@ export function useRequestActions({
     const patch: AnyRecord = { status: "REALIZADA" };
     if (note) patch.workflow_data = { ...((request.workflow_data || request.workflowData) || {}), complaintResolutionNote: note };
     try {
-      await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}${note ? `. Conclusão: ${note}` : ""}`);
+      const updated = await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}${note ? `. Conclusão: ${note}` : ""}`);
       showToast("Processo confirmado com sucesso", "success");
+      showNotificationNotice(updated);
     } catch { showToast("Erro ao confirmar processo", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }
@@ -198,8 +203,9 @@ export function useRequestActions({
       workflow_data: { performedProcedures, attendanceMicrochip: microchip, attendanceNote: note, attendancePrescription: receita },
     };
     try {
-      await patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${receita ? `. Receita registrada` : ""}${note ? `. Observação: ${note}` : ""}`);
+      const updated = await patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${receita ? `. Receita registrada` : ""}${note ? `. Observação: ${note}` : ""}`);
       showToast("Comparecimento confirmado — procedimento realizado", "success");
+      showNotificationNotice(updated);
     } catch { showToast("Erro ao confirmar comparecimento", "error"); }
     setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
   }

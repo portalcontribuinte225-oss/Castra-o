@@ -78,15 +78,15 @@ describe("identification type combined with the request type", () => {
     getVisibleSteps({ internal: false, skipTutor: false, configs }).map((item) => item.step);
 
   it("hides the tutor step for a type without tutor", () => {
-    expect(steps([{}, withoutTutor])).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.DOCUMENTS]);
+    expect(steps([{}, withoutTutor])).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
   });
 
   it("requires both sides to allow a step", () => {
-    expect(steps([{ stepAgenda: false }, withoutTutor])).toEqual([RequestStep.ANIMAL, RequestStep.DOCUMENTS]);
-    expect(steps([{}, { ...withoutTutor, stepDocuments: false }])).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE]);
+    expect(steps([{ stepAgenda: false }, withoutTutor])).toEqual([RequestStep.ANIMAL, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
+    expect(steps([{}, { ...withoutTutor, stepDocuments: false }])).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP]);
   });
 
   it("ignores a missing identification type", () => {
-    expect(steps([{}, null])).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS]);
+    expect(steps([{}, null])).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
   });
 });

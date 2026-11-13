@@ -10,7 +10,6 @@ export function buildDefaultIdentificationTypes() {
       stepAgenda: true,
       stepDocuments: true,
     },
-    // Starts inactive: POST /requests still requires a valid CPF, which a request without the tutor step cannot provide.
     {
       id: "animal_sem_tutor",
       name: "Animal sem Tutor",
