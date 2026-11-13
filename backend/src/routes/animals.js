@@ -1,11 +1,18 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
-import { optionalAuth } from "../middleware/auth.js";
+import { auth, optionalAuth } from "../middleware/auth.js";
 import { normalizeCpf, isValidCpf } from "../utils.js";
 import { isInternalUser, pickMunicipalityId } from "../tenant.js";
+import { mine, fromRequest, requestContext, documentContent, confirmMicrochip, animalEndpoint } from "../services/registered-animals/animal-handlers.js";
+import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 
 const router = Router();
+router.get("/mine", auth, animalEndpoint(mine));
+router.post("/from-request", auth, animalEndpoint(fromRequest));
+router.get("/:id/request-context", auth, animalEndpoint(requestContext));
+router.get("/:id/documents/:sourceRequestId/:attachmentId", auth, animalEndpoint(documentContent));
+router.post("/:id/confirm-microchip", auth, animalEndpoint(confirmMicrochip));
 
 function requireAnimalContext(req, res, next) {
   if (!pickMunicipalityId(req)) return res.status(400).json({ error: "Município obrigatório para esta operação." });
@@ -109,6 +116,8 @@ async function ensureAnimalFromLegacyRequest(client, microchip, req) {
   if (!request) return null;
 
   const animalData = request.matched_animal || {};
+  const registeredId = animalData.id || (request.animals?.length === 1 ? request.animal_id : null);
+  if (registeredId) return fetchAnimalById(client, registeredId, pickMunicipalityId(req));
   const { rows } = await client.query(
     `INSERT INTO animals (microchip, name, species, sex, size, breed, color, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
@@ -242,9 +251,11 @@ async function fetchActiveTutor(client, animalId, req) {
     `SELECT at.*
      FROM animal_tutors at
      WHERE at.animal_id = $1 AND at.active = TRUE${owner.sql}
-       AND EXISTS (SELECT 1 FROM animal_records ar JOIN requests r ON r.id = ar.request_id
+       AND (EXISTS (SELECT 1 FROM animal_records ar JOIN requests r ON r.id = ar.request_id
          WHERE ar.animal_id = $1 AND ar.municipality_id = $2
            AND regexp_replace(COALESCE(r.cpf, ''), '\\D', '', 'g') = regexp_replace(COALESCE(at.cpf, ''), '\\D', '', 'g'))
+       OR EXISTS (SELECT 1 FROM animal_records scoped WHERE scoped.animal_id=at.animal_id
+         AND scoped.municipality_id=$2 AND scoped.data->>'tutorRelationshipId'=at.id::text))
      ORDER BY at.started_at DESC, at.created_at DESC
      LIMIT 1`,
     [animalId, pickMunicipalityId(req), ...owner.values],
@@ -367,6 +378,7 @@ router.post("/lookup", optionalAuth, requireAnimalContext, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    if (isInternalUser(req.user)) await lockMunicipalSchedule(client, pickMunicipalityId(req));
     const animal = await ensureAnimalFromLegacyRequest(client, microchip, req);
     if (!animal || !await ensureAuthorized(client, req, animal)) {
       await client.query("ROLLBACK");
@@ -391,6 +403,7 @@ router.post("/consult", optionalAuth, requireAnimalContext, async (req, res) => 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    if (isInternalUser(req.user)) await lockMunicipalSchedule(client, pickMunicipalityId(req));
     const animal = await ensureAnimalFromLegacyRequest(client, microchip, req);
     if (!animal) {
       await client.query("ROLLBACK");
@@ -424,6 +437,7 @@ router.post("/:id/death", optionalAuth, requireAnimalContext, async (req, res) =
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await lockMunicipalSchedule(client, pickMunicipalityId(req));
     const animal = await fetchAnimalById(client, req.params.id, pickMunicipalityId(req));
     if (!animal) {
       await client.query("ROLLBACK");
@@ -527,6 +541,7 @@ router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await lockMunicipalSchedule(client, pickMunicipalityId(req));
     const animal = await fetchAnimalById(client, req.params.id, pickMunicipalityId(req));
     if (!animal) {
       await client.query("ROLLBACK");
@@ -542,7 +557,7 @@ router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res
     const tutor = await fetchActiveTutor(client, animal.id, req);
     const targetCpf = normalizeCpf(pick(req.body?.target_tutor_cpf, req.body?.targetTutorCpf, req.body?.newTutorCpf));
     const targetName = pick(req.body?.target_tutor_name, req.body?.targetTutorName, req.body?.newTutorName);
-    if (!targetName || targetCpf.length !== 11) {
+    if (!targetName || !isValidCpf(targetCpf)) {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Nome e CPF do novo tutor sao obrigatorios." });
     }

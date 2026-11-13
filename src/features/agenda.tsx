@@ -12,7 +12,7 @@ import {
   requestTypeLabel,
 } from "../domain";
 import { RequestPreviewModal, ToastContainer } from "../App";
-import { useRequestActions } from "./request-actions";
+import { canEditRequests, useRequestActions } from "./request-actions";
 
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -140,7 +140,6 @@ export function AgendaView({
     closePreview,
     activeSectors,
     activeUsers,
-    activeScheduleDays,
     approveRequest,
     archiveWithTag,
     rescheduleFromPreview,
@@ -148,7 +147,7 @@ export function AgendaView({
     assumeFromPreview,
     rejectRequestFromProcess,
     confirmAttendanceFromProcess,
-  } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
+  } = useRequestActions({ patchRequest, currentUser, teams, showToast, setSelectedId });
 
   const normalized = useMemo(() => requests.map(normalizeRequest), [requests]);
 
@@ -354,8 +353,8 @@ export function AgendaView({
       {previewRequest && (
         <RequestPreviewModal
           request={previewRequest}
+          readOnly={!canEditRequests(currentUser?.role)}
           requestTypes={requestTypes}
-          scheduleDays={activeScheduleDays}
           sectors={activeSectors}
           users={activeUsers}
           municipalities={municipalities}

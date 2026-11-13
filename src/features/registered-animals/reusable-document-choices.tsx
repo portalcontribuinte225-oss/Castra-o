@@ -1,0 +1,8 @@
+import React from "react";
+import { DocumentReviewStatus, DocumentReuseState } from "../../../shared/document-reuse-contract.js";
+import type { ReusableDocumentCandidate } from "./registered-animal-types";
+
+export function ReusableDocumentChoices({ candidates, selected, onSelect, onPreview, onRemove }: { candidates: ReusableDocumentCandidate[]; selected?: ReusableDocumentCandidate; onSelect: (candidate: ReusableDocumentCandidate) => void; onPreview: (candidate: ReusableDocumentCandidate) => void; onRemove: () => void }) {
+  if (!candidates.length) return null;
+  return <div className="reusable-document-options">{candidates.map((candidate) => <div className="reusable-document-option" key={`${candidate.reuseRef.sourceRequestId}:${candidate.attachmentId}`}><div><strong>{candidate.fileName}</strong><small>{candidate.eligible ? candidate.status === DocumentReviewStatus.APPROVED ? "Revisão anterior válida" : "Pendente de conferência" : candidate.state === DocumentReuseState.EXPIRED ? "Vencido para reaproveitamento" : "Precisa anexar outro arquivo"}</small>{candidate.expiresAt && <small>Prazo para reuso: {new Date(candidate.expiresAt).toLocaleDateString("pt-BR")}</small>}</div><button type="button" className="ghost-button" onClick={() => onPreview(candidate)}>Ver arquivo</button>{selected?.attachmentId === candidate.attachmentId ? <><span className="reused-document-badge">Reaproveitado</span><button type="button" className="ghost-button" onClick={onRemove}>Usar outro arquivo</button></> : <button type="button" className="ghost-button" disabled={!candidate.eligible} onClick={() => onSelect(candidate)}>Reaproveitar</button>}</div>)}</div>;
+}

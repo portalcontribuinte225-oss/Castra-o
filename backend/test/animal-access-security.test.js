@@ -24,6 +24,7 @@ async function fixture(t, { existingAnimal = true, globalCollision = false } = {
     if (session) return session;
     calls.push({ sql, values });
     if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [] };
+    if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
     if (sql.includes("SELECT a.* FROM animals")) return { rows: existingAnimal && values[1] === MUNICIPALITY ? [structuredClone(animal)] : [] };
     if (sql.includes("FROM users u") || sql.includes("JOIN users u")) return { rows: values[1] === OWNER_ID && values[2] === MUNICIPALITY ? [{ ok: true }] : [] };
     if (sql.includes("FROM request_validation_keys")) return { rows: values[0] === CPF && values[1] === "known-key" ? [{ ok: true }] : [] };

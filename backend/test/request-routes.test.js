@@ -1,4 +1,5 @@
 import test from "node:test";
+import crypto from "node:crypto";
 import assert from "node:assert/strict";
 import express from "express";
 import requestsRouter from "../src/routes/requests.js";
@@ -12,18 +13,19 @@ const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
 const ADMIN = { id: "44444444-4444-4444-8444-444444444444", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
 const SECRET = "request-route-tests-only";
 const VALID_CPF = "52998224725";
+const FUTURE_DATE = `01/01/${new Date().getFullYear() + 1}`;
 const clientFetch = globalThis.fetch;
 const clone = (value) => structuredClone(value);
 
 function procedureBody(overrides = {}) {
   return {
-    municipalityId: MUNICIPALITY_ID, requestTypeId: "castration", type: "Castração",
+    municipalityId: MUNICIPALITY_ID, requestTypeId: "castration", type: "Castração", declarationAccepted: true,
     animals: [{ species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida" }],
     workflow_data: { identificationTypeId: "without_tutor", followUp: { enabled: false } }, ...overrides,
   };
 }
 
-async function fixture(t, { existing, failHistory = false, failNotificationSettings = false, failRequestInsert = false } = {}) {
+async function fixture(t, { existing, failHistory = false, failNotificationSettings = false, failRequestInsert = false, agenda = false, requiredDocument = false } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
   const stats = { calls: [], settingsReads: 0, historyAppends: 0, transports: 0 };
@@ -32,23 +34,25 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
   const createdUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
-    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true }]],
+    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true, stepAgenda: agenda, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] }]],
+    ["castragestao:document-types", requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : []],
     ["castragestao:identification-types", [
       { id: "with_tutor", name: "Com tutor", active: true, stepTutor: true },
       { id: "without_tutor", name: "Sem tutor", active: true, stepTutor: false },
     ]],
     [NOTIFICATIONS_CONFIG_KEY, buildDefaultNotificationConfig()], ["whatsapp", { active: false }],
   ]);
-  let lockTail = Promise.resolve();
-  function acquireLock() {
+  const lockTails = new Map();
+  function acquireLock(key = "request-row") {
     let unlock;
     const held = new Promise((resolve) => { unlock = resolve; });
-    const previousLock = lockTail;
-    lockTail = previousLock.then(() => held);
+    const previousLock = lockTails.get(key) || Promise.resolve();
+    lockTails.set(key, previousLock.then(() => held));
     return previousLock.then(() => unlock);
   }
   function connection(source) {
-    let unlock;
+    const unlocks = [];
+    const heldKeys = new Set();
     const created = [];
     return {
       async query(sql, values = []) {
@@ -61,12 +65,12 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
             createdUsers.delete(id);
             for (const [key, profile] of tutorProfiles) if (profile.user_id === id) tutorProfiles.delete(key);
           }
-          unlock?.(); unlock = undefined;
+          unlocks.reverse().forEach((unlock) => unlock()); unlocks.length = 0; heldKeys.clear();
           return { rows: [] };
         }
         if (sql.includes("INSERT INTO auth_rate_limits")) return { rows: [{ attempts: 1 }] };
         if (sql.includes("DELETE FROM auth_rate_limits")) return { rows: [] };
-        if (sql.includes("pg_advisory_xact_lock")) { unlock = await acquireLock(); return { rows: [] }; }
+        if (sql.includes("pg_advisory_xact_lock")) { if (!heldKeys.has(values[0])) { unlocks.push(await acquireLock(values[0])); heldKeys.add(values[0]); } return { rows: [] }; }
         if (sql.startsWith("SELECT user_id FROM tutor_profiles")) {
           const profile = tutorProfiles.get(`${values[0]}:${values[1]}`);
           return { rows: profile ? [profile] : [] };
@@ -93,13 +97,21 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
           return { rows: [...configuration].map(([key, value]) => ({ key, value: clone(value), municipality_id: values[0] })) };
         }
         if (sql.includes("SELECT value FROM config")) return { rows: [{ value: clone(configuration.get(values[0])) }] };
+        if (sql.includes("INSERT INTO animals")) return { rows: [{
+          id: crypto.randomUUID(), microchip: null, name: values[0], species: values[1], sex: values[2], size: values[3],
+          breed: values[4], color: values[5], birth_date: values[6], metadata: JSON.parse(values[7]), status: "ATIVO",
+        }] };
+        if (sql.includes("INSERT INTO animal_tutors") || sql.includes("INSERT INTO animal_records")) return { rows: [] };
+        if (sql.startsWith("SELECT municipality_id FROM requests")) return { rows: requestRow?.id === values[0] ? [{ municipality_id: requestRow.municipality_id }] : [] };
+        if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: "77777777-7777-4777-8777-777777777777", date: FUTURE_DATE, active: true, slots: [{time:"08:00",vacancies:10}] }] };
+        if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) return { rows: requestRow ? [clone(requestRow)] : [] };
         if (sql.includes("INSERT INTO request_protocol_counters")) return { rows: [{ seq: 1 }] };
         if (sql.includes("SELECT validation_key FROM request_validation_keys")) return { rows: [] };
         if (sql.includes("INSERT INTO request_validation_keys")) return { rows: [{ validation_key: values[1] }] };
         if (sql.includes("INSERT INTO requests")) {
           if (failRequestInsert) throw new Error("Simulated request write failure");
           requestRow = {
-            id: REQUEST_ID, tutor_id: values[0], protocol: values[1], validation_key: values[2],
+            id: values[38] || REQUEST_ID, tutor_id: values[0], protocol: values[1], validation_key: values[2],
             tutor_name: values[3], tutor_email: values[4], cpf: values[5], phone: values[6],
             animals: JSON.parse(values[17]), request_type: values[18], municipality_id: values[20],
             schedule_date: values[22], documents: JSON.parse(values[31]), tags: JSON.parse(values[32]),
@@ -112,7 +124,7 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
             assert.match(sql, /AND municipality_id = \$2/);
             return { rows: requestRow?.tutor_id === values[0] && requestRow?.municipality_id === values[1] ? [clone(requestRow)] : [] };
           }
-          if (sql.includes("FOR UPDATE")) unlock = await acquireLock();
+          if (sql.includes("FOR UPDATE")) unlocks.push(await acquireLock());
           const match = requestRow?.id === values[0] && (!sql.includes("municipality_id = $2") || requestRow.municipality_id === values[1]);
           const selected = match ? clone(requestRow) : null;
           await new Promise((resolve) => setImmediate(resolve));
@@ -127,11 +139,11 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
           return { rows: [] };
         }
         if (sql.startsWith("UPDATE requests SET")) {
-          const idIndex = Number(sql.match(/WHERE id = \$(\d+)/)[1]) - 1;
-          const scope = sql.match(/AND municipality_id = \$(\d+)/);
+          const idIndex = Number(sql.match(/WHERE id\s*=\s*\$(\d+)/)[1]) - 1;
+          const scope = sql.match(/AND municipality_id\s*=\s*\$(\d+)/);
           assert.equal(values[idIndex], requestRow.id);
           if (scope) assert.equal(values[Number(scope[1]) - 1], requestRow.municipality_id);
-          for (const [, key, parameter] of sql.split(" WHERE ")[0].matchAll(/(\w+) = \$(\d+)/g)) {
+          for (const [, key, parameter] of sql.split(/\bWHERE\b/)[0].matchAll(/(\w+)\s*=\s*\$(\d+)/g)) {
             const value = values[Number(parameter) - 1];
             requestRow[key] = ["workflow_data", "documents", "animals", "tags"].includes(key) ? JSON.parse(value) : value;
           }
@@ -141,7 +153,7 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
         }
         throw new Error(`Unexpected test SQL: ${sql}`);
       },
-      release() { assert.equal(unlock, undefined, "Transaction lock must be released before returning connection"); },
+      release() { assert.equal(unlocks.length, 0, "Transaction lock must be released before returning connection"); },
     };
   }
   pool.query = connection("pool").query;
@@ -229,7 +241,7 @@ test("explicit refusal is persisted independently from cadastral contact and str
 
 test("municipal POST cannot override the authenticated municipality", async (t) => {
   const { request, stats, row } = await fixture(t);
-  assert.equal((await request({ user: ADMIN, body: procedureBody({ municipalityId: OTHER_MUNICIPALITY_ID, cpf: VALID_CPF }) })).status, 201);
+  assert.equal((await request({ user: ADMIN, body: procedureBody({ municipalityId: OTHER_MUNICIPALITY_ID, cpf: VALID_CPF, preferredSchedule: FUTURE_DATE }) })).status, 201);
   assert.equal(row().municipality_id, MUNICIPALITY_ID);
   assert.equal(stats.calls.find(({ sql }) => sql.includes("FROM municipalities m")).values[0], MUNICIPALITY_ID);
   assert.equal(row().tutor_id, null, "An attendant is not the tutor owner");
@@ -275,7 +287,8 @@ test("concurrent initial submissions create one municipal account and reveal onl
   assert.equal(users.size, 1);
   assert.equal(profiles.size, 1);
   assert.equal(stats.calls.filter(({ sql }) => sql.includes("INSERT INTO users")).length, 1);
-  assert.equal(stats.calls.filter(({ sql }) => sql.includes("pg_advisory_xact_lock")).length, 2);
+  assert.equal(stats.calls.filter(({ sql, values }) => sql.includes("pg_advisory_xact_lock") && values[0].startsWith("tutor-enrollment:")).length, 2);
+  assert.equal(stats.calls.filter(({ sql, values }) => sql.includes("pg_advisory_xact_lock") && values[0].startsWith("schedule:")).length, 2);
 });
 
 test("failed request insert rolls back both new account and profile", async (t) => {
@@ -366,4 +379,25 @@ test("notification-settings failure is recorded in history after successful PATC
   assert.equal(row().status, "AGENDADA");
   assert.equal(stats.historyAppends, 1);
   assert.equal(row().history[0].notification.status, "failed");
+});
+
+test("HTTP submissions share the last agenda place without leaking another request", async (t) => {
+  const { request, stats } = await fixture(t, {agenda:true});
+  const payload = procedureBody({ animals:Array.from({length:10},()=>({species:"Cão",sex:"Macho",size:"Pequeno",breedType:"Indefinida"})), preferredSchedule:FUTURE_DATE });
+  const results = await Promise.all([request({body:payload}),request({body:payload})]);
+  assert.deepEqual(results.map(r=>r.status).sort(),[201,409]);
+  const rejected = results.find(r=>r.status===409);
+  assert.equal(rejected.body.request,undefined);
+  assert.equal(stats.calls.filter(({sql})=>sql.includes("INSERT INTO requests")).length,1);
+  const forgedCancellation = await request({body:{...payload,status:"CANCELADA"}});
+  assert.equal(forgedCancellation.status,409, "A public status hint must not bypass the reservation of a new NOVA request");
+});
+
+test("public requestType alias cannot omit the configured mandatory document", async (t) => {
+  const { request, stats } = await fixture(t, { requiredDocument: true });
+  const result = await request({ body: procedureBody({ type: undefined, requestTypeId: undefined, requestType: "Castração" }) });
+  assert.equal(result.status, 400);
+  assert.match(result.body.error, /documento obrigatório/i);
+  assert.equal(stats.calls.some(({ sql }) => sql === "COMMIT"), false);
+  assert.equal(stats.calls.some(({ sql }) => sql === "ROLLBACK"), true);
 });

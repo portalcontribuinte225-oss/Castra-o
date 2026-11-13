@@ -13,8 +13,13 @@ import {
   validateNotificationConfig,
 } from "../../../shared/notification-contract.js";
 import { AUTH_DELIVERY_CONFIG_KEY, buildDefaultAuthDeliveryConfig, normalizeAuthDeliveryConfig, validateAuthDeliveryConfig } from "../../../shared/auth-contract.js";
+import { normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../../shared/document-reuse-contract.js";
+import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 
 const router = Router();
+const RESERVATION_CONFIG_KEYS = new Set([
+  "castragestao:schedule-rules", "castragestao:request-types", "castragestao:document-types", IDENTIFICATION_TYPES_CONFIG_KEY,
+]);
 
 const BREEDS_CONFIG_KEY = "castragestao:breeds";
 
@@ -115,6 +120,29 @@ function validateTeams(value) {
   return null;
 }
 
+function validateDocumentPolicies(key, value) {
+  if (!["castragestao:document-types", "castragestao:request-types"].includes(key)) return null;
+  if (!Array.isArray(value)) return "A configuração deve conter uma lista.";
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return "Tipo inválido.";
+    if (key === "castragestao:request-types" && item.documents !== undefined && !Array.isArray(item.documents)) return "Os documentos do pedido devem conter uma lista.";
+    const documents = key === "castragestao:document-types" ? [item] : item.documents || [];
+    for (const document of documents) {
+      const error = validateDocumentReusePolicy(document);
+      if (error) return error;
+    }
+  }
+  return null;
+}
+
+function normalizeDocumentPolicies(key, value) {
+  if (!Array.isArray(value)) return value;
+  if (key === "castragestao:document-types") return value.map((item) => ({ ...item, ...normalizeDocumentReusePolicy(item) }));
+  if (key === "castragestao:request-types") return value.map((item) => ({ ...item,
+    ...(Array.isArray(item.documents) ? { documents: item.documents.map((document) => ({ ...document, ...normalizeDocumentReusePolicy(document) })) } : {}) }));
+  return value;
+}
+
 // ── GET /:key ─────────────────────────────────────────────────────────────
 
 router.get("/:key", optionalAuth, async (req, res) => {
@@ -189,6 +217,8 @@ router.put("/:key", auth, async (req, res) => {
     const validationError = validateAuthDeliveryConfig(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
   }
+  const documentPolicyError = validateDocumentPolicies(key, req.body);
+  if (documentPolicyError) return res.status(400).json({ error: documentPolicyError });
 
   // Valida estrutura para chaves críticas de permissão
   if (key === "permission_groups") {
@@ -201,12 +231,13 @@ router.put("/:key", auth, async (req, res) => {
   }
 
   const client = await pool.connect();
-  let quotaTransaction = false;
+  let writeTransaction = false;
   try {
-    if (key === "whatsapp_quota") {
+    if (key === "whatsapp_quota" || RESERVATION_CONFIG_KEYS.has(key)) {
       await client.query("BEGIN");
-      quotaTransaction = true;
+      writeTransaction = true;
     }
+    if (RESERVATION_CONFIG_KEYS.has(key)) await lockMunicipalSchedule(client, municipalityId);
     const value = await prepareConfigValue(key, req.body, municipalityId, client);
 
     // A IA só pode ficar ativa com uma chave testada e aceita pelo provedor.
@@ -252,14 +283,14 @@ router.put("/:key", auth, async (req, res) => {
       });
     }
 
-    if (quotaTransaction) {
+    if (writeTransaction) {
       await client.query("COMMIT");
-      quotaTransaction = false;
+      writeTransaction = false;
     }
     res.json({ ...rows[0], value: publicConfigValue(key, rows[0].value) });
   } catch (err) {
-    if (quotaTransaction) await client.query("ROLLBACK").catch(() => {});
-    res.status(err.status || 500).json({ error: err.message });
+    if (writeTransaction) await client.query("ROLLBACK").catch(() => {});
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar a configuração." });
   } finally {
     client.release();
   }
@@ -268,6 +299,7 @@ router.put("/:key", auth, async (req, res) => {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function publicConfigValue(key, value = {}) {
+  if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
   if (key === AUTH_DELIVERY_CONFIG_KEY) return normalizeAuthDeliveryConfig(value);
   if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
@@ -281,6 +313,7 @@ function publicConfigValue(key, value = {}) {
 }
 
 async function prepareConfigValue(key, value = {}, municipalityId = null, client) {
+  if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
   if (key === AUTH_DELIVERY_CONFIG_KEY) return normalizeAuthDeliveryConfig(value);
   if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;

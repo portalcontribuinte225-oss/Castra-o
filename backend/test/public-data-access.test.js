@@ -29,6 +29,7 @@ async function fixture(t) {
     if (session) return session;
     calls.push({ sql, values });
     if (sql.includes("SELECT cpf FROM request_validation_keys")) return { rows: [{ cpf: CPF }] };
+    if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK" || sql.includes("pg_advisory_xact_lock")) return { rows: [] };
     if (sql.includes("SELECT interests, status FROM adoptions")) return { rows: [{ interests: adoption.interests, status: adoption.status }] };
     if (sql.includes("SELECT interests FROM adoptions")) return { rows: [{ interests: adoption.interests }] };
     if (sql.startsWith("UPDATE adoptions SET interests")) {
@@ -36,12 +37,15 @@ async function fixture(t) {
     }
     if (sql.includes("FROM adoptions")) return { rows: [structuredClone(adoption)] };
     if (sql.includes("INSERT INTO adoptions")) return { rows: [structuredClone(adoption)] };
+    if (sql.startsWith("SELECT id FROM municipalities")) return { rows: [{id:values[0]}] };
+    if (sql.includes("FROM config")) return { rows: [] };
+    if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) return { rows: [] };
     if (sql.includes("INSERT INTO schedule_days")) return { rows: [{ id: ANIMAL_ID, date: values[0], municipality_id: values[4] }] };
     if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: ANIMAL_ID, municipality_id: MUNICIPALITY, date: "2027-01-01" }] };
     throw new Error(`Unexpected access test SQL: ${sql}`);
   };
   pool.query = query;
-  pool.connect = async () => { throw new Error("Denied operation must not open a write transaction"); };
+  pool.connect = async () => ({ query, release() {} });
   const app = express(); app.use(express.json()); app.use("/adoptions", adoptionsRouter); app.use("/schedule", scheduleRouter);
   const server = await new Promise((resolve) => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
   t.after(async () => {
@@ -128,4 +132,15 @@ test("public agenda stays readable while internal creation ignores forged munici
   const created = await request("/schedule", { method: "POST", role: "analista", body: { date: "2027-01-01", vacancies: 10, municipalityId: OTHER_MUNICIPALITY } });
   assert.equal(created.status, 201); assert.equal(created.body.municipality_id, MUNICIPALITY);
   assert.equal(calls.find(({ sql }) => sql.includes("INSERT INTO schedule_days")).values[4], MUNICIPALITY);
+});
+
+test("availability HTTP returns aggregates and clamps tutor municipality without private request data", async (t) => {
+  const { request, calls } = await fixture(t);
+  const response = await request(`/schedule/availability?municipalityId=${OTHER_MUNICIPALITY}&from=2027-01-01&to=2027-01-01`, {role:"tutor"});
+  assert.equal(response.status,200); assert.equal(Array.isArray(response.body.days),true);
+  assert.equal(JSON.stringify(response.body).includes("PRIVATE_"),false);
+  assert.equal(JSON.stringify(response.body).includes("municipality_id"),false);
+  const reads = calls.filter(({sql})=>sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests"));
+  assert.equal(reads.length,1); assert.equal(reads[0].values[0],MUNICIPALITY);
+  assert.equal((await request(`/schedule/availability?municipalityId=${MUNICIPALITY}&from=invalid`)).status,400);
 });

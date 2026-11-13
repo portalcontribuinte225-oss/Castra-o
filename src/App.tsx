@@ -188,6 +188,20 @@ import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
 import { validateTutorName } from "./features/tutor-access/tutor-identity";
 import { SessionBoundary } from "./features/tutor-access/session-boundary";
 import { getAdoptionInterestCount } from "./features/adoption-interest-count";
+import { ProcedureEntry } from "./features/registered-animals/procedure-entry";
+import { bindProcedureIntent } from "./features/registered-animals/procedure-intent";
+import type { ProcedureIntent } from "./features/registered-animals/procedure-intent";
+import type { ReusableDocumentCandidate } from "./features/registered-animals/registered-animal-types";
+import { buildRequestPayload } from "./features/registered-animals/request-payload";
+import { animalForRequest, pickReusableDocuments, resolveRegisteredIdentificationType } from "./features/registered-animals/registered-request-data";
+import { RegisteredRequestSelection } from "./features/registered-animals/registered-request-selection";
+import { ReusableDocumentChoices } from "./features/registered-animals/reusable-document-choices";
+import { ReusableDocumentPreview } from "./features/registered-animals/reusable-document-preview";
+import { getAvailableScheduleSlot, selectScheduleOccurrence, useScheduleAvailability } from "./features/registered-animals/use-schedule-availability";
+import { DocumentReuseScope, DocumentReviewStatus, normalizeDocumentReusePolicy } from "../shared/document-reuse-contract.js";
+import { documentPolicyFromForm } from "./features/registered-animals/document-policy-form";
+import { buildDocumentReviewDecisions } from "./features/registered-animals/document-review-decisions";
+import { buildDocumentSubmission, removeReusedDocument } from "./features/registered-animals/document-selection";
 
 type ConfigTabItem = {
   id: string;
@@ -312,12 +326,19 @@ function dedupeMunicipalityItems(items = []) {
 
 export default function App() {
   const session = useSession();
-  return <SessionBoundary session={session}
-    renderTutor={(user) => <TutorArea key={user.id} user={user} onSession={session.accept} onLogout={session.logout} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact cpf={user.cpf || ""} setActive={() => {}} />} />}
-    renderWorkspace={(user) => <ApplicationWorkspace key={user?.id || "public"} currentUser={user} setCurrentUser={session.accept} />} />;
+  const [procedureIntent, setProcedureIntent] = useState<ProcedureIntent | null>(null);
+  const accept = useCallback((user) => { setProcedureIntent((current) => bindProcedureIntent(current, user)); session.accept(user); }, [session.accept]);
+  const logout = useCallback(() => { setProcedureIntent(null); session.logout(); }, [session.logout]);
+  useEffect(() => { if (session.ready && !session.user) setProcedureIntent((current) => current?.ownerId ? null : current); }, [session.ready, session.user]);
+  return <SessionBoundary session={{ ...session, accept, logout }}
+    renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact cpf={user.cpf || ""} setActive={() => {}} />}
+      renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} publicFlow selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
+        requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} identificationTypes={input.context?.identificationTypes || input.options[CONFIG_KEYS.identificationTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
+    />}
+    renderWorkspace={(user) => <ApplicationWorkspace key={user?.id || "public"} currentUser={user} setCurrentUser={accept} onProcedureIntent={setProcedureIntent} />} />;
 }
 
-function ApplicationWorkspace({ currentUser, setCurrentUser }: AnyRecord) {
+function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }: AnyRecord) {
   const [active, setActive] = useState("admin");
   const [configArea, setConfigArea] = useState("");
   const [configTab, setConfigTab] = useState("agenda");
@@ -611,43 +632,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser }: AnyRecord) {
 
   async function createRequest(payload, onEnrollment?: (credential?: EnrollmentCredential) => void) {
     try {
-      const newRequest = await api.createRequest({
-        animal_name: payload.animalName || payload.animal_name,
-        species: payload.species,
-        size: payload.size,
-        animal_id: payload.animal_id || payload.animalId || "",
-        animal_microchip: payload.animal_microchip || payload.animalMicrochip || "",
-        request_type: payload.requestType || payload.request_type,
-        municipality: payload.municipality,
-        notes: payload.notes,
-        tutor_name: payload.tutor ?? currentUser?.name ?? "",
-        tutor_email: payload.email ?? currentUser?.email ?? "",
-        cpf: payload.cpf || "",
-        phone: payload.phone || "",
-        cep: payload.cep || "",
-        address: payload.address || "",
-        neighborhood: payload.neighborhood || "",
-        city: payload.city || "",
-        state: payload.state || "",
-        preferredSchedule: payload.preferredSchedule || "",
-        municipalityId: payload.municipalityId || payload.municipality_id || currentUser?.municipalityId || "",
-        schedule_date: payload.preferredSchedule || payload.schedule_date || "",
-        scheduleLocationName: payload.scheduleLocationName || "",
-        scheduleAddress: payload.scheduleAddress || "",
-        scheduleAddressUrl: payload.scheduleAddressUrl || "",
-        scheduleMunicipality: payload.scheduleMunicipality || "",
-        responsibleUnit: payload.responsibleUnit || "",
-        veterinarian: payload.veterinarian || "",
-        animals: payload.animals || [],
-        documents: payload.documents || [],
-        signatureDataUrl: payload.signatureDataUrl || "",
-        signedAt: payload.signedAt || "",
-        type: payload.type || payload.requestType || payload.request_type || "",
-        requestTypeId: payload.requestTypeId || "",
-        fee: payload.fee || "",
-        tags: payload.tags || [],
-        workflow_data: payload.workflowData || payload.workflow_data || {},
-      }, onEnrollment);
+      const newRequest = await api.createRequest(buildRequestPayload(payload, currentUser), onEnrollment);
       registerCreatedRequest(newRequest, { openAdmin: Boolean(currentUser) });
       return newRequest;
     } catch (err) {
@@ -712,6 +697,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser }: AnyRecord) {
   }
 
   function handleMunicipalitySelect(id) {
+    onProcedureIntent(null);
     setSelectedMunicipalityId(id);
     localStorage.setItem("castragestao:municipalityId", id);
   }
@@ -737,6 +723,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser }: AnyRecord) {
       <>
         <LoginView
           onLogin={setCurrentUser}
+          onProcedureIntent={onProcedureIntent}
           onAccessRequest={createAccessRequest}
           adoptionAnimals={adoptionAnimals}
           onInterestSent={handleInterestSent}
@@ -1791,9 +1778,9 @@ function ScheduleDayButton({
   );
 }
 function PublicSchedulePicker({
-  requests,
   scheduleDays = [],
   selectedDate = "",
+  selectedOccurrenceKey = "",
   onSelect,
   pendingReservation = null,
   title = "",
@@ -1802,10 +1789,10 @@ function PublicSchedulePicker({
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
   const requiredVacancies = Math.max(Number(pendingReservation?.count) || 1, 1);
   const scheduleWithUsage = scheduleDays.filter((day) => day.active !== false).map((day) => {
-    const confirmed = countUsedVacancies(requests, day.date);
-    const pending = pendingReservation?.date === day.date ? (pendingReservation.count || 0) : 0;
+    const confirmed = Math.max(day.vacancies - day.remaining, 0);
+    const pending = pendingReservation?.date === day.date && (!selectedOccurrenceKey || selectedOccurrenceKey === day.occurrenceKey) ? (pendingReservation.count || 0) : 0;
     const used = confirmed + pending;
-    const offeredSlot = getOfferedScheduleSlot(day, requests, requiredVacancies);
+    const offeredSlot = getAvailableScheduleSlot(day, requiredVacancies);
     const confirmedRemaining = Math.max(day.vacancies - confirmed, 0);
     return {
       ...day,
@@ -1818,7 +1805,11 @@ function PublicSchedulePicker({
   });
   const scheduleMonths = buildScheduleMonths(scheduleWithUsage);
   const activeScheduleMonth = scheduleMonths[scheduleMonthIndex] || "";
-  const scheduleByDate = new Map(scheduleWithUsage.map((day) => [day.date, day]));
+  const scheduleByDate = new Map();
+  scheduleWithUsage.forEach((day) => {
+    const previous = scheduleByDate.get(day.date);
+    if (!previous || day.occurrenceKey === selectedOccurrenceKey || (!previous.hasEnoughVacancies && day.hasEnoughVacancies)) scheduleByDate.set(day.date, day);
+  });
   const visibleScheduleDays = buildMonthCalendarDays(activeScheduleMonth).map((calendarDay) => {
     if (calendarDay.offset) return calendarDay;
     const configuredDay = scheduleByDate.get(calendarDay.date);
@@ -1884,7 +1875,7 @@ function PublicSchedulePicker({
                 mutirao={day.kind === "Mutirao"}
                 hasVacancy={day.available && !day.isPast && day.hasEnoughVacancies}
                 disabled={!day.available || !day.hasEnoughVacancies || day.isPast}
-                onClick={() => onSelect(day.date)}
+                onClick={() => onSelect(day.date, day.occurrenceKey || "")}
               >
                 <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
                 <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} - ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
@@ -1893,6 +1884,7 @@ function PublicSchedulePicker({
             )
         )}
       </div>
+      {selectedDate && scheduleWithUsage.filter((day) => day.date === selectedDate).length > 1 && <div className="schedule-occurrence-options" role="group" aria-label="Local e horário"><p>Escolha o local desta data:</p>{scheduleWithUsage.filter((day) => day.date === selectedDate).map((day) => <button type="button" key={day.occurrenceKey || day.id} className={selectedOccurrenceKey === day.occurrenceKey ? "primary-action" : "ghost-button"} disabled={!day.hasEnoughVacancies || day.isPast} onClick={() => onSelect(day.date, day.occurrenceKey || "")}>{day.locationName || "Local de atendimento"} · {day.offeredSlot?.time || day.startTime} · {Math.max(day.vacancies - (day.used - (selectedOccurrenceKey === day.occurrenceKey ? requiredVacancies : 0)), 0)} vagas</button>)}</div>}
     </section>
   );
 }
@@ -2188,7 +2180,7 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [showVetModal, setShowVetModal] = useState(false);
   const [activePublicService, setActivePublicService] = useState<string | null>(null);
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
@@ -2248,14 +2240,14 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     setEnrollment(null);
     setProcedurePrefill(null);
     setPublicServiceDone(null);
-    setActivePublicService(serviceId);
+    setActivePublicService(serviceId === "procedure_form" ? "procedure_entry" : serviceId);
   }
 
   function joinMutirao() {
     setEnrollment(null);
     setProcedurePrefill(nextMutirao ? { schedule: nextMutirao.date } : null);
     setPublicServiceDone(null);
-    setActivePublicService("procedure_form");
+    setActivePublicService("procedure_entry");
   }
 
   function closePublicService() {
@@ -2285,9 +2277,9 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
 
   function openInlineProcedure(prefill: AnyRecord = {}) {
     setEnrollment(null);
-    setProcedurePrefill(prefill);
+    setProcedurePrefill({ schedule: prefill.schedule || "", requestType: prefill.requestType || "" });
     setPublicServiceDone(null);
-    setActivePublicService("procedure_form");
+    setActivePublicService("procedure_entry");
   }
 
   const publicFooterItems = [
@@ -2323,7 +2315,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
         <nav className="public-topbar-nav" aria-label="Serviços públicos">
           {publicHomeServices.map((service) => {
             const Icon = service.icon;
-            const active = activePublicService === service.id;
+            const active = activePublicService === service.id || (service.id === "procedure_form" && activePublicService === "procedure_entry");
             return (
               <button
                 key={service.id}
@@ -2356,7 +2348,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
           <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
             {activePublicService !== "procedure_form" && (
               <div className="public-service-panel-header">
-                <h2>{activePublicServiceDetails?.label || "Serviço"}</h2>
+                <h2>{activePublicService === "procedure_entry" ? "Solicitar procedimento" : activePublicServiceDetails?.label || "Serviço"}</h2>
                 <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
               </div>
             )}
@@ -2376,8 +2368,11 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 </div>
                 {publicServiceDoneDownloadError && <p className="form-error">{publicServiceDoneDownloadError}</p>}
               </div>
+            ) : activePublicService === "procedure_entry" ? (
+              <ProcedureEntry disabled={!selectedMunicipalityId} onFirst={() => setActivePublicService("procedure_form")} onRegistered={() => { onProcedureIntent({ municipalityId: selectedMunicipalityId, schedule: procedurePrefill?.schedule || "", requestTypeId: procedurePrefill?.requestType || "" }); setShowVetModal(true); }} />
             ) : activePublicService === "procedure_form" ? (
               <NewRequest
+                key={`public-procedure-${selectedMunicipalityId}`}
                 createRequest={createRequest}
                 onEnrollment={(credential) => { if (selectedMunicipalityId === publicMunicipalityRef.current) setEnrollment(credential || null); }}
                 currentUser={GUEST_USER}
@@ -2389,8 +2384,6 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                   const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
                   setPublicServiceDone(normalized);
                 }}
-                requests={requests}
-                scheduleDays={effectivePublicServiceScheduleDays}
                 initialMunicipalityId={selectedMunicipalityId}
                 requestTypes={publicServiceRequestTypes}
                 documentTypes={publicServiceDocumentTypes}
@@ -2489,7 +2482,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
         )}
       </footer>
 
-{showVetModal && <AuthEntry municipalityId={selectedMunicipalityId} municipalities={municipalities} onMunicipalitySelect={onMunicipalitySelect} onLogin={(user) => { setEnrollment(null); onLogin(user); }} onClose={() => setShowVetModal(false)} />}
+{showVetModal && <AuthEntry municipalityId={selectedMunicipalityId} municipalities={municipalities} onMunicipalitySelect={onMunicipalitySelect} onLogin={(user) => { setEnrollment(null); onLogin(user); }} onClose={() => { onProcedureIntent(null); setShowVetModal(false); }} />}
     </main>
   );
 }
@@ -3131,8 +3124,9 @@ function NewRequest({
   selectedMunicipalityId = "",
   onBack,
   onDone,
-  requests = [],
-  scheduleDays = [],
+  registeredContext,
+  contextLoading = false,
+  onRequestTypeChange,
   requestTypes = initialRequestTypes,
   aiSettings = initialAiSettings,
   speciesOptions = initialSpecies,
@@ -3161,12 +3155,13 @@ function NewRequest({
     else if (!isNaN(end)) subtitle = `Até ${s.weightEnd} ${unit}`;
     return { value: s.name, label: s.name, subtitle };
   });
-  const skipTutorStep = currentUser.role === "tutor" && currentUser.profileComplete && isValidCpf(currentUser.cpf || "");
+  const registered = Boolean(registeredContext);
+  const skipTutorStep = registered || (currentUser.role === "tutor" && currentUser.profileComplete && isValidCpf(currentUser.cpf || ""));
   const [requestData, setRequestData] = useState({
-    tutor: canManagePublicAnimalFlows(currentUser.role) ? "" : currentUser.name,
-    neighborhood: currentUser.neighborhood || "",
-    address: currentUser.address || "",
-    cpf: currentUser.cpf || "",
+    tutor: registeredContext?.tutor.name || registeredContext?.tutor.tutor || (canManagePublicAnimalFlows(currentUser.role) ? "" : currentUser.name),
+    neighborhood: registeredContext?.tutor.neighborhood || currentUser.neighborhood || "",
+    address: registeredContext?.tutor.address || currentUser.address || "",
+    cpf: registeredContext?.tutor.cpf || currentUser.cpf || "",
     email: currentUser.email || "",
     cep: currentUser.cep || "",
     number: currentUser.number || "",
@@ -3178,14 +3173,15 @@ function NewRequest({
     latitude: "",
     longitude: "",
     type: initialType,
-    identificationTypeId: "",
+    identificationTypeId: registeredContext?.animal.identificationTypeId || "",
     phone: currentUser.phone || "",
     notes: "",
     schedule: initialSchedule,
     municipalityId: initialMunicipalityId || currentUser.municipalityId || "",
+    scheduleOccurrenceKey: "",
   });
   const [animals, setAnimals] = useState<AnyRecord[]>([
-    {
+    registeredContext ? animalForRequest(registeredContext.animal) : {
       name: "",
       species: "",
       sex: "",
@@ -3207,6 +3203,12 @@ function NewRequest({
   const [expandedAnimal, setExpandedAnimal] = useState(0);
   const [accepted, setAccepted] = useState(false);
   const [documentUploads, setDocumentUploads] = useState<AnyRecord>({});
+  const documentUploadGeneration = useRef(0);
+  const animalPhotoGeneration = useRef(0);
+  const [animalPhotoLoading, setAnimalPhotoLoading] = useState(false);
+  useEffect(() => () => { documentUploadGeneration.current += 1; }, []);
+  const [reusedDocuments, setReusedDocuments] = useState<Record<string, ReusableDocumentCandidate>>({});
+  const [reusedPreview, setReusedPreview] = useState<ReusableDocumentCandidate | null>(null);
   const [formStep, setFormStep] = useState<RequestStep>(internalSimple ? RequestStep.TUTOR : RequestStep.ANIMAL);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -3215,6 +3217,24 @@ function NewRequest({
   const [followUp, setFollowUp] = useState<FollowUpValue>(emptyFollowUp);
   const followUpMunicipalityId = selectedMunicipalityId || requestData.municipalityId || currentUser.municipalityId || "";
   const followUpPolicy = useFollowUpPolicy(followUpMunicipalityId, !internalSimple);
+  const availability = useScheduleAvailability(followUpMunicipalityId, initialSchedule);
+  const scheduleDays = availability.days;
+  useEffect(() => {
+    if (!availability.ready || !requestData.schedule || requestData.scheduleOccurrenceKey) return;
+    const day = selectScheduleOccurrence(scheduleDays, requestData.schedule, "", Math.max(animals.length, 1));
+    if (day) setRequestData((current) => ({ ...current, scheduleOccurrenceKey: day.occurrenceKey }));
+  }, [availability.ready, scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, animals.length]);
+
+  useEffect(() => {
+    if (!registeredContext) return;
+    setAnimals([animalForRequest(registeredContext.animal)]);
+    setRequestData((current) => ({ ...current, tutor: registeredContext.tutor.name || registeredContext.tutor.tutor || "", cpf: registeredContext.tutor.cpf, address: registeredContext.tutor.address || "", neighborhood: registeredContext.tutor.neighborhood || "", city: registeredContext.tutor.city || "", state: registeredContext.tutor.state || "", cep: registeredContext.tutor.cep || "", identificationTypeId: registeredContext.animal.identificationTypeId || "" }));
+  }, [registeredContext]);
+
+  useEffect(() => {
+    setReusedDocuments(registeredContext && !contextLoading ? pickReusableDocuments(registeredContext.documents) : {});
+    setReusedPreview(null);
+  }, [registeredContext?.documents, contextLoading]);
 
   useEffect(() => {
     setFollowUp({ ...emptyFollowUp });
@@ -3249,7 +3269,7 @@ function NewRequest({
     .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
   const selectedRequestType = configuredRequestTypes.find((type) => type.name === requestData.type) || null;
   const activeIdentificationTypes = publicFlow ? getActiveIdentificationTypes(identificationTypes) : [];
-  const selectedIdentificationType = resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
+  const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
   const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [selectedRequestType, selectedIdentificationType] });
   const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
   const requiresTutorIdentity = internalSimple || currentUser.role === "tutor" || configsAllowStep([selectedRequestType, selectedIdentificationType], "stepTutor");
@@ -3257,10 +3277,10 @@ function NewRequest({
     .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
     .filter((document) => document.active !== false);
-  const acceptableUploadStatuses = ["approved", "attached"];
+  const acceptableUploadStatuses = [DocumentReviewStatus.APPROVED, DocumentReviewStatus.ATTACHED];
   const requiredDocsApproved = selectedTypeDocuments
     .filter((document) => document.required)
-    .every((document) => acceptableUploadStatuses.includes(documentUploads[document.id]?.status));
+    .every((document) => Boolean(reusedDocuments[document.id]?.eligible) || acceptableUploadStatuses.includes(documentUploads[document.id]?.status));
   const hasUploadNeedingReplacement = Object.values(documentUploads)
     .some((upload: AnyRecord) => upload?.status === "attached" && upload?.aiVerdict === "rejected");
   const requiredIssues = getRequestValidationIssues();
@@ -3268,9 +3288,9 @@ function NewRequest({
   const currentStepIndex = Math.max(formSteps.findIndex((item) => item.step === formStep), 0);
   function selectedScheduleHasCapacity() {
     if (!requestData.schedule) return false;
-    const selectedDay = scheduleDays.find((day) => day.date === requestData.schedule && day.active !== false);
+    const selectedDay = selectScheduleOccurrence(scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, Math.max(animals.length, 1));
     if (!selectedDay || isPastScheduleDay(selectedDay.date)) return false;
-    return Boolean(getOfferedScheduleSlot(selectedDay, requests, Math.max(animals.length, 1)));
+    return Boolean(getAvailableScheduleSlot(selectedDay, Math.max(animals.length, 1)));
   }
 
   function addAnimal() {
@@ -3333,7 +3353,11 @@ function NewRequest({
   function selectRequestType(name) {
     if (requestData.type === name) return;
     updateRequestField("type", name);
-    setAnimals((current) => current.map((animal) => ({ ...animal, breedDescription: "" })));
+    documentUploadGeneration.current += 1;
+    setAnimalPhotoLoading(false);
+    setReusedDocuments({}); setDocumentUploads({}); setAccepted(false);
+    if (registered) onRequestTypeChange?.(configuredRequestTypes.find((type) => type.name === name)?.id || "");
+    else setAnimals((current) => current.map((animal) => ({ ...animal, breedDescription: "" })));
   }
 
   function removeAnimal(indexToRemove) {
@@ -3364,20 +3388,26 @@ function NewRequest({
 
   function getRequestValidationIssues() {
     const issues = [];
+    if (animalPhotoLoading) issues.push("Aguarde a leitura da foto do animal.");
     const filledAnimals = animals.length > 0 ? animals : [{}];
+    if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) issues.push(registeredContext.eligibility?.reason || "Aguarde a validação do cadastro ou procure o atendimento.");
 
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
     if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !requestData.schedule) issues.push("Escolha uma data disponível.");
     else if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
     if (configuredRequestTypes.length > 0 && !requestData.type) issues.push("Selecione o tipo de solicitação.");
     filledAnimals.forEach((animal, index) => {
+      if (registered) {
+        if (!animal.species || !animal.sex || !animal.size || !animal.breedType) issues.push("O cadastro do animal está incompleto. Procure o atendimento para conferência.");
+        return;
+      }
       const label = filledAnimals.length > 1 ? ` do animal ${index + 1}` : " do animal";
       if (!animal.species) issues.push(`Selecione a espécie${label}.`);
       if (!animal.sex) issues.push(`Selecione o sexo${label}.`);
       if (!animal.size) issues.push(`Selecione o porte${label}.`);
       if (!animal.breedType) issues.push(`Informe se a raça é definida ou indefinida${label}.`);
     });
-    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
+    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Anexe ou reaproveite os documentos obrigatórios. Arquivos pendentes serão conferidos pela equipe.");
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
     if ((requiresTutorIdentity || requestData.cpf) && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
     if (requiresTutorIdentity && validateTutorName(requestData.tutor)) issues.push(validateTutorName(requestData.tutor));
@@ -3400,6 +3430,7 @@ function NewRequest({
     }
 
     if (step === RequestStep.ANIMAL) {
+      if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) return [true];
       return animals
         .flatMap((animal, index) => [
           index === 0 && configuredRequestTypes.length > 0 && !requestData.type,
@@ -3490,12 +3521,15 @@ function NewRequest({
 
   async function handleDocumentFile(document: AnyRecord, file?: File) {
     if (!file) return;
+    const generation = documentUploadGeneration.current;
+    setReusedDocuments((current) => { const next = { ...current }; delete next[document.id]; return next; });
 
     try {
       const normalizedDocument = normalizeDocumentType(document);
       const documentUsesAi = normalizedDocument.analysisRules?.useAi !== false;
       const shouldAnalyzeWithAi = aiSettings.active && documentUsesAi;
       const dataUrl = await readFileAsDataUrl(file);
+      if (generation !== documentUploadGeneration.current) return;
       setDocumentUploads((current) => ({
         ...current,
         [normalizedDocument.id]: {
@@ -3511,6 +3545,7 @@ function NewRequest({
       }));
       const documentMunicipalityId = requestData.municipalityId || selectedMunicipalityId || initialMunicipalityId || currentUser?.municipalityId || "";
       const result = await validateDocumentWithAI(normalizedDocument, file, aiSettings, dataUrl, documentMunicipalityId);
+      if (generation !== documentUploadGeneration.current) return;
       setDocumentUploads((current) => ({
         ...current,
         [normalizedDocument.id]: {
@@ -3524,6 +3559,7 @@ function NewRequest({
         },
       }));
     } catch (err) {
+      if (generation !== documentUploadGeneration.current) return;
       setDocumentUploads((current) => ({
         ...current,
         [document.id]: {
@@ -3543,8 +3579,16 @@ function NewRequest({
 
   async function handleAnimalPhotoFile(file?: File) {
     if (!file) return;
+    const generation = documentUploadGeneration.current;
+    const photoGeneration = ++animalPhotoGeneration.current;
+    setReusedDocuments((current) => removeReusedDocument(current, "animal_photo"));
+    removeDocumentFile("animal_photo");
+    setAnimalPhotoLoading(true);
+    setSubmissionError("");
+    const isCurrentPhoto = () => generation === documentUploadGeneration.current && photoGeneration === animalPhotoGeneration.current;
     try {
       const dataUrl = await readFileAsDataUrl(file);
+      if (!isCurrentPhoto()) return;
       setDocumentUploads((current) => ({
         ...current,
         animal_photo: {
@@ -3559,7 +3603,9 @@ function NewRequest({
         },
       }));
     } catch {
-      setSubmissionError("Não foi possível anexar a foto do animal.");
+      if (isCurrentPhoto()) setSubmissionError("Não foi possível anexar a foto do animal. Selecione o arquivo novamente ou envie sem a foto opcional.");
+    } finally {
+      if (isCurrentPhoto()) setAnimalPhotoLoading(false);
     }
   }
 
@@ -3603,8 +3649,8 @@ function NewRequest({
 
   async function submitInternal() {
     setSubmissionError("");
-    const selectedScheduleDay = scheduleDays.find((day) => day.date === requestData.schedule);
-    const selectedScheduleSlot = selectedScheduleDay ? getOfferedScheduleSlot(selectedScheduleDay, requests, Math.max(animals.length, 1)) : null;
+    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, Math.max(animals.length, 1));
+    const selectedScheduleSlot = getAvailableScheduleSlot(selectedScheduleDay, Math.max(animals.length, 1));
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
     const hasGpsCoords = requestData.latitude && requestData.longitude;
@@ -3643,6 +3689,7 @@ function NewRequest({
         isFarmer: requestData.isFarmer,
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+        scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
       },
       animals: animals.map((animal, index) => ({
         ...animal,
@@ -3665,8 +3712,8 @@ function NewRequest({
 
   async function submitAccepted() {
     setSubmissionError("");
-    const selectedScheduleDay = scheduleDays.find((day) => day.date === requestData.schedule);
-    const selectedScheduleSlot = selectedScheduleDay ? getOfferedScheduleSlot(selectedScheduleDay, requests, Math.max(animals.length, 1)) : null;
+    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, Math.max(animals.length, 1));
+    const selectedScheduleSlot = getAvailableScheduleSlot(selectedScheduleDay, Math.max(animals.length, 1));
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
     const hasGpsCoords = requestData.latitude && requestData.longitude;
@@ -3681,6 +3728,7 @@ function NewRequest({
       ...uploadedDocuments,
       ...(animalPhotoUpload ? [animalPhotoUpload] : []),
     ];
+    const documentSubmission = buildDocumentSubmission(allUploadedDocuments, reusedDocuments);
     const identificationPayload = selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {};
     const localPayload = {
       tutor: requestData.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
@@ -3714,16 +3762,19 @@ function NewRequest({
         isFarmer: requestData.isFarmer,
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+        scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
         ...identificationPayload,
         followUp: buildFollowUpPayload(followUp, followUpPolicy.phoneEnabled),
       },
-      animals: animals.map((animal, index) => ({
+      animalId: registeredContext?.animal.id || "",
+      animals: registeredContext ? [{ id: registeredContext.animal.id }] : animals.map((animal, index) => ({
         ...animal,
         ...identificationPayload,
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
       })),
-      documents: allUploadedDocuments,
+      ...documentSubmission,
+      declarationAccepted: accepted,
       signedAt: new Date().toISOString(),
     };
     try {
@@ -3737,6 +3788,7 @@ function NewRequest({
 
       onDone?.(normalizeRequest({ ...localPayload, ...newRequest, protocol: generatedProtocol }));
     } catch (err) {
+      if (err?.status === 409) availability.refresh();
       setSubmissionError(err?.message || "Falha ao enviar solicitação. Tente novamente.");
     }
   }
@@ -3946,7 +3998,7 @@ function NewRequest({
           </FormSection>}
 
           {formStep === RequestStep.ANIMAL && <FormSection title="Dados do animal">
-
+            {registeredContext ? <><RegisteredRequestSelection context={registeredContext} selectedType={requestData.type} onSelectType={selectRequestType} />{contextLoading && <p role="status">Atualizando os requisitos do procedimento...</p>}</> : <>
             {animals.map((animal, index) => {
               const isOpen = animals.length === 1 || expandedAnimal === index;
               const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
@@ -4116,15 +4168,18 @@ function NewRequest({
                 </button>
               )}
             </div>
+            </>}
           </FormSection>}
 
           {formStep === RequestStep.SCHEDULE && <FormSection title="Agenda">
+            {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
+            {availability.error && <p className="form-error" role="alert">{availability.error} <button type="button" className="ghost-button" onClick={availability.refresh}>Tentar novamente</button></p>}
             <PublicSchedulePicker
-              requests={requests}
               scheduleDays={scheduleDays}
               selectedDate={requestData.schedule}
+              selectedOccurrenceKey={requestData.scheduleOccurrenceKey}
               pendingReservation={{ date: requestData.schedule, count: animals.length }}
-              onSelect={(date) => updateRequestField("schedule", date)}
+              onSelect={(date, occurrenceKey) => setRequestData((current) => ({ ...current, schedule: date, scheduleOccurrenceKey: occurrenceKey }))}
               title={publicFlow ? "Escolha data e horário" : ""}
             />
             {internalSimple && (
@@ -4154,8 +4209,8 @@ function NewRequest({
                     ) : (
                       <div className="doc-photo-placeholder">
                         <ImagePlus size={22} />
-                        <span>Foto do animal</span>
-                        <small>Opcional</small>
+                        <span>{animalPhotoLoading ? "Carregando foto..." : reusedDocuments.animal_photo?.fileName || "Foto do animal"}</span>
+                        <small>{reusedDocuments.animal_photo ? "Foto reaproveitada" : "Opcional"}</small>
                       </div>
                     )}
                     <input type="file" accept="image/*" onClick={(e) => { e.currentTarget.value = ""; }} onChange={(e) => handleAnimalPhotoFile(e.target.files?.[0])} />
@@ -4165,6 +4220,7 @@ function NewRequest({
                       </button>
                     )}
                   </label>
+                  {registeredContext && !contextLoading && <ReusableDocumentChoices candidates={registeredContext.documents.filter((candidate) => candidate.documentId === "animal_photo")} selected={reusedDocuments.animal_photo} onSelect={(candidate) => { animalPhotoGeneration.current += 1; setAnimalPhotoLoading(false); removeDocumentFile("animal_photo"); setReusedDocuments((current) => ({ ...current, animal_photo: candidate })); }} onPreview={setReusedPreview} onRemove={() => setReusedDocuments((current) => removeReusedDocument(current, "animal_photo"))} />}
                 </aside>
 
                 <div className="documents-main-column">
@@ -4177,15 +4233,18 @@ function NewRequest({
                     )}
                     {selectedTypeDocuments.map((document) => {
                       const upload = documentUploads[document.id];
+                      const selectedReuse = reusedDocuments[document.id];
                       return (
-                        <DocumentScannerUpload
-                          key={document.id}
+                        <div key={document.id}>
+                        {registeredContext && !contextLoading && <ReusableDocumentChoices candidates={registeredContext.documents.filter((candidate) => candidate.documentId === document.id)} selected={selectedReuse} onSelect={(candidate) => { removeDocumentFile(document.id); setReusedDocuments((current) => ({ ...current, [document.id]: candidate })); }} onPreview={setReusedPreview} onRemove={() => setReusedDocuments((current) => { const next = { ...current }; delete next[document.id]; return next; })} />}
+                        {!selectedReuse && <DocumentScannerUpload
                           document={document}
                           upload={upload}
                           aiActive={aiSettings.active && document.analysisRules?.useAi !== false}
                           onUpload={(file) => handleDocumentFile(document, file)}
                           onRemove={() => removeDocumentFile(document.id)}
-                        />
+                        />}
+                        </div>
                       );
                     })}
                   </div>
@@ -4221,7 +4280,7 @@ function NewRequest({
                 Voltar
               </button>
             )}
-            {formStep === RequestStep.ANIMAL && (
+            {formStep === RequestStep.ANIMAL && !registered && (
               <button className="anm-add-btn" type="button" onClick={addAnimal}>
                 Adicionar animal
               </button>
@@ -4239,7 +4298,7 @@ function NewRequest({
               <button
                 className="nr-topbar-continue primary-action"
                 type="button"
-                disabled={submitting || (!internalSimple && (!followUpPolicy.ready || getFollowUpIssues(followUp, followUpPolicy.phoneEnabled).length > 0))}
+                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) || (!internalSimple && (!followUpPolicy.ready || getFollowUpIssues(followUp, followUpPolicy.phoneEnabled).length > 0))}
                 onClick={submit}
               >
                 {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
@@ -4250,6 +4309,7 @@ function NewRequest({
         </div>
 
         {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
+        {reusedPreview && registeredContext && <ReusableDocumentPreview key={`${reusedPreview.attachmentId}:${reusedPreview.reuseRef.hash}`} animalId={registeredContext.animal.id} candidate={reusedPreview} onClose={() => setReusedPreview(null)} />}
       </div>
   );
 }
@@ -4418,7 +4478,6 @@ function AdminDashboard({
   currentUser,
   patchRequest,
   createRequest,
-  scheduleDays = [],
   requestTypes = initialRequestTypes,
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
@@ -4449,7 +4508,6 @@ function AdminDashboard({
     closePreview: closeRequestPreview,
     activeSectors,
     activeUsers,
-    activeScheduleDays,
     approveRequest,
     archiveWithTag,
     rescheduleFromPreview,
@@ -4458,7 +4516,7 @@ function AdminDashboard({
     rejectRequestFromProcess,
     confirmAttendanceFromProcess,
     confirmSpecialRequest,
-  } = useRequestActions({ patchRequest, currentUser, teams, requests, scheduleDays, showToast, setSelectedId });
+  } = useRequestActions({ patchRequest, currentUser, teams, showToast, setSelectedId });
 
   const normalizedRequests = useMemo(
     () => (Array.isArray(requests) ? requests : []).map(normalizeRequest),
@@ -4637,7 +4695,6 @@ function AdminDashboard({
           request={previewRequest}
           readOnly={!canEditRequests(currentUser?.role)}
           requestTypes={requestTypes}
-          scheduleDays={activeScheduleDays}
           sectors={activeSectors}
           users={activeUsers}
           municipalities={municipalities}
@@ -4666,18 +4723,19 @@ function AdminDashboard({
               </button>
             </div>
             <NewRequest
+              key={`internal-procedure-${selectedMunicipalityId || currentUser.municipalityId || ""}`}
               createRequest={async (payload) => {
                 const result = await createRequest?.(payload);
                 if (result?.protocol) showToast(`Cadastro criado — Protocolo #${result.protocol}`, "success");
                 return result;
               }}
               currentUser={currentUser}
+              selectedMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
+              initialMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
               compact
               internalSimple
               onBack={() => setCreateRequestOpen(false)}
               onDone={() => setCreateRequestOpen(false)}
-              requests={requests}
-              scheduleDays={scheduleDays}
               requestTypes={requestTypes}
               aiSettings={aiSettings}
               speciesOptions={speciesOptions}
@@ -4696,13 +4754,14 @@ function isAnimalPhotoDocument(d: AnyRecord = {}) {
   return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
 }
 
-export function RequestPreviewModal({ request, readOnly = true, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], scheduleDays = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
+export function RequestPreviewModal({ request, readOnly = true, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [downloadLoadingId, setDownloadLoadingId] = useState("");
   const [confirmingSchedule, setConfirmingSchedule] = useState(false);
+  const [reviewError, setReviewError] = useState("");
   const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | "confirmComplaint" | null>(null);
   const [rejectData, setRejectData] = useState({ category: "", note: "" });
   const [complaintResolutionNote, setComplaintResolutionNote] = useState("");
@@ -4714,11 +4773,16 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
   const [rescheduleReason, setRescheduleReason] = useState("");
   const [selectedRescheduleDate, setSelectedRescheduleDate] = useState("");
   const [manualRescheduleDate, setManualRescheduleDate] = useState("");
+  const [selectedRescheduleOccurrence, setSelectedRescheduleOccurrence] = useState("");
+  const [selectedRescheduleTime, setSelectedRescheduleTime] = useState("");
+  const [rescheduling, setRescheduling] = useState(false);
+  const rescheduleAvailability = useScheduleAvailability(!readOnly && activePanel === "reschedule" ? normalizedRequest.municipalityId : "", selectedRescheduleDate);
   const [attendanceData, setAttendanceData] = useState({
-    microchip: normalizedRequest.animalMicrochip || normalizedRequest.animals?.find((animal) => animal.microchip)?.microchip || "",
+    microchip: normalizedRequest.animals?.[0]?.confirmedMicrochip || "",
     receita: normalizedRequest.workflow_data?.attendancePrescription || normalizedRequest.workflowData?.attendancePrescription || "",
     note: normalizedRequest.attendanceNote || "",
   });
+  const [confirmedAnimalChips, setConfirmedAnimalChips] = useState<Record<string, string>>(() => Object.fromEntries((normalizedRequest.animals || []).filter((animal) => animal.id).map((animal) => [animal.id, animal.confirmedMicrochip || ""])));
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
   const [assignData, setAssignData] = useState({
     sectorId: normalizedRequest.assignedSectorId || sectors[0]?.id || "",
@@ -5004,7 +5068,7 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
 
   function confirmAttendanceInline(event) {
     event.preventDefault();
-    onAttendance?.(request, { ...attendanceData, animalData });
+    onAttendance?.(request, { ...attendanceData, animalData, confirmedAnimalChips });
   }
 
   async function handleEvidenceUpload(event) {
@@ -5036,29 +5100,17 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
   async function confirmSchedule() {
     if (!canConfirmSchedule || confirmingSchedule) return;
     setConfirmingSchedule(true);
+    setReviewError("");
     try {
       let documentNotificationResults: NotificationResult[] = [];
-      const decisions = Object.entries(docDecisions).filter(([, decision]) => decision === "approved" || decision === "rejected");
+      const decisions = buildDocumentReviewDecisions(anexos, docDecisions);
       if (decisions.length && patchRequest) {
-        const currentDocuments = Array.isArray(request.documents) ? request.documents : [];
-        const updatedDocuments = currentDocuments.map((document) => {
-          const row = anexos.find((anexo) => anexo.document === document
-            || anexo.document?.documentId === document.documentId
-            || anexo.document?.fileName === document.fileName
-            || anexo.id === document.documentId
-            || anexo.id === document.fileName);
-          const decision = row ? docDecisions[row.id] : "";
-          if (decision !== "approved" && decision !== "rejected") return document;
-          return {
-            ...document,
-            status: decision,
-            message: document.message || (decision === "approved" ? "Documento aprovado manualmente na conferência." : "Documento recusado manualmente na conferência."),
-          };
-        });
-        const reviewed = await patchRequest(request.id, { documents: updatedDocuments }, "Documentos conferidos antes da agenda");
+        const reviewed = await patchRequest(request.id, { documentReviews: decisions }, "Documentos conferidos antes da agenda");
         documentNotificationResults = Array.isArray(reviewed?.notificationResults) ? reviewed.notificationResults : [];
       }
       await onApprove?.(request, documentNotificationResults);
+    } catch (failure) {
+      setReviewError(failure?.message || "Não foi possível salvar a conferência. Tente novamente.");
     } finally {
       setConfirmingSchedule(false);
     }
@@ -5212,30 +5264,44 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
         && !isPastScheduleDay(value);
     }
 
-    function selectRescheduleDate(date: string) {
+    const count = Math.max(normalizedRequest.animals?.length || 0, 1);
+    const selectedDay = selectScheduleOccurrence(rescheduleAvailability.days, selectedRescheduleDate, selectedRescheduleOccurrence, count);
+    const selectedSlot = selectedDay?.slots.find((slot) => slot.time === selectedRescheduleTime && slot.remaining >= count);
+
+    function selectRescheduleDate(date: string, occurrenceKey: string) {
       setSelectedRescheduleDate(date);
       setManualRescheduleDate(date);
+      setSelectedRescheduleOccurrence(occurrenceKey);
+      const day = selectScheduleOccurrence(rescheduleAvailability.days, date, occurrenceKey, count);
+      setSelectedRescheduleTime(getAvailableScheduleSlot(day, count)?.time || "");
     }
 
     function updateManualRescheduleDate(value: string) {
       const nextDate = maskScheduleDateInput(value);
       setManualRescheduleDate(nextDate);
       setSelectedRescheduleDate(isValidManualScheduleDate(nextDate) ? nextDate : "");
+      setSelectedRescheduleOccurrence(""); setSelectedRescheduleTime("");
     }
 
     function cancelReschedule() {
       setSelectedRescheduleDate("");
       setManualRescheduleDate("");
       setRescheduleReason("");
+      setSelectedRescheduleOccurrence(""); setSelectedRescheduleTime("");
       setActivePanel(null);
     }
 
-    function confirmReschedule() {
-      if (!selectedRescheduleDate) return;
-      onReschedule?.(request, selectedRescheduleDate, rescheduleReason);
+    async function confirmReschedule() {
+      if (!selectedRescheduleDate || !selectedRescheduleOccurrence || !selectedSlot || rescheduling) return;
+      setRescheduling(true);
+      let confirmed;
+      try { confirmed = await onReschedule?.(request, selectedRescheduleDate, rescheduleReason, { occurrenceKey: selectedRescheduleOccurrence, time: selectedRescheduleTime }); }
+      finally { setRescheduling(false); }
+      if (confirmed === false) { rescheduleAvailability.refresh(); return; }
       setSelectedRescheduleDate("");
       setManualRescheduleDate("");
       setRescheduleReason("");
+      setSelectedRescheduleOccurrence(""); setSelectedRescheduleTime("");
       setActivePanel(null);
     }
 
@@ -5263,30 +5329,14 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
             aria-label="Motivo do reagendamento"
           />
         </label>
-        {scheduleDays.length === 0
-          ? <p className="prm-muted-note">Nenhuma data disponível. Configure em Configurações › Agenda.</p>
-          : (
-            <div className="reschedule-grid">
-              {scheduleDays.map((day) => (
-                <ScheduleDayButton
-                  key={day.date}
-                  selected={selectedRescheduleDate === day.date}
-                  hasVacancy={day.remaining > 0}
-                  disabled={day.remaining <= 0}
-                  onClick={() => selectRescheduleDate(day.date)}
-                >
-                  <span>{day.weekday}</span>
-                  <strong>{day.date}</strong>
-                  <small>{day.remaining} vagas</small>
-                </ScheduleDayButton>
-              ))}
-            </div>
-          )
-        }
+        {rescheduleAvailability.loading && <p role="status">Carregando vagas disponíveis...</p>}
+        {rescheduleAvailability.error && <p role="alert" className="form-error">{rescheduleAvailability.error} <button type="button" className="ghost-button" onClick={rescheduleAvailability.refresh}>Tentar novamente</button></p>}
+        <PublicSchedulePicker scheduleDays={rescheduleAvailability.days} selectedDate={selectedRescheduleDate} selectedOccurrenceKey={selectedRescheduleOccurrence} pendingReservation={{ date: selectedRescheduleDate, count }} onSelect={selectRescheduleDate} />
+        {selectedRescheduleOccurrence && selectedDay && <label className="field"><span>Horário no local selecionado</span><select value={selectedRescheduleTime} onChange={(event) => setSelectedRescheduleTime(event.target.value)}><option value="">Escolha o horário</option>{selectedDay.slots.map((slot) => <option key={slot.time} value={slot.time} disabled={slot.remaining < count}>{slot.time} · {slot.remaining} vagas</option>)}</select></label>}
         <div className="prm-inline-actions">
           <button className="ghost-button" type="button" onClick={cancelReschedule}>Cancelar</button>
-          <button className="primary-action" type="button" disabled={!selectedRescheduleDate} onClick={confirmReschedule}>
-            Confirmar reagendamento
+          <button className="primary-action" type="button" disabled={rescheduling || !rescheduleAvailability.ready || !selectedRescheduleOccurrence || !selectedSlot} onClick={confirmReschedule}>
+            {rescheduling ? "Reagendando..." : "Confirmar reagendamento"}
           </button>
         </div>
       </div>
@@ -5396,14 +5446,16 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
                 <p className="prm-section-title">Procedimento</p>
                 <div className="prm-procedure-fields">
                   <label className="field">
-                    <span>Microchip</span>
+                    <span>Microchip conferido do primeiro animal</span>
                     <input
                       value={attendanceData.microchip}
                       readOnly={readOnly}
                       onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
                       placeholder="Código aplicado ou lido"
                     />
+                    <small>Preencha após ler ou aplicar o microchip. O código informado pelo tutor não é confirmação.</small>
                   </label>
+                  {normalizedRequest.animals?.slice(1).map((animal, index) => animal.id && <label className="field" key={animal.id}><span>Microchip conferido: {animal.name || `animal ${index + 2}`}</span><input readOnly={readOnly} value={confirmedAnimalChips[animal.id] || ""} onChange={(event) => setConfirmedAnimalChips((current) => ({ ...current, [animal.id]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))} placeholder="Código aplicado ou lido" /></label>)}
                   <label className="field">
                     <span>Observação</span>
                     <input
@@ -5445,6 +5497,7 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
           )}
           {!isRescheduleMode && modalTab === "anexos" && (
             <div className="prm-section prm-section--documents">
+              {reviewError && <p className="form-error" role="alert">{reviewError}</p>}
               <div className="prm-section-head">
                 <p className="prm-section-label">Documentos</p>
                 <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
@@ -6798,8 +6851,11 @@ function ConfigView({
     useAi: true,
     required: true,
     active: true,
+    reuseScope: String(DocumentReuseScope.REQUEST),
+    reuseValidityDays: "",
   };
   const [newDocument, setNewDocument] = useState(emptyDocumentForm);
+  const [documentPolicyError, setDocumentPolicyError] = useState("");
   const [newRequiredCriterion, setNewRequiredCriterion] = useState("");
   const [newRejectionCriterion, setNewRejectionCriterion] = useState("");
   const [newSectorName, setNewSectorName] = useState("");
@@ -7217,6 +7273,7 @@ function ConfigView({
       active: payload.active !== false,
       accept: existing.accept || ["image/jpeg", "image/png", "application/pdf"],
       maxSizeMb: existing.maxSizeMb || 5,
+      ...normalizeDocumentReusePolicy(payload),
       analysisRules: {
         ...existingAnalysisRules,
         expectedDocument: String(payload.expectedDocument || "").trim().toUpperCase(),
@@ -7295,6 +7352,7 @@ function ConfigView({
   }
 
   function openDocumentModal(document = null) {
+    setDocumentPolicyError("");
     if (document) {
       const normalized = normalizeDocumentType(document);
       const rules = normalized.analysisRules || {};
@@ -7306,6 +7364,8 @@ function ConfigView({
         useAi: rules.useAi !== false,
         required: normalized.required !== false,
         active: normalized.active !== false,
+        reuseScope: normalized.reuseScope,
+        reuseValidityDays: normalized.reuseValidityDays == null ? "" : String(normalized.reuseValidityDays),
       });
       setNewRequiredCriterion((Array.isArray(rules.requiredCriteria) ? rules.requiredCriteria : []).join("\n"));
       setNewRejectionCriterion((Array.isArray(rules.rejectionCriteria) ? rules.rejectionCriteria : []).join("\n"));
@@ -9743,8 +9803,11 @@ function ConfigView({
             className="config-modal document-analysis-modal config-environment-modal"
             onSubmit={(event) => {
               event.preventDefault();
+              const { policy, error } = documentPolicyFromForm(newDocument.reuseScope, newDocument.reuseValidityDays);
+              if (error) { setDocumentPolicyError(error); return; }
               createDocumentType({
                 ...newDocument,
+                ...policy,
                 requiredCriteria: textToCriteriaList(newRequiredCriterion),
                 rejectionCriteria: textToCriteriaList(newRejectionCriterion),
               });
@@ -9790,6 +9853,12 @@ function ConfigView({
               </div>
             </div>
             <div className="document-modal-body">
+              {documentPolicyError && <p className="form-error" role="alert">{documentPolicyError}</p>}
+              <section className="document-modal-panel">
+                <label className="field"><span>Abrangência para reaproveitamento</span><select value={newDocument.reuseScope} onChange={(event) => setNewDocument((current) => ({ ...current, reuseScope: event.target.value }))}><option value={DocumentReuseScope.REQUEST}>Somente esta solicitação</option><option value={DocumentReuseScope.TUTOR}>Tutor, entre seus pedidos</option><option value={DocumentReuseScope.ANIMAL}>Este animal, entre seus pedidos</option></select></label>
+                <label className="field"><span>Prazo para reaproveitamento em dias (opcional)</span><input type="number" min="1" max="36525" step="1" value={newDocument.reuseValidityDays} onChange={(event) => setNewDocument((current) => ({ ...current, reuseValidityDays: event.target.value }))} placeholder="Sem prazo" /></label>
+                <small>Contado desde o envio original do arquivo. Vazio significa sem vencimento por idade; a conferência do conteúdo continua necessária.</small>
+              </section>
               <div className="document-identity-grid">
                 <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residencia" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
                 <label className="field document-sigla-field">
@@ -11907,40 +11976,6 @@ function getScheduleMonthKey(dateText) {
   const [, month, year] = normalizeScheduleDateText(dateText).split("/");
   if (!month || !year) return "";
   return `${month}/${year}`;
-}
-
-function getScheduleSlotUsage(requests, date, slots = []) {
-  const usage = new Map(normalizeScheduleSlots(slots).map((slot) => [slot.time, 0]));
-  let unassigned = 0;
-
-  requests
-    .map(normalizeRequest)
-    .filter((request) => (request.preferredSchedule || request.appointment || request.schedule_date) === date)
-    .forEach((request) => {
-      const count = countRequestAnimals(request);
-      const slotTime = request.scheduleSlotTime || request.scheduleTime;
-      if (slotTime && usage.has(slotTime)) {
-        usage.set(slotTime, usage.get(slotTime) + count);
-      } else {
-        unassigned += count;
-      }
-    });
-
-  normalizeScheduleSlots(slots).forEach((slot) => {
-    if (unassigned <= 0) return;
-    const used = usage.get(slot.time) || 0;
-    const assignable = Math.min(Math.max(slot.vacancies - used, 0), unassigned);
-    usage.set(slot.time, used + assignable);
-    unassigned -= assignable;
-  });
-
-  return usage;
-}
-
-function getOfferedScheduleSlot(day, requests, requiredVacancies = 1) {
-  const slots = normalizeScheduleSlots(day?.slots, day?.startTime || day?.time, day?.vacancies);
-  const usage = getScheduleSlotUsage(requests, day?.date, slots);
-  return slots.find((slot) => Math.max(slot.vacancies - (usage.get(slot.time) || 0), 0) >= requiredVacancies) || null;
 }
 
 function buildScheduleMonths(days) {

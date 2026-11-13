@@ -26018,3 +26018,48 @@ small,
   border-radius: 10px;
   background: #fff;
 }
+
+.procedure-entry-options,
+.registered-animal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.procedure-entry-card,
+.registered-animal-card,
+.registered-readonly-summary {
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--border, #dce4e0);
+  border-radius: 14px;
+  background: #fff;
+  color: inherit;
+  text-align: left;
+}
+
+.procedure-entry-card { cursor: pointer; font: inherit; }
+.procedure-entry-card strong { font-size: 1.1rem; }
+.procedure-entry-card:focus-visible,
+.procedure-entry-card:hover { border-color: #4d8b6a; outline-offset: 3px; }
+.procedure-entry-card:disabled { cursor: default; opacity: .6; }
+.procedure-entry-card span { line-height: 1.5; }
+.registered-animal-card h3,
+.registered-animal-card p { margin: 0; }
+.registered-readonly-summary dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; }
+.registered-readonly-summary dt { color: #60716a; }
+.registered-readonly-summary dd { margin: 0; overflow-wrap: anywhere; }
+.registered-request-selection,
+.reusable-document-options,
+.schedule-occurrence-options { display: grid; gap: 14px; }
+.reusable-document-option { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; border: 1px solid #dce4e0; border-radius: 10px; }
+.reusable-document-option > div { display: grid; gap: 5px; flex: 1 1 180px; overflow-wrap: anywhere; }
+.reused-document-badge { color: #186a46; font-weight: 600; }
+.reused-document-frame { width: 100%; height: 65dvh; border: 0; }
+.reused-document-image { display: block; max-width: 100%; max-height: 65dvh; object-fit: contain; margin: auto; }
+@media (max-width: 540px) {
+  .registered-readonly-summary dl { grid-template-columns: 1fr; gap: 5px; }
+  .registered-readonly-summary dd { margin-bottom: 8px; }
+}

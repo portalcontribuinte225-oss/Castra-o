@@ -1,11 +1,13 @@
 import type { AnyRecord } from "./types";
 import { maskCpf, maskName } from "./utils";
+import { normalizeDocumentReusePolicy } from "../shared/document-reuse-contract.js";
+import { RequestKind, RequestStatus } from "../shared/request-contract.js";
 
 export const statuses = [
-  "NOVA",
-  "AGENDADA",
-  "REALIZADA",
-  "CANCELADA",
+  RequestStatus.NEW,
+  RequestStatus.SCHEDULED,
+  RequestStatus.COMPLETED,
+  RequestStatus.CANCELLED,
 ];
 
 export const statusLabels: AnyRecord = {
@@ -16,10 +18,10 @@ export const statusLabels: AnyRecord = {
 };
 
 export const RequestType = {
-  PROCEDURE: "PROCEDIMENTO",
-  ANIMAL_DEATH: "ANIMAL_OBITO",
-  TUTOR_TRANSFER: "TROCA_TUTOR",
-  COMPLAINT: "DENUNCIA",
+  PROCEDURE: RequestKind.PROCEDURE,
+  ANIMAL_DEATH: RequestKind.DEATH,
+  TUTOR_TRANSFER: RequestKind.TRANSFER,
+  COMPLAINT: RequestKind.COMPLAINT,
 } as const;
 
 export const requestTypeDomainLabels: AnyRecord = {
@@ -210,6 +212,7 @@ export function normalizeDocumentType(document: AnyRecord = {}): AnyRecord {
 
   return {
     ...rest,
+    ...normalizeDocumentReusePolicy(document),
     required: document.required !== false,
     active: document.active !== false,
     accept: Array.isArray(document.accept) && document.accept.length ? document.accept : DEFAULT_DOCUMENT_ACCEPT,

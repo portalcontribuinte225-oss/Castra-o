@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { AnyRecord } from "../types";
-import { countUsedVacancies, isPastScheduleDay, mergeTags, normalizeRequest } from "../domain";
+import { mergeTags, normalizeRequest } from "../domain";
 import { getNotificationNotice } from "./notifications/notification-results";
 import type { NotificationResult } from "./notifications/notification-results";
 import { normalizeText } from "../utils";
@@ -26,16 +26,12 @@ export function useRequestActions({
   patchRequest,
   currentUser,
   teams = { sectors: [], users: [] },
-  requests = [],
-  scheduleDays = [],
   showToast,
   setSelectedId,
 }: {
   patchRequest?: (id: string, patch: AnyRecord, note?: string) => Promise<AnyRecord>;
   currentUser: AnyRecord;
   teams?: AnyRecord;
-  requests?: AnyRecord[];
-  scheduleDays?: AnyRecord[];
   showToast: ShowToast;
   setSelectedId?: (id: string) => void;
 }) {
@@ -46,9 +42,6 @@ export function useRequestActions({
   const currentTeamUser = activeUsers.find((user: AnyRecord) => user.email && currentUser?.email && user.email.toLowerCase() === currentUser.email.toLowerCase())
     || activeUsers.find((user: AnyRecord) => user.id === currentUser?.id);
   const currentUserSector = activeSectors.find((sector: AnyRecord) => getActionUserSectorIds(currentTeamUser).includes(sector.id));
-  const activeScheduleDays = scheduleDays
-    .filter((day: AnyRecord) => day.active !== false && !isPastScheduleDay(day.date))
-    .map((day: AnyRecord) => ({ ...day, remaining: Math.max((day.vacancies || 0) - countUsedVacancies(requests, day.date), 0) }));
 
   function showNotificationNotice(updated: AnyRecord, precedingResults: NotificationResult[] = []) {
     const notice = getNotificationNotice(updated?.notificationResults, precedingResults);
@@ -70,8 +63,9 @@ export function useRequestActions({
       const updated = await patchRequest?.(request.id, patch, `Agenda confirmada por ${currentUser.name}`);
       showToast("Agenda confirmada com sucesso", "success");
       showNotificationNotice(updated, precedingResults);
-    } catch { showToast("Erro ao confirmar agenda", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch, ...updated }) : current);
+      return true;
+    } catch (failure) { showToast(failure?.message || "Erro ao confirmar agenda", "error"); return false; }
   }
 
   async function archiveWithTag(request: AnyRecord, tag: string, note?: string) {
@@ -82,11 +76,11 @@ export function useRequestActions({
     try {
       await patchRequest?.(request.id, patch, note);
       showToast("Processo cancelado", "info");
-    } catch { showToast("Erro ao cancelar processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+    } catch (failure) { showToast(failure?.message || "Erro ao cancelar processo", "error"); }
   }
 
-  async function rescheduleFromPreview(request: AnyRecord, date: string, reason = "") {
+  async function rescheduleFromPreview(request: AnyRecord, date: string, reason = "", selection?: { occurrenceKey: string; time: string }) {
     if (!request || !date) return;
     const note = String(reason || "").trim();
     const patch = {
@@ -95,13 +89,15 @@ export function useRequestActions({
       previousSchedule: request.preferredSchedule || request.appointment || "Não informado",
       preferredSchedule: date,
       appointment: date,
+      ...(selection ? { workflow_data: { ...(request.workflow_data || request.workflowData || {}), scheduleOccurrenceKey: selection.occurrenceKey, scheduleSlotTime: selection.time, scheduleTime: selection.time } } : {}),
     };
     try {
       const updated = await patchRequest?.(request.id, patch, `Reagendada por ${currentUser.name}: ${request.preferredSchedule || "sem data"} -> ${date}${note ? `. Motivo: ${note}` : ""}`);
       showToast(`Processo reagendado para ${date}`, "success");
       showNotificationNotice(updated);
-    } catch { showToast("Erro ao reagendar processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch, ...updated }) : current);
+      return true;
+    } catch (failure) { showToast(failure?.message || "Erro ao reagendar processo", "error"); return false; }
   }
 
   async function assignFromPreview(request: AnyRecord, assignment: AnyRecord = {}) {
@@ -160,8 +156,8 @@ export function useRequestActions({
     try {
       await patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
       showToast("Processo indeferido", "warning");
-    } catch { showToast("Erro ao indeferir processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+    } catch (failure) { showToast(failure?.message || "Erro ao indeferir processo", "error"); }
   }
 
   async function confirmSpecialRequest(request: AnyRecord, data: AnyRecord = {}) {
@@ -173,8 +169,8 @@ export function useRequestActions({
       const updated = await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}${note ? `. Conclusão: ${note}` : ""}`);
       showToast("Processo confirmado com sucesso", "success");
       showNotificationNotice(updated);
-    } catch { showToast("Erro ao confirmar processo", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch, ...updated }) : current);
+    } catch (failure) { showToast(failure?.message || "Erro ao confirmar processo", "error"); }
   }
 
   async function confirmAttendanceFromProcess(request: AnyRecord, data: AnyRecord = {}) {
@@ -191,8 +187,8 @@ export function useRequestActions({
       ? currentAnimals.map((animal: AnyRecord, index: number) => index === 0 ? {
         ...animal,
         ...(hasAnimalData ? animalData : {}),
-        ...(microchip ? { hasChip: "Sim", microchip } : {}),
-      } : animal)
+        ...(microchip ? { hasChip: "Sim", microchip, confirmedMicrochip: microchip } : {}),
+      } : { ...animal, ...(data.confirmedAnimalChips?.[animal.id] ? { confirmedMicrochip: String(data.confirmedAnimalChips[animal.id]).trim() } : {}) })
       : hasAnimalData || microchip
         ? [{ ...(hasAnimalData ? animalData : {}), ...(microchip ? { hasChip: "Sim", microchip } : {}) }]
         : currentAnimals;
@@ -206,8 +202,8 @@ export function useRequestActions({
       const updated = await patchRequest?.(request.id, patch, `Comparecimento confirmado${microchip ? `. Microchip: ${microchip}` : ""}${receita ? `. Receita registrada` : ""}${note ? `. Observação: ${note}` : ""}`);
       showToast("Comparecimento confirmado — procedimento realizado", "success");
       showNotificationNotice(updated);
-    } catch { showToast("Erro ao confirmar comparecimento", "error"); }
-    setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch, ...updated }) : current);
+    } catch (failure) { showToast(failure?.message || "Erro ao confirmar comparecimento", "error"); }
   }
 
   return {
@@ -216,7 +212,6 @@ export function useRequestActions({
     closePreview,
     activeSectors,
     activeUsers,
-    activeScheduleDays,
     approveRequest,
     archiveWithTag,
     rescheduleFromPreview,

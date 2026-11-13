@@ -1,6 +1,7 @@
 import { AuthAudience } from "../shared/auth-contract.js";
 import { splitSubmissionEnvelope } from "./features/tutor-access/submission-envelope";
 import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
+import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 
@@ -31,7 +32,7 @@ function headers(json = true) {
   return h;
 }
 
-async function request(method: string, path: string, body?: unknown) {
+async function request(method: string, path: string, body?: unknown, responseType: "json" | "blob" = "json") {
   const requestToken = getToken();
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -46,6 +47,7 @@ async function request(method: string, path: string, body?: unknown) {
     throw new ApiError(err.error || res.statusText, res.status, err.code || "", Number(err.retryAfter || res.headers.get("Retry-After")) || 0);
   }
   if (res.status === 204) return null;
+  if (responseType === "blob") return res.blob();
   return res.json();
 }
 
@@ -85,6 +87,10 @@ export const api = {
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),
 
   lookupAnimalByMicrochip: (microchip) => request("POST", "/animals/lookup", { microchip }),
+  getMyAnimals: (query = "", cursor = "") => request("GET", `/animals/mine?query=${encodeURIComponent(query)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`),
+  resolvePreviousAnimal: (reference: PreviousAnimalCandidate) => request("POST", "/animals/from-request", { sourceRequestId: reference.sourceRequestId, animalIndex: reference.animalIndex, fingerprint: reference.fingerprint }),
+  getAnimalRequestContext: (id: string, requestTypeId = "") => request("GET", `/animals/${encodeURIComponent(id)}/request-context${requestTypeId ? `?requestTypeId=${encodeURIComponent(requestTypeId)}` : ""}`),
+  getReusedDocumentContent: (animalId: string, reference: ReusedDocumentReference) => request("GET", `/animals/${encodeURIComponent(animalId)}/documents/${encodeURIComponent(reference.sourceRequestId)}/${encodeURIComponent(reference.attachmentId)}?hash=${encodeURIComponent(reference.hash)}`, undefined, "blob"),
   consultAnimalByMicrochip: (body) => request("POST", "/animals/consult", body),
   createAnimalDeathRequest: (animalId, body) => request("POST", `/animals/${animalId}/death`, body),
   createAnimalTransferRequest: (animalId, body) => request("POST", `/animals/${animalId}/transfer`, body),
@@ -103,6 +109,7 @@ export const api = {
   reviewAccessRequest: (id, body) => request("PATCH", `/access-requests/${id}/review`, body),
 
   getSchedule: (municipalityId = "") => request("GET", municipalityId ? `/schedule?municipalityId=${encodeURIComponent(municipalityId)}` : "/schedule"),
+  getScheduleAvailability: (municipalityId: string, from: string, to: string) => request("GET", `/schedule/availability?municipalityId=${encodeURIComponent(municipalityId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
   createScheduleDay: (body) => request("POST", "/schedule", body),
   bulkCreateScheduleDays: (body) => request("POST", "/schedule/bulk", body),
   updateScheduleDay: (id, body) => request("PATCH", `/schedule/${id}`, body),

@@ -27,6 +27,11 @@ async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
     calls.push({ sql, values });
     if (sql === "BEGIN") { transactionStarted = true; return { rows: [] }; }
     if (sql === "COMMIT" || sql === "ROLLBACK") { transactionStarted = false; return { rows: [] }; }
+    if (sql.includes("pg_advisory_xact_lock")) {
+      assert.equal(transactionStarted, true, "Schedule-affecting configuration must hold a transaction lock");
+      assert.deepEqual(values, [`schedule:${MUNICIPALITY_ID}`]);
+      return { rows: [] };
+    }
     if (sql.includes("SELECT value FROM config")) {
       if (values[0] === "whatsapp_quota" && sql.includes("FOR UPDATE")) {
         assert.equal(transactionStarted, true, "Quota row must be locked inside a transaction");
@@ -84,6 +89,35 @@ test("public notification configuration requires a municipality and returns safe
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, buildDefaultNotificationConfig());
   assert.deepEqual(calls[0].values, [NOTIFICATIONS_CONFIG_KEY, MUNICIPALITY_ID]);
+});
+
+test("document policy reads default to request scope and admin writes validate bounded periods", async (t) => {
+  const { request, store } = await fixture(t);
+  const key = "castragestao:document-types";
+  store.set(`${key}:${MUNICIPALITY_ID}`, [{ id: "identity", name: "Identity" }]);
+  const read = await request(`/config/${key}?municipalityId=${MUNICIPALITY_ID}`);
+  assert.equal(read.status, 200);
+  assert.equal(read.body[0].reuseScope, "request");
+  assert.equal(read.body[0].reuseValidityDays, null);
+  for (const policy of [{ reuseScope: "global" }, { reuseValidityDays: 0 }, { reuseValidityDays: "30" }, { reuseValidityDays: Number.MAX_SAFE_INTEGER }]) {
+    const rejected = await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: [{ id: "identity", ...policy }] });
+    assert.equal(rejected.status, 400);
+  }
+  const saved = await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: [{ id: "identity", reuseScope: "tutor", reuseValidityDays: 30 }] });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.value[0].reuseValidityDays, 30);
+  assert.equal((await request(`/config/${key}`, { user: { ...ADMIN, role: "tutor" }, method: "PUT", body: [] })).status, 403);
+});
+
+test("request type document policy is validated and normalized without removing existing fields", async (t) => {
+  const { request } = await fixture(t);
+  const key = "castragestao:request-types";
+  const invalid = await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: [{ id: "procedure", documents: [{ id: "identity", reuseValidityDays: -1 }] }] });
+  assert.equal(invalid.status, 400);
+  const saved = await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: [{ id: "procedure", stepAgenda: false, documents: [{ id: "identity", required: false }] }] });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.value[0].stepAgenda, false);
+  assert.deepEqual(saved.body.value[0].documents[0], { id: "identity", required: false, reuseScope: "request", reuseValidityDays: null });
 });
 
 test("tutors cannot read internal config or write any known or unknown key", async (t) => {
