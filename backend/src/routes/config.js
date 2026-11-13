@@ -9,9 +9,12 @@ import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from
 
 const router = Router();
 
+const BREEDS_CONFIG_KEY = "castragestao:breeds";
+
 // Keys that fall back to factory defaults when the municipality has no row yet.
 const DEFAULT_CONFIG_VALUE_BUILDERS = {
   [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes,
+  [BREEDS_CONFIG_KEY]: () => [],
 };
 
 // Keys de configuração que expõem dados sensíveis (usuários, permissões)

@@ -84,6 +84,7 @@ export const brazilStatesFallback = [
 export const initialDocumentTypes: AnyRecord[] = [];
 export const initialRequestTypes: AnyRecord[] = [];
 export const initialIdentificationTypes: AnyRecord[] = [];
+export const initialBreeds: AnyRecord[] = [];
 export const initialSpecies: AnyRecord[] = [];
 export const initialSizes: AnyRecord[] = [];
 export const initialMunicipalities: AnyRecord[] = [];
@@ -152,6 +153,7 @@ export const CONFIG_KEYS = {
   documentTypes: "castragestao:document-types",
   species: "castragestao:species",
   sizes: "castragestao:sizes",
+  breeds: "castragestao:breeds",
   teams: "castragestao:teams",
   scheduleRules: "castragestao:schedule-rules",
   permissionGroups: "permission_groups",

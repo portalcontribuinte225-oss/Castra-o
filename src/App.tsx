@@ -73,6 +73,7 @@ import {
   getNextUpcomingMutirao,
   hiddenWorkflowTags,
   initialAiSettings,
+  initialBreeds,
   initialDocumentTypes,
   initialIdentificationTypes,
   initialMunicipalities,
@@ -161,6 +162,8 @@ import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-f
 import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
 import { useRequestFilterResults, useRequestFilters } from "./features/request-filters/use-request-filters";
+import { BreedsConfig } from "./features/breeds/breeds-config";
+import { findSpeciesIdByName, getBreedOptions } from "./features/breeds/breeds";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
 import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./features/request-steps/request-steps";
@@ -192,6 +195,7 @@ const environmentConfigTabs: ConfigTabItem[] = [
   { id: "identification", label: "Tipo de Identificação" },
   { id: "sizes", label: "Portes" },
   { id: "species", label: "Espécies" },
+  { id: "breeds", label: "Raças" },
   { id: "documents", label: "Documentos Solicitados" },
 ];
 
@@ -314,6 +318,7 @@ export default function App() {
   const [speciesOptions, setSpeciesOptions] = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
   const [identificationTypes, setIdentificationTypes] = useState([]);
+  const [breeds, setBreeds] = useState([]);
   const [municipalities, setMunicipalities] = useState(initialMunicipalities);
   const [aiSettings, setAiSettings] = useState(initialAiSettings);
   const [scheduleDays, setScheduleDays] = useState([]);
@@ -447,6 +452,7 @@ export default function App() {
           setSpeciesOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.species], municipality)));
           setSizeOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.sizes], municipality)));
           setIdentificationTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.identificationTypes], municipality)));
+          setBreeds(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.breeds], municipality)));
           setTeams({
             sectors: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.sectors, municipality))),
             users: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.users, municipality))),
@@ -480,6 +486,7 @@ export default function App() {
       [CONFIG_KEYS.species, setSpeciesOptions],
       [CONFIG_KEYS.sizes, setSizeOptions],
       [CONFIG_KEYS.identificationTypes, setIdentificationTypes],
+      [CONFIG_KEYS.breeds, setBreeds],
       [CONFIG_KEYS.teams, setTeams],
       [CONFIG_KEYS.permissionGroups, setPermissionGroups],
       [CONFIG_KEYS.scheduleRules, (rules) => setScheduleRules((Array.isArray(rules) ? rules : []).map((rule) => {
@@ -503,6 +510,7 @@ export default function App() {
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.identificationTypes]) api.setConfig(CONFIG_KEYS.identificationTypes, identificationTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, identificationTypes]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.breeds]) api.setConfig(CONFIG_KEYS.breeds, breeds).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, breeds]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
@@ -774,6 +782,7 @@ export default function App() {
           speciesOptions={speciesOptions}
           sizeOptions={sizeOptions}
           identificationTypes={identificationTypes}
+          breeds={breeds}
           aiSettings={aiSettings}
           onRequestCreated={registerCreatedRequest}
         />
@@ -810,6 +819,7 @@ export default function App() {
   const scopedSpeciesOptions = filterByMunicipalityScope(speciesOptions, scopedMunicipalityId);
   const scopedSizeOptions = filterByMunicipalityScope(sizeOptions, scopedMunicipalityId);
   const scopedIdentificationTypes = filterByMunicipalityScope(identificationTypes, scopedMunicipalityId);
+  const scopedBreeds = filterByMunicipalityScope(breeds, scopedMunicipalityId);
   const scopedScheduleRules = filterByMunicipalityScope(scheduleRules, scopedMunicipalityId);
   const effectiveScopedScheduleDays = mergeScheduleDaysWithRules(scopedScheduleDays, scopedScheduleRules);
   const scopedPermissionGroups = filterByMunicipalityScope(permissionGroups, scopedMunicipalityId);
@@ -1088,6 +1098,8 @@ export default function App() {
           setSizeOptions={setSizeOptions}
           identificationTypes={scopedIdentificationTypes}
           setIdentificationTypes={setIdentificationTypes}
+          breeds={scopedBreeds}
+          setBreeds={setBreeds}
           municipalities={scopedMunicipalities}
           setMunicipalities={setMunicipalities}
           aiSettings={aiSettings}
@@ -2235,7 +2247,7 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -2253,6 +2265,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const [publicServiceSpeciesOptions, setPublicServiceSpeciesOptions] = useState(speciesOptions);
   const [publicServiceSizeOptions, setPublicServiceSizeOptions] = useState(sizeOptions);
   const [publicServiceIdentificationTypes, setPublicServiceIdentificationTypes] = useState(identificationTypes);
+  const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
   const adoptionSectionRef = useRef(null);
   const [resetScreen, setResetScreen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -2328,7 +2341,8 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     setPublicServiceSpeciesOptions(speciesOptions);
     setPublicServiceSizeOptions(sizeOptions);
     setPublicServiceIdentificationTypes(identificationTypes);
-  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, identificationTypes]);
+    setPublicServiceBreeds(breeds);
+  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, identificationTypes, breeds]);
 
   useEffect(() => {
     if (!selectedMunicipalityId) return;
@@ -2341,6 +2355,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSpeciesOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSizeOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.identificationTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceIdentificationTypes(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.breeds, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceBreeds(value); }).catch(() => {});
   }, [selectedMunicipalityId]);
 
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
@@ -2504,6 +2519,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 speciesOptions={publicServiceSpeciesOptions}
                 sizeOptions={publicServiceSizeOptions}
                 identificationTypes={publicServiceIdentificationTypes}
+                breeds={publicServiceBreeds}
                 initialType={procedurePrefill?.requestType || ""}
                 initialSchedule={procedurePrefill?.schedule || ""}
               />
@@ -3361,6 +3377,7 @@ function NewRequest({
   sizeOptions = initialSizes,
   documentTypes = initialDocumentTypes,
   identificationTypes = initialIdentificationTypes,
+  breeds = initialBreeds,
   initialSchedule = "",
   initialType = "",
   initialMunicipalityId = "",
@@ -3526,6 +3543,21 @@ function NewRequest({
     setAnimals((current) =>
       current.map((animal, animalIndex) => (animalIndex === index ? { ...animal, [field]: value } : animal)),
     );
+  }
+
+  // Changing the species or the request type changes the breed options, so the chosen breed is cleared.
+  function selectSpecies(index, value) {
+    setAnimals((current) =>
+      current.map((animal, animalIndex) => (
+        animalIndex === index && animal.species !== value ? { ...animal, species: value, breedDescription: "" } : animal
+      )),
+    );
+  }
+
+  function selectRequestType(name) {
+    if (requestData.type === name) return;
+    updateRequestField("type", name);
+    setAnimals((current) => current.map((animal) => ({ ...animal, breedDescription: "" })));
   }
 
   function removeAnimal(indexToRemove) {
@@ -4137,6 +4169,10 @@ function NewRequest({
               const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
               const showTypeSelector = externalLikeRegistration && index === 0 && configuredRequestTypes.length > 0;
               const showIdentificationPicker = index === 0 && activeIdentificationTypes.length > 1;
+              const breedOptions = getBreedOptions(breeds, {
+                requestTypeId: selectedRequestType?.id,
+                speciesId: findSpeciesIdByName(speciesOptions, animal.species),
+              });
               return (
                 <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
                   {animals.length > 1 && (
@@ -4173,7 +4209,7 @@ function NewRequest({
                                 key={type.id || type.name}
                                 type="button"
                                 className={`anm-type-card${requestData.type === type.name ? " is-selected" : ""}`}
-                                onClick={() => updateRequestField("type", type.name)}
+                                onClick={() => selectRequestType(type.name)}
                               >
                                 {type.name}
                               </button>
@@ -4184,15 +4220,25 @@ function NewRequest({
                       )}
 
                       <div className="animal-choice-grid three-col">
-                        <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => updateAnimal(index, "species", value)} invalid={submitAttempted && !animal.species} required />
+                        <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => selectSpecies(index, value)} invalid={submitAttempted && !animal.species} required />
                         <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} required />
                         <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} required />
                       </div>
-                      {animal.breedType === "Definida" && (
+                      {animal.breedType === "Definida" && (breedOptions.length > 0 ? (
+                        <label className="field">
+                          <span>Raça</span>
+                          <select value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)}>
+                            <option value="">Selecione a raça</option>
+                            {breedOptions.map((breed) => (
+                              <option key={breed.id} value={breed.name}>{breed.name}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : (
                         <div className="access-field" data-label="Raça">
                           <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
                         </div>
-                      )}
+                      ))}
                       {externalLikeRegistration ? (
                         <>
                           <CompactChoiceField label="Porte" value={animal.size} options={sizeChoiceOptions} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} required />
@@ -4591,6 +4637,7 @@ function AdminDashboard({
   requestTypes = initialRequestTypes,
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
+  breeds = initialBreeds,
   aiSettings = initialAiSettings,
   teams = initialTeams,
   municipalities = [],
@@ -4845,6 +4892,7 @@ function AdminDashboard({
               aiSettings={aiSettings}
               speciesOptions={speciesOptions}
               sizeOptions={sizeOptions}
+              breeds={breeds}
             />
           </div>
         </div>
@@ -6888,6 +6936,8 @@ function ConfigView({
   setSizeOptions,
   identificationTypes = initialIdentificationTypes,
   setIdentificationTypes,
+  breeds = initialBreeds,
+  setBreeds,
   municipalities = initialMunicipalities,
   setMunicipalities,
   scheduleDays = [],
@@ -7625,6 +7675,11 @@ function ConfigView({
       setIdentificationTypes?.((current) => mergeScopedConfigItems(
         current,
         scopeConfigItems(createdConfigs[CONFIG_KEYS.identificationTypes], createdMunicipalityScope),
+        created.id,
+      ));
+      setBreeds?.((current) => mergeScopedConfigItems(
+        current,
+        scopeConfigItems(createdConfigs[CONFIG_KEYS.breeds], createdMunicipalityScope),
         created.id,
       ));
       setPermissionGroups?.((current) => mergeScopedConfigItems(
@@ -8638,6 +8693,10 @@ function ConfigView({
 
       {configArea === "environment" && configTab === "species" && (
         <SimpleConfigList title="Espécies" items={filteredSpecies} allItems={speciesOptions} filterValue={configStatusFilter} onFilterChange={setConfigStatusFilter} onCreate={() => openSpeciesModal()} onEdit={openSpeciesModal} onPatch={(id, patch) => patchListItem(setSpeciesOptions, id, patch)} />
+      )}
+
+      {configArea === "environment" && configTab === "breeds" && (
+        <BreedsConfig items={breeds} setItems={setBreeds} municipalityScopeId={configMunicipalityScopeId} speciesOptions={speciesOptions} requestTypes={requestTypes} />
       )}
 
       {configArea === "sectors" && (
