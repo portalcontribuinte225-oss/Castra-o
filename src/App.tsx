@@ -74,6 +74,7 @@ import {
   hiddenWorkflowTags,
   initialAiSettings,
   initialDocumentTypes,
+  initialIdentificationTypes,
   initialMunicipalities,
   initialRequestTypes,
   initialScheduleDays,
@@ -160,7 +161,9 @@ import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-f
 import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
 import { useRequestFilterResults, useRequestFilters } from "./features/request-filters/use-request-filters";
-import { RequestStep, getVisibleSteps } from "./features/request-steps/request-steps";
+import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
+import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
+import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./features/request-steps/request-steps";
 
 type ConfigTabItem = {
   id: string;
@@ -186,6 +189,7 @@ const menu = [
 const environmentConfigTabs: ConfigTabItem[] = [
   { id: "agenda", label: "Agenda" },
   { id: "requests", label: "Tipo de Solicitação" },
+  { id: "identification", label: "Tipo de Identificação" },
   { id: "sizes", label: "Portes" },
   { id: "species", label: "Espécies" },
   { id: "documents", label: "Documentos Solicitados" },
@@ -309,6 +313,7 @@ export default function App() {
   const [documentTypes, setDocumentTypes] = useState([]);
   const [speciesOptions, setSpeciesOptions] = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
+  const [identificationTypes, setIdentificationTypes] = useState([]);
   const [municipalities, setMunicipalities] = useState(initialMunicipalities);
   const [aiSettings, setAiSettings] = useState(initialAiSettings);
   const [scheduleDays, setScheduleDays] = useState([]);
@@ -441,6 +446,7 @@ export default function App() {
           setDocumentTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.documentTypes], municipality)));
           setSpeciesOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.species], municipality)));
           setSizeOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.sizes], municipality)));
+          setIdentificationTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.identificationTypes], municipality)));
           setTeams({
             sectors: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.sectors, municipality))),
             users: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.users, municipality))),
@@ -473,6 +479,7 @@ export default function App() {
       [CONFIG_KEYS.documentTypes, setDocumentTypes],
       [CONFIG_KEYS.species, setSpeciesOptions],
       [CONFIG_KEYS.sizes, setSizeOptions],
+      [CONFIG_KEYS.identificationTypes, setIdentificationTypes],
       [CONFIG_KEYS.teams, setTeams],
       [CONFIG_KEYS.permissionGroups, setPermissionGroups],
       [CONFIG_KEYS.scheduleRules, (rules) => setScheduleRules((Array.isArray(rules) ? rules : []).map((rule) => {
@@ -495,6 +502,7 @@ export default function App() {
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.documentTypes]) api.setConfig(CONFIG_KEYS.documentTypes, documentTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, documentTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.identificationTypes]) api.setConfig(CONFIG_KEYS.identificationTypes, identificationTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, identificationTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
@@ -765,6 +773,7 @@ export default function App() {
           documentTypes={documentTypes}
           speciesOptions={speciesOptions}
           sizeOptions={sizeOptions}
+          identificationTypes={identificationTypes}
           aiSettings={aiSettings}
           onRequestCreated={registerCreatedRequest}
         />
@@ -800,6 +809,7 @@ export default function App() {
   const scopedDocumentTypes = filterByMunicipalityScope(documentTypes, scopedMunicipalityId);
   const scopedSpeciesOptions = filterByMunicipalityScope(speciesOptions, scopedMunicipalityId);
   const scopedSizeOptions = filterByMunicipalityScope(sizeOptions, scopedMunicipalityId);
+  const scopedIdentificationTypes = filterByMunicipalityScope(identificationTypes, scopedMunicipalityId);
   const scopedScheduleRules = filterByMunicipalityScope(scheduleRules, scopedMunicipalityId);
   const effectiveScopedScheduleDays = mergeScheduleDaysWithRules(scopedScheduleDays, scopedScheduleRules);
   const scopedPermissionGroups = filterByMunicipalityScope(permissionGroups, scopedMunicipalityId);
@@ -1076,6 +1086,8 @@ export default function App() {
           setSpeciesOptions={setSpeciesOptions}
           sizeOptions={scopedSizeOptions}
           setSizeOptions={setSizeOptions}
+          identificationTypes={scopedIdentificationTypes}
+          setIdentificationTypes={setIdentificationTypes}
           municipalities={scopedMunicipalities}
           setMunicipalities={setMunicipalities}
           aiSettings={aiSettings}
@@ -2223,7 +2235,7 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -2240,6 +2252,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const [publicServiceDocumentTypes, setPublicServiceDocumentTypes] = useState(documentTypes);
   const [publicServiceSpeciesOptions, setPublicServiceSpeciesOptions] = useState(speciesOptions);
   const [publicServiceSizeOptions, setPublicServiceSizeOptions] = useState(sizeOptions);
+  const [publicServiceIdentificationTypes, setPublicServiceIdentificationTypes] = useState(identificationTypes);
   const adoptionSectionRef = useRef(null);
   const [resetScreen, setResetScreen] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
@@ -2314,7 +2327,8 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     setPublicServiceDocumentTypes(documentTypes);
     setPublicServiceSpeciesOptions(speciesOptions);
     setPublicServiceSizeOptions(sizeOptions);
-  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions]);
+    setPublicServiceIdentificationTypes(identificationTypes);
+  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, identificationTypes]);
 
   useEffect(() => {
     if (!selectedMunicipalityId) return;
@@ -2326,6 +2340,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
     api.getConfig(CONFIG_KEYS.documentTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceDocumentTypes(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSpeciesOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSizeOptions(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.identificationTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceIdentificationTypes(value); }).catch(() => {});
   }, [selectedMunicipalityId]);
 
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
@@ -2488,6 +2503,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 aiSettings={aiSettings}
                 speciesOptions={publicServiceSpeciesOptions}
                 sizeOptions={publicServiceSizeOptions}
+                identificationTypes={publicServiceIdentificationTypes}
                 initialType={procedurePrefill?.requestType || ""}
                 initialSchedule={procedurePrefill?.schedule || ""}
               />
@@ -3344,6 +3360,7 @@ function NewRequest({
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
   documentTypes = initialDocumentTypes,
+  identificationTypes = initialIdentificationTypes,
   initialSchedule = "",
   initialType = "",
   initialMunicipalityId = "",
@@ -3382,6 +3399,7 @@ function NewRequest({
     latitude: "",
     longitude: "",
     type: initialType,
+    identificationTypeId: "",
     phone: currentUser.phone || "",
     notes: "",
     schedule: initialSchedule,
@@ -3391,7 +3409,6 @@ function NewRequest({
     {
       name: "",
       species: "",
-      procedureType: "",
       sex: "",
       breedType: "",
       breedDescription: "",
@@ -3439,7 +3456,9 @@ function NewRequest({
     .filter((type) => type.name.trim() && type.active !== false)
     .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
   const selectedRequestType = configuredRequestTypes.find((type) => type.name === requestData.type) || null;
-  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [selectedRequestType] });
+  const activeIdentificationTypes = publicFlow ? getActiveIdentificationTypes(identificationTypes) : [];
+  const selectedIdentificationType = resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
+  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [selectedRequestType, selectedIdentificationType] });
   const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
   const selectedTypeDocuments = (selectedRequestType?.documents || [])
     .map((document) => resolveConfiguredDocument(document, documentTypes))
@@ -3468,7 +3487,6 @@ function NewRequest({
         {
           name: "",
           species: "",
-          procedureType: "",
           sex: "",
           breedType: "",
           breedDescription: "",
@@ -3844,6 +3862,7 @@ function NewRequest({
       ...uploadedDocuments,
       ...(animalPhotoUpload ? [animalPhotoUpload] : []),
     ];
+    const identificationPayload = selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {};
     const localPayload = {
       tutor: requestData.tutor || currentUser.name,
       neighborhood: requestData.neighborhood || "Bairro não informado",
@@ -3876,9 +3895,11 @@ function NewRequest({
         isFarmer: requestData.isFarmer,
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+        ...identificationPayload,
       },
       animals: animals.map((animal, index) => ({
         ...animal,
+        ...identificationPayload,
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
       })),
@@ -4115,6 +4136,7 @@ function NewRequest({
               const isOpen = animals.length === 1 || expandedAnimal === index;
               const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
               const showTypeSelector = externalLikeRegistration && index === 0 && configuredRequestTypes.length > 0;
+              const showIdentificationPicker = index === 0 && activeIdentificationTypes.length > 1;
               return (
                 <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
                   {animals.length > 1 && (
@@ -4134,11 +4156,13 @@ function NewRequest({
 
                   {isOpen && <>
                     <div className="form-sub-card">
-                      <span className="form-sub-card-title">{showTypeSelector ? "Tipo e identificação" : "Identificação do animal"}</span>
+                      <span className="form-sub-card-title">{showTypeSelector || showIdentificationPicker ? "Tipo e identificação" : "Identificação do animal"}</span>
 
-                      <div className="animal-choice-grid species-row">
-                        <CompactChoiceField label="Tipo de Procedimento" value={animal.procedureType} options={["Castração", "Microchipagem", "Ambos"]} onChange={(value) => updateAnimal(index, "procedureType", value)} />
-                      </div>
+                      {showIdentificationPicker && (
+                        <div className="animal-choice-grid species-row">
+                          <CompactChoiceField label="Tipo de identificação" value={selectedIdentificationType?.id} options={activeIdentificationTypes.map((type) => ({ value: type.id, label: type.name }))} onChange={(id) => updateRequestField("identificationTypeId", id)} />
+                        </div>
+                      )}
 
                       {showTypeSelector && (
                         <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
@@ -4442,7 +4466,6 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
   const animalFieldLabels = [
     ["Nome", "name"],
     ["Espécie", "species"],
-    ["Procedimento", "procedureType"],
     ["Sexo", "sex"],
     ["Raça", "breedType"],
     ["Descrição da raça", "breedDescription"],
@@ -6863,6 +6886,8 @@ function ConfigView({
   setSpeciesOptions,
   sizeOptions = initialSizes,
   setSizeOptions,
+  identificationTypes = initialIdentificationTypes,
+  setIdentificationTypes,
   municipalities = initialMunicipalities,
   setMunicipalities,
   scheduleDays = [],
@@ -7595,6 +7620,11 @@ function ConfigView({
       setSizeOptions?.((current) => mergeScopedConfigItems(
         current,
         scopeConfigItems(createdConfigs[CONFIG_KEYS.sizes], createdMunicipalityScope),
+        created.id,
+      ));
+      setIdentificationTypes?.((current) => mergeScopedConfigItems(
+        current,
+        scopeConfigItems(createdConfigs[CONFIG_KEYS.identificationTypes], createdMunicipalityScope),
         created.id,
       ));
       setPermissionGroups?.((current) => mergeScopedConfigItems(
@@ -8566,6 +8596,10 @@ function ConfigView({
             ))}
           </div>
         </div>
+      )}
+
+      {configArea === "environment" && configTab === "identification" && (
+        <IdentificationTypesConfig items={identificationTypes} setItems={setIdentificationTypes} municipalityScopeId={configMunicipalityScopeId} />
       )}
 
       {configArea === "environment" && configTab === "agenda" && (
@@ -9738,7 +9772,7 @@ function ConfigView({
                   <span className="toggle-track"><span className="toggle-thumb" /></span>
                   <span className="request-type-step-toggle-text">
                     <span>Dados do tutor</span>
-                    <small>Desativar oculta esta etapa no cadastro público.</small>
+                    <small>Esta etapa só aparece se o tipo de identificação também permitir.</small>
                   </span>
                 </label>
                 <label className="toggle-switch config-active-toggle request-type-step-toggle">
@@ -9750,10 +9784,13 @@ function ConfigView({
                   <span className="toggle-track"><span className="toggle-thumb" /></span>
                   <span className="request-type-step-toggle-text">
                     <span>Agenda</span>
-                    <small>Desativar oculta esta etapa no cadastro público.</small>
+                    <small>Esta etapa só aparece se o tipo de identificação também permitir.</small>
                   </span>
                 </label>
               </div>
+              <span className="request-type-step-toggle-text">
+                <small>Etapas desta solicitação: {summarizeVisibleSteps([{ ...newRequestType, stepDocuments: true }])}</small>
+              </span>
             </div>
             <Field label="Nome" value={newRequestType.name} placeholder="Ex: Castração" onChange={(value) => setNewRequestType((current) => ({ ...current, name: value }))} />
             {newRequestType.charged && (

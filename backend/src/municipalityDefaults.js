@@ -1,4 +1,5 @@
 import { DEFAULT_MINIMUM_CONFIDENCE } from "./routes/ai.js";
+import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "./services/identification-type-defaults.js";
 
 export const DEFAULT_MUNICIPALITY_SECTOR_ID = "setor_gestao_municipal";
 export const DEFAULT_MUNICIPALITY_SECTOR_NAME = "Gestão Municipal";
@@ -145,6 +146,7 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
         ],
       },
     ],
+    [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes(),
     "castragestao:species": [
       { id: "canino", name: "Canino", active: true },
       { id: "felino", name: "Felino", active: true },

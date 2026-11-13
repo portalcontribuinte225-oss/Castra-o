@@ -5,8 +5,14 @@ import { isGlobalUser, isMunicipalAdmin, pickMunicipalityId } from "../tenant.js
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
 import { testProviderKey } from "./ai.js";
+import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
 
 const router = Router();
+
+// Keys that fall back to factory defaults when the municipality has no row yet.
+const DEFAULT_CONFIG_VALUE_BUILDERS = {
+  [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes,
+};
 
 // Keys de configuração que expõem dados sensíveis (usuários, permissões)
 // e que portanto exigem autenticação para leitura
@@ -109,7 +115,10 @@ router.get("/:key", optionalAuth, async (req, res) => {
 
   try {
     const { rows } = await pool.query(query.text, query.values);
-    if (!rows[0]) return res.json(null);
+    if (!rows[0]) {
+      const buildDefault = DEFAULT_CONFIG_VALUE_BUILDERS[key];
+      return res.json(buildDefault ? buildDefault() : null);
+    }
     res.json(publicConfigValue(key, rows[0].value));
   } catch (err) {
     res.status(500).json({ error: err.message });

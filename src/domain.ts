@@ -83,6 +83,7 @@ export const brazilStatesFallback = [
 
 export const initialDocumentTypes: AnyRecord[] = [];
 export const initialRequestTypes: AnyRecord[] = [];
+export const initialIdentificationTypes: AnyRecord[] = [];
 export const initialSpecies: AnyRecord[] = [];
 export const initialSizes: AnyRecord[] = [];
 export const initialMunicipalities: AnyRecord[] = [];
@@ -147,6 +148,7 @@ export const WHATSAPP_TEMPLATE_VARS = [
 
 export const CONFIG_KEYS = {
   requestTypes: "castragestao:request-types",
+  identificationTypes: "castragestao:identification-types",
   documentTypes: "castragestao:document-types",
   species: "castragestao:species",
   sizes: "castragestao:sizes",

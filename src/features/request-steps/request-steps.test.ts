@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RequestStep, getVisibleSteps } from "./request-steps";
+import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./request-steps";
 import type { VisibleStepsInput } from "./request-steps";
 
 function steps(overrides: Partial<VisibleStepsInput> = {}): RequestStep[] {
@@ -52,5 +52,19 @@ describe("getVisibleSteps", () => {
       RequestStep.SCHEDULE,
       RequestStep.DOCUMENTS,
     ]);
+  });
+});
+
+describe("summarizeVisibleSteps", () => {
+  it("lists every public step label when no config restricts anything", () => {
+    expect(summarizeVisibleSteps([])).toBe("Animal, Tutor, Agenda, Documentos");
+  });
+
+  it("omits the steps a config hides", () => {
+    expect(summarizeVisibleSteps([{ stepTutor: false }])).toBe("Animal, Agenda, Documentos");
+  });
+
+  it("combines several configs", () => {
+    expect(summarizeVisibleSteps([{ stepAgenda: false }, { stepDocuments: false }])).toBe("Animal, Tutor");
   });
 });

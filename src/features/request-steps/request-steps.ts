@@ -64,3 +64,9 @@ export function getVisibleSteps({ internal, skipTutor, configs }: VisibleStepsIn
     .filter((step) => isAllowedByConfigs(step, configs))
     .map(toStepItem);
 }
+
+export function summarizeVisibleSteps(configs: VisibleStepsInput["configs"]): string {
+  return getVisibleSteps({ internal: false, skipTutor: false, configs })
+    .map((item) => item.label)
+    .join(", ");
+}
