@@ -5,17 +5,17 @@ import { filterByMunicipalityScope, getItemMunicipalityId } from "../../domain";
 import type { AnyRecord } from "../../types";
 import { BreedFormModal } from "./breed-form-modal";
 import type { BreedFormErrors, BreedFormValues } from "./breed-form-modal";
-import { getDuplicateBreedNames, parseBreedNames } from "./breeds";
+import { hasDuplicateBreedName } from "./breeds";
 
 interface BreedsConfigProps {
   items: AnyRecord[];
   setItems: (updater: (current: AnyRecord[]) => AnyRecord[]) => void;
   municipalityScopeId: string;
   speciesOptions: AnyRecord[];
-  requestTypes: AnyRecord[];
 }
 
-const noErrors: BreedFormErrors = { names: "", speciesId: "", requestTypeIds: "" };
+const emptyForm: BreedFormValues = { name: "", speciesId: "", active: true };
+const noErrors: BreedFormErrors = { name: "", speciesId: "" };
 
 function isSameItem(left: AnyRecord, right: AnyRecord) {
   return left.id === right.id && getItemMunicipalityId(left) === getItemMunicipalityId(right);
@@ -30,26 +30,24 @@ function compareText(left: string, right: string) {
   return left.localeCompare(right, "pt-BR", { sensitivity: "base" });
 }
 
-export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOptions, requestTypes }: BreedsConfigProps) {
+export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOptions }: BreedsConfigProps) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AnyRecord | null>(null);
-  const [form, setForm] = useState<BreedFormValues>({ names: "", speciesId: "", requestTypeIds: [], active: true });
+  const [form, setForm] = useState<BreedFormValues>(emptyForm);
   const [submitAttempted, setSubmitAttempted] = useState(false);
 
-  const isEditing = editingItem !== null;
   const formMunicipalityId = editingItem ? getItemMunicipalityId(editingItem) : municipalityScopeId;
   const formSpecies = filterByMunicipalityScope(speciesOptions, formMunicipalityId).filter((item) => item.active !== false && item.name);
-  const formRequestTypes = filterByMunicipalityScope(requestTypes, formMunicipalityId).filter((item) => item.active !== false && item.name);
 
-  const parsedNames = isEditing ? [form.names.trim()].filter(Boolean) : parseBreedNames(form.names);
-  const duplicateNames = getDuplicateBreedNames(filterByMunicipalityScope(items, formMunicipalityId), parsedNames, form.speciesId, editingItem?.id);
+  const trimmedName = form.name.trim();
   const errors: BreedFormErrors = {
-    names: parsedNames.length === 0
-      ? (isEditing ? "Informe o nome da raça." : "Informe ao menos uma raça.")
-      : duplicateNames.length > 0 ? `Já cadastrada(s) para esta espécie: ${duplicateNames.join(", ")}.` : "",
+    name: !trimmedName
+      ? "Informe o nome da raça."
+      : hasDuplicateBreedName(filterByMunicipalityScope(items, formMunicipalityId), trimmedName, form.speciesId, editingItem?.id)
+        ? "Já existe uma raça com este nome para esta espécie."
+        : "",
     speciesId: form.speciesId ? "" : "Selecione a espécie.",
-    requestTypeIds: form.requestTypeIds.length > 0 ? "" : "Selecione ao menos um tipo de solicitação.",
   };
   const hasErrors = Object.values(errors).some(Boolean);
 
@@ -64,25 +62,8 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
     .sort((left, right) => compareText(left.speciesName, right.speciesName) || compareText(left.item.name || "", right.item.name || ""));
 
   function openModal(item: AnyRecord | null = null) {
-    const municipalityId = item ? getItemMunicipalityId(item) : municipalityScopeId;
     setEditingItem(item);
-    setForm(
-      item
-        ? {
-            names: item.name || "",
-            speciesId: item.speciesId || "",
-            requestTypeIds: Array.isArray(item.requestTypeIds) ? item.requestTypeIds : [],
-            active: item.active !== false,
-          }
-        : {
-            names: "",
-            speciesId: "",
-            requestTypeIds: filterByMunicipalityScope(requestTypes, municipalityId)
-              .filter((type) => type.active !== false && type.name)
-              .map((type) => type.id),
-            active: true,
-          },
-    );
+    setForm(item ? { name: item.name || "", speciesId: item.speciesId || "", active: item.active !== false } : emptyForm);
     setSubmitAttempted(false);
     setModalOpen(true);
   }
@@ -99,20 +80,12 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
       setSubmitAttempted(true);
       return;
     }
+    const values = { name: trimmedName, speciesId: form.speciesId, active: form.active };
     if (editingItem) {
-      const values = { name: parsedNames[0], speciesId: form.speciesId, requestTypeIds: form.requestTypeIds, active: form.active };
       setItems((current) => current.map((item) => (isSameItem(item, editingItem) ? { ...item, ...values } : item)));
     } else {
-      const createdAt = Date.now();
-      const created = parsedNames.map((name, index) => ({
-        id: `breed_${createdAt}_${index}`,
-        name,
-        speciesId: form.speciesId,
-        requestTypeIds: [...form.requestTypeIds],
-        active: form.active,
-        municipalityId: municipalityScopeId,
-      }));
-      setItems((current) => [...current, ...created]);
+      const created = { id: `breed_${Date.now()}`, ...values, municipalityId: municipalityScopeId };
+      setItems((current) => [...current, created]);
     }
     closeModal();
   }
@@ -132,7 +105,7 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
           {visibleItems.length === 0 && (
             <EmptyState
               title="Nenhuma raça cadastrada"
-              text="Cadastre as raças que o tutor poderá escolher. Cada raça é ligada a uma espécie e a um ou mais tipos de solicitação. Sem raças para o tipo e a espécie escolhidos, o formulário mantém o campo de texto."
+              text="Cadastre as raças que o tutor poderá escolher e depois vincule-as aos tipos de solicitação, em Tipo de Solicitação. Sem raças vinculadas ao tipo e à espécie escolhidos, o formulário mantém o campo de texto."
             />
           )}
           {visibleItems.map(({ item, speciesName }, index) => (
@@ -146,7 +119,7 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
               <span className="config-list-index">{index + 1}</span>
               <div className="config-list-main">
                 <strong>{item.name}</strong>
-                <span>{speciesName || "Espécie não encontrada"} · {Array.isArray(item.requestTypeIds) ? item.requestTypeIds.length : 0} tipo(s) de solicitação</span>
+                <span>{speciesName || "Espécie não encontrada"}</span>
               </div>
               <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
                 {item.active === false ? "Inativo" : "Ativo"}
@@ -158,11 +131,10 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
 
       {modalOpen && (
         <BreedFormModal
-          isEditing={isEditing}
+          isEditing={editingItem !== null}
           form={form}
           errors={submitAttempted ? errors : noErrors}
           species={formSpecies}
-          requestTypes={formRequestTypes}
           onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
           onSubmit={handleSubmit}
           onClose={closeModal}

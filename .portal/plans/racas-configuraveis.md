@@ -373,3 +373,12 @@ A implementação deve ser considerada pronta quando:
   - registrar as decisões fechadas: uma espécie por raça; texto livre quando não há raça para o tipo e a espécie; vínculo explícito com todos os tipos ativos pré-marcados ao criar e sem herança para tipos criados depois; cadastro em lote; nome da raça em `breedDescription` sem `breedId`; sem catálogo de fábrica; sem busca na lista;
   - anotar para a fase 6 que `animals.breed` (cadastro de animais, backend) nunca é preenchido pelo formulário, que grava `breedDescription` dentro de `requests.animals`; ao criar ou vincular o animal do cadastro, mapear `breedDescription` para `breed`;
   - atualizar a linha do texto de estado do código que fala de raça ("conferir se já existe alguma configuração de raça antes de criar a nova"), que passa a existir como `castragestao:breeds`.
+
+---
+
+## Ajuste pós-implementação (2026-11-12)
+
+Depois da implementação (commit `3ec8b45`) o usuário pediu duas mudanças que **substituem** o que este plano descreve:
+
+- **Sem cadastro em lote:** o modal "Criar raça" tem um campo de nome único (uma raça por vez). `parseBreedNames` e o textarea "uma raça por linha" foram removidos.
+- **Vínculo no tipo de solicitação:** a raça não tem mais `requestTypeIds`. O vínculo é `breedIds[]` dentro do **tipo de solicitação**, escolhido no modal "Tipo de solicitação" por um multisseletor das raças cadastradas (`BreedPicker`: pills agrupadas por espécie, no padrão de "Documentos vinculados"). O formulário monta as opções com `selectedRequestType.breedIds` e a espécie do animal. Raças gravadas antes do ajuste podem ter um `requestTypeIds` sem uso; o campo é ignorado.

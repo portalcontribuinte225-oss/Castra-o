@@ -162,6 +162,7 @@ import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-f
 import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
 import { useRequestFilterResults, useRequestFilters } from "./features/request-filters/use-request-filters";
+import { BreedPicker } from "./features/breeds/breed-picker";
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { findSpeciesIdByName, getBreedOptions } from "./features/breeds/breeds";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
@@ -4170,7 +4171,7 @@ function NewRequest({
               const showTypeSelector = externalLikeRegistration && index === 0 && configuredRequestTypes.length > 0;
               const showIdentificationPicker = index === 0 && activeIdentificationTypes.length > 1;
               const breedOptions = getBreedOptions(breeds, {
-                requestTypeId: selectedRequestType?.id,
+                breedIds: selectedRequestType?.breedIds,
                 speciesId: findSpeciesIdByName(speciesOptions, animal.species),
               });
               return (
@@ -4225,15 +4226,14 @@ function NewRequest({
                         <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} required />
                       </div>
                       {animal.breedType === "Definida" && (breedOptions.length > 0 ? (
-                        <label className="field">
-                          <span>Raça</span>
-                          <select value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)}>
+                        <div className="access-field" data-label="Raça">
+                          <select aria-label="Raça" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)}>
                             <option value="">Selecione a raça</option>
                             {breedOptions.map((breed) => (
                               <option key={breed.id} value={breed.name}>{breed.name}</option>
                             ))}
                           </select>
-                        </label>
+                        </div>
                       ) : (
                         <div className="access-field" data-label="Raça">
                           <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
@@ -6959,7 +6959,7 @@ function ConfigView({
   aiSettings = initialAiSettings,
   setAiSettings,
 }) {
-  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepTutor: true, stepAgenda: true, stepDocuments: true };
+  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepTutor: true, stepAgenda: true, stepDocuments: true, breedIds: [] };
   const emptyAgendaForm = {
     description: "Agenda padrão",
     active: true,
@@ -7274,6 +7274,7 @@ function ConfigView({
         overrideDailyLimit: Boolean(payload.overrideDailyLimit),
         municipalityId: payload.municipalityId || configMunicipalityScopeId,
         documents: selectedDocuments,
+        breedIds: Array.isArray(payload.breedIds) ? payload.breedIds : [],
         stepTutor: payload.stepTutor !== false,
         stepAgenda: payload.stepAgenda !== false,
         stepDocuments: true,
@@ -8696,7 +8697,7 @@ function ConfigView({
       )}
 
       {configArea === "environment" && configTab === "breeds" && (
-        <BreedsConfig items={breeds} setItems={setBreeds} municipalityScopeId={configMunicipalityScopeId} speciesOptions={speciesOptions} requestTypes={requestTypes} />
+        <BreedsConfig items={breeds} setItems={setBreeds} municipalityScopeId={configMunicipalityScopeId} speciesOptions={speciesOptions} />
       )}
 
       {configArea === "sectors" && (
@@ -9872,6 +9873,13 @@ function ConfigView({
                   return { ...current, documents: exists ? selectedDocuments.filter((item) => item.id !== document.id) : [...selectedDocuments, document] };
                 })
               }
+            />
+            <BreedPicker
+              breeds={breeds}
+              species={speciesOptions}
+              municipalityId={newRequestType.municipalityId || configMunicipalityScopeId}
+              selectedIds={newRequestType.breedIds || []}
+              onChange={(breedIds) => setNewRequestType((current) => ({ ...current, breedIds }))}
             />
             <div className="form-actions">
               <button className="primary-action" type="submit">Salvar</button>

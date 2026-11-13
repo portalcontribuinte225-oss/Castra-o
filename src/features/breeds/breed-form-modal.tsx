@@ -3,16 +3,14 @@ import { ConfigActiveToggle, Field, ModalHeader } from "../../components/ui";
 import type { AnyRecord } from "../../types";
 
 export interface BreedFormValues {
-  names: string;
+  name: string;
   speciesId: string;
-  requestTypeIds: string[];
   active: boolean;
 }
 
 export interface BreedFormErrors {
-  names: string;
+  name: string;
   speciesId: string;
-  requestTypeIds: string;
 }
 
 interface BreedFormModalProps {
@@ -20,25 +18,16 @@ interface BreedFormModalProps {
   form: BreedFormValues;
   errors: BreedFormErrors;
   species: AnyRecord[];
-  requestTypes: AnyRecord[];
   onChange: (patch: Partial<BreedFormValues>) => void;
   onSubmit: (event: FormEvent) => void;
   onClose: () => void;
 }
 
-export function BreedFormModal({ isEditing, form, errors, species, requestTypes, onChange, onSubmit, onClose }: BreedFormModalProps) {
-  function toggleRequestType(requestTypeId: string) {
-    onChange({
-      requestTypeIds: form.requestTypeIds.includes(requestTypeId)
-        ? form.requestTypeIds.filter((id) => id !== requestTypeId)
-        : [...form.requestTypeIds, requestTypeId],
-    });
-  }
-
+export function BreedFormModal({ isEditing, form, errors, species, onChange, onSubmit, onClose }: BreedFormModalProps) {
   return (
     <div className="modal-backdrop">
       <form className="config-modal compact config-environment-modal" onSubmit={onSubmit}>
-        <ModalHeader title={isEditing ? "Editar raça" : "Criar raças"} onClose={onClose} />
+        <ModalHeader title={isEditing ? "Editar raça" : "Criar raça"} onClose={onClose} />
         <div className="config-modal-options">
           <ConfigActiveToggle checked={form.active} onChange={(checked) => onChange({ active: checked })} />
         </div>
@@ -52,42 +41,14 @@ export function BreedFormModal({ isEditing, form, errors, species, requestTypes,
           </select>
         </label>
         {errors.speciesId && <small className="field-error-message">{errors.speciesId}</small>}
-        <div className="document-button-field">
-          <span>Tipos de solicitação</span>
-          <div className="document-button-grid">
-            {requestTypes.map((type) => (
-              <button
-                className={form.requestTypeIds.includes(type.id) ? "document-pill selected" : "document-pill"}
-                key={type.id}
-                type="button"
-                onClick={() => toggleRequestType(type.id)}
-              >
-                {type.name}
-              </button>
-            ))}
-          </div>
-        </div>
-        {errors.requestTypeIds && <small className="field-error-message">{errors.requestTypeIds}</small>}
-        {isEditing ? (
-          <Field
-            label="Nome"
-            value={form.names}
-            placeholder="Ex: Poodle"
-            invalid={Boolean(errors.names)}
-            onChange={(value) => onChange({ names: value })}
-          />
-        ) : (
-          <label className={`field${errors.names ? " invalid" : ""}`}>
-            <span>Raças (uma por linha)</span>
-            <textarea
-              rows={6}
-              value={form.names}
-              placeholder={"Poodle\nSiamês"}
-              onChange={(event) => onChange({ names: event.target.value })}
-            />
-          </label>
-        )}
-        {errors.names && <small className="field-error-message">{errors.names}</small>}
+        <Field
+          label="Nome"
+          value={form.name}
+          placeholder="Ex: Poodle"
+          invalid={Boolean(errors.name)}
+          onChange={(value) => onChange({ name: value })}
+        />
+        {errors.name && <small className="field-error-message">{errors.name}</small>}
         <div className="form-actions">
           <button className="primary-action" type="submit">Salvar</button>
         </div>
