@@ -8,6 +8,10 @@ import { DeliveryStatus } from "../../../shared/notification-contract.js";
 import { loadRequestSettings } from "../repositories/request-settings.js";
 import { prepareRequestSubmission, mergeProtectedWorkflow } from "../services/request-submission.js";
 import { notifyRequestChanges } from "../services/request-change-notifications.js";
+import { enrollTutorForRequest } from "../services/auth/tutor-enrollment.js";
+import { deliverAuthMessage } from "../services/auth/auth-message-delivery.js";
+import { AuthPurpose } from "../../../shared/auth-contract.js";
+import { validateRequestAnimalLink } from "../services/request-animal-link.js";
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(["NOVA", "AGENDADA", "REALIZADA", "CANCELADA"]);
@@ -25,6 +29,13 @@ const ALLOWED_REQUEST_TAGS = new Set([
 
 function pick(...values) {
   return values.find((value) => value !== undefined);
+}
+
+function withoutValidationKey(request) {
+  const visible = { ...request };
+  delete visible.validation_key;
+  delete visible.validationKey;
+  return visible;
 }
 
 function randomValidationKey() {
@@ -48,34 +59,6 @@ async function nextProtocol(client) {
     [year]
   );
   return `${String(rows[0].seq).padStart(6, "0")}/${year}`;
-}
-
-async function validationKeyForCpf(client, cpf) {
-  const normalizedCpf = normalizeCpf(cpf);
-  if (!normalizedCpf) return randomValidationKey();
-
-  const { rows: existing } = await client.query(
-    "SELECT validation_key FROM request_validation_keys WHERE cpf = $1",
-    [normalizedCpf],
-  );
-  if (existing[0]?.validation_key) return existing[0].validation_key;
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const candidate = randomValidationKey();
-    try {
-      const { rows } = await client.query(
-        `INSERT INTO request_validation_keys (cpf, validation_key)
-         VALUES ($1, $2)
-         RETURNING validation_key`,
-        [normalizedCpf, candidate],
-      );
-      return rows[0].validation_key;
-    } catch (error) {
-      if (error?.code !== "23505") throw error;
-    }
-  }
-
-  throw new Error("Nao foi possivel gerar uma chave de validacao unica.");
 }
 
 function parseSignedAt(value) {
@@ -121,12 +104,12 @@ function validateTags(value) {
 router.get("/", auth, async (req, res) => {
   try {
     const query = req.user.role === "tutor"
-      ? { text: "SELECT * FROM requests WHERE tutor_id = $1 ORDER BY created_at DESC", values: [req.user.id] }
+      ? { text: "SELECT * FROM requests WHERE tutor_id = $1 AND municipality_id = $2 ORDER BY created_at DESC", values: [req.user.id, req.user.municipalityId] }
       : isGlobalUser(req.user)
       ? { text: "SELECT * FROM requests ORDER BY created_at DESC", values: [] }
       : { text: "SELECT * FROM requests WHERE municipality_id = $1 ORDER BY created_at DESC", values: [req.user.municipalityId] };
     const { rows } = await pool.query(query.text, query.values);
-    res.json(rows);
+    res.json(req.user.role === "tutor" ? rows.map(withoutValidationKey) : rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -134,9 +117,10 @@ router.get("/", auth, async (req, res) => {
 
 router.get("/public/:validationKey", async (req, res) => {
   try {
-    const municipalityId = req.query.municipalityId || null;
-    const values = municipalityId ? [req.params.validationKey, municipalityId] : [req.params.validationKey];
-    const scope = municipalityId ? " AND municipality_id = $2" : "";
+    const municipalityId = requireMunicipality(req, res);
+    if (!municipalityId) return;
+    const values = [req.params.validationKey, municipalityId];
+    const scope = " AND municipality_id = $2";
     const { rows } = await pool.query(
       `SELECT * FROM requests WHERE validation_key = $1${scope} ORDER BY created_at DESC`,
       values
@@ -150,6 +134,7 @@ router.get("/public/:validationKey", async (req, res) => {
 router.post("/consult", async (req, res) => {
   try {
     const { validationKey, cpf, municipalityId } = req.body || {};
+    if (!municipalityId) return res.status(400).json({ error: "Município obrigatório para consulta." });
     const cleanCpf = normalizeCpf(cpf);
     if (!isValidCpf(cleanCpf)) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
     if (!validationKey) return res.status(400).json({ error: "Chave de consulta obrigatoria." });
@@ -176,20 +161,27 @@ router.post("/consult", async (req, res) => {
 
 router.post("/", optionalAuth, async (req, res) => {
   const body = req.body || {};
-  const tutorId = req.user?.id || null;
   const municipalityId = requireMunicipality(req, res);
   if (!municipalityId) return;
-  const client = await pool.connect();
+  let client;
+  let committed = false;
+  let released = false;
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
 
     const settings = await loadRequestSettings(municipalityId, client);
-    const { cpf, workflow, requestType, internal } = prepareRequestSubmission({
+    const { cpf, workflow, requestType, internal, tutorRequired } = prepareRequestSubmission({
       body, user: req.user, municipalityId,
       workflow: parseJsonObject(body.workflow_data || body.workflowData), settings,
     });
+    await validateRequestAnimalLink(client, { body, user: req.user, municipalityId });
+    const { tutorId, enrollment } = await enrollTutorForRequest(client, {
+      body: { ...body, cpf }, workflow, municipalityId, user: req.user, ip: req.ip,
+      tutorRequired: tutorRequired && !internal && requestType !== "DENUNCIA",
+    });
     const protocol = await nextProtocol(client);
-    const validationKey = await validationKeyForCpf(client, cpf);
+    const validationKey = randomValidationKey();
     const animals = Array.isArray(body.animals) ? body.animals : [];
     const firstAnimal = animals[0] || {};
     const scheduleDate = pick(body.schedule_date, body.preferredSchedule, body.appointment);
@@ -302,12 +294,29 @@ router.post("/", optionalAuth, async (req, res) => {
     }
 
     await client.query("COMMIT");
-    res.status(201).json(rows[0]);
+    committed = true;
+    client.release();
+    released = true;
+    if (enrollment) {
+      try {
+        enrollment.delivery = await deliverAuthMessage({
+          purpose: AuthPurpose.INITIAL_PASSWORD, municipalityId,
+          user: { name: rows[0].tutor_name },
+          email: workflow.followUp?.enabled ? workflow.followUp.email : "",
+          phone: workflow.followUp?.enabled ? workflow.followUp.phone : "",
+          temporaryPassword: enrollment.temporaryPassword,
+        });
+      } catch {
+        enrollment.delivery = [{ status: DeliveryStatus.FAILED, reason: "Acesso criado; não foi possível enviar a senha inicial." }];
+      }
+    }
+    res.set("Cache-Control", "no-store");
+    res.status(201).json({ request: withoutValidationKey(rows[0]), ...(enrollment ? { enrollment } : {}) });
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
+    if (client && !committed) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar a solicitação." });
   } finally {
-    client.release();
+    if (client && !released) client.release();
   }
 });
 
@@ -390,11 +399,12 @@ router.patch("/:id", auth, async (req, res) => {
     return res.status(400).json({ error: "Nenhum campo válido." });
   }
 
-  const client = await pool.connect();
+  let client;
   let committed = false;
   let released = false;
   let savedRequest;
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
     const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
     const scopeValues = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
@@ -460,8 +470,9 @@ router.patch("/:id", auth, async (req, res) => {
       if (!animalId && rows[0].animal_microchip) {
         const clean = String(rows[0].animal_microchip).toUpperCase().replace(/[^A-Z0-9]/g, "");
         const { rows: animalRows } = await pool.query(
-          `SELECT id FROM animals
-           WHERE regexp_replace(upper(COALESCE(microchip, '')), '[^A-Z0-9]', '', 'g') = $1 AND municipality_id = $2
+          `SELECT a.id FROM animals a
+           WHERE regexp_replace(upper(COALESCE(a.microchip, '')), '[^A-Z0-9]', '', 'g') = $1
+             AND EXISTS (SELECT 1 FROM animal_records r WHERE r.animal_id = a.id AND r.municipality_id = $2)
            LIMIT 1`,
           [clean, rows[0].municipality_id],
         );
@@ -471,7 +482,7 @@ router.patch("/:id", auth, async (req, res) => {
       if (rows[0].request_type === "ANIMAL_OBITO" && animalId) {
         try {
           await pool.query(
-            "UPDATE animals SET status = 'OBITO', updated_at = NOW() WHERE id = $1 AND municipality_id = $2",
+            "UPDATE animals a SET status = 'OBITO', updated_at = NOW() WHERE a.id = $1 AND EXISTS (SELECT 1 FROM animal_records r WHERE r.animal_id = a.id AND r.municipality_id = $2)",
             [animalId, rows[0].municipality_id],
           );
         } catch (deathErr) {
@@ -542,14 +553,15 @@ router.patch("/:id", auth, async (req, res) => {
     res.json(rows[0]);
   } catch (err) {
     if (committed) return res.json({ ...savedRequest, notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
-    if (!committed) await client.query("ROLLBACK").catch(() => {});
+    if (client && !committed) await client.query("ROLLBACK").catch(() => {});
     res.status(500).json({ error: "Não foi possível atualizar a solicitação." });
   } finally {
-    if (!released) client.release();
+    if (client && !released) client.release();
   }
 });
 
 router.delete("/:id", auth, async (req, res) => {
+  if (!isInternalUser(req.user)) return res.status(403).json({ error: "Operação restrita à equipe de atendimento." });
   try {
     const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
     const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];

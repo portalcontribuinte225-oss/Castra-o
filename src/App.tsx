@@ -176,6 +176,18 @@ import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-po
 import { NotificationSettings } from "./features/notifications/notification-settings";
 import type { NotificationResult } from "./features/notifications/notification-results";
 import { configsAllowStep } from "../shared/notification-contract.js";
+import { useSession } from "./features/tutor-access/use-session";
+import { AuthEntry } from "./features/tutor-access/auth-entry";
+import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
+import { TutorArea } from "./features/tutor-access/tutor-area";
+import { EnrollmentNotice } from "./features/tutor-access/enrollment-notice";
+import { AssistedRecovery } from "./features/tutor-access/assisted-recovery";
+import { AuthDeliverySettings } from "./features/tutor-access/auth-delivery-settings";
+import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./features/tutor-access/submission-envelope";
+import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
+import { validateTutorName } from "./features/tutor-access/tutor-identity";
+import { SessionBoundary } from "./features/tutor-access/session-boundary";
+import { getAdoptionInterestCount } from "./features/adoption-interest-count";
 
 type ConfigTabItem = {
   id: string;
@@ -299,24 +311,13 @@ function dedupeMunicipalityItems(items = []) {
 }
 
 export default function App() {
-  const [currentUser, setCurrentUserRaw] = useState(() => {
-    try {
-      const saved = localStorage.getItem("castragestao:user");
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
+  const session = useSession();
+  return <SessionBoundary session={session}
+    renderTutor={(user) => <TutorArea key={user.id} user={user} onSession={session.accept} onLogout={session.logout} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact cpf={user.cpf || ""} setActive={() => {}} />} />}
+    renderWorkspace={(user) => <ApplicationWorkspace key={user?.id || "public"} currentUser={user} setCurrentUser={session.accept} />} />;
+}
 
-  function setCurrentUser(user) {
-    if (user) {
-      localStorage.setItem("castragestao:user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("castragestao:user");
-      api.logout();
-    }
-    setCurrentUserRaw(user);
-  }
+function ApplicationWorkspace({ currentUser, setCurrentUser }: AnyRecord) {
   const [active, setActive] = useState("admin");
   const [configArea, setConfigArea] = useState("");
   const [configTab, setConfigTab] = useState("agenda");
@@ -348,10 +349,6 @@ export default function App() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [sidebarResetOpen, setSidebarResetOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [sidebarResetPassword, setSidebarResetPassword] = useState("");
-  const [sidebarResetConfirm, setSidebarResetConfirm] = useState("");
-  const [sidebarResetStatus, setSidebarResetStatus] = useState("");
-  const [sidebarResetSaving, setSidebarResetSaving] = useState(false);
 
   const selected = requests.find((request) => request.id === selectedId) || requests[0] || null;
   const metrics = useMemo(() => buildMetrics(requests), [requests]);
@@ -612,7 +609,7 @@ export default function App() {
     }
   }
 
-  async function createRequest(payload) {
+  async function createRequest(payload, onEnrollment?: (credential?: EnrollmentCredential) => void) {
     try {
       const newRequest = await api.createRequest({
         animal_name: payload.animalName || payload.animal_name,
@@ -650,7 +647,7 @@ export default function App() {
         fee: payload.fee || "",
         tags: payload.tags || [],
         workflow_data: payload.workflowData || payload.workflow_data || {},
-      });
+      }, onEnrollment);
       registerCreatedRequest(newRequest, { openAdmin: Boolean(currentUser) });
       return newRequest;
     } catch (err) {
@@ -699,7 +696,7 @@ export default function App() {
       });
     }
 
-    return normalized;
+    return { accessRequest: normalized, credential: updated.credential };
   }
 
   function registerCreatedRequest(newRequest, options: AnyRecord = {}) {
@@ -719,44 +716,7 @@ export default function App() {
     localStorage.setItem("castragestao:municipalityId", id);
   }
 
-  function closeSidebarReset() {
-    setSidebarResetOpen(false);
-    setSidebarResetPassword("");
-    setSidebarResetConfirm("");
-    setSidebarResetStatus("");
-    setSidebarResetSaving(false);
-  }
-
-  async function submitSidebarReset(event) {
-    event.preventDefault();
-    if (sidebarResetSaving) return;
-    if (sidebarResetPassword.length < 6) {
-      setSidebarResetStatus("A senha deve ter pelo menos 6 caracteres.");
-      return;
-    }
-    if (sidebarResetPassword !== sidebarResetConfirm) {
-      setSidebarResetStatus("As senhas não conferem.");
-      return;
-    }
-    setSidebarResetSaving(true);
-    setSidebarResetStatus("Salvando nova senha...");
-    try {
-      await api.upsertAuthUser({
-        name: currentUser.name,
-        email: currentUser.email,
-        role: currentUser.role,
-        municipalityId: currentUser.municipalityId || currentUser.municipality_id || "",
-        password: sidebarResetPassword,
-      });
-      setSidebarResetStatus("Senha redefinida com sucesso.");
-      setSidebarResetPassword("");
-      setSidebarResetConfirm("");
-    } catch (err) {
-      setSidebarResetStatus(err?.message || "Não foi possível redefinir a senha.");
-    } finally {
-      setSidebarResetSaving(false);
-    }
-  }
+  function closeSidebarReset() { setSidebarResetOpen(false); }
 
   function handleGlobalMunicipalityFilter(id) {
     setGlobalMunicipalityFilterId(id);
@@ -1167,40 +1127,7 @@ export default function App() {
         </button>
       </nav>
 
-      {sidebarResetOpen && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal reset-form" onSubmit={submitSidebarReset} role="dialog" aria-modal="true">
-            <ModalHeader title="Redefinir senha" subtitle={currentUser.email || currentUser.name} onClose={closeSidebarReset} icon={KeyRound} />
-            <label className="field">
-              <span>Nova senha</span>
-              <input
-                type="password"
-                value={sidebarResetPassword}
-                onChange={(event) => setSidebarResetPassword(event.target.value)}
-                placeholder="Mínimo 6 caracteres"
-                autoComplete="new-password"
-              />
-            </label>
-            <label className="field">
-              <span>Confirmar nova senha</span>
-              <input
-                type="password"
-                value={sidebarResetConfirm}
-                onChange={(event) => setSidebarResetConfirm(event.target.value)}
-                placeholder="Repita a nova senha"
-                autoComplete="new-password"
-              />
-            </label>
-            {sidebarResetStatus && <p className={sidebarResetStatus.includes("sucesso") ? "form-success" : "form-error"}>{sidebarResetStatus}</p>}
-            <div className="reset-form-actions">
-              <button className="ghost-button" type="button" onClick={closeSidebarReset}>Cancelar</button>
-              <button className="primary-action" type="submit" disabled={sidebarResetSaving}>
-                {sidebarResetSaving ? "Salvando..." : "Redefinir senha"}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
+      {sidebarResetOpen && <div className="modal-backdrop"><div className="workflow-modal reset-form" role="dialog" aria-modal="true"><PasswordChangeForm onChanged={(user) => { setCurrentUser(user); closeSidebarReset(); }} onCancel={closeSidebarReset} /></div></div>}
     </div>
   );
 }
@@ -1261,10 +1188,11 @@ function defaultMunicipalityUserToTeamUser(user: AnyRecord = {}, municipalityId 
 }
 
 function normalizeAccessRequest(item: AnyRecord = {}): AnyRecord {
+  const safeItem = stripEphemeralCredentials(item);
   const requesterType = item.requesterType || item.requester_type || "";
   const type = accessRequesterTypes.find((option) => option.id === requesterType);
   return {
-    ...item,
+    ...safeItem,
     requesterType,
     requesterLabel: type?.label || requesterType || "Solicitante",
     organizationName: item.organizationName || item.organization_name || "",
@@ -1273,7 +1201,6 @@ function normalizeAccessRequest(item: AnyRecord = {}): AnyRecord {
     intendedUse: item.intendedUse || item.intended_use || "",
     assignedSector: item.assignedSector || item.assigned_sector || type?.sector || "",
     reviewNote: item.reviewNote || item.review_note || "",
-    temporaryPassword: item.temporaryPassword || item.temporary_password || "",
     createdAt: item.createdAt || item.created_at || "",
     reviewedAt: item.reviewedAt || item.reviewed_at || "",
     status: item.status || "PENDENTE",
@@ -1413,6 +1340,11 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     const key = validationKey.trim();
     const chip = microchip.trim();
     const hasValidCredential = cleanCpf.length === 11 && !/^0+$/.test(cleanCpf) && Boolean(key);
+    if (!api.hasToken() && (!isValidCpf(cleanCpf) || !key || !municipalityId)) {
+      setStatus("Informe CPF, chave de validação e município, ou entre com seu acesso de tutor.");
+      setSearchOk(false);
+      return;
+    }
     if (!chip && cleanCpf.length !== 11) {
       setStatus("Informe um CPF válido.");
       setSearchOk(false);
@@ -1429,7 +1361,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
     try {
       const [record, reqList, adoptList] = chip
         ? await Promise.all([
-            api.consultAnimalByMicrochip({ microchip: chip, ...(hasValidCredential ? { cpf: cleanCpf, validationKey: key } : {}) }),
+            api.consultAnimalByMicrochip({ microchip: chip, municipalityId, ...(hasValidCredential ? { cpf: cleanCpf, validationKey: key } : {}) }),
             Promise.resolve([]),
             Promise.resolve([]),
           ])
@@ -1503,11 +1435,12 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         const chip = svcIdForm.microchip.trim();
         const cleanCpf = onlyDigits(svcIdForm.cpf);
         const key = svcIdForm.key.trim();
+        if (!api.hasToken() && (!isValidCpf(cleanCpf) || !key || !municipalityId)) { setSvcError("Informe CPF, chave de validação e município, ou entre com seu acesso de tutor."); return; }
         if (!chip && cleanCpf.length !== 11) { setSvcError("Informe o microchip do animal ou o CPF do tutor."); return; }
         if (cleanCpf.length === 11 && !key) { setSvcError("Informe a chave de validação junto com o CPF."); return; }
         const hasCredentials = cleanCpf.length === 11 && Boolean(key);
         const [record, reqList] = await Promise.all([
-          chip ? api.consultAnimalByMicrochip({ microchip: chip, ...(hasCredentials ? { cpf: cleanCpf, validationKey: key } : {}) }) : Promise.resolve(null),
+          chip ? api.consultAnimalByMicrochip({ microchip: chip, municipalityId, ...(hasCredentials ? { cpf: cleanCpf, validationKey: key } : {}) }) : Promise.resolve(null),
           hasCredentials ? api.consultRequestsByCredentials(cleanCpf, key, municipalityId) : Promise.resolve([]),
         ]);
         setCpf(hasCredentials ? svcIdForm.cpf : "");
@@ -1520,11 +1453,16 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
       }
       if (activeServiceModal === "transfer" || activeServiceModal === "death") {
         const chip = svcIdForm.microchip.trim();
+        const cleanCpf = onlyDigits(svcIdForm.cpf);
+        const key = svcIdForm.key.trim();
         if (!chip) { setSvcError("Informe o microchip do animal."); return; }
-        const animalResult = await api.consultAnimalByMicrochip({ microchip: chip });
+        if (!api.hasToken() && (!isValidCpf(cleanCpf) || !key || !municipalityId)) { setSvcError("Informe CPF, chave de validação e município, ou entre com seu acesso de tutor."); return; }
+        const animalResult = await api.consultAnimalByMicrochip({ microchip: chip, municipalityId, cpf: cleanCpf, validationKey: key });
         if (!animalResult?.animal) { setSvcError("Animal não encontrado para este microchip."); return; }
         setSvcFoundAnimal(animalResult.animal);
         setSvcFoundTutor(animalResult.tutor || null);
+        setCpf(svcIdForm.cpf);
+        setValidationKey(key);
         setSvcStep(2);
         return;
       }
@@ -1584,6 +1522,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         target_tutor_state: svcTransferForm.targetState,
         notes: svcTransferForm.notes,
         cpf: svcFoundTutor?.cpf || "",
+        validationKey: validationKey.trim(),
         municipalityId,
       });
       setSvcResult("Solicitação de troca enviada para análise.");
@@ -1605,6 +1544,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         death_cause: svcDeathForm.cause,
         notes: svcDeathForm.notes,
         cpf: svcFoundTutor?.cpf || "",
+        validationKey: validationKey.trim(),
         municipalityId,
       });
       setSvcResult("Registro de óbito enviado para análise.");
@@ -1622,6 +1562,7 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
         {animalRecord?.animal && (
           <AnimalRecordPanel
             record={animalRecord}
+            municipalityId={municipalityId}
             cpf={onlyDigits(cpf)}
             validationKey={validationKey.trim()}
             onRequestCreated={(request) => {
@@ -1713,7 +1654,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
                   </>
                 ) : svcStep === 1 ? (
                   <>
-                    {isPront ? (
                       <div className="svc-grid-3">
                         <label className="field svc-field">
                           <span>Microchip do animal</span>
@@ -1728,14 +1668,6 @@ function ValidationKeyConsultation({ fallbackRequests = [], currentUser, onReque
                           <input value={svcIdForm.key} onChange={(e) => setSvcIdForm((f) => ({ ...f, key: e.target.value.toUpperCase() }))} placeholder="Cole ou digite sua chave" />
                         </label>
                       </div>
-                    ) : (
-                      <div className="svc-grid-3">
-                        <label className="field svc-field">
-                          <span>Microchip do animal</span>
-                          <input autoFocus value={svcIdForm.microchip} onChange={(e) => setSvcIdForm((f) => ({ ...f, microchip: e.target.value }))} placeholder="Número do microchip" />
-                        </label>
-                      </div>
-                    )}
                   </>
                 ) : isTransfer ? (
                   <>
@@ -2036,7 +1968,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
         )}
         {filteredAnimals.map((animal) => {
           const displayName = String(animal.name || animal.animal_name || "Animal").trim();
-          const interestCount = getAdoptionInterestList(animal).length;
+          const interestCount = getAdoptionInterestCount(animal);
           const highlighted = isAdoptionHighlighted(animal);
           return (
             <article
@@ -2257,10 +2189,6 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
 function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
   const [showVetModal, setShowVetModal] = useState(false);
   const [activePublicService, setActivePublicService] = useState<string | null>(null);
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
@@ -2276,72 +2204,10 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const [publicServiceIdentificationTypes, setPublicServiceIdentificationTypes] = useState(identificationTypes);
   const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
   const adoptionSectionRef = useRef(null);
-  const [resetScreen, setResetScreen] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
-  const [resetCode, setResetCode] = useState("");
-  const [resetPassword, setResetPassword] = useState("");
-  const [resetConfirm, setResetConfirm] = useState("");
-  const [resetStep, setResetStep] = useState("email");
-  const [resetError, setResetError] = useState("");
-  const [resetSuccess, setResetSuccess] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
-
-  async function requestResetCode() {
-    setResetError("");
-    setResetLoading(true);
-    try {
-      const res = await fetch("/api/auth/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: resetEmail.trim().toLowerCase() }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setResetError(data.error || "Erro ao enviar código"); return; }
-      setResetStep("code");
-    } catch (err) {
-      setResetError("Falha na conexão. Tente novamente.");
-    } finally {
-      setResetLoading(false);
-    }
-  }
-
-  async function sendResetCode(event) {
-    event.preventDefault();
-    await requestResetCode();
-  }
-
-  async function confirmReset(event) {
-    event.preventDefault();
-    setResetError("");
-    if (resetPassword !== resetConfirm) { setResetError("As senhas não conferem."); return; }
-    if (resetPassword.length < 6) { setResetError("A senha deve ter pelo menos 6 caracteres."); return; }
-    setResetLoading(true);
-    try {
-      const res = await fetch("/api/auth/reset-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: resetEmail.trim().toLowerCase(), code: resetCode.trim(), password: resetPassword }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setResetError(data.error || "Erro ao redefinir senha"); return; }
-      setResetSuccess(true);
-    } catch (err) {
-      setResetError("Falha na conexão. Tente novamente.");
-    } finally {
-      setResetLoading(false);
-    }
-  }
-
-  async function submit(event) {
-    event.preventDefault();
-    try {
-      const user = await api.login(email.trim(), password);
-      setError("");
-      onLogin(user);
-    } catch {
-      setError("Email ou senha incorretos.");
-    }
-  }
+  const [enrollment, setEnrollment] = useState<EnrollmentCredential | null>(null);
+  const publicMunicipalityRef = useRef(selectedMunicipalityId);
+  publicMunicipalityRef.current = selectedMunicipalityId;
+  useEffect(() => { setEnrollment(null); setPublicServiceDone(null); setProcedurePrefill(null); }, [selectedMunicipalityId]);
 
   useEffect(() => {
     setPublicServiceScheduleDays(scheduleDays);
@@ -2373,23 +2239,27 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   const nextMutirao = getNextUpcomingMutirao(effectivePublicServiceScheduleDays);
 
   function scrollToAdoption() {
+    setEnrollment(null);
     if (activePublicService) setActivePublicService(null);
     adoptionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function openPublicService(serviceId: string) {
+    setEnrollment(null);
     setProcedurePrefill(null);
     setPublicServiceDone(null);
     setActivePublicService(serviceId);
   }
 
   function joinMutirao() {
+    setEnrollment(null);
     setProcedurePrefill(nextMutirao ? { schedule: nextMutirao.date } : null);
     setPublicServiceDone(null);
     setActivePublicService("procedure_form");
   }
 
   function closePublicService() {
+    setEnrollment(null);
     setActivePublicService(null);
     setProcedurePrefill(null);
     setPublicServiceDone(null);
@@ -2414,6 +2284,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
   }
 
   function openInlineProcedure(prefill: AnyRecord = {}) {
+    setEnrollment(null);
     setProcedurePrefill(prefill);
     setPublicServiceDone(null);
     setActivePublicService("procedure_form");
@@ -2465,7 +2336,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
               </button>
             );
           })}
-          <button type="button" className="public-topbar-enter" onClick={() => setShowVetModal(true)}>
+          <button type="button" className="public-topbar-enter" onClick={() => { setEnrollment(null); setShowVetModal(true); }}>
             <User size={15} />
             Entrar
           </button>
@@ -2496,11 +2367,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
                 <h3>Solicitação enviada!</h3>
                 <p>Protocolo oficial: <strong>{publicServiceDone.protocol}</strong></p>
                 <FollowUpSummary value={(publicServiceDone.workflow_data || publicServiceDone.workflowData)?.followUp} />
-                <div className="success-validation-key">
-                  <span>Chave de validação</span>
-                  <strong>{publicServiceDone.validationKey || publicServiceDone.validation_key}</strong>
-                  <small>{publicServiceDone.cpf ? "Use CPF + chave de validação para consultar o andamento." : "Guarde seu protocolo e esta chave de validação."}</small>
-                </div>
+                {(enrollment || publicServiceDone.cpf) && <EnrollmentNotice credential={enrollment} onDismiss={() => setEnrollment(null)} onLogin={() => { setEnrollment(null); setShowVetModal(true); }} />}
                 <div className="public-service-success-actions">
                   <button className="primary-action" type="button" onClick={closePublicService}>Voltar ao início</button>
                   <button className="ghost-button" type="button" onClick={downloadPublicServiceRequerimento} disabled={publicServiceDoneDownloading}>
@@ -2512,11 +2379,13 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
             ) : activePublicService === "procedure_form" ? (
               <NewRequest
                 createRequest={createRequest}
+                onEnrollment={(credential) => { if (selectedMunicipalityId === publicMunicipalityRef.current) setEnrollment(credential || null); }}
                 currentUser={GUEST_USER}
                 publicFlow
                 selectedMunicipalityId={selectedMunicipalityId}
                 onBack={closePublicService}
                 onDone={(request) => {
+                  if (selectedMunicipalityId !== publicMunicipalityRef.current) return;
                   const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
                   setPublicServiceDone(normalized);
                 }}
@@ -2620,125 +2489,7 @@ function LoginView({ onLogin, onAccessRequest, adoptionAnimals = [], onInterestS
         )}
       </footer>
 
-{showVetModal && (
-        <div className="modal-backdrop">
-          {!resetScreen ? (
-            <form className="auth-modal compact-auth-modal" onSubmit={submit}>
-              <ModalHeader title="Entrar no sistema" onClose={() => { setShowVetModal(false); setError(""); setResetScreen(false); }} />
-              <label className="field">
-                <span>Email</span>
-                <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" />
-              </label>
-              <label className="field password-field">
-                <span>Senha</span>
-                <div>
-                  <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} autoComplete="current-password" />
-                  <button type="button" onClick={() => setShowPassword((v) => !v)} aria-label="Ver senha">
-                    <Eye size={18} />
-                  </button>
-                </div>
-              </label>
-              {error && <p className="form-error">{error}</p>}
-              <button className="primary-action" type="submit">Entrar</button>
-              <button
-                type="button"
-                className="reset-password-link"
-                onClick={() => { setResetScreen(true); setResetStep("email"); setResetError(""); setResetSuccess(false); setResetEmail(""); setResetCode(""); setResetPassword(""); setResetConfirm(""); }}
-              >
-                Esqueceu a senha?
-              </button>
-            </form>
-          ) : (
-            <div className="auth-modal compact-auth-modal">
-              <ModalHeader
-                title="Redefinir senha"
-                onClose={() => { setShowVetModal(false); setResetScreen(false); setResetError(""); }}
-              />
-
-              {resetSuccess ? (
-                <div className="reset-success-msg">
-                  <p>Senha redefinida com sucesso!</p>
-                  <button className="primary-action" type="button" onClick={() => { setResetScreen(false); setResetSuccess(false); }}>
-                    Voltar ao login
-                  </button>
-                </div>
-              ) : (
-                <form onSubmit={resetStep === "email" ? sendResetCode : confirmReset} className="reset-form">
-                  <label className="field">
-                    <span>E-mail cadastrado</span>
-                    <input
-                      type="email"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      placeholder="seu@email.com"
-                      required
-                      disabled={resetStep === "code"}
-                    />
-                  </label>
-
-                  {resetStep === "email" && (
-                    <>
-                      <button className="primary-action" type="submit" disabled={resetLoading}>
-                        {resetLoading ? "Enviando..." : "Enviar código"}
-                      </button>
-                      <button className="ghost-button" type="button" onClick={() => { setResetScreen(false); setResetError(""); }}>
-                        Voltar ao login
-                      </button>
-                    </>
-                  )}
-
-                  {resetStep === "code" && (
-                    <>
-                      <label className="field">
-                        <span>Código recebido</span>
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          maxLength={6}
-                          value={resetCode}
-                          onChange={(e) => setResetCode(e.target.value.replace(/\D/g, ""))}
-                          placeholder="000000"
-                          required
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Nova senha</span>
-                        <input
-                          type="password"
-                          value={resetPassword}
-                          onChange={(e) => setResetPassword(e.target.value)}
-                          placeholder="Mínimo 6 caracteres"
-                          required
-                        />
-                      </label>
-                      <label className="field">
-                        <span>Confirmar nova senha</span>
-                        <input
-                          type="password"
-                          value={resetConfirm}
-                          onChange={(e) => setResetConfirm(e.target.value)}
-                          placeholder="Repita a nova senha"
-                          required
-                        />
-                      </label>
-                      <div className="reset-form-actions">
-                        <button className="ghost-button" type="button" disabled={resetLoading} onClick={() => { setResetCode(""); requestResetCode(); }}>
-                          {resetLoading ? "Reenviando..." : "Reenviar código"}
-                        </button>
-                        <button className="primary-action" type="submit" disabled={resetLoading}>
-                          {resetLoading ? "Salvando..." : "Redefinir senha"}
-                        </button>
-                      </div>
-                    </>
-                  )}
-
-                  {resetError && <p className="form-error">{resetError}</p>}
-                </form>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+{showVetModal && <AuthEntry municipalityId={selectedMunicipalityId} municipalities={municipalities} onMunicipalitySelect={onMunicipalitySelect} onLogin={(user) => { setEnrollment(null); onLogin(user); }} onClose={() => setShowVetModal(false)} />}
     </main>
   );
 }
@@ -3271,7 +3022,7 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false, cpf
                         const chip = (animal.microchip || req.animalMicrochip || "").trim();
                         let history = animalRecord;
                         if (!history && chip) {
-                          history = await api.consultAnimalByMicrochip({ microchip: chip }).catch(() => null);
+                          history = await api.consultAnimalByMicrochip({ microchip: chip, municipalityId: currentUser?.municipalityId || req.municipalityId || req.municipality_id || "", cpf: cpf || currentUser?.cpf || req.cpf || "", validationKey }).catch(() => null);
                         }
                         const bundle = await generateProntuarioPdf(req, history);
                         if (bundle?.dataUrl) {
@@ -3372,6 +3123,7 @@ function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {
 
 function NewRequest({
   createRequest,
+  onEnrollment,
   currentUser,
   compact = false,
   internalSimple = false,
@@ -3628,6 +3380,7 @@ function NewRequest({
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Todos os documentos obrigatórios precisam estar aprovados pela validação.");
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
     if ((requiresTutorIdentity || requestData.cpf) && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
+    if (requiresTutorIdentity && validateTutorName(requestData.tutor)) issues.push(validateTutorName(requestData.tutor));
     if (requestData.phone && !isValidPhone(requestData.phone)) issues.push("Informe um telefone válido com DDD.");
     if (!internalSimple) {
       if (!followUpPolicy.ready) issues.push(followUpPolicy.error || "Aguarde o carregamento dos canais de acompanhamento.");
@@ -3639,7 +3392,7 @@ function NewRequest({
 
   function getStepIssues(step = formStep) {
     if (step === RequestStep.TUTOR) {
-      return requiresTutorIdentity && !isValidCpf(requestData.cpf) ? [true] : [];
+      return requiresTutorIdentity ? [!isValidCpf(requestData.cpf), validateTutorName(requestData.tutor)].filter(Boolean) : [];
     }
 
     if (step === RequestStep.FOLLOW_UP) {
@@ -3673,6 +3426,8 @@ function NewRequest({
     if (!submitAttempted) return false;
     const firstAnimal: AnyRecord = animals[0] || {};
     const checks = {
+      tutor: requiresTutorIdentity && Boolean(validateTutorName(requestData.tutor)),
+      cpf: (requiresTutorIdentity || Boolean(requestData.cpf)) && !isValidCpf(requestData.cpf),
       email: Boolean(requestData.email.trim()) && !requestData.email.includes("@"),
       type: configuredRequestTypes.length > 0 && !requestData.type,
       species: !firstAnimal.species,
@@ -3972,16 +3727,15 @@ function NewRequest({
       signedAt: new Date().toISOString(),
     };
     try {
-      const newRequest = await createRequest(localPayload);
+      const newRequest = await createRequest(localPayload, onEnrollment);
       const generatedProtocol = String(newRequest?.protocol || "").trim();
-      const generatedValidationKey = String(newRequest?.validationKey || newRequest?.validation_key || "").trim();
 
-      if (!generatedProtocol || !generatedValidationKey) {
-        setSubmissionError("Não foi possível concluir: protocolo/chave de validação não foram gerados. Tente novamente.");
+      if (!generatedProtocol) {
+        setSubmissionError("Não foi possível obter o protocolo. Confira o envio antes de tentar novamente.");
         return;
       }
 
-      onDone?.(normalizeRequest({ ...localPayload, ...newRequest, protocol: generatedProtocol, validation_key: generatedValidationKey }));
+      onDone?.(normalizeRequest({ ...localPayload, ...newRequest, protocol: generatedProtocol }));
     } catch (err) {
       setSubmissionError(err?.message || "Falha ao enviar solicitação. Tente novamente.");
     }
@@ -4076,12 +3830,14 @@ function NewRequest({
               <>
                 <div className="form-sub-card">
                   <span className="form-sub-card-title">Responsável</span>
-                  <div className="access-field" data-label="Nome completo">
-                    <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+                  <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Nome completo">
+                    <input type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} aria-invalid={showInvalid("tutor")} />
+                    {showInvalid("tutor") && <small className="field-error-message">{validateTutorName(requestData.tutor)}</small>}
                   </div>
                   <div className="two-column-fields">
-                    <div className="access-field" data-label="CPF">
-                      <input type="text" placeholder="000.000.000-00" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
+                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
+                      <input type="text" placeholder="000.000.000-00" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} aria-invalid={showInvalid("cpf")} />
+                      {showInvalid("cpf") && <small className="field-error-message">Informe um CPF válido.</small>}
                     </div>
                     <div className="access-field" data-label="CadÚnico (se aplica)">
                       <div className="access-field-action-row">
@@ -4127,11 +3883,13 @@ function NewRequest({
                 <div className="form-sub-card">
                   <span className="form-sub-card-title">Identificação</span>
                   <div className="two-column-fields">
-                    <div className="access-field" data-label="Tutor">
-                      <input type="text" placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} />
+                    <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Tutor">
+                      <input type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} aria-invalid={showInvalid("tutor")} />
+                      {showInvalid("tutor") && <small className="field-error-message">{validateTutorName(requestData.tutor)}</small>}
                     </div>
-                    <div className="access-field" data-label="CPF">
-                      <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} />
+                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
+                      <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} aria-invalid={showInvalid("cpf")} />
+                      {showInvalid("cpf") && <small className="field-error-message">Informe um CPF válido.</small>}
                     </div>
                   </div>
                   <div className="cadunico-row">
@@ -4671,10 +4429,12 @@ function AdminDashboard({
   globalSearch = "",
   accessRequests = [],
   setActive,
+  selectedMunicipalityId = "",
 }) {
   const { filters: requestFilters, actions: requestFilterActions } = useRequestFilters();
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
@@ -4762,6 +4522,7 @@ function AdminDashboard({
               <Plus size={18} />
               Criar Solicitação
             </button>
+            {canEditRequests(currentUser?.role) && <button className="ghost-button" type="button" onClick={() => setRecoveryOpen(true)}>Recuperar acesso de tutor</button>}
           </div>
 
           <RequestFiltersToolbar
@@ -4780,6 +4541,7 @@ function AdminDashboard({
         onClearDimension={requestFilterActions.clearDimension}
         onClearAll={requestFilterActions.clearAll}
       />
+      {recoveryOpen && canEditRequests(currentUser?.role) && <AssistedRecovery key={selectedMunicipalityId} municipalityId={selectedMunicipalityId || currentUser?.municipalityId || ""} municipalities={municipalities} onClose={() => setRecoveryOpen(false)} />}
       <div className="triage-card-grid">
         {activeRequests.length === 0 && (
           <EmptyState
@@ -6595,7 +6357,7 @@ function AdoptionView({
             {displayedAnimals.length > 0 && adoptionViewMode === "grid" && (
               <div className="adoption-grid adoption-grid-modern">
                 {displayedAnimals.map((animal) => {
-                  const interestCount = getAdoptionInterestList(animal).length;
+                  const interestCount = getAdoptionInterestCount(animal);
                   const displayName = animal.name || animal.animal_name || "Animal";
                   return (
                     <article className="adoption-card adoption-card-modern" key={animal.id || animal.name}>
@@ -6650,7 +6412,7 @@ function AdoptionView({
               <div className="adoption-list-modern">
                 {displayedAnimals.map((animal) => {
                   const statusView = getAdoptionStatusView(animal);
-                  const interestCount = getAdoptionInterestList(animal).length;
+                  const interestCount = getAdoptionInterestCount(animal);
                   const daysInProgram = getAdoptionDaysInProgram(animal);
                   const displayName = animal.name || animal.animal_name || "Animal";
                   return (
@@ -7654,11 +7416,12 @@ function ConfigView({
         return;
       }
       const created = await api.createMunicipality(newMunicipality);
+      const safeCreated = stripMunicipalityBootstrap(created);
       const refreshed = await api.getMunicipalitiesAdmin().catch(() => null);
       setMunicipalities?.((current) => (
         Array.isArray(refreshed)
           ? refreshed
-          : [created, ...current.filter((item) => item.id !== created.id)]
+          : [safeCreated, ...current.filter((item) => item.id !== created.id)]
       ));
       if (created.defaultUser?.email) {
         const defaultTeamUser = defaultMunicipalityUserToTeamUser(created.defaultUser, created.id);
@@ -7685,8 +7448,8 @@ function ConfigView({
       }));
       const createdConfigs = Object.fromEntries(createdConfigEntries);
       const createdMunicipalityScope = Array.isArray(refreshed)
-        ? refreshed.find((municipality) => municipality.id === created.id) || created
-        : created;
+        ? refreshed.find((municipality) => municipality.id === created.id) || safeCreated
+        : safeCreated;
 
       setRequestTypes?.((current) => mergeScopedConfigItems(
         current,
@@ -7908,6 +7671,8 @@ function ConfigView({
     let authUser = null;
     try {
       authUser = await api.upsertAuthUser({
+        ...(editingTeamUserId ? { id: editingTeamUserId } : {}),
+        active: newTeamUser.active !== false,
         name: newTeamUser.name.trim(),
         email: newTeamUser.email.trim(),
         password: newTeamUser.senha,
@@ -9173,6 +8938,7 @@ function ConfigView({
           <div className="config-panel wide">
             <PanelHeader title="Canais de notificação por município" />
             <NotificationSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
+            <AuthDeliverySettings key={`auth:${configMunicipalityScopeId}`} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
 
             {configMunicipalityScopeId && (
               <div className="whatsapp-statusbar">
@@ -10112,7 +9878,7 @@ function SimpleConfigList({ title, items, allItems = items, filterValue = "activ
   );
 }
 
-function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: AnyRecord) {
+function AnimalRecordPanel({ record, cpf, validationKey, municipalityId, onRequestCreated }: AnyRecord) {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [deathOpen, setDeathOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -10142,6 +9908,7 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
         ...deathForm,
         cpf,
         validationKey,
+        municipalityId,
       });
       setDeathOpen(false);
       setDeathForm({ death_date: "", death_cause: "", notes: "" });
@@ -10167,6 +9934,7 @@ function AnimalRecordPanel({ record, cpf, validationKey, onRequestCreated }: Any
         target_tutor_cpf: onlyDigits(transferForm.target_tutor_cpf),
         cpf,
         validationKey,
+        municipalityId,
       });
       setTransferOpen(false);
       setTransferForm({ target_tutor_name: "", target_tutor_cpf: "", target_tutor_phone: "", target_tutor_email: "", notes: "" });

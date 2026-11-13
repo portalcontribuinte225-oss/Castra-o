@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
-import { isGlobalUser, isMunicipalAdmin, pickMunicipalityId } from "../tenant.js";
+import { isGlobalUser, isMunicipalAdmin, isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
 import { testProviderKey } from "./ai.js";
@@ -12,6 +12,7 @@ import {
   normalizeNotificationConfig,
   validateNotificationConfig,
 } from "../../../shared/notification-contract.js";
+import { AUTH_DELIVERY_CONFIG_KEY, buildDefaultAuthDeliveryConfig, normalizeAuthDeliveryConfig, validateAuthDeliveryConfig } from "../../../shared/auth-contract.js";
 
 const router = Router();
 
@@ -22,6 +23,7 @@ const DEFAULT_CONFIG_VALUE_BUILDERS = {
   [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes,
   [BREEDS_CONFIG_KEY]: () => [],
   [NOTIFICATIONS_CONFIG_KEY]: buildDefaultNotificationConfig,
+  [AUTH_DELIVERY_CONFIG_KEY]: buildDefaultAuthDeliveryConfig,
 };
 
 // Keys de configuração que expõem dados sensíveis (usuários, permissões)
@@ -29,6 +31,8 @@ const DEFAULT_CONFIG_VALUE_BUILDERS = {
 const SENSITIVE_CONFIG_KEYS = new Set([
   "castragestao:teams",
   "permission_groups",
+  "whatsapp_quota",
+  AUTH_DELIVERY_CONFIG_KEY,
 ]);
 
 // Keys cujas alterações são registradas em audit_logs (nunca inclui o valor de secrets).
@@ -50,6 +54,14 @@ const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   NOTIFICATIONS_CONFIG_KEY,
   "whatsapp",
   "whatsapp_quota",
+  "castragestao:document-types",
+  "castragestao:species",
+  "castragestao:sizes",
+  BREEDS_CONFIG_KEY,
+  "castragestao:teams",
+  "castragestao:schedule-rules",
+  "permission_groups",
+  AUTH_DELIVERY_CONFIG_KEY,
 ]);
 
 const MUNICIPAL_ONLY_CONFIG_KEYS = new Set(MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS);
@@ -107,10 +119,16 @@ function validateTeams(value) {
 
 router.get("/:key", optionalAuth, async (req, res) => {
   const key = req.params.key;
+  if (!GLOBAL_ONLY_CONFIG_KEYS.has(key) && !MUNICIPAL_ONLY_CONFIG_KEYS.has(key)) {
+    return res.status(404).json({ error: "Configuração não disponível." });
+  }
 
   // Chaves sensíveis exigem autenticação
   if (SENSITIVE_CONFIG_KEYS.has(key) && !req.user) {
     return res.status(401).json({ error: "Autenticação necessária para esta configuração." });
+  }
+  if (SENSITIVE_CONFIG_KEYS.has(key) && !isInternalUser(req.user)) {
+    return res.status(403).json({ error: "Configuração restrita à equipe do município." });
   }
 
   // Chaves globais exigem usuário global
@@ -145,6 +163,9 @@ router.get("/:key", optionalAuth, async (req, res) => {
 
 router.put("/:key", auth, async (req, res) => {
   const key = req.params.key;
+  if (!GLOBAL_ONLY_CONFIG_KEYS.has(key) && !MUNICIPAL_ONLY_CONFIG_KEYS.has(key)) {
+    return res.status(403).json({ error: "Alteração de configuração não autorizada." });
+  }
 
   // Chaves globais só podem ser salvas por usuários globais
   if (GLOBAL_ONLY_CONFIG_KEYS.has(key) && !isGlobalUser(req.user)) {
@@ -162,6 +183,10 @@ router.put("/:key", auth, async (req, res) => {
   }
   if (key === NOTIFICATIONS_CONFIG_KEY) {
     const validationError = validateNotificationConfig(req.body);
+    if (validationError) return res.status(400).json({ error: validationError });
+  }
+  if (key === AUTH_DELIVERY_CONFIG_KEY) {
+    const validationError = validateAuthDeliveryConfig(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
   }
 
@@ -243,6 +268,7 @@ router.put("/:key", auth, async (req, res) => {
 // ── Helpers ───────────────────────────────────────────────────────────────
 
 function publicConfigValue(key, value = {}) {
+  if (key === AUTH_DELIVERY_CONFIG_KEY) return normalizeAuthDeliveryConfig(value);
   if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
   if (key === "whatsapp") {
@@ -255,6 +281,7 @@ function publicConfigValue(key, value = {}) {
 }
 
 async function prepareConfigValue(key, value = {}, municipalityId = null, client) {
+  if (key === AUTH_DELIVERY_CONFIG_KEY) return normalizeAuthDeliveryConfig(value);
   if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
   const query = municipalityId

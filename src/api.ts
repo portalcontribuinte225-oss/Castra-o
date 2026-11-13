@@ -1,4 +1,23 @@
+import { AuthAudience } from "../shared/auth-contract.js";
+import { splitSubmissionEnvelope } from "./features/tutor-access/submission-envelope";
+import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
+
 const BASE = import.meta.env.VITE_API_URL || "/api";
+
+export const SESSION_INVALID_EVENT = "castragestao:session-invalid";
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  retryAfter: number;
+  constructor(message: string, status: number, code = "", retryAfter = 0) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+    this.retryAfter = retryAfter;
+  }
+}
 
 function getToken() {
   return localStorage.getItem("castragestao:token");
@@ -13,6 +32,7 @@ function headers(json = true) {
 }
 
 async function request(method: string, path: string, body?: unknown) {
+  const requestToken = getToken();
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: headers(),
@@ -20,25 +40,46 @@ async function request(method: string, path: string, body?: unknown) {
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.error || res.statusText);
+    if (res.status === 401 && requestToken && requestToken === getToken() && !path.startsWith("/auth/login") && typeof window !== "undefined") {
+      window.dispatchEvent(new Event(SESSION_INVALID_EVENT));
+    }
+    throw new ApiError(err.error || res.statusText, res.status, err.code || "", Number(err.retryAfter || res.headers.get("Retry-After")) || 0);
   }
   if (res.status === 204) return null;
   return res.json();
 }
 
 export const api = {
-  async login(email, password) {
-    const data = await request("POST", "/auth/login", { email, password });
+  async login(identifier: string, password: string, audience: string = AuthAudience.STAFF, municipalityId = "") {
+    const data = await request("POST", "/auth/login", { identifier, password, audience, municipalityId });
     localStorage.setItem("castragestao:token", data.token);
     return data.user;
   },
+  hasToken: () => Boolean(getToken()),
+  getSession: () => request("GET", "/auth/me"),
+  async changePassword(body: { currentPassword: string; password: string }) {
+    const data = await request("POST", "/auth/change-password", body);
+    localStorage.setItem("castragestao:token", data.token);
+    return data.user;
+  },
+  forgotPassword: (body) => request("POST", "/auth/forgot-password", body),
+  resetPassword: (body) => request("POST", "/auth/reset-password", body),
+  getTutorProfile: () => request("GET", "/auth/tutor/profile"),
+  requestContactChallenge: (body) => request("POST", "/auth/tutor/contact-challenges", body),
+  confirmContactChallenge: (challengeId: string, code: string) => request("POST", `/auth/tutor/contact-challenges/${encodeURIComponent(challengeId)}/confirm`, { code }),
+  searchTutors: (cpf: string, municipalityId: string) => request("GET", `/auth/tutors?cpf=${encodeURIComponent(cpf)}&municipalityId=${encodeURIComponent(municipalityId)}`),
+  recoverTutorAccess: (id: string, body) => request("POST", `/auth/tutors/${encodeURIComponent(id)}/assisted-recovery`, body),
   upsertAuthUser: (body) => request("PUT", "/auth/users", body),
   logout() {
     localStorage.removeItem("castragestao:token");
   },
 
   getRequests: () => request("GET", "/requests"),
-  createRequest: (body) => request("POST", "/requests", body),
+  async createRequest(body, onEnrollment?: (credential?: EnrollmentCredential) => void) {
+    const envelope = splitSubmissionEnvelope(await request("POST", "/requests", body));
+    onEnrollment?.(envelope.enrollment);
+    return envelope.request;
+  },
   consultRequestsByCredentials: (cpf, validationKey, municipalityId) => request("POST", "/requests/consult", { cpf, validationKey, municipalityId }),
   patchRequest: (id, patch) => request("PATCH", `/requests/${id}`, patch),
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),

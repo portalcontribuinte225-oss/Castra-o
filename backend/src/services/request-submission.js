@@ -58,7 +58,7 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
     if (typeof name !== "string" || !name.trim()) invalid("Nome do denunciante é obrigatório.");
     if (!isValidPhone(body.phone)) invalid("Informe um telefone válido em Contato.");
   }
-  return { cpf: cleanCpf || null, workflow: nextWorkflow, requestType, internal };
+  return { cpf: cleanCpf || null, workflow: nextWorkflow, requestType, internal, tutorRequired };
 }
 
 // Consent and delivery metadata are not editable through the generic operational PATCH.

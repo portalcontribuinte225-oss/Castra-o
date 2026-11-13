@@ -2,10 +2,18 @@ import { Router } from "express";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { optionalAuth } from "../middleware/auth.js";
-import { normalizeCpf } from "../utils.js";
-import { isGlobalUser, isInternalUser, pickMunicipalityId } from "../tenant.js";
+import { normalizeCpf, isValidCpf } from "../utils.js";
+import { isInternalUser, pickMunicipalityId } from "../tenant.js";
 
 const router = Router();
+
+function requireAnimalContext(req, res, next) {
+  if (!pickMunicipalityId(req)) return res.status(400).json({ error: "Município obrigatório para esta operação." });
+  if (!req.user && (!isValidCpf(req.body?.cpf) || !String(req.body?.validationKey || "").trim())) {
+    return res.status(403).json({ error: "Autenticação ou credenciais de consulta obrigatórias." });
+  }
+  next();
+}
 
 function pick(...values) {
   return values.find((value) => value !== undefined && value !== null && value !== "");
@@ -53,75 +61,58 @@ async function nextProtocol(client) {
   return `${String(rows[0].seq).padStart(6, "0")}/${year}`;
 }
 
-async function validationKeyForCpf(client, cpf) {
-  const normalizedCpf = normalizeCpf(cpf);
-  if (!normalizedCpf) return randomValidationKey();
-
-  const { rows: existing } = await client.query(
-    "SELECT validation_key FROM request_validation_keys WHERE cpf = $1",
-    [normalizedCpf],
+async function fetchAnimalById(client, id, municipalityId) {
+  const { rows } = await client.query(
+    "SELECT a.* FROM animals a WHERE a.id = $1 AND EXISTS (SELECT 1 FROM animal_records ar WHERE ar.animal_id = a.id AND ar.municipality_id = $2)",
+    [id, municipalityId],
   );
-  if (existing[0]?.validation_key) return existing[0].validation_key;
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    const candidate = randomValidationKey();
-    try {
-      const { rows } = await client.query(
-        `INSERT INTO request_validation_keys (cpf, validation_key)
-         VALUES ($1, $2)
-         RETURNING validation_key`,
-        [normalizedCpf, candidate],
-      );
-      return rows[0].validation_key;
-    } catch (error) {
-      if (error?.code !== "23505") throw error;
-    }
-  }
-
-  throw new Error("Nao foi possivel gerar uma chave de validacao unica.");
-}
-
-async function fetchAnimalById(client, id) {
-  const { rows } = await client.query("SELECT * FROM animals WHERE id = $1", [id]);
   return rows[0] || null;
 }
 
-async function fetchAnimalByMicrochip(client, microchip) {
-  const { rows } = await client.query("SELECT * FROM animals WHERE microchip = $1", [microchip]);
+async function fetchAnimalByMicrochip(client, microchip, municipalityId) {
+  const { rows } = await client.query(
+    "SELECT a.* FROM animals a WHERE a.microchip = $1 AND EXISTS (SELECT 1 FROM animal_records ar WHERE ar.animal_id = a.id AND ar.municipality_id = $2)",
+    [microchip, municipalityId],
+  );
   return rows[0] || null;
 }
 
-async function fetchLegacyAnimalRequest(client, microchip) {
+function requestOwnerScope(req, alias, parameter) {
+  if (isInternalUser(req.user)) return { sql: "", values: [] };
+  return req.user
+    ? { sql: ` AND ${alias}.tutor_id = $${parameter}`, values: [req.user.id] }
+    : { sql: ` AND regexp_replace(COALESCE(${alias}.cpf, ''), '\\D', '', 'g') = $${parameter}`, values: [normalizeCpf(req.body?.cpf)] };
+}
+
+async function fetchLegacyAnimalRequest(client, microchip, req) {
+  const owner = requestOwnerScope(req, "r", 3);
   const { rows } = await client.query(
     `SELECT r.*, elem AS matched_animal
      FROM requests r
      JOIN LATERAL jsonb_array_elements(COALESCE(r.animals, '[]'::jsonb)) elem ON TRUE
      WHERE regexp_replace(upper(COALESCE(elem->>'microchip', '')), '[^A-Z0-9]', '', 'g') = $1
+       AND r.municipality_id = $2${owner.sql}
      ORDER BY r.created_at DESC
      LIMIT 1`,
-    [microchip],
+    [microchip, pickMunicipalityId(req), ...owner.values],
   );
   return rows[0] || null;
 }
 
-async function ensureAnimalFromLegacyRequest(client, microchip) {
-  const existing = await fetchAnimalByMicrochip(client, microchip);
+async function ensureAnimalFromLegacyRequest(client, microchip, req) {
+  const existing = await fetchAnimalByMicrochip(client, microchip, pickMunicipalityId(req));
   if (existing) return existing;
 
-  const request = await fetchLegacyAnimalRequest(client, microchip);
+  // An externally submitted microchip is not proof of ownership of an existing animal.
+  if (!isInternalUser(req.user)) return null;
+  const request = await fetchLegacyAnimalRequest(client, microchip, req);
   if (!request) return null;
 
   const animalData = request.matched_animal || {};
   const { rows } = await client.query(
     `INSERT INTO animals (microchip, name, species, sex, size, breed, color, metadata)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-     ON CONFLICT (microchip)
-     DO UPDATE SET
-       name = COALESCE(animals.name, EXCLUDED.name),
-       species = COALESCE(animals.species, EXCLUDED.species),
-       sex = COALESCE(animals.sex, EXCLUDED.sex),
-       size = COALESCE(animals.size, EXCLUDED.size),
-       updated_at = NOW()
+     ON CONFLICT (microchip) DO NOTHING
      RETURNING *`,
     [
       microchip,
@@ -135,6 +126,7 @@ async function ensureAnimalFromLegacyRequest(client, microchip) {
     ],
   );
   const animal = rows[0];
+  if (!animal) return null;
 
   const cpf = normalizeCpf(request.cpf);
   if (cpf) {
@@ -183,85 +175,95 @@ async function ensureAnimalFromLegacyRequest(client, microchip) {
   return animal;
 }
 
-async function isCredentialAuthorizedForAnimal(client, animalId, cpf, validationKey) {
+async function hasLegacyCredential(client, cpf, validationKey) {
   const cleanCpf = normalizeCpf(cpf);
   const cleanKey = String(validationKey || "").trim();
-  if (cleanCpf.length !== 11 || !cleanKey) return false;
+  if (!isValidCpf(cleanCpf) || !cleanKey) return false;
 
   const { rows: keyRows } = await client.query(
     "SELECT 1 FROM request_validation_keys WHERE cpf = $1 AND validation_key = $2",
     [cleanCpf, cleanKey],
   );
-  if (!keyRows[0]) return false;
+  return Boolean(keyRows[0]);
+}
 
+async function isCredentialAuthorizedForAnimal(client, animalId, cpf, validationKey, municipalityId) {
+  const cleanCpf = normalizeCpf(cpf);
+  if (!municipalityId || !await hasLegacyCredential(client, cpf, validationKey)) return false;
   const { rows: tutorRows } = await client.query(
     `SELECT 1
      FROM animal_tutors
      WHERE animal_id = $1
        AND active = TRUE
        AND regexp_replace(COALESCE(cpf, ''), '\\D', '', 'g') = $2
+       AND EXISTS (SELECT 1 FROM animal_records ar JOIN requests r ON r.id = ar.request_id
+         WHERE ar.animal_id = $1 AND ar.municipality_id = $3
+           AND regexp_replace(COALESCE(r.cpf, ''), '\\D', '', 'g') = $2)
      LIMIT 1`,
-    [animalId, cleanCpf],
+    [animalId, cleanCpf, municipalityId],
   );
   return Boolean(tutorRows[0]);
 }
 
-async function isUserAuthorizedForAnimal(client, user, animal) {
+async function isUserAuthorizedForAnimal(client, user, animal, municipalityId) {
   if (!user) return false;
-  if (isGlobalUser(user)) return true;
-
   if (isInternalUser(user)) {
-    const municipalityId = user.municipalityId || user.municipality_id || null;
     const { rows: recordRows } = await client.query(
-      "SELECT DISTINCT municipality_id FROM animal_records WHERE animal_id = $1 AND municipality_id IS NOT NULL",
-      [animal.id],
+      "SELECT 1 FROM animal_records WHERE animal_id = $1 AND municipality_id = $2 LIMIT 1",
+      [animal.id, municipalityId],
     );
-    // Animal sem histórico de prefeitura (ex: recém-identificado por microchip):
-    // qualquer usuário interno pode operar — será o primeiro vínculo registrado.
-    if (recordRows.length === 0) return true;
-    // Animal já vinculado a alguma prefeitura: só a equipe interna dessa mesma
-    // prefeitura pode operar, preservando isolamento multi-tenant.
-    return recordRows.some((row) => row.municipality_id === municipalityId);
+    return recordRows.length > 0;
   }
 
   const { rows } = await client.query(
     `SELECT 1
-     FROM animal_tutors
-     WHERE animal_id = $1
-       AND active = TRUE
-       AND user_id = $2
+     FROM animal_tutors at
+     JOIN users u ON u.id = at.user_id
+     WHERE at.animal_id = $1
+       AND at.active = TRUE
+       AND at.user_id = $2 AND u.municipality_id = $3
      LIMIT 1`,
-    [animal.id, user.id],
+    [animal.id, user.id, municipalityId],
   );
   return Boolean(rows[0]);
 }
 
 async function ensureAuthorized(client, req, animal) {
-  if (await isUserAuthorizedForAnimal(client, req.user, animal)) return true;
-  return isCredentialAuthorizedForAnimal(client, animal.id, req.body?.cpf, req.body?.validationKey);
+  const municipalityId = pickMunicipalityId(req);
+  if (await isUserAuthorizedForAnimal(client, req.user, animal, municipalityId)) return true;
+  return isCredentialAuthorizedForAnimal(client, animal.id, req.body?.cpf, req.body?.validationKey, municipalityId);
 }
 
-async function fetchActiveTutor(client, animalId) {
+async function fetchActiveTutor(client, animalId, req) {
+  const owner = isInternalUser(req.user) ? { sql: "", values: [] }
+    : req.user ? { sql: " AND at.user_id = $3", values: [req.user.id] }
+    : { sql: " AND regexp_replace(COALESCE(at.cpf, ''), '\\D', '', 'g') = $3", values: [normalizeCpf(req.body?.cpf)] };
   const { rows } = await client.query(
-    `SELECT *
-     FROM animal_tutors
-     WHERE animal_id = $1 AND active = TRUE
-     ORDER BY started_at DESC, created_at DESC
+    `SELECT at.*
+     FROM animal_tutors at
+     WHERE at.animal_id = $1 AND at.active = TRUE${owner.sql}
+       AND EXISTS (SELECT 1 FROM animal_records ar JOIN requests r ON r.id = ar.request_id
+         WHERE ar.animal_id = $1 AND ar.municipality_id = $2
+           AND regexp_replace(COALESCE(r.cpf, ''), '\\D', '', 'g') = regexp_replace(COALESCE(at.cpf, ''), '\\D', '', 'g'))
+     ORDER BY at.started_at DESC, at.created_at DESC
      LIMIT 1`,
-    [animalId],
+    [animalId, pickMunicipalityId(req), ...owner.values],
   );
   return rows[0] || null;
 }
 
-async function buildAnimalHistory(client, animal) {
+async function buildAnimalHistory(client, animal, req) {
+  const recordOwner = requestOwnerScope(req, "r", 3);
   const { rows: records } = await client.query(
     `SELECT id, request_id, record_type, title, notes, data, occurred_at, created_at
-     FROM animal_records
-     WHERE animal_id = $1
+     FROM animal_records ar
+     WHERE animal_id = $1 AND municipality_id = $2
+       ${recordOwner.sql ? `AND EXISTS (SELECT 1 FROM requests r WHERE r.id = ar.request_id${recordOwner.sql})` : ""}
      ORDER BY occurred_at DESC, created_at DESC`,
-    [animal.id],
+    [animal.id, pickMunicipalityId(req), ...recordOwner.values],
   );
 
+  const requestOwner = requestOwnerScope(req, "r", 4);
   const { rows: requests } = await client.query(
     `SELECT id, protocol, request_type, status, notes, death_date, death_cause,
             tutor_name, tutor_email, cpf, phone, address, neighborhood, city, state, cep,
@@ -277,9 +279,9 @@ async function buildAnimalHistory(client, animal) {
           SELECT 1
           FROM jsonb_array_elements(COALESCE(r.animals, '[]'::jsonb)) elem
           WHERE regexp_replace(upper(COALESCE(elem->>'microchip', '')), '[^A-Z0-9]', '', 'g') = $2
-        ))
+        )) AND r.municipality_id = $3${requestOwner.sql}
      ORDER BY created_at DESC`,
-    [animal.id, animal.microchip],
+    [animal.id, animal.microchip, pickMunicipalityId(req), ...requestOwner.values],
   );
 
   const recordEntries = records.map((record) => ({
@@ -356,7 +358,7 @@ async function buildAnimalHistory(client, animal) {
   );
 }
 
-router.post("/lookup", async (req, res) => {
+router.post("/lookup", optionalAuth, requireAnimalContext, async (req, res) => {
   const microchip = normalizeMicrochip(req.body?.microchip);
   if (microchip.length < 4 || microchip.length > 32) {
     return res.status(400).json({ error: "Microchip invalido." });
@@ -365,10 +367,12 @@ router.post("/lookup", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const animal = await ensureAnimalFromLegacyRequest(client, microchip);
+    const animal = await ensureAnimalFromLegacyRequest(client, microchip, req);
+    if (!animal || !await ensureAuthorized(client, req, animal)) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Animal não encontrado ou consulta não autorizada." });
+    }
     await client.query("COMMIT");
-
-    if (!animal) return res.status(404).json({ error: "Animal nao encontrado." });
     res.json({ found: true, animal: publicAnimal(animal) });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
@@ -378,7 +382,7 @@ router.post("/lookup", async (req, res) => {
   }
 });
 
-router.post("/consult", optionalAuth, async (req, res) => {
+router.post("/consult", optionalAuth, requireAnimalContext, async (req, res) => {
   const microchip = normalizeMicrochip(req.body?.microchip);
   if (microchip.length < 4 || microchip.length > 32) {
     return res.status(400).json({ error: "Microchip invalido." });
@@ -387,23 +391,20 @@ router.post("/consult", optionalAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const animal = await ensureAnimalFromLegacyRequest(client, microchip);
+    const animal = await ensureAnimalFromLegacyRequest(client, microchip, req);
     if (!animal) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Animal nao encontrado." });
     }
 
-    const cleanCpf = normalizeCpf(req.body?.cpf);
-    const cleanKey = String(req.body?.validationKey || "").trim();
-    const hasCredential = cleanCpf.length === 11 && !/^0+$/.test(cleanCpf) && Boolean(cleanKey);
-    const authorized = hasCredential ? await ensureAuthorized(client, req, animal) : true;
+    const authorized = await ensureAuthorized(client, req, animal);
     if (!authorized) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Consulta nao autorizada para este animal." });
     }
 
-    const tutor = await fetchActiveTutor(client, animal.id);
-    const history = await buildAnimalHistory(client, animal);
+    const tutor = await fetchActiveTutor(client, animal.id, req);
+    const history = await buildAnimalHistory(client, animal, req);
     await client.query("COMMIT");
 
     res.json({
@@ -419,11 +420,11 @@ router.post("/consult", optionalAuth, async (req, res) => {
   }
 });
 
-router.post("/:id/death", optionalAuth, async (req, res) => {
+router.post("/:id/death", optionalAuth, requireAnimalContext, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const animal = await fetchAnimalById(client, req.params.id);
+    const animal = await fetchAnimalById(client, req.params.id, pickMunicipalityId(req));
     if (!animal) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Animal nao encontrado." });
@@ -435,10 +436,10 @@ router.post("/:id/death", optionalAuth, async (req, res) => {
       return res.status(403).json({ error: "Solicitacao nao autorizada para este animal." });
     }
 
-    const tutor = await fetchActiveTutor(client, animal.id);
+    const tutor = await fetchActiveTutor(client, animal.id, req);
     const protocol = await nextProtocol(client);
-    const cpf = pick(req.body?.cpf, tutor?.cpf);
-    const validationKey = await validationKeyForCpf(client, cpf);
+    const cpf = pick(tutor?.cpf, req.user?.cpf, req.body?.cpf);
+    const validationKey = randomValidationKey();
     const deathDate = pick(req.body?.death_date, req.body?.deathDate);
     const deathCause = pick(req.body?.death_cause, req.body?.deathCause);
     if (!deathDate || !String(deathCause || "").trim()) {
@@ -472,7 +473,7 @@ router.post("/:id/death", optionalAuth, async (req, res) => {
       )
       RETURNING *`,
       [
-        req.user?.id || tutor?.user_id || null,
+        req.user && !isInternalUser(req.user) ? req.user.id : tutor?.user_id || null,
         protocol,
         validationKey,
         pick(req.body?.tutor_name, req.body?.tutorName, tutor?.tutor_name),
@@ -522,11 +523,11 @@ router.post("/:id/death", optionalAuth, async (req, res) => {
   }
 });
 
-router.post("/:id/transfer", optionalAuth, async (req, res) => {
+router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const animal = await fetchAnimalById(client, req.params.id);
+    const animal = await fetchAnimalById(client, req.params.id, pickMunicipalityId(req));
     if (!animal) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Animal nao encontrado." });
@@ -538,7 +539,7 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
       return res.status(403).json({ error: "Solicitacao nao autorizada para este animal." });
     }
 
-    const tutor = await fetchActiveTutor(client, animal.id);
+    const tutor = await fetchActiveTutor(client, animal.id, req);
     const targetCpf = normalizeCpf(pick(req.body?.target_tutor_cpf, req.body?.targetTutorCpf, req.body?.newTutorCpf));
     const targetName = pick(req.body?.target_tutor_name, req.body?.targetTutorName, req.body?.newTutorName);
     if (!targetName || targetCpf.length !== 11) {
@@ -547,8 +548,8 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
     }
 
     const protocol = await nextProtocol(client);
-    const cpf = pick(req.body?.cpf, tutor?.cpf);
-    const validationKey = await validationKeyForCpf(client, cpf);
+    const cpf = pick(tutor?.cpf, req.user?.cpf, req.body?.cpf);
+    const validationKey = randomValidationKey();
     const notes = req.body?.notes || null;
     const target = {
       name: targetName,
@@ -585,7 +586,7 @@ router.post("/:id/transfer", optionalAuth, async (req, res) => {
       )
       RETURNING *`,
       [
-        req.user?.id || tutor?.user_id || null,
+        req.user && !isInternalUser(req.user) ? req.user.id : tutor?.user_id || null,
         protocol,
         validationKey,
         pick(req.body?.tutor_name, req.body?.tutorName, tutor?.tutor_name),

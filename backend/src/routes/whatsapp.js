@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
-import { auth, requireMunicipalAdmin } from "../middleware/auth.js";
+import { auth, requireMunicipalAdmin, requireRole } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
 import { isValidPhone } from "../utils.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendCloudApiTemplate } from "../services/whatsapp.js";
@@ -8,7 +8,7 @@ import { getQuotaStatus } from "../services/whatsappQuota.js";
 
 const router = Router();
 
-router.get("/quota-status", auth, async (req, res) => {
+router.get("/quota-status", auth, requireRole("admin_municipal", "analista", "servidor_publico"), async (req, res) => {
   const municipalityId = pickMunicipalityId(req);
   if (!municipalityId) return res.json(null);
   try {

@@ -1,10 +1,12 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
-import { auth, optionalAuth } from "../middleware/auth.js";
+import { auth, optionalAuth, requireRole } from "../middleware/auth.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
 import { isGlobalUser, pickMunicipalityId, requireMunicipality } from "../tenant.js";
+import { ADOPTION_OPERATOR_ROLES, canManageAdoptions, publicAdoption } from "../services/adoption-public-view.js";
 
 const router = Router();
+const requireAdoptionOperator = requireRole(...ADOPTION_OPERATOR_ROLES);
 const MAX_ADOPTION_PHOTOS = 5;
 const MAX_ADOPTION_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_ADOPTION_TOTAL_BYTES = 8 * 1024 * 1024;
@@ -157,7 +159,8 @@ router.get("/by-key/:validationKey", async (req, res) => {
   try {
     const cleanCpf = normalizeCpf(req.query.cpf);
     const municipalityId = req.query.municipalityId || null;
-    if (cleanCpf.length !== 11) {
+    if (!municipalityId) return res.status(400).json({ error: "Município obrigatório para consulta." });
+    if (!isValidCpf(cleanCpf)) {
       return res.status(400).json({ error: "CPF obrigatorio para consulta." });
     }
 
@@ -178,7 +181,7 @@ router.get("/by-key/:validationKey", async (req, res) => {
        ORDER BY created_at DESC`,
       values
     );
-    res.json(rows);
+    res.json(rows.map(publicAdoption));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -188,7 +191,8 @@ router.post("/consult", async (req, res) => {
   try {
     const { validationKey, cpf, municipalityId } = req.body || {};
     const cleanCpf = normalizeCpf(cpf);
-    if (cleanCpf.length !== 11) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
+    if (!municipalityId) return res.status(400).json({ error: "Município obrigatório para consulta." });
+    if (!isValidCpf(cleanCpf)) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
     if (!validationKey) return res.status(400).json({ error: "Chave de consulta obrigatoria." });
 
     const { rows: keyRows } = await pool.query(
@@ -208,7 +212,7 @@ router.post("/consult", async (req, res) => {
        ORDER BY created_at DESC`,
       values,
     );
-    res.json(rows);
+    res.json(rows.map(publicAdoption));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -231,13 +235,13 @@ router.get("/", optionalAuth, async (req, res) => {
       ? { text: `${baseSelect} ORDER BY a.created_at DESC`, values: [] }
       : { text: "SELECT * FROM adoptions WHERE 1=0", values: [] };
     const { rows } = await pool.query(query.text, query.values);
-    res.json(rows);
+    res.json(canManageAdoptions(req.user) ? rows : rows.map(publicAdoption));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, requireAdoptionOperator, async (req, res) => {
   const { animal_name, species, sex, age, description, health, photo_url, photos, main_photo_index } = req.body;
   const municipalityId = requireMunicipality(req, res);
   if (!municipalityId) return;
@@ -296,13 +300,13 @@ router.post("/:id/interest", optionalAuth, async (req, res) => {
        WHERE a.id = $1`,
       [rows[0].id],
     );
-    res.json(enriched[0] || rows[0]);
+    res.json(publicAdoption(enriched[0] || rows[0]));
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get("/:id/interests", auth, async (req, res) => {
+router.get("/:id/interests", auth, requireAdoptionOperator, async (req, res) => {
   const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
   const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
   const { rows } = await pool.query(`SELECT interests FROM adoptions WHERE id=$1${scope}`, values);
@@ -311,7 +315,7 @@ router.get("/:id/interests", auth, async (req, res) => {
   res.json(Array.isArray(interests) ? interests : []);
 });
 
-router.delete("/:id/interest/:index", auth, async (req, res) => {
+router.delete("/:id/interest/:index", auth, requireAdoptionOperator, async (req, res) => {
   const idx = parseInt(req.params.index, 10);
   try {
     const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
@@ -340,7 +344,7 @@ router.delete("/:id/interest/:index", auth, async (req, res) => {
   }
 });
 
-router.patch("/:id", auth, async (req, res) => {
+router.patch("/:id", auth, requireAdoptionOperator, async (req, res) => {
   const allowed = ["status", "animal_name", "species", "sex", "age", "description", "health", "photo_url", "photos", "main_photo_index", "adopted_at", "animal_microchip", "adoption_tutor", "adoption_notes"];
   const incomingEntries = Object.entries(req.body).filter(([k]) => allowed.includes(k));
   if (!incomingEntries.length) return res.status(400).json({ error: "Nenhum campo valido." });
@@ -416,7 +420,7 @@ router.patch("/:id", auth, async (req, res) => {
   }
 });
 
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", auth, requireAdoptionOperator, async (req, res) => {
   try {
     const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
     const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];

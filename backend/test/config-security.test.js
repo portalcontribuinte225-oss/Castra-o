@@ -1,11 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import jwt from "jsonwebtoken";
 import configRoutes from "../src/routes/config.js";
 import whatsappRoutes from "../src/routes/whatsapp.js";
 import { pool } from "../src/db/index.js";
 import { NOTIFICATIONS_CONFIG_KEY, buildDefaultNotificationConfig } from "../../shared/notification-contract.js";
+import { AUTH_DELIVERY_CONFIG_KEY, buildDefaultAuthDeliveryConfig } from "../../shared/auth-contract.js";
+import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
@@ -18,8 +19,11 @@ async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
   process.env.JWT_SECRET = TEST_SECRET;
   const store = new Map();
   const calls = [];
+  const users = new Map();
   let transactionStarted = false;
   const query = async (sql, values = []) => {
+    const session = resolveTestSession(sql, values, users);
+    if (session) return session;
     calls.push({ sql, values });
     if (sql === "BEGIN") { transactionStarted = true; return { rows: [] }; }
     if (sql === "COMMIT" || sql === "ROLLBACK") { transactionStarted = false; return { rows: [] }; }
@@ -63,7 +67,7 @@ async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
       method,
       headers: {
         "Content-Type": "application/json",
-        ...(user ? { Authorization: `Bearer ${jwt.sign(user, TEST_SECRET)}` } : {}),
+        ...(user ? { Authorization: `Bearer ${registerTestSession(users, user)}` } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
@@ -80,6 +84,33 @@ test("public notification configuration requires a municipality and returns safe
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, buildDefaultNotificationConfig());
   assert.deepEqual(calls[0].values, [NOTIFICATIONS_CONFIG_KEY, MUNICIPALITY_ID]);
+});
+
+test("tutors cannot read internal config or write any known or unknown key", async (t) => {
+  const { request, calls } = await fixture(t);
+  const user = { ...ADMIN, role: "tutor" };
+  for (const key of ["castragestao:teams", "permission_groups", "whatsapp_quota", AUTH_DELIVERY_CONFIG_KEY]) {
+    assert.equal((await request(`/config/${key}`, { user })).status, 403);
+  }
+  for (const key of ["castragestao:teams", "permission_groups", "castragestao:species", "new_unregistered_key", AUTH_DELIVERY_CONFIG_KEY]) {
+    assert.equal((await request(`/config/${key}`, { user, method: "PUT", body: {} })).status, 403);
+  }
+  assert.equal(calls.length, 0);
+});
+
+test("auth delivery configuration is municipal, internal-readable and admin-writable", async (t) => {
+  const { request, store } = await fixture(t);
+  assert.equal((await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}?municipalityId=${MUNICIPALITY_ID}`)).status, 401);
+  assert.equal((await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}`, { user: { ...ADMIN, role: "analista" }, method: "PUT", body: {} })).status, 403);
+  const settings = buildDefaultAuthDeliveryConfig();
+  settings.emailTemplates.initial_password = "welcome";
+  const saved = await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: ADMIN, method: "PUT", body: { ...settings, accessToken: "never-stored" } });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.value.emailTemplates.initial_password, "welcome");
+  assert.equal(JSON.stringify(saved.body).includes("never-stored"), false);
+  assert.equal(store.has(`${AUTH_DELIVERY_CONFIG_KEY}:${OTHER_MUNICIPALITY_ID}`), false);
+  const invalid = await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}`, { user: ADMIN, method: "PUT", body: { emailTemplates: { arbitrary: "wrong" } } });
+  assert.equal(invalid.status, 400);
 });
 
 test("public notification configuration whitelists fields even for older malformed stored values", async (t) => {
@@ -149,9 +180,27 @@ test("notification configuration rejects disabled email, enabled SMS and malform
   assert.equal(calls.length, 0);
 });
 
-test("municipal quota readers are scoped to their municipality despite query override", async (t) => {
+test("quota status denies external roles and scopes internal readers despite query override", async (t) => {
   const { request, calls } = await fixture(t);
-  const response = await request(`/whatsapp/quota-status?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: { ...ADMIN, role: "tutor" } });
+  for (const role of ["tutor", "ong", "protetor"]) {
+    const denied = await request(`/whatsapp/quota-status?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: { ...ADMIN, role } });
+    assert.equal(denied.status, 403);
+  }
+  assert.equal(calls.length, 0);
+  const response = await request(`/whatsapp/quota-status?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: { ...ADMIN, role: "analista" } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(calls[0].values, ["whatsapp_quota", MUNICIPALITY_ID]);
+});
+
+test("quota configuration is never publicly readable and excludes external roles", async (t) => {
+  const { request, calls } = await fixture(t);
+  const path = `/config/whatsapp_quota?municipalityId=${OTHER_MUNICIPALITY_ID}`;
+  assert.equal((await request(path)).status, 401);
+  for (const role of ["tutor", "ong", "protetor"]) {
+    assert.equal((await request(path, { user: { ...ADMIN, role } })).status, 403);
+  }
+  assert.equal(calls.length, 0);
+  const response = await request(path, { user: { ...ADMIN, role: "servidor_publico" } });
   assert.equal(response.status, 200);
   assert.deepEqual(calls[0].values, ["whatsapp_quota", MUNICIPALITY_ID]);
 });

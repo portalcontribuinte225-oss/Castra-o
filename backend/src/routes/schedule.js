@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
-import { auth, optionalAuth } from "../middleware/auth.js";
+import { auth, optionalAuth, requireInternalUser } from "../middleware/auth.js";
 import { isGlobalUser, pickMunicipalityId, requireMunicipality } from "../tenant.js";
 
 const router = Router();
@@ -15,7 +15,7 @@ router.get("/", optionalAuth, async (req, res) => {
   res.json(rows);
 });
 
-router.post("/", auth, async (req, res) => {
+router.post("/", auth, requireInternalUser, async (req, res) => {
   const { date, weekday, vacancies, slots, locationName, location_name, locationAddress, location_address, addressUrl, address_url, active, scheduleRuleId, schedule_rule_id } = req.body;
   const municipalityId = requireMunicipality(req, res);
   if (!municipalityId) return;
@@ -26,7 +26,7 @@ router.post("/", auth, async (req, res) => {
   res.status(201).json(rows[0]);
 });
 
-router.post("/bulk", auth, async (req, res) => {
+router.post("/bulk", auth, requireInternalUser, async (req, res) => {
   const municipalityId = requireMunicipality(req, res);
   if (!municipalityId) return;
   const days = Array.isArray(req.body?.days) ? req.body.days : [];
@@ -95,7 +95,7 @@ router.post("/bulk", auth, async (req, res) => {
   }
 });
 
-router.patch("/:id", auth, async (req, res) => {
+router.patch("/:id", auth, requireInternalUser, async (req, res) => {
   const { vacancies, slots, locationName, location_name, locationAddress, location_address, addressUrl, address_url, active, scheduleRuleId, schedule_rule_id } = req.body;
   const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $9";
   const values = [
@@ -117,7 +117,7 @@ router.patch("/:id", auth, async (req, res) => {
   res.json(rows[0]);
 });
 
-router.delete("/:id", auth, async (req, res) => {
+router.delete("/:id", auth, requireInternalUser, async (req, res) => {
   const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
   const values = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
   await pool.query(`DELETE FROM schedule_days WHERE id=$1${scope}`, values);

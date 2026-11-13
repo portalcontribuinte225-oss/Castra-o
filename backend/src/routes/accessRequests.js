@@ -2,7 +2,7 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
-import { auth } from "../middleware/auth.js";
+import { auth, requireRole } from "../middleware/auth.js";
 import { isGlobalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { isValidCpfOrCnpj, isValidPhone } from "../utils.js";
@@ -34,18 +34,18 @@ function normalizeType(value = "") {
 }
 
 function temporaryPassword() {
-  return `Acesso-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+  return crypto.randomBytes(18).toString("base64url");
 }
 
 function publicAccessRequest(row = {}) {
   if (!row) return row;
-  return {
-    ...row,
-    temporary_password: row.status === "APROVADO" ? row.temporary_password : "",
-  };
+  const { temporary_password, credential, ...safe } = row;
+  return safe;
 }
 
-router.get("/", auth, async (req, res) => {
+const internalOnly = requireRole("admin_municipal", "analista", "servidor_publico");
+
+router.get("/", auth, internalOnly, async (req, res) => {
   try {
     const query = isGlobalUser(req.user)
       ? { text: "SELECT * FROM access_requests ORDER BY created_at DESC", values: [] }
@@ -70,7 +70,7 @@ router.post("/", async (req, res) => {
 
   if (!REQUESTER_TYPES.has(requesterType)) return res.status(400).json({ error: "Tipo de solicitante invalido." });
   if (!responsibleName) return res.status(400).json({ error: "Nome do responsavel e obrigatorio." });
-  if (!email) return res.status(400).json({ error: "Email e obrigatorio." });
+  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: "Informe um e-mail válido." });
   if (!municipalityId) return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
   if (phone && !isValidPhone(phone)) return res.status(400).json({ error: "Telefone invalido." });
   if (document && isNumericDocument && !isValidCpfOrCnpj(document)) return res.status(400).json({ error: "CPF ou CNPJ invalido." });
@@ -114,7 +114,7 @@ router.post("/", async (req, res) => {
   }
 });
 
-router.patch("/:id/review", auth, async (req, res) => {
+router.patch("/:id/review", auth, internalOnly, async (req, res) => {
   const body = req.body || {};
   const status = String(body.status || "").trim().toUpperCase();
   const reviewNote = String(body.review_note || body.reviewNote || "").trim();
@@ -136,31 +136,35 @@ router.patch("/:id/review", auth, async (req, res) => {
     }
 
     let createdUserId = accessRequest.created_user_id || null;
-    let password = accessRequest.temporary_password || "";
+    let password = "";
 
-    if (status === "APROVADO") {
-      password = password || temporaryPassword();
+    if (status === "APROVADO" && !createdUserId) {
+      const email = normalizeEmail(accessRequest.email);
+      const { rows: existingUsers } = await client.query("SELECT id FROM users WHERE lower(email) = $1 FOR UPDATE", [email]);
+      if (existingUsers.length) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "O e-mail não está disponível para este credenciamento. Use outro contato ou procure a administração." });
+      }
+      password = temporaryPassword();
       const hash = await bcrypt.hash(password, 10);
       const { rows: userRows } = await client.query(
         `INSERT INTO users (name, email, password, role, municipality_id, created_by)
          VALUES ($1, $2, $3, $4, $5, $6)
-         ON CONFLICT (email)
-         DO UPDATE SET
-           name            = EXCLUDED.name,
-           password        = EXCLUDED.password,
-           role            = EXCLUDED.role,
-           municipality_id = EXCLUDED.municipality_id,
-           updated_at      = NOW()
+         ON CONFLICT (email) DO NOTHING
          RETURNING id`,
         [
           accessRequest.responsible_name,
-          normalizeEmail(accessRequest.email),
+          email,
           hash,
           roleByType[accessRequest.requester_type] || "protetor",
           accessRequest.municipality_id,
           req.user.id,
         ],
       );
+      if (!userRows[0]) {
+        await client.query("ROLLBACK");
+        return res.status(409).json({ error: "O e-mail não está disponível para este credenciamento." });
+      }
       createdUserId = userRows[0].id;
     }
 
@@ -178,12 +182,11 @@ router.patch("/:id/review", auth, async (req, res) => {
            reviewed_by = $3,
            reviewed_at = NOW(),
            created_user_id = $4,
-           temporary_password = $5,
-           history = history || $6::jsonb,
+           history = history || $5::jsonb,
            updated_at = NOW()
-       WHERE id = $7
+       WHERE id = $6
        RETURNING *`,
-      [status, reviewNote, req.user.id, createdUserId, status === "APROVADO" ? password : "", JSON.stringify([historyEntry]), req.params.id],
+      [status, reviewNote, req.user.id, createdUserId, JSON.stringify([historyEntry]), req.params.id],
     );
 
     await logAudit(client, {
@@ -196,10 +199,10 @@ router.patch("/:id/review", auth, async (req, res) => {
     });
 
     await client.query("COMMIT");
-    res.json(publicAccessRequest(rows[0]));
+    res.set("Cache-Control", "no-store").json({ ...publicAccessRequest(rows[0]), ...(password ? { credential: { temporaryPassword: password } } : {}) });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: "Não foi possível revisar o credenciamento." });
   } finally {
     client.release();
   }

@@ -1,10 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import jwt from "jsonwebtoken";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
 import { NOTIFICATIONS_CONFIG_KEY, buildDefaultNotificationConfig } from "../../shared/notification-contract.js";
+import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
@@ -23,10 +23,13 @@ function procedureBody(overrides = {}) {
   };
 }
 
-async function fixture(t, { existing, failHistory = false, failNotificationSettings = false } = {}) {
+async function fixture(t, { existing, failHistory = false, failNotificationSettings = false, failRequestInsert = false } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
   const stats = { calls: [], settingsReads: 0, historyAppends: 0, transports: 0 };
+  const sessionUsers = new Map();
+  const tutorProfiles = new Map();
+  const createdUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
     ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true }]],
@@ -46,12 +49,40 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
   }
   function connection(source) {
     let unlock;
+    const created = [];
     return {
       async query(sql, values = []) {
+        const session = resolveTestSession(sql, values, sessionUsers);
+        if (session) return session;
         stats.calls.push({ sql, values, source });
         if (sql === "BEGIN") return { rows: [] };
         if (sql === "COMMIT" || sql === "ROLLBACK") {
+          if (sql === "ROLLBACK") for (const id of created) {
+            createdUsers.delete(id);
+            for (const [key, profile] of tutorProfiles) if (profile.user_id === id) tutorProfiles.delete(key);
+          }
           unlock?.(); unlock = undefined;
+          return { rows: [] };
+        }
+        if (sql.includes("INSERT INTO auth_rate_limits")) return { rows: [{ attempts: 1 }] };
+        if (sql.includes("DELETE FROM auth_rate_limits")) return { rows: [] };
+        if (sql.includes("pg_advisory_xact_lock")) { unlock = await acquireLock(); return { rows: [] }; }
+        if (sql.startsWith("SELECT user_id FROM tutor_profiles")) {
+          const profile = tutorProfiles.get(`${values[0]}:${values[1]}`);
+          return { rows: profile ? [profile] : [] };
+        }
+        if (sql.startsWith("SELECT cpf FROM tutor_profiles")) {
+          const user = sessionUsers.get(values[0]);
+          return { rows: user?.municipality_id === values[1] && user.cpf ? [{ cpf: user.cpf }] : [] };
+        }
+        if (sql.includes("INSERT INTO users")) {
+          const id = "55555555-5555-4555-8555-555555555555";
+          createdUsers.set(id, { id, name: values[0], password: values[1], municipality_id: values[2] });
+          created.push(id);
+          return { rows: [{ id }] };
+        }
+        if (sql.startsWith("INSERT INTO tutor_profiles")) {
+          tutorProfiles.set(`${values[1]}:${values[2]}`, { user_id: values[0], cpf: values[2] });
           return { rows: [] };
         }
         if (sql.includes("FROM municipalities m LEFT JOIN config")) {
@@ -66,6 +97,7 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
         if (sql.includes("SELECT validation_key FROM request_validation_keys")) return { rows: [] };
         if (sql.includes("INSERT INTO request_validation_keys")) return { rows: [{ validation_key: values[1] }] };
         if (sql.includes("INSERT INTO requests")) {
+          if (failRequestInsert) throw new Error("Simulated request write failure");
           requestRow = {
             id: REQUEST_ID, tutor_id: values[0], protocol: values[1], validation_key: values[2],
             tutor_name: values[3], tutor_email: values[4], cpf: values[5], phone: values[6],
@@ -76,6 +108,10 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
           return { rows: [clone(requestRow)] };
         }
         if (sql.startsWith("SELECT * FROM requests")) {
+          if (sql.includes("WHERE tutor_id = $1")) {
+            assert.match(sql, /AND municipality_id = \$2/);
+            return { rows: requestRow?.tutor_id === values[0] && requestRow?.municipality_id === values[1] ? [clone(requestRow)] : [] };
+          }
           if (sql.includes("FOR UPDATE")) unlock = await acquireLock();
           const match = requestRow?.id === values[0] && (!sql.includes("municipality_id = $2") || requestRow.municipality_id === values[1]);
           const selected = match ? clone(requestRow) : null;
@@ -127,11 +163,11 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
   });
   async function request({ method = "POST", body, user, path = "/requests" } = {}) {
     const response = await clientFetch(`http://127.0.0.1:${server.address().port}${path}`, {
-      method, headers: { "Content-Type": "application/json", ...(user ? { Authorization: `Bearer ${jwt.sign(user, SECRET)}` } : {}) }, body: JSON.stringify(body),
+      method, headers: { "Content-Type": "application/json", ...(user ? { Authorization: `Bearer ${registerTestSession(sessionUsers, user)}` } : {}) }, body: JSON.stringify(body),
     });
-    return { status: response.status, body: await response.json() };
+    return { status: response.status, body: await response.json(), cacheControl: response.headers.get("cache-control") };
   }
-  return { request, stats, row: () => requestRow };
+  return { request, stats, row: () => requestRow, profiles: tutorProfiles, users: createdUsers };
 }
 
 function pendingRequest(followUp = { enabled: false, email: "", phone: "" }) {
@@ -155,6 +191,9 @@ test("configured no-Tutor POST saves without CPF and never writes an empty CPF v
   assert.match(row().validation_key, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
   assert.equal(stats.calls.some(({ sql }) => sql.includes("request_validation_keys")), false);
   assert.equal(row().origin, "PUBLICA");
+  assert.equal(response.body.request.id, row().id);
+  assert.equal(response.body.request.validation_key, undefined);
+  assert.equal(response.body.enrollment, undefined);
 });
 
 test("forged origin, skipTutor and stepTutor flags cannot dispense CPF", async (t) => {
@@ -193,6 +232,76 @@ test("municipal POST cannot override the authenticated municipality", async (t) 
   assert.equal((await request({ user: ADMIN, body: procedureBody({ municipalityId: OTHER_MUNICIPALITY_ID, cpf: VALID_CPF }) })).status, 201);
   assert.equal(row().municipality_id, MUNICIPALITY_ID);
   assert.equal(stats.calls.find(({ sql }) => sql.includes("FROM municipalities m")).values[0], MUNICIPALITY_ID);
+  assert.equal(row().tutor_id, null, "An attendant is not the tutor owner");
+});
+
+test("new public tutor enrollment returns one ephemeral credential outside the persisted request", async (t) => {
+  const { request, row, users, profiles } = await fixture(t);
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
+  assert.equal(response.status, 201);
+  const password = response.body.enrollment.temporaryPassword;
+  assert.equal(response.cacheControl, "no-store");
+  assert.ok(password.length >= 15);
+  assert.equal(response.body.enrollment.cpf, VALID_CPF);
+  assert.equal(response.body.request.validation_key, undefined);
+  assert.equal(JSON.stringify(row()).includes(password), false);
+  assert.equal(JSON.stringify(response.body.request).includes(password), false);
+  assert.equal(users.size, 1);
+  assert.equal(profiles.size, 1);
+  assert.match([...users.values()][0].password, /^\$2[aby]\$/);
+});
+
+test("repeated anonymous CPF never resets an existing account or returns its credential or key", async (t) => {
+  const { request, row, users } = await fixture(t);
+  const body = procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
+  const first = await request({ body });
+  const storedHash = [...users.values()][0].password;
+  const second = await request({ body });
+  assert.equal(second.status, 201);
+  assert.equal(second.body.enrollment, undefined);
+  assert.equal(second.body.request.validation_key, undefined);
+  assert.equal(second.body.request.tutor_id, null);
+  assert.equal(row().tutor_id, null);
+  assert.equal([...users.values()][0].password, storedHash);
+  assert.equal(JSON.stringify(second.body).includes(first.body.enrollment.temporaryPassword), false);
+});
+
+test("concurrent initial submissions create one municipal account and reveal only the newly created credential", async (t) => {
+  const { request, users, profiles, stats } = await fixture(t);
+  const body = procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
+  const results = await Promise.all([request({ body }), request({ body })]);
+  assert.ok(results.every((result) => result.status === 201));
+  assert.equal(results.filter((result) => result.body.enrollment?.temporaryPassword).length, 1);
+  assert.equal(users.size, 1);
+  assert.equal(profiles.size, 1);
+  assert.equal(stats.calls.filter(({ sql }) => sql.includes("INSERT INTO users")).length, 1);
+  assert.equal(stats.calls.filter(({ sql }) => sql.includes("pg_advisory_xact_lock")).length, 2);
+});
+
+test("failed request insert rolls back both new account and profile", async (t) => {
+  const { request, users, profiles, stats } = await fixture(t, { failRequestInsert: true });
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
+  assert.equal(response.status, 500);
+  assert.equal(users.size, 0);
+  assert.equal(profiles.size, 0);
+  assert.equal(stats.calls.at(-1).sql, "ROLLBACK");
+});
+
+test("authenticated tutor cannot submit a different CPF or delete requests", async (t) => {
+  const { request } = await fixture(t);
+  const user = { ...ADMIN, role: "tutor" };
+  const response = await request({ user, body: procedureBody({ cpf: "16899535009", tutor_name: "Another Tutor" }) });
+  assert.equal(response.status, 403);
+  assert.equal((await request({ user, method: "DELETE", path: `/requests/${REQUEST_ID}` })).status, 403);
+});
+
+test("tutor request reads require authenticated owner and municipality and omit validation secrets", async (t) => {
+  const existing = { ...pendingRequest(), tutor_id: ADMIN.id, validation_key: "private-existing-key" };
+  const { request } = await fixture(t, { existing });
+  const response = await request({ user: { ...ADMIN, role: "tutor" }, method: "GET" });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.length, 1);
+  assert.equal(response.body[0].validation_key, undefined);
 });
 
 test("tutor cannot use operational PATCH to trigger notifications", async (t) => {

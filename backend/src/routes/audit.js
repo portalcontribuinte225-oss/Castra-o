@@ -2,18 +2,11 @@ import { Router } from "express";
 import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
 import { isGlobalUser, isMunicipalAdmin } from "../tenant.js";
+import { AUDIT_ACTIONS } from "../services/audit.js";
 
 const router = Router();
 
-const VALID_ACTIONS = new Set([
-  "USER_CREATE", "USER_UPDATE", "USER_DEACTIVATE",
-  "MUNICIPALITY_CREATE", "MUNICIPALITY_UPDATE",
-  "CONFIG_UPDATE",
-  "ACCESS_REQUEST_REVIEW",
-  "SUPPORT_ACCESS",
-  "LOGIN",
-  "PASSWORD_RESET",
-]);
+const VALID_ACTIONS = new Set(Object.values(AUDIT_ACTIONS));
 
 const VALID_ENTITY_TYPES = new Set([
   "user", "municipality", "config", "access_request", "sector",

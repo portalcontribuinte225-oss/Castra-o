@@ -100,20 +100,22 @@ router.post("/", auth, async (req, res) => {
 
     // Cria o admin municipal com senha segura
     const adminEmail = buildMunicipalityAdminEmail(municipality.slug);
-    const temporaryPassword = generateAdminPassword();
-    const passwordHash = await bcrypt.hash(temporaryPassword, 10);
+    const { rows: existingAdmins } = await client.query(
+      "SELECT id, name, email, role, municipality_id, is_default_admin FROM users WHERE lower(email) = $1 FOR UPDATE",
+      [adminEmail.toLowerCase()],
+    );
+    const existingAdmin = existingAdmins[0];
+    if (existingAdmins.length > 1 || (existingAdmin && (
+      existingAdmin.role !== MUNICIPALITY_ADMIN_ROLE || existingAdmin.municipality_id !== municipality.id || !existingAdmin.is_default_admin
+    ))) {
+      throw Object.assign(new Error("O identificador do administrador já pertence a outra conta."), { status: 409 });
+    }
+    const temporaryPassword = existingAdmin ? undefined : generateAdminPassword();
+    const passwordHash = temporaryPassword ? await bcrypt.hash(temporaryPassword, 10) : null;
 
-    const adminResult = await client.query(
+    const adminResult = existingAdmin ? { rows: [existingAdmin] } : await client.query(
       `INSERT INTO users (name, email, password, role, municipality_id, is_default_admin, created_by)
        VALUES ($1, $2, $3, $4, $5, TRUE, $6)
-       ON CONFLICT (email)
-       DO UPDATE SET
-         name              = EXCLUDED.name,
-         password          = EXCLUDED.password,
-         role              = EXCLUDED.role,
-         municipality_id   = EXCLUDED.municipality_id,
-         is_default_admin  = TRUE,
-         updated_at        = NOW()
        RETURNING id, name, email, role, municipality_id`,
       [
         `Administrador ${municipality.name}`,
@@ -155,6 +157,7 @@ router.post("/", auth, async (req, res) => {
     });
 
     await client.query("COMMIT");
+    res.set("Cache-Control", "no-store");
     res.status(201).json({
       ...municipality,
       defaultUser: {
@@ -168,7 +171,7 @@ router.post("/", auth, async (req, res) => {
     });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar o município." });
   } finally {
     client.release();
   }

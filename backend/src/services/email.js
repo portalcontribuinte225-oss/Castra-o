@@ -54,15 +54,7 @@ export function createEmailSender({ fetchImpl = globalThis.fetch, env = process.
   };
 }
 
-const sendEmailTemplate = createEmailSender();
-
-export async function sendResetCodeEmail({ toEmail, toName, code }) {
-  return sendEmailTemplate({
-    toEmail,
-    templateId: process.env.EMAILJS_TEMPLATE_ID,
-    templateParams: { to_name: toName || toEmail, codigo_recuperacao: code, validade: "15 minutos" },
-  });
-}
+export const sendEmailTemplate = createEmailSender();
 
 export async function sendNotificationEmail({ toEmail, toName, event, request, templateId }, sender = sendEmailTemplate) {
   const content = buildNotificationMessage(event, request);

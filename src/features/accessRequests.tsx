@@ -40,6 +40,7 @@ export function AccessRequestsView({
   const [reviewing, setReviewing] = useState<AnyRecord | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [feedback, setFeedback] = useState("");
+  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
   const [deciding, setDeciding] = useState(false);
 
   const pendingCount = accessRequests.filter((item: AnyRecord) => item.status === "PENDENTE").length;
@@ -61,13 +62,15 @@ export function AccessRequestsView({
         review_note: reviewNote,
       });
       const msg =
-        decision === "APROVADO" && updated?.temporaryPassword
-          ? `Acesso aprovado. Senha inicial: ${updated.temporaryPassword}`
+        decision === "APROVADO" && updated?.credential?.temporaryPassword
+          ? `Acesso aprovado. Anote a senha inicial exibida somente agora: ${updated.credential.temporaryPassword}`
           : "Decisão registrada com sucesso.";
       setFeedback(msg);
+      setFeedbackSuccess(true);
       setReviewing(null);
       setReviewNote("");
     } catch (err: any) {
+      setFeedbackSuccess(false);
       setFeedback(err.message || "Não foi possível revisar o credenciamento.");
     } finally {
       setDeciding(false);
@@ -89,8 +92,8 @@ export function AccessRequestsView({
   return (
     <section className="request-workspace triage-workspace clean-requests-workspace">
       {feedback && (
-        <div className={`cr-feedback ${feedback.includes("sucesso") || feedback.includes("Senha") ? "is-ok" : "is-error"}`}>
-          {feedback.includes("sucesso") || feedback.includes("Senha")
+        <div className={`cr-feedback ${feedbackSuccess ? "is-ok" : "is-error"}`}>
+          {feedbackSuccess
             ? <CheckCircle2 size={15} />
             : <XCircle size={15} />}
           <span>{feedback}</span>
@@ -114,7 +117,7 @@ export function AccessRequestsView({
                   key={item.id}
                   type="button"
                   className={filter === item.id ? "selected" : ""}
-                  onClick={() => setFilter(item.id)}
+                  onClick={() => { setFeedback(""); setFilter(item.id); }}
                 >
                   {item.label}<span>{count}</span>
                 </button>
@@ -177,9 +180,6 @@ export function AccessRequestsView({
                 </div>
                 <div className="tc-col tc-col--status">
                   <span className={`tc-result-badge tc-result-badge--${tone}`}>{accessStatusLabel(item.status)}</span>
-                  {item.temporaryPassword && (
-                    <span className="cr-temp-pw">Senha: {item.temporaryPassword}</span>
-                  )}
                 </div>
               </div>
             </article>

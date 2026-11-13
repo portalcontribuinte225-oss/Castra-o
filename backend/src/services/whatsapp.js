@@ -53,14 +53,12 @@ export function getRuntimeConfig(config = {}) {
   };
 }
 
-export async function sendCloudApiTemplate(config, request, { fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
-  const to = toE164Brazil(request.phone);
+export async function sendWhatsappTemplateComponents(config, phone, components, { fetchImpl = globalThis.fetch, timeoutMs = 5000 } = {}) {
+  const to = toE164Brazil(phone);
   if (!to) return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.INVALID_RECIPIENT);
   if (!config.accessToken || !config.phoneNumberId || !config.templateName) {
     return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED);
   }
-  const variables = (Array.isArray(config.templateVariables) ? config.templateVariables : DEFAULT_CONFIRMATION_VARIABLES)
-    .map((key) => resolveTemplateVariable(key, request));
   const body = {
     messaging_product: "whatsapp",
     recipient_type: "individual",
@@ -69,7 +67,7 @@ export async function sendCloudApiTemplate(config, request, { fetchImpl = global
     template: {
       name: config.templateName,
       language: { code: config.languageCode || "pt_BR" },
-      components: [{ type: "body", parameters: variables.map((text) => ({ type: "text", text })) }],
+      components,
     },
   };
   try {
@@ -84,4 +82,11 @@ export async function sendCloudApiTemplate(config, request, { fetchImpl = global
   } catch (error) {
     return deliveryFailure(DeliveryStatus.FAILED, ["AbortError", "TimeoutError"].includes(error?.name) ? DeliveryCode.TIMEOUT : DeliveryCode.TRANSPORT_FAILED);
   }
+}
+
+export async function sendCloudApiTemplate(config, request, options) {
+  const variables = (Array.isArray(config.templateVariables) ? config.templateVariables : DEFAULT_CONFIRMATION_VARIABLES)
+    .map((key) => resolveTemplateVariable(key, request));
+  return sendWhatsappTemplateComponents(config, request.phone,
+    [{ type: "body", parameters: variables.map((text) => ({ type: "text", text })) }], options);
 }
