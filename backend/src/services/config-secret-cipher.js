@@ -13,6 +13,36 @@ const ENC_PREFIX = "enc:v1:";
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 
+function strictEncryptionKey() {
+  const raw = process.env.CONFIG_ENCRYPTION_KEY || "";
+  if (!/^[A-Za-z0-9+/]{43}=$/.test(raw)) return null;
+  const key = Buffer.from(raw, "base64");
+  return key.length === 32 && key.toString("base64") === raw ? key : null;
+}
+
+export function isSecretEncryptionAvailable() { return Boolean(strictEncryptionKey()); }
+const secureStorageError = () => Object.assign(new Error("A configuração segura de SMS está indisponível."), { status: 503 });
+
+export function encryptSecretStrict(plainText) {
+  const key = strictEncryptionKey();
+  if (!key || typeof plainText !== "string" || !plainText) throw secureStorageError();
+  const iv = randomBytes(IV_LENGTH); const cipher = createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(plainText, "utf8"), cipher.final()]);
+  return `${ENC_PREFIX}${Buffer.concat([iv, cipher.getAuthTag(), encrypted]).toString("base64")}`;
+}
+
+export function decryptSecretStrict(storedValue) {
+  const key = strictEncryptionKey();
+  if (!key || typeof storedValue !== "string" || !storedValue.startsWith(ENC_PREFIX)) throw secureStorageError();
+  try {
+    const encoded = storedValue.slice(ENC_PREFIX.length); const payload = Buffer.from(encoded, "base64");
+    if (payload.length < IV_LENGTH + 17 || payload.toString("base64") !== encoded) throw secureStorageError();
+    const decipher = createDecipheriv(ALGORITHM, key, payload.subarray(0, IV_LENGTH));
+    decipher.setAuthTag(payload.subarray(IV_LENGTH, IV_LENGTH + 16));
+    return Buffer.concat([decipher.update(payload.subarray(IV_LENGTH + 16)), decipher.final()]).toString("utf8");
+  } catch { throw secureStorageError(); }
+}
+
 function getEncryptionKey() {
   const raw = process.env.CONFIG_ENCRYPTION_KEY || "";
   if (!raw) return null;

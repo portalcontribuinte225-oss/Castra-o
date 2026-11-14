@@ -30,9 +30,9 @@ function resolveTemplateVariable(key, request = {}) {
   return Object.hasOwn(values, key) ? String(values[key]) : "-";
 }
 
-export async function getMunicipalityWhatsappConfig(municipalityId) {
+export async function getMunicipalityWhatsappConfig(municipalityId, database = pool) {
   if (!municipalityId) return {};
-  const { rows } = await pool.query(
+  const { rows } = await database.query(
     "SELECT value FROM config WHERE key=$1 AND municipality_id=$2",
     [WHATSAPP_CONFIG_KEY, municipalityId],
   );

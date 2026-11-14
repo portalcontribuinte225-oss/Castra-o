@@ -1,4 +1,5 @@
 export const AuthAudience = Object.freeze({ TUTOR: "tutor", STAFF: "staff" });
+export const AuthErrorCode = Object.freeze({ CPF_REQUIRED: "CPF_REQUIRED", RECOVERY_OPTIONS_EXPIRED: "RECOVERY_OPTIONS_EXPIRED" });
 export const AuthPurpose = Object.freeze({
   INITIAL_PASSWORD: "initial_password", PASSWORD_RESET: "password_reset",
   VERIFY_EMAIL: "verify_email", VERIFY_PHONE: "verify_phone", CONTACT_CHANGED: "contact_changed",
@@ -11,7 +12,7 @@ export const AUTH_RETRY_SECONDS = 60;
 export const AUTH_MAX_CODE_ATTEMPTS = 5;
 
 export function validateNewPassword(value) {
-  if (typeof value !== "string" || Array.from(value).length < 15) return "A senha deve ter pelo menos 15 caracteres.";
+  if (typeof value !== "string" || Array.from(value).length < 6) return "A senha deve ter pelo menos 6 caracteres.";
   if (new TextEncoder().encode(value).length > 72) return "A senha deve ter no máximo 72 bytes UTF-8.";
   return "";
 }

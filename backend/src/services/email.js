@@ -3,12 +3,12 @@ import { buildNotificationMessage } from "./notifications/notification-message.j
 import { deliveryFailure } from "./notifications/delivery-result.js";
 
 // A bounded admission gate covers both reset and notification messages using the same EmailJS account.
-export function createEmailSender({ fetchImpl = globalThis.fetch, env = process.env, now = Date.now, timeoutMs = 5000,
+export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(...args), env = process.env, now = Date.now, timeoutMs = 5000,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
   let lastStartedAt = -Infinity;
   let nextSlotReserved = false;
-  return async function sendEmailTemplate({ toEmail, templateId, templateParams }) {
+  return async function sendEmailTemplate({ toEmail, templateId, templateParams, expiresAt }) {
     if (!env.EMAILJS_SERVICE_ID || !env.EMAILJS_PUBLIC_KEY || !templateId) {
       return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED);
     }
@@ -28,6 +28,9 @@ export function createEmailSender({ fetchImpl = globalThis.fetch, env = process.
       } finally {
         nextSlotReserved = false;
       }
+    }
+    if (expiresAt !== undefined && (!Number.isFinite(new Date(expiresAt).getTime()) || new Date(expiresAt).getTime() <= now())) {
+      return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.PREPARATION_FAILED);
     }
     lastStartedAt = now();
     const body = {

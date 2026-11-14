@@ -20,18 +20,20 @@ export function authUser(overrides = {}) {
     profile_phone: "", email_verified_at: null, phone_verified_at: null, profile_version: 0, ...overrides };
 }
 
-export async function authHttpFixture(t, initialUsers = [authUser()], { failAudit = false } = {}) {
+export async function authHttpFixture(t, initialUsers = [authUser()], { failAudit = false, emailEnabled = false, configs = {} } = {}) {
   const original = { query: pool.query, connect: pool.connect, fetch: globalThis.fetch };
-  const environment = ["JWT_SECRET", "EMAILJS_SERVICE_ID", "EMAILJS_TEMPLATE_ID", "ADMIN_EMAIL"];
+  const environment = ["JWT_SECRET", "EMAILJS_SERVICE_ID", "EMAILJS_PUBLIC_KEY", "EMAILJS_TEMPLATE_ID", "ADMIN_EMAIL"];
   const originalEnvironment = Object.fromEntries(environment.map((key) => [key, process.env[key]]));
   process.env.JWT_SECRET = "auth-http-tests-only";
-  process.env.EMAILJS_SERVICE_ID = "";
-  process.env.EMAILJS_TEMPLATE_ID = "";
+  process.env.EMAILJS_SERVICE_ID = emailEnabled ? "test-service" : "";
+  process.env.EMAILJS_PUBLIC_KEY = emailEnabled ? "test-public" : "";
+  process.env.EMAILJS_TEMPLATE_ID = emailEnabled ? "test-reset" : "";
   process.env.ADMIN_EMAIL = "staff@example.test";
   const users = new Map(initialUsers.map((user) => [user.id, structuredClone(user)]));
   const challenges = new Map(); const limits = new Map(); const calls = []; const followUps = [];
   let tail = Promise.resolve();
   let externalCalls = 0;
+  const messages = [];
   function connection(source) {
     let unlock; let snapshot;
     return { release() { if (unlock) throw new Error("Unclosed test transaction"); }, query: async (sql, values = []) => {
@@ -107,13 +109,18 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
         return { rows: [] };
       }
       if (sql.includes("INSERT INTO audit_logs")) { if (failAudit) throw new Error("Simulated required audit failure"); return { rows: [] }; }
-      if (sql.startsWith("SELECT value FROM config")) return { rows: [] };
+      if (sql.startsWith("SELECT value FROM config")) return { rows: configs[`${values[0]}:${values[1]}`] ? [{ value: configs[`${values[0]}:${values[1]}`] }] : [] };
       throw new Error(`Unhandled auth fixture SQL: ${sql}`);
     } };
   }
   pool.query = connection("pool").query;
   pool.connect = async () => connection("client");
-  globalThis.fetch = async () => { externalCalls += 1; throw new Error("External transport forbidden"); };
+  globalThis.fetch = async (url, options) => {
+    if (emailEnabled && url === "https://api.emailjs.com/api/v1.0/email/send") {
+      messages.push(JSON.parse(options.body)); return { ok: true };
+    }
+    externalCalls += 1; throw new Error("External transport forbidden");
+  };
   const app = express(); app.use(express.json()); app.use("/auth", authRouter);
   app.get("/protected", auth, (req, res) => res.json({ id: req.user.id, municipalityId: req.user.municipalityId }));
   const server = await new Promise((resolve) => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
@@ -130,7 +137,7 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
     });
     return { status: response.status, body: await response.json(), cacheControl: response.headers.get("cache-control") };
   }
-  return { request, users, challenges, limits, calls, followUps, token: (user) => issueSession(users.get(user.id || user)).token,
+  return { request, users, challenges, limits, calls, followUps, messages, token: (user) => issueSession(users.get(user.id || user)).token,
     challenge: (user, purpose, destination) => createChallenge({ query: pool.query }, { user: users.get(user.id || user), purpose, destination }) };
 }
 

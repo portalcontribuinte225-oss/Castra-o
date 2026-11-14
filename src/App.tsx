@@ -178,6 +178,10 @@ import type { NotificationResult } from "./features/notifications/notification-r
 import { configsAllowStep } from "../shared/notification-contract.js";
 import { useSession } from "./features/tutor-access/use-session";
 import { AuthEntry } from "./features/tutor-access/auth-entry";
+import { AuthEntryOrigin, authEntryKey, createAuthEntryContext } from "./features/tutor-access/auth-entry-context";
+import type { AuthEntryContext } from "./features/tutor-access/auth-entry-context";
+import { SmsSettings } from "./features/sms/sms-settings";
+import { RegistrationContactFields, registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
 import { EnrollmentNotice } from "./features/tutor-access/enrollment-notice";
@@ -236,6 +240,7 @@ const environmentConfigTabs: ConfigTabItem[] = [
 
 const integrationsConfigTabs: ConfigTabItem[] = [
   { id: "whatsapp", label: "WhatsApp" },
+  { id: "sms", label: "SMS" },
   { id: "ai_settings", label: "Intelig\u00eancia Artificial", aiSettingsOnly: true },
 ];
 
@@ -257,6 +262,7 @@ const permissionConfigItems: ConfigTabItem[] = [
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
   { id: "whatsapp_settings", label: "Aba WhatsApp" },
+  { id: "sms_settings", label: "Aba SMS" },
   { id: "ai_settings", label: "Configurar IA" },
 ];
 
@@ -268,6 +274,7 @@ function filterVisibleConfigTabs(tabs: ConfigTabItem[] = [], currentUser: AnyRec
       return canManageAiSettings(currentUser?.role);
     }
     if (tab.id === "whatsapp" && canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("whatsapp_settings")) return false;
+    if (tab.id === "sms" && (!canManageAiSettings(currentUser?.role) || (canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))) return false;
     return true;
   });
 }
@@ -2181,7 +2188,8 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
 function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, requests = [], scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
-  const [showVetModal, setShowVetModal] = useState(false);
+  const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
+  const [authEntryError, setAuthEntryError] = useState("");
   const [activePublicService, setActivePublicService] = useState<string | null>(null);
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
   const [publicServiceDone, setPublicServiceDone] = useState<AnyRecord | null>(null);
@@ -2199,7 +2207,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
   const [enrollment, setEnrollment] = useState<EnrollmentCredential | null>(null);
   const publicMunicipalityRef = useRef(selectedMunicipalityId);
   publicMunicipalityRef.current = selectedMunicipalityId;
-  useEffect(() => { setEnrollment(null); setPublicServiceDone(null); setProcedurePrefill(null); }, [selectedMunicipalityId]);
+  useEffect(() => { setEnrollment(null); setPublicServiceDone(null); setProcedurePrefill(null); setAuthEntry(null); setAuthEntryError(""); }, [selectedMunicipalityId]);
 
   useEffect(() => {
     setPublicServiceScheduleDays(scheduleDays);
@@ -2229,6 +2237,16 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
   const activePublicServiceDetails = publicHomeServices.find((service) => service.id === activePublicService) || null;
   const effectivePublicServiceScheduleDays = mergeScheduleDaysWithRules(publicServiceScheduleDays, publicServiceScheduleRules);
   const nextMutirao = getNextUpcomingMutirao(effectivePublicServiceScheduleDays);
+
+  function openAuthEntry(origin: AuthEntryOrigin) {
+    const context = createAuthEntryContext(origin, selectedMunicipalityId);
+    setEnrollment(null);
+    if (!context || (origin !== AuthEntryOrigin.STAFF && (!activeMunicipality || activeMunicipality.active === false))) { setAuthEntryError("Selecione o município na página."); return; }
+    setAuthEntryError("");
+    if (origin === AuthEntryOrigin.REGISTERED_ANIMAL) onProcedureIntent({ municipalityId: selectedMunicipalityId, schedule: procedurePrefill?.schedule || "", requestTypeId: procedurePrefill?.requestType || "" });
+    else onProcedureIntent(null);
+    setAuthEntry(context);
+  }
 
   function scrollToAdoption() {
     setEnrollment(null);
@@ -2328,12 +2346,14 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
               </button>
             );
           })}
-          <button type="button" className="public-topbar-enter" onClick={() => { setEnrollment(null); setShowVetModal(true); }}>
+          <button type="button" className="public-topbar-enter" onClick={() => openAuthEntry(AuthEntryOrigin.STAFF)}>
             <User size={15} />
             Entrar
           </button>
         </nav>
       </div>
+
+      {authEntryError && <p className="form-error" role="alert">{authEntryError}</p>}
 
       {activePublicService ? (
         <section className="public-service-workspace">
@@ -2359,7 +2379,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
                 <h3>Solicitação enviada!</h3>
                 <p>Protocolo oficial: <strong>{publicServiceDone.protocol}</strong></p>
                 <FollowUpSummary value={(publicServiceDone.workflow_data || publicServiceDone.workflowData)?.followUp} />
-                {(enrollment || publicServiceDone.cpf) && <EnrollmentNotice credential={enrollment} onDismiss={() => setEnrollment(null)} onLogin={() => { setEnrollment(null); setShowVetModal(true); }} />}
+                {(enrollment || publicServiceDone.cpf) && <EnrollmentNotice credential={enrollment} onDismiss={() => setEnrollment(null)} onLogin={() => openAuthEntry(AuthEntryOrigin.ENROLLMENT)} />}
                 <div className="public-service-success-actions">
                   <button className="primary-action" type="button" onClick={closePublicService}>Voltar ao início</button>
                   <button className="ghost-button" type="button" onClick={downloadPublicServiceRequerimento} disabled={publicServiceDoneDownloading}>
@@ -2369,7 +2389,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
                 {publicServiceDoneDownloadError && <p className="form-error">{publicServiceDoneDownloadError}</p>}
               </div>
             ) : activePublicService === "procedure_entry" ? (
-              <ProcedureEntry disabled={!selectedMunicipalityId} onFirst={() => setActivePublicService("procedure_form")} onRegistered={() => { onProcedureIntent({ municipalityId: selectedMunicipalityId, schedule: procedurePrefill?.schedule || "", requestTypeId: procedurePrefill?.requestType || "" }); setShowVetModal(true); }} />
+              <ProcedureEntry disabled={!selectedMunicipalityId} onFirst={() => setActivePublicService("procedure_form")} onRegistered={() => openAuthEntry(AuthEntryOrigin.REGISTERED_ANIMAL)} />
             ) : activePublicService === "procedure_form" ? (
               <NewRequest
                 key={`public-procedure-${selectedMunicipalityId}`}
@@ -2482,7 +2502,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
         )}
       </footer>
 
-{showVetModal && <AuthEntry municipalityId={selectedMunicipalityId} municipalities={municipalities} onMunicipalitySelect={onMunicipalitySelect} onLogin={(user) => { setEnrollment(null); onLogin(user); }} onClose={() => { onProcedureIntent(null); setShowVetModal(false); }} />}
+{authEntry && <AuthEntry key={authEntryKey(authEntry)} audience={authEntry.audience} municipalityId={authEntry.municipalityId} onLogin={(user) => { setEnrollment(null); onLogin(user); }} onClose={() => { onProcedureIntent(null); setAuthEntry(null); }} />}
     </main>
   );
 }
@@ -3283,6 +3303,7 @@ function NewRequest({
     .every((document) => Boolean(reusedDocuments[document.id]?.eligible) || acceptableUploadStatuses.includes(documentUploads[document.id]?.status));
   const hasUploadNeedingReplacement = Object.values(documentUploads)
     .some((upload: AnyRecord) => upload?.status === "attached" && upload?.aiVerdict === "rejected");
+  const contactIssues = registrationContactIssues(requestData.email, requestData.phone, hasStep(RequestStep.TUTOR));
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
   const currentStepIndex = Math.max(formSteps.findIndex((item) => item.step === formStep), 0);
@@ -3411,7 +3432,8 @@ function NewRequest({
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
     if ((requiresTutorIdentity || requestData.cpf) && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
     if (requiresTutorIdentity && validateTutorName(requestData.tutor)) issues.push(validateTutorName(requestData.tutor));
-    if (requestData.phone && !isValidPhone(requestData.phone)) issues.push("Informe um telefone válido com DDD.");
+    if (!registered && contactIssues.email) issues.push(contactIssues.email);
+    if (contactIssues.phone) issues.push(contactIssues.phone);
     if (!internalSimple) {
       if (!followUpPolicy.ready) issues.push(followUpPolicy.error || "Aguarde o carregamento dos canais de acompanhamento.");
       issues.push(...getFollowUpIssues(followUp, followUpPolicy.phoneEnabled));
@@ -3422,7 +3444,7 @@ function NewRequest({
 
   function getStepIssues(step = formStep) {
     if (step === RequestStep.TUTOR) {
-      return requiresTutorIdentity ? [!isValidCpf(requestData.cpf), validateTutorName(requestData.tutor)].filter(Boolean) : [];
+      return [...(requiresTutorIdentity ? [!isValidCpf(requestData.cpf), validateTutorName(requestData.tutor)] : []), contactIssues.email, contactIssues.phone].filter(Boolean);
     }
 
     if (step === RequestStep.FOLLOW_UP) {
@@ -3459,7 +3481,6 @@ function NewRequest({
     const checks = {
       tutor: requiresTutorIdentity && Boolean(validateTutorName(requestData.tutor)),
       cpf: (requiresTutorIdentity || Boolean(requestData.cpf)) && !isValidCpf(requestData.cpf),
-      email: Boolean(requestData.email.trim()) && !requestData.email.includes("@"),
       type: configuredRequestTypes.length > 0 && !requestData.type,
       species: !firstAnimal.species,
       sex: !firstAnimal.sex,
@@ -3982,19 +4003,9 @@ function NewRequest({
                   {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
                 </div>
 
-                {internalSimple && <div className="form-sub-card">
-                  <span className="form-sub-card-title">Contato</span>
-                  <div className="two-column-fields">
-                    <div className={`access-field${showInvalid("email") ? " is-invalid" : ""}`} data-label="Email">
-                      <input type="email" placeholder="Email" value={requestData.email} onChange={(e) => updateRequestField("email", e.target.value)} />
-                    </div>
-                    <div className="access-field" data-label="Telefone">
-                      <input type="tel" placeholder="WhatsApp / celular" value={requestData.phone} onChange={(e) => updateMaskedRequestField("phone", e.target.value)} />
-                    </div>
-                  </div>
-                </div>}
               </>
             )}
+            {(publicFlow || internalSimple) && <RegistrationContactFields email={requestData.email} phone={requestData.phone} onEmailChange={(value) => updateRequestField("email", value)} onPhoneChange={(value) => updateMaskedRequestField("phone", value)} showErrors={submitAttempted} />}
           </FormSection>}
 
           {formStep === RequestStep.ANIMAL && <FormSection title="Dados do animal">
@@ -6948,11 +6959,11 @@ function ConfigView({
       return;
     }
     if (configArea === "integrations") {
-      setConfigTab((current) => (integrationsTabs.some((tab) => tab.id === current) ? current : "whatsapp"));
+      setConfigTab((current) => (integrationsTabs.some((tab) => tab.id === current) ? current : integrationsTabs[0]?.id || ""));
       return;
     }
     setConfigTab(configArea);
-  }, [configArea]);
+  }, [configArea, integrationsTabs.map((tab) => tab.id).join("|")]);
 
   useEffect(() => {
     if (configModal !== "municipality") return;
@@ -8387,6 +8398,8 @@ function ConfigView({
           </div>
         );
       })()}
+
+      {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))} />}
 
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
         <div className="config-panel wide">

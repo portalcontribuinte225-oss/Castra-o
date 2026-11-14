@@ -11,6 +11,7 @@ export function authenticatedDigest(purpose, ...values) {
 }
 
 export function safeDigestEqual(left, right) {
+  if (!/^[a-f0-9]{64}$/i.test(String(left || "")) || !/^[a-f0-9]{64}$/i.test(String(right || ""))) return false;
   const a = Buffer.from(String(left || ""), "hex");
   const b = Buffer.from(String(right || ""), "hex");
   return a.length === 32 && b.length === 32 && timingSafeEqual(a, b);
@@ -30,5 +31,5 @@ export function maskEmail(value = "") {
 }
 export function maskPhone(value = "") {
   const digits = String(value || "").replace(/\D/g, "");
-  return digits ? `*****-${digits.slice(-4)}` : "";
+  return digits ? `(${digits.slice(0, 2)}) *****-${digits.slice(-4)}` : "";
 }

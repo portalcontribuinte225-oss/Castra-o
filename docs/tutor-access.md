@@ -1,6 +1,6 @@
 # Acesso do tutor — fase 5
 
-Implementação baseada em `.portal/plans/acesso-tutor-fase-5.md`. Contas de tutor são municipais; não há migração de contas antigas nem compartilhamento automático de solicitações por CPF.
+Implementação baseada em `.portal/plans/acesso-tutor-fase-5.md`, com os ajustes de `.plans/ajustes-login-recuperacao-senha.md`. Contas de tutor são municipais; não há migração de contas antigas nem compartilhamento automático de solicitações por CPF.
 
 ## Aplicação do schema
 
@@ -29,7 +29,7 @@ Configuração municipal: `castragestao:auth-delivery`. Somente administradores 
 | Finalidade | Uso |
 | --- | --- |
 | `initial_password` | A senha inicial de uma conta realmente criada naquela operação |
-| `password_reset` | Código de recuperação para contato já confirmado |
+| `password_reset` | Código de recuperação para o contato cadastral escolhido, inclusive ainda não confirmado |
 | `verify_email` | Código enviado exclusivamente ao e-mail novo |
 | `verify_phone` | Código enviado exclusivamente ao telefone novo |
 | `contact_changed` | Aviso de alteração ao contato anterior confirmado |
@@ -51,9 +51,37 @@ WhatsApp reutiliza ativação, credenciais e cota municipais. Templates devem es
 
 Confirmar o formato aceito pelo template configurado antes de qualquer teste real autorizado. Não usar template de agenda para enviar credenciais nem inserir senha/código no resolver de variáveis operacionais.
 
-Mensagens de segurança não são avisos de agenda/documentos e não alteram o opt-out da solicitação. Recuperação exige contato confirmado. Uma senha exibida na conclusão também ter sido enviada por e-mail não confirma posse desse e-mail.
+Mensagens de segurança não são avisos de agenda/documentos e não alteram o opt-out da solicitação. Os contatos válidos do primeiro cadastro são salvos no perfil independentemente do acompanhamento operacional. A recuperação pode usar esses contatos ainda não confirmados; a conclusão correta confirma somente o contato utilizado. Uma senha exibida na conclusão também ter sido enviada por e-mail não confirma posse desse e-mail.
 
-Sem WhatsApp ativo e sem SMS implementado, telefone não pode ser confirmado por fallback de e-mail. E-mail confirma e-mail; telefone confirma telefone.
+A confirmação de uma alteração de telefone no perfil continua usando seu fluxo próprio de WhatsApp, sem fallback de e-mail. SMSMais atende à recuperação de senha com escolha explícita. E-mail confirma e-mail; telefone confirma telefone.
+
+## Entrada e recuperação
+
+- O botão público “Entrar” abre acesso da equipe; “Animal já cadastrado” e o acesso após a primeira solicitação abrem acesso do tutor. O modal não oferece seleção de tipo de acesso ou município.
+- O tutor usa o município já escolhido na página. Contas globais da equipe preservam o acesso sem município.
+- Senhas manuais aceitam no mínimo 6 caracteres, sem composição obrigatória, e no máximo 72 bytes UTF-8. Senhas temporárias continuam aleatórias e exigem primeira troca.
+- `POST /auth/recovery-options` recebe `identifier`, `audience` e `municipalityId` do contexto. Retorna `recoveryToken` e `options` com IDs opacos, canal e destino mascarado. Não envia mensagens nem invalida códigos existentes.
+- E-mail compartilhado por mais de um tutor retorna `CPF_REQUIRED`; o usuário deve informar CPF, sem lista de titulares. Nenhuma opção é oferecida quando não há contato/canal disponível.
+- `POST /auth/forgot-password` recebe `recoveryToken`, `optionId`, audiência e município. O servidor revalida identidade, revisões, contato e integração. O desafio é vinculado ao canal/destino por envelope versionado em `destination`, protegido pelo HMAC existente.
+- Identificador de escolha expirado ou invalidado retorna `RECOVERY_OPTIONS_EXPIRED`; a interface limpa código/senhas e permite consultar os contatos novamente com o identificador preenchido.
+- O envio e o reenvio usam somente a escolha explícita. Falha de WhatsApp/SMS não envia e-mail automaticamente. SMS desativado, incompleto ou em homologação não aparece.
+- `POST /auth/reset-password` mantém o contrato de confirmação. Desafios antigos sem vínculo de destino exigem reiniciar a recuperação. Sucesso confirma apenas o contato usado, altera senha, invalida sessões e registra auditoria na mesma transação.
+- Códigos valem 600 segundos, reenvio tem cooldown de 60 segundos e cada desafio admite 5 tentativas. Limites persistentes também abrangem consulta, conta e origem. `serverNow`, `expiresAt` e `retryAt` orientam o relógio sem mostrar contadores na interface.
+- A etapa final mostra código, nova senha, confirmação e ações necessárias. Após sucesso, retorna ao login da mesma origem, sem autenticação automática.
+
+## SMSMais em Configurações → Integrações → SMS
+
+Cada município possui configuração independente em `castragestao:sms`. O formulário permite salvar/substituir/remover o token, ativar/desativar o canal e testar conexão/consultar saldo. Somente administração municipal do próprio município ou administração global autorizada pode gravar/testar; `sms_settings` controla a aba.
+
+O token fica cifrado no servidor e nunca é devolvido em respostas de leitura/gravação. Campo vazio preserva a credencial; remoção explícita também desativa o canal. Desativar preserva a credencial. A proteção exige a `CONFIG_ENCRYPTION_KEY` existente válida (32 bytes em base64); sem ela, o servidor impede gravar o segredo/ativar e informa indisponibilidade da configuração segura. Não há fallback de texto puro para SMS.
+
+`POST /sms/test-connection` consulta apenas `GET /saldo`, com o token informado ou salvo. Não envia SMS, não persiste token e não ativa a integração. Ativação/troca de credencial ativa exige validação no servidor e usa o snapshot realmente persistido, sem manter conexão de banco durante a rede. Saldo zero não invalida a credencial.
+
+O adapter usa `POST https://smsmais.com/send`, Bearer no header, uma mensagem por desafio e referência externa correspondente ao ID do desafio. Não usa o endpoint individual que retém mensagens sem saldo para disparar após recarga. Aceite do provedor não é entrega nem verificação do telefone. Sem saldo, token inválido, rejeição ou timeout retornam falha segura sem troca de canal ou retry automático.
+
+Tokens `sbx_` podem ser armazenados/testados, mas não habilitam recuperação pública. O sandbox do fornecedor pode enviar SMS real ao celular verificado da conta; os testes do projeto usam transportes simulados. Nenhum webhook ou URL pública é necessário para esta entrega. SMS operacional de agenda/documentos permanece desabilitado.
+
+Referências do contrato: [API SMSMais](https://smsmais.com/api-sms) e [OpenAPI](https://smsmais.com/doc/openapi.yaml). O usuário obtém a credencial no painel do fornecedor e a informa no formulário; nunca a registra no código ou na conversa.
 
 ## Segurança e operação
 

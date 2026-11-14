@@ -59,6 +59,10 @@ export async function checkAndConsumeQuota(municipalityId, { db = pool, now = ne
   }
 }
 
+export async function isWhatsappQuotaAvailable(municipalityId, database = pool) {
+  return Boolean(municipalityId && evaluateWhatsappQuota(await readQuota(municipalityId, database)).allowed);
+}
+
 export async function getQuotaStatus(municipalityId) {
   if (!municipalityId) return null;
   const quota = await readQuota(municipalityId);

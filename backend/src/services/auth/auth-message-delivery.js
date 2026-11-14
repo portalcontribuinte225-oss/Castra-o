@@ -6,9 +6,10 @@ import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateCo
 import { checkAndConsumeQuota } from "../whatsappQuota.js";
 import { deliveryFailure, knownDeliveryCode } from "../notifications/delivery-result.js";
 import { isGlobalUser } from "../../tenant.js";
+import { sendSmsRecoveryCode } from "../sms-integration-settings.js";
 
-async function loadAuthDeliveryConfig(municipalityId) {
-  const { rows } = await pool.query("SELECT value FROM config WHERE key=$1 AND municipality_id=$2", [AUTH_DELIVERY_CONFIG_KEY, municipalityId]);
+export async function loadAuthDeliveryConfig(municipalityId, database = pool) {
+  const { rows } = await database.query("SELECT value FROM config WHERE key=$1 AND municipality_id=$2", [AUTH_DELIVERY_CONFIG_KEY, municipalityId]);
   return normalizeAuthDeliveryConfig(rows[0]?.value);
 }
 
@@ -24,6 +25,12 @@ function unavailable(purpose, channel, code) {
 
 function isVerification(purpose) {
   return purpose === AuthPurpose.VERIFY_EMAIL || purpose === AuthPurpose.VERIFY_PHONE;
+}
+
+function isRecoveryExpired(input) {
+  if (input.purpose !== AuthPurpose.PASSWORD_RESET) return false;
+  const expiresAt = new Date(input.expiresAt).getTime();
+  return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
 }
 
 function emailParameters(input) {
@@ -57,6 +64,7 @@ async function tryWhatsapp(input, config, dependencies) {
     return unavailable(input.purpose, channel, DeliveryCode.NOT_CONFIGURED);
   }
   if (!(await dependencies.consumeQuota(input.municipalityId)).allowed) return unavailable(input.purpose, channel, DeliveryCode.QUOTA_UNAVAILABLE);
+  if (isRecoveryExpired(input)) return unavailable(input.purpose, channel, DeliveryCode.PREPARATION_FAILED);
   const sent = await dependencies.sendWhatsapp({ ...runtime, templateName }, input.phone, whatsappComponents(input));
   return safeResult(input.purpose, channel, sent);
 }
@@ -65,7 +73,9 @@ async function tryEmail(input, config, dependencies) {
   const templateId = config.emailTemplates[input.purpose]
     || (input.purpose === AuthPurpose.PASSWORD_RESET ? dependencies.env.EMAILJS_TEMPLATE_ID : "");
   if (!templateId) return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.NOT_CONFIGURED);
-  const sent = await dependencies.sendEmail({ toEmail: input.email, templateId, templateParams: emailParameters(input) });
+  if (isRecoveryExpired(input)) return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.PREPARATION_FAILED);
+  const sent = await dependencies.sendEmail({ toEmail: input.email, templateId, templateParams: emailParameters(input),
+    ...(input.purpose === AuthPurpose.PASSWORD_RESET ? { expiresAt: input.expiresAt } : {}) });
   return safeResult(input.purpose, NotificationChannel.EMAIL, sent);
 }
 
@@ -73,10 +83,11 @@ async function tryEmail(input, config, dependencies) {
 export async function deliverAuthMessage(input, overrides = {}) {
   const dependencies = { loadConfig: loadAuthDeliveryConfig, loadWhatsappConfig: getMunicipalityWhatsappConfig,
     consumeQuota: checkAndConsumeQuota, sendEmail: sendEmailTemplate, sendWhatsapp: sendWhatsappTemplateComponents,
-    env: process.env, ...overrides };
+    sendSms: sendSmsRecoveryCode, env: process.env, ...overrides };
   const { purpose } = input;
   const globalStaffReset = purpose === AuthPurpose.PASSWORD_RESET && !input.municipalityId && isGlobalUser(input.user);
   if (!Object.values(AuthPurpose).includes(purpose) || (!input.municipalityId && !globalStaffReset)) return [];
+  if (purpose === AuthPurpose.PASSWORD_RESET) return deliverRecoveryChannel(input, dependencies, globalStaffReset);
   const requiresCode = isVerification(purpose) || purpose === AuthPurpose.PASSWORD_RESET;
   if ((requiresCode && !/^\d{6}$/.test(input.code || ""))
     || (purpose === AuthPurpose.INITIAL_PASSWORD && (typeof input.temporaryPassword !== "string" || input.temporaryPassword.length < 15))) {
@@ -103,4 +114,23 @@ export async function deliverAuthMessage(input, overrides = {}) {
     catch { results.push({ purpose, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }); }
   }
   return results;
+}
+
+async function deliverRecoveryChannel(input, dependencies, globalStaffReset) {
+  const { purpose, channel } = input;
+  if (!Object.values(NotificationChannel).includes(channel)) return [];
+  if (!/^\d{6}$/.test(input.code || "") || isRecoveryExpired(input)) return [unavailable(purpose, channel, DeliveryCode.PREPARATION_FAILED)];
+  try {
+    if (channel === NotificationChannel.SMS) {
+      if (globalStaffReset) return [unavailable(purpose, channel, DeliveryCode.CHANNEL_DISABLED)];
+      const result = await dependencies.sendSms({ municipalityId: input.municipalityId, phone: input.phone,
+        code: input.code, challengeId: input.challengeId, expiresAt: input.expiresAt });
+      return [{ ...safeResult(purpose, channel, result), ...(result?.status === DeliveryStatus.SENT
+        ? { providerMessageId: result.providerMessageId, reference: result.reference } : {}) }];
+    }
+    const config = normalizeAuthDeliveryConfig(globalStaffReset ? undefined : await dependencies.loadConfig(input.municipalityId));
+    if (channel === NotificationChannel.EMAIL) return [await tryEmail(input, config, dependencies)];
+    if (!globalStaffReset) return [await tryWhatsapp(input, config, dependencies)];
+    return [unavailable(purpose, channel, DeliveryCode.CHANNEL_DISABLED)];
+  } catch { return [{ purpose, channel, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }]; }
 }

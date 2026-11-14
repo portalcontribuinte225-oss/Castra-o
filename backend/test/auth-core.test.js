@@ -26,11 +26,13 @@ function useSecret(t) {
 }
 
 test("new password policy permits spaces and rejects bcrypt UTF-8 truncation", () => {
-  assert.notEqual(validateNewPassword("x".repeat(14)), "");
+  assert.notEqual(validateNewPassword("x".repeat(5)), "");
+  assert.equal(validateNewPassword("123456"), "");
+  assert.equal(validateNewPassword("abcdef"), "");
   assert.equal(validateNewPassword("long phrase with spaces"), "");
   assert.equal(validateNewPassword("á".repeat(36)), "");
   assert.notEqual(validateNewPassword("á".repeat(37)), "");
-  assert.notEqual(validateNewPassword("😀".repeat(8)), "");
+  assert.notEqual(validateNewPassword("😀".repeat(5)), "");
   assert.equal(validateNewPassword("😀".repeat(15)), "");
 });
 
@@ -147,6 +149,20 @@ test("new enrollment saves unverified contacts without fictitious login email or
   assert.equal(profile.email, "family@example.test");
   assert.equal(profile.email_verified_at, undefined);
   assert.equal(profile.phone_verified_at, undefined);
+});
+
+test("initial cadastral contacts persist independently of operational follow-up and repeats cannot replace them", async (t) => {
+  useSecret(t);
+  const store = enrollmentStore();
+  await store.run(enrollmentInput({ body: { cpf: CPF, tutor_name: "Tutor Test", tutor_email: " Family@Example.test ", phone: "(48) 99999-1234" } }));
+  const profile = store.profiles.get(`${MUNICIPALITY}:${CPF}`);
+  assert.equal(profile.email, "family@example.test");
+  assert.equal(profile.phone, "48999991234");
+  await store.run(enrollmentInput({ body: { cpf: CPF, tutor_name: "Changed", tutor_email: "attacker@example.test", phone: "11999998888" } }));
+  assert.equal(profile.email, "family@example.test");
+  assert.equal(profile.phone, "48999991234");
+  await store.run(enrollmentInput({ municipalityId: OTHER_MUNICIPALITY, body: { cpf: CPF, tutor_name: "Tutor Test", tutorEmail: "alias@example.test" } }));
+  assert.equal(store.profiles.get(`${OTHER_MUNICIPALITY}:${CPF}`).email, "alias@example.test");
 });
 
 function challengeStore() {

@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import { isValidCpf, normalizeCpf } from "../../utils.js";
 import { authError, temporaryPassword } from "./auth-security.js";
 import { allowAuthAttempt } from "../../repositories/auth-limits.js";
+import { normalizeAuthEmail, normalizeAuthPhone } from "./auth-contacts.js";
 
 // Called only inside the request transaction. tutorRequired is computed by request-submission, never copied from payload.
 export async function enrollTutorForRequest(client, { body, workflow, municipalityId, user, tutorRequired, ip }) {
@@ -25,8 +26,8 @@ export async function enrollTutorForRequest(client, { body, workflow, municipali
     `INSERT INTO users (name, email, password, role, municipality_id, must_change_password)
      VALUES ($1, NULL, $2, 'tutor', $3, TRUE) RETURNING id`, [name, hash, municipalityId],
   );
-  const email = workflow.followUp?.enabled ? workflow.followUp.email || null : null;
-  const phone = workflow.followUp?.enabled ? workflow.followUp.phone || null : null;
+  const email = normalizeAuthEmail(body.tutor_email || body.tutorEmail || body.email) || normalizeAuthEmail(workflow.followUp?.email) || null;
+  const phone = normalizeAuthPhone(body.phone) || normalizeAuthPhone(workflow.followUp?.phone) || null;
   await client.query("INSERT INTO tutor_profiles (user_id, municipality_id, cpf, email, phone) VALUES ($1, $2, $3, $4, $5)",
     [rows[0].id, municipalityId, cpf, email, phone]);
   return { tutorId: rows[0].id, enrollment: { temporaryPassword: password, cpf, municipalityId, name, email, phone } };

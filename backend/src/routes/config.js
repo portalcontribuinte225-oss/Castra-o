@@ -15,6 +15,8 @@ import {
 import { AUTH_DELIVERY_CONFIG_KEY, buildDefaultAuthDeliveryConfig, normalizeAuthDeliveryConfig, validateAuthDeliveryConfig } from "../../../shared/auth-contract.js";
 import { normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../../shared/document-reuse-contract.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
+import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
+import { getSmsIntegrationSettings, saveSmsIntegrationSettings } from "../services/sms-integration-settings.js";
 
 const router = Router();
 const RESERVATION_CONFIG_KEYS = new Set([
@@ -38,6 +40,7 @@ const SENSITIVE_CONFIG_KEYS = new Set([
   "permission_groups",
   "whatsapp_quota",
   AUTH_DELIVERY_CONFIG_KEY,
+  SMS_CONFIG_KEY,
 ]);
 
 // Keys cujas alterações são registradas em audit_logs (nunca inclui o valor de secrets).
@@ -67,6 +70,7 @@ const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "castragestao:schedule-rules",
   "permission_groups",
   AUTH_DELIVERY_CONFIG_KEY,
+  SMS_CONFIG_KEY,
 ]);
 
 const MUNICIPAL_ONLY_CONFIG_KEYS = new Set(MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS);
@@ -83,7 +87,7 @@ function validatePermissionGroups(value) {
     "dashboard", "admin", "credenciamento", "agenda", "adocao", "relatorios", "config",
   ]);
   const VALID_CONFIG_ITEMS = new Set([
-    "environment", "users", "sectors", "permissions", "municipalities", "whatsapp_settings", "ai_settings",
+    "environment", "users", "sectors", "permissions", "municipalities", "whatsapp_settings", "ai_settings", "sms_settings",
   ]);
   for (const group of value) {
     if (!group || typeof group !== "object") return "Cada grupo deve ser um objeto";
@@ -158,6 +162,9 @@ router.get("/:key", optionalAuth, async (req, res) => {
   if (SENSITIVE_CONFIG_KEYS.has(key) && !isInternalUser(req.user)) {
     return res.status(403).json({ error: "Configuração restrita à equipe do município." });
   }
+  if (key === SMS_CONFIG_KEY && !isGlobalUser(req.user) && !isMunicipalAdmin(req.user)) {
+    return res.status(403).json({ error: "Configuração restrita à administração municipal." });
+  }
 
   // Chaves globais exigem usuário global
   if (GLOBAL_ONLY_CONFIG_KEYS.has(key) && !isGlobalUser(req.user)) {
@@ -176,6 +183,7 @@ router.get("/:key", optionalAuth, async (req, res) => {
     : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: [key] };
 
   try {
+    if (key === SMS_CONFIG_KEY) return res.set("Cache-Control", "no-store").json(await getSmsIntegrationSettings(municipalityId));
     const { rows } = await pool.query(query.text, query.values);
     if (!rows[0]) {
       const buildDefault = DEFAULT_CONFIG_VALUE_BUILDERS[key];
@@ -183,6 +191,7 @@ router.get("/:key", optionalAuth, async (req, res) => {
     }
     res.json(publicConfigValue(key, rows[0].value));
   } catch (err) {
+    if (key === SMS_CONFIG_KEY) return res.set("Cache-Control", "no-store").status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível consultar a configuração de SMS." });
     res.status(500).json({ error: err.message });
   }
 });
@@ -219,6 +228,17 @@ router.put("/:key", auth, async (req, res) => {
   }
   const documentPolicyError = validateDocumentPolicies(key, req.body);
   if (documentPolicyError) return res.status(400).json({ error: documentPolicyError });
+
+  // SMS validates remotely before opening its optimistic, tenant-scoped write transaction.
+  if (key === SMS_CONFIG_KEY) {
+    try {
+      const result = await saveSmsIntegrationSettings({ municipalityId, input: req.body, actor: req.user });
+      return res.set("Cache-Control", "no-store").json(result);
+    } catch (error) {
+      return res.set("Cache-Control", "no-store").status(error.status || 500).json({ error: error.status ? error.message : "Não foi possível salvar a configuração de SMS.",
+        ...(error.status && error.code ? { code: error.code } : {}) });
+    }
+  }
 
   // Valida estrutura para chaves críticas de permissão
   if (key === "permission_groups") {

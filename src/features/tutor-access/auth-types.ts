@@ -1,3 +1,14 @@
+import { AuthAudience } from "../../../shared/auth-contract.js";
+import { NotificationChannel } from "../../../shared/notification-contract.js";
+
+export type AuthAudienceValue = typeof AuthAudience[keyof typeof AuthAudience];
+export type AuthChannel = typeof NotificationChannel[keyof typeof NotificationChannel];
+
+export interface AuthRequestOptions {
+  signal?: AbortSignal;
+  isCurrent?: () => boolean;
+}
+
 export interface SessionUser {
   id: string;
   name: string;
@@ -16,7 +27,26 @@ export interface AuthChallenge {
   challengeId: string;
   expiresIn: number;
   retryAfter: number;
+  serverNow?: string;
+  expiresAt?: string;
+  retryAt?: string;
   delivery?: Array<{ status?: string; reason?: string }>;
+}
+
+export interface RecoveryOption {
+  id: string;
+  channel: AuthChannel;
+  maskedDestination: string;
+}
+
+export interface RecoveryOptions {
+  recoveryToken: string;
+  options: RecoveryOption[];
+}
+
+export interface RecoveryContext {
+  audience: AuthAudienceValue;
+  municipalityId: string;
 }
 
 export interface EnrollmentCredential {

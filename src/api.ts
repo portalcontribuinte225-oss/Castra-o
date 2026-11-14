@@ -1,9 +1,10 @@
 import { AuthAudience } from "../shared/auth-contract.js";
 import { splitSubmissionEnvelope } from "./features/tutor-access/submission-envelope";
-import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
+import type { AuthRequestOptions, EnrollmentCredential, RecoveryContext } from "./features/tutor-access/auth-types";
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
+let sessionMutationVersion = 0;
 
 export const SESSION_INVALID_EVENT = "castragestao:session-invalid";
 
@@ -32,16 +33,18 @@ function headers(json = true) {
   return h;
 }
 
-async function request(method: string, path: string, body?: unknown, responseType: "json" | "blob" = "json") {
+async function request(method: string, path: string, body?: unknown, responseType: "json" | "blob" = "json", options?: AuthRequestOptions) {
   const requestToken = getToken();
+  const requestSessionVersion = sessionMutationVersion;
   const res = await fetch(`${BASE}${path}`, {
     method,
     headers: headers(),
     body: body ? JSON.stringify(body) : undefined,
+    ...(options?.signal ? { signal: options.signal } : {}),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    if (res.status === 401 && requestToken && requestToken === getToken() && !path.startsWith("/auth/login") && typeof window !== "undefined") {
+    if (res.status === 401 && requestToken && requestToken === getToken() && requestSessionVersion === sessionMutationVersion && !options?.signal?.aborted && (!options?.isCurrent || options.isCurrent()) && !path.startsWith("/auth/login") && typeof window !== "undefined") {
       window.dispatchEvent(new Event(SESSION_INVALID_EVENT));
     }
     throw new ApiError(err.error || res.statusText, res.status, err.code || "", Number(err.retryAfter || res.headers.get("Retry-After")) || 0);
@@ -52,20 +55,31 @@ async function request(method: string, path: string, body?: unknown, responseTyp
 }
 
 export const api = {
-  async login(identifier: string, password: string, audience: string = AuthAudience.STAFF, municipalityId = "") {
-    const data = await request("POST", "/auth/login", { identifier, password, audience, municipalityId });
+  async login(identifier: string, password: string, audience: string = AuthAudience.STAFF, municipalityId = "", options?: AuthRequestOptions) {
+    const version = ++sessionMutationVersion;
+    const data = await request("POST", "/auth/login", { identifier, password, audience, municipalityId }, "json", options);
+    if (version !== sessionMutationVersion || options?.signal?.aborted || options?.isCurrent?.() === false) throw new DOMException("Operação encerrada.", "AbortError");
     localStorage.setItem("castragestao:token", data.token);
     return data.user;
   },
   hasToken: () => Boolean(getToken()),
   getSession: () => request("GET", "/auth/me"),
-  async changePassword(body: { currentPassword: string; password: string }) {
-    const data = await request("POST", "/auth/change-password", body);
+  async changePassword(body: { currentPassword: string; password: string }, options?: AuthRequestOptions) {
+    const version = ++sessionMutationVersion;
+    const data = await request("POST", "/auth/change-password", body, "json", options);
+    if (version !== sessionMutationVersion || options?.signal?.aborted || options?.isCurrent?.() === false) throw new DOMException("Operação encerrada.", "AbortError");
     localStorage.setItem("castragestao:token", data.token);
     return data.user;
   },
-  forgotPassword: (body) => request("POST", "/auth/forgot-password", body),
-  resetPassword: (body) => request("POST", "/auth/reset-password", body),
+  getRecoveryOptions: (body: RecoveryContext & { identifier: string }, options?: AuthRequestOptions) => request("POST", "/auth/recovery-options", body, "json", options),
+  forgotPassword: (body: RecoveryContext & { recoveryToken: string; optionId: string }, options?: AuthRequestOptions) => request("POST", "/auth/forgot-password", body, "json", options),
+  async resetPassword(body: RecoveryContext & { challengeId: string; code: string; password: string }, options?: AuthRequestOptions) {
+    const version = sessionMutationVersion;
+    const data = await request("POST", "/auth/reset-password", body, "json", options);
+    if (version !== sessionMutationVersion || options?.signal?.aborted || options?.isCurrent?.() === false) throw new DOMException("Operação encerrada.", "AbortError");
+    api.logout();
+    return data;
+  },
   getTutorProfile: () => request("GET", "/auth/tutor/profile"),
   requestContactChallenge: (body) => request("POST", "/auth/tutor/contact-challenges", body),
   confirmContactChallenge: (challengeId: string, code: string) => request("POST", `/auth/tutor/contact-challenges/${encodeURIComponent(challengeId)}/confirm`, { code }),
@@ -73,6 +87,7 @@ export const api = {
   recoverTutorAccess: (id: string, body) => request("POST", `/auth/tutors/${encodeURIComponent(id)}/assisted-recovery`, body),
   upsertAuthUser: (body) => request("PUT", "/auth/users", body),
   logout() {
+    sessionMutationVersion += 1;
     localStorage.removeItem("castragestao:token");
   },
 
@@ -116,6 +131,7 @@ export const api = {
   deleteScheduleDay: (id) => request("DELETE", `/schedule/${id}`),
 
   getConfig: (key, municipalityId = "") => request("GET", municipalityId ? `/config/${key}?municipalityId=${encodeURIComponent(municipalityId)}` : `/config/${key}`),
+  testSmsConnection: (body: { municipalityId: string; token?: string }) => request("POST", "/sms/test-connection", body),
   setConfig: (key, value, municipalityId = "") => request(
     "PUT",
     municipalityId ? `/config/${key}?municipalityId=${encodeURIComponent(municipalityId)}` : `/config/${key}`,

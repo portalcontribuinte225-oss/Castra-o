@@ -59,4 +59,74 @@ describe("auth API boundaries", () => {
     expect(dispatchEvent).not.toHaveBeenCalled();
     expect(values.get("castragestao:token")).toBe("new-token");
   });
+
+  it("discovers without sending and sends only the selected opaque recovery option", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ recoveryToken: "recovery-token", options: [{ id: "sms-option", channel: "sms", maskedDestination: "(48) *****-1234" }] })));
+    vi.stubGlobal("fetch", fetch);
+    const context = { audience: AuthAudience.TUTOR, municipalityId: "town-a" };
+    await api.getRecoveryOptions({ ...context, identifier: "52998224725" });
+    expect(fetch.mock.calls).toHaveLength(1); expect(fetch.mock.calls[0][0]).toBe("/api/auth/recovery-options");
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({ ...context, identifier: "52998224725" });
+    await api.forgotPassword({ ...context, recoveryToken: "recovery-token", optionId: "sms-option" });
+    expect(fetch.mock.calls[1][0]).toBe("/api/auth/forgot-password");
+    expect(JSON.parse(String(fetch.mock.calls[1][1]?.body))).toEqual({ ...context, recoveryToken: "recovery-token", optionId: "sms-option" });
+    expect(values.size).toBe(0);
+  });
+
+  it("does not persist a late login after closing its context or starting a newer login", async () => {
+    let resolveOld: (value: Response) => void;
+    const oldResponse = new Promise<Response>((resolve) => { resolveOld = resolve; });
+    const fetch = vi.fn().mockImplementationOnce(() => oldResponse).mockResolvedValueOnce(new Response(JSON.stringify({ token: "new-token", user: { id: "new-user" } })));
+    vi.stubGlobal("fetch", fetch);
+    const oldLogin = api.login("old-user", "old-pass");
+    const rejected = expect(oldLogin).rejects.toMatchObject({ name: "AbortError" });
+    await api.login("new-user", "new-pass");
+    resolveOld(new Response(JSON.stringify({ token: "stale-token", user: { id: "old-user" } })));
+    await rejected;
+    expect(values.get("castragestao:token")).toBe("new-token");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ token: "closed-token", user: { id: "closed-user" } }))));
+    await expect(api.login("closed", "password", AuthAudience.TUTOR, "town-a", { isCurrent: () => false })).rejects.toMatchObject({ name: "AbortError" });
+    expect(values.get("castragestao:token")).toBe("new-token");
+  });
+
+  it("does not restore a session after logout or let an old reset act on a newer session", async () => {
+    let resolveLogin: (value: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { resolveLogin = resolve; })));
+    const pendingLogin = api.login("user", "password");
+    const loginRejected = expect(pendingLogin).rejects.toMatchObject({ name: "AbortError" });
+    api.logout(); resolveLogin(new Response(JSON.stringify({ token: "stale-token", user: { id: "user" } })));
+    await loginRejected; expect(values.size).toBe(0);
+
+    let resolveReset: (value: Response) => void;
+    const resetResponse = new Promise<Response>((resolve) => { resolveReset = resolve; });
+    vi.stubGlobal("fetch", vi.fn().mockImplementationOnce(() => resetResponse).mockResolvedValueOnce(new Response(JSON.stringify({ token: "new-token", user: { id: "new-user" } }))));
+    const pendingReset = api.resetPassword({ audience: AuthAudience.TUTOR, municipalityId: "town-a", challengeId: "challenge", code: "123456", password: "abcdef" });
+    const resetRejected = expect(pendingReset).rejects.toMatchObject({ name: "AbortError" });
+    await api.login("new-user", "new-pass"); resolveReset(new Response(JSON.stringify({ ok: true })));
+    await resetRejected; expect(values.get("castragestao:token")).toBe("new-token");
+  });
+
+  it("clears the eligible reset session immediately after its version guard without issuing a new login", async () => {
+    values.set("castragestao:token", "old-token");
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ ok: true })));
+    vi.stubGlobal("fetch", fetch);
+    await api.resetPassword({ audience: AuthAudience.TUTOR, municipalityId: "town-a", challengeId: "challenge", code: "123456", password: "abcdef" });
+    expect(values.size).toBe(0); expect(fetch.mock.calls).toHaveLength(1); expect(fetch.mock.calls[0][0]).toBe("/api/auth/reset-password");
+  });
+
+  it("preserves a newer pending login when an older authenticated request returns unauthorized", async () => {
+    values.set("castragestao:token", "old-token");
+    const dispatchEvent = vi.fn(); vi.stubGlobal("window", { dispatchEvent });
+    let resolveSession: (value: Response) => void;
+    let resolveLogin: (value: Response) => void;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveSession = resolve; }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { resolveLogin = resolve; })));
+    const oldSession = api.getSession(); const rejected = expect(oldSession).rejects.toMatchObject({ status: 401 });
+    const newLogin = api.login("new-user", "new-pass");
+    resolveSession(new Response(JSON.stringify({ error: "Sessão expirada." }), { status: 401 }));
+    await rejected; expect(dispatchEvent).not.toHaveBeenCalled();
+    resolveLogin(new Response(JSON.stringify({ token: "new-token", user: { id: "new-user" } })));
+    await newLogin; expect(values.get("castragestao:token")).toBe("new-token");
+  });
 });

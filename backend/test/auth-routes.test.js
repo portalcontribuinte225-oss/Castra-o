@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
 import { AuthAudience, AuthPurpose } from "../../shared/auth-contract.js";
+import { recoveryDestination } from "../src/services/auth/recovery-token.js";
 import { authHttpFixture, authUser, AUTH_TEST_MUNICIPALITY as MUNICIPALITY, AUTH_TEST_OTHER_MUNICIPALITY as OTHER,
   AUTH_TEST_PASSWORD as PASSWORD } from "./fixtures/auth-http.js";
 
@@ -42,7 +43,7 @@ test("first-change ticket can bootstrap and change password but cannot enter pro
 
 test("only one concurrent reset consumes a code and previous sessions are revoked", async (t) => {
   const user = authUser(); const fixture = await authHttpFixture(t, [user]); const oldToken = fixture.token(user);
-  const pending = await fixture.challenge(user, AuthPurpose.PASSWORD_RESET);
+  const pending = await fixture.challenge(user, AuthPurpose.PASSWORD_RESET, recoveryDestination("email", user.profile_email));
   const results = await Promise.all([1, 2].map(() => fixture.request("/auth/reset-password", { method: "POST", body: {
     audience: AuthAudience.TUTOR, municipalityId: MUNICIPALITY, challengeId: pending.challenge.id, code: pending.code, password: "new reset password phrase",
   } })));
@@ -95,16 +96,14 @@ test("existing staff identity cannot be reset by email collision without an expl
   assert.equal(await bcrypt.compare(payload.password, fixture.users.get(staff.id).password), true);
 });
 
-test("recovery responses for unknown and unconfirmed-contact accounts have the same public shape", async (t) => {
+test("recovery without available transports returns no options and never creates challenges", async (t) => {
   const user = authUser(); const fixture = await authHttpFixture(t, [user]);
-  const results = await Promise.all([user.cpf, "11144477735"].map((identifier) => fixture.request("/auth/forgot-password", {
+  const results = await Promise.all([user.cpf, "11144477735"].map((identifier) => fixture.request("/auth/recovery-options", {
     method: "POST", body: { audience: AuthAudience.TUTOR, municipalityId: MUNICIPALITY, identifier },
   })));
   for (const result of results) {
-    assert.equal(result.status, 200); assert.equal(result.body.ok, true);
-    assert.equal(result.body.expiresIn, 600); assert.equal(result.body.retryAfter, 60);
-    assert.match(result.body.challengeId, /^[0-9a-f-]{36}$/);
-    assert.deepEqual(Object.keys(result.body).sort(), ["challengeId", "expiresIn", "ok", "retryAfter"]);
+    assert.equal(result.status, 200);
+    assert.deepEqual(result.body, { recoveryToken: "", options: [] });
   }
   assert.equal(fixture.challenges.size, 0);
 });

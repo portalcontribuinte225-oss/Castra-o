@@ -2,6 +2,9 @@ import { DeliveryCode } from "../../../../shared/notification-contract.js";
 
 const deliveryCodeLabels = Object.freeze({
   [DeliveryCode.NOT_CONFIGURED]: "Credenciais ou template do canal incompletos.",
+  [DeliveryCode.INVALID_CREDENTIALS]: "Credencial do provedor inválida.",
+  [DeliveryCode.INSUFFICIENT_BALANCE]: "Saldo de SMS insuficiente.",
+  [DeliveryCode.INVALID_RESPONSE]: "Não foi possível confirmar o aceite da mensagem.",
   [DeliveryCode.INVALID_RECIPIENT]: "Contato de destino ausente ou inválido.",
   [DeliveryCode.RATE_LIMITED]: "Limite de envio atingido. Tente novamente mais tarde.",
   [DeliveryCode.PROVIDER_REJECTED]: "O provedor recusou o envio da mensagem.",

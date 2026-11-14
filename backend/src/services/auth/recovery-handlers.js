@@ -1,52 +1,59 @@
 import bcrypt from "bcryptjs";
 import { AUDIT_ACTIONS } from "../audit.js";
-import { randomUUID } from "node:crypto";
-import { AuthAudience, AuthPurpose, AUTH_CHALLENGE_SECONDS, AUTH_RETRY_SECONDS } from "../../../../shared/auth-contract.js";
+import { AuthAudience, AuthErrorCode, AuthPurpose, ContactKind, AUTH_CHALLENGE_SECONDS, AUTH_RETRY_SECONDS } from "../../../../shared/auth-contract.js";
+import { NotificationChannel } from "../../../../shared/notification-contract.js";
 import { findAuthUser, findLoginCandidates, savePassword, strictAuthAudit, withAuthTransaction } from "../../repositories/auth-users.js";
 import { allowAuthAttempt, consumeAuthLimit } from "../../repositories/auth-limits.js";
 import { createChallenge, findChallenge, consumeChallenge, recordChallengeDelivery } from "../../repositories/auth-challenges.js";
+import { saveVerifiedContact } from "../../repositories/tutor-profiles.js";
 import { authRequestContext } from "./session-handlers.js";
-import { authError, requireNewPassword } from "./auth-security.js";
+import { authError, requireNewPassword, safeDigestEqual } from "./auth-security.js";
+import { isActiveAccount } from "./auth-session.js";
 import { deliverAuthMessage } from "./auth-message-delivery.js";
+import { recoveryContacts } from "./auth-contacts.js";
+import { getRecoveryOptions } from "./recovery-channels.js";
+import { createRecoveryToken, readRecoveryToken, matchesRecoveryUser, invalidRecovery, recoveryDestination, readRecoveryDestination } from "./recovery-token.js";
 
 const invalidCode = () => authError(400, "Código inválido ou expirado. Solicite um novo código.");
-const wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+const limited = () => Object.assign(authError(429, "Aguarde para tentar novamente."), { retryAfter: AUTH_RETRY_SECONDS });
+
+export async function recoveryOptions(req, res) {
+  const context = authRequestContext(req);
+  if (!await allowAuthAttempt({ ...context, purpose: "recovery-options" })) throw limited();
+  const candidates = await findLoginCandidates(context);
+  if (candidates.length > 1 && context.audience === AuthAudience.TUTOR && context.identifier.includes("@")) {
+    throw authError(400, "Informe seu CPF para recuperar o acesso.", AuthErrorCode.CPF_REQUIRED);
+  }
+  const user = candidates.length === 1 ? candidates[0] : null;
+  const recoveryToken = isActiveAccount(user) ? createRecoveryToken(user) : "";
+  const options = recoveryToken ? await getRecoveryOptions(user, recoveryToken) : [];
+  res.set("Cache-Control", "no-store").json({ recoveryToken: options.length ? recoveryToken : "", options });
+}
 
 export async function forgotPassword(req, res) {
-  const started = Date.now();
-  const context = authRequestContext(req);
-  const response = { ok: true, challengeId: randomUUID(), expiresIn: AUTH_CHALLENGE_SECONDS, retryAfter: AUTH_RETRY_SECONDS };
-  let pending;
-  if (await allowAuthAttempt({ ...context, purpose: AuthPurpose.PASSWORD_RESET }, { limit: 10, seconds: 600 })) {
-    const candidates = await findLoginCandidates(context);
-    const found = candidates.length === 1 ? candidates[0] : null;
-    if (found && found.active !== false && (!found.municipality_id || found.municipality_active === true)
-      && await consumeAuthLimit(["reset-send", found.id], { limit: 1, seconds: AUTH_RETRY_SECONDS })) {
-      const emailVerified = context.audience === AuthAudience.STAFF ? Boolean(found.email) : Boolean(found.email_verified_at);
-      const phoneVerified = context.audience === AuthAudience.TUTOR && Boolean(found.phone_verified_at);
-      if (emailVerified || phoneVerified) {
-        pending = await withAuthTransaction(async (client) => {
-          const user = await findAuthUser(found.id, client, true);
-          if (user.active === false || (user.municipality_id && user.municipality_active !== true)) return null;
-          return { ...await createChallenge(client, { user, purpose: AuthPurpose.PASSWORD_RESET }), user };
-        });
-        if (pending) {
-          response.challengeId = pending.challenge.id;
-          try {
-            const results = await deliverAuthMessage({
-              purpose: AuthPurpose.PASSWORD_RESET, user: pending.user, municipalityId: pending.user.municipality_id,
-              email: context.audience === AuthAudience.STAFF ? pending.user.email : pending.user.profile_email,
-              phone: pending.user.profile_phone, emailVerified, phoneVerified, code: pending.code,
-            });
-            await recordChallengeDelivery(pending.challenge.id, results);
-          } catch { /* A public response never reveals account presence or provider status. */ }
-        }
-      }
-    }
-  }
-  // The same bounded response window covers absent, throttled and deliverable identities.
-  await wait(Math.max(0, 12_000 - (Date.now() - started)));
-  res.set("Cache-Control", "no-store").json(response);
+  const context = authRequestContext({ ip: req.ip, body: { ...req.body, identifier: "recovery" } });
+  const claims = readRecoveryToken(req.body?.recoveryToken, context);
+  if (!await allowAuthAttempt({ ...context, identifier: claims.userId, purpose: AuthPurpose.PASSWORD_RESET })) throw limited();
+  if (!await consumeAuthLimit(["reset-send", claims.userId], { limit: 1, seconds: AUTH_RETRY_SECONDS })) throw limited();
+  const pending = await withAuthTransaction(async (client) => {
+    const user = await findAuthUser(claims.userId, client, true);
+    if (!matchesRecoveryUser(claims, user)) throw invalidRecovery();
+    const options = await getRecoveryOptions(user, req.body.recoveryToken, { database: client });
+    const option = options.find((item) => safeDigestEqual(item.id, req.body?.optionId));
+    if (!option) throw invalidRecovery();
+    const destination = recoveryContacts(user)[option.channel];
+    return { ...await createChallenge(client, { user, purpose: AuthPurpose.PASSWORD_RESET,
+      destination: recoveryDestination(option.channel, destination) }), user, channel: option.channel, destination };
+  });
+  const { challenge, user, code, channel, destination } = pending;
+  const delivery = await deliverAuthMessage({ purpose: AuthPurpose.PASSWORD_RESET, user, municipalityId: user.municipality_id,
+    channel, code, challengeId: challenge.id, expiresAt: challenge.expires_at,
+    email: channel === NotificationChannel.EMAIL ? destination : "", phone: channel !== NotificationChannel.EMAIL ? destination : "" });
+  await recordChallengeDelivery(challenge.id, delivery);
+  res.set("Cache-Control", "no-store").json({ ok: true, challengeId: challenge.id, expiresIn: AUTH_CHALLENGE_SECONDS,
+    retryAfter: AUTH_RETRY_SECONDS, expiresAt: challenge.expires_at, retryAt: new Date(challenge.expires_at.getTime()
+      - (AUTH_CHALLENGE_SECONDS - AUTH_RETRY_SECONDS) * 1000), serverNow: new Date(),
+    delivery: delivery.map(({ channel: selected, status, code: failure, reason }) => ({ channel: selected, status, code: failure, reason })) });
 }
 
 export async function resetPassword(req, res) {
@@ -59,11 +66,18 @@ export async function resetPassword(req, res) {
   if (!allowed) throw invalidCode();
   const success = await withAuthTransaction(async (client) => {
     const user = await findAuthUser(candidate.user_id, client, true);
-    if (!user || user.active === false || (user.municipality_id && user.municipality_active !== true)) return false;
+    if (!isActiveAccount(user)) return false;
     const challenge = await findChallenge(candidate.id, client, true);
+    const destination = readRecoveryDestination(challenge?.destination);
+    if (!destination || recoveryContacts(user)[destination.channel] !== destination.value || !destination.value) return false;
     const consumed = await consumeChallenge(client, { challenge, user, code: req.body?.code, audience,
       municipalityId: req.body?.municipalityId, purpose: AuthPurpose.PASSWORD_RESET });
     if (!consumed) return false;
+    if (user.role === AuthAudience.TUTOR) {
+      const email = destination.channel === NotificationChannel.EMAIL;
+      if (!(email ? user.email_verified_at : user.phone_verified_at)) await saveVerifiedContact(client,
+        { userId: user.id, municipalityId: user.municipality_id, kind: email ? ContactKind.EMAIL : ContactKind.PHONE, value: destination.value });
+    }
     await savePassword(client, user.id, await bcrypt.hash(password, 10));
     await strictAuthAudit(client, { actorId: user.id, userId: user.id, municipalityId: user.municipality_id, action: AUDIT_ACTIONS.PASSWORD_RESET });
     return true;

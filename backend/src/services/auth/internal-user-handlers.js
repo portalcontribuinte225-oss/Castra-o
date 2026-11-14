@@ -3,7 +3,7 @@ import { AUDIT_ACTIONS } from "../audit.js";
 import { GLOBAL_ROLES, MUNICIPALITY_ADMIN_ROLE, ROLE_LEVELS, isGlobalUser, isMunicipalAdmin,
   canAssignRole, canManageUser, normalizeRole } from "../../tenant.js";
 import { strictAuthAudit, withAuthTransaction } from "../../repositories/auth-users.js";
-import { authError } from "./auth-security.js";
+import { authError, requireNewPassword } from "./auth-security.js";
 
 function writableRole(value) {
   const role = normalizeRole(value);
@@ -24,7 +24,8 @@ export async function upsertInternalUser(req, res) {
     ? req.body?.municipalityId || req.body?.municipality_id : req.user.municipalityId;
   if (name.length < 2 || name.length > 160 || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw authError(400, "Informe nome e e-mail válidos.");
   if (!global && !municipalityId) throw authError(400, "Selecione um município.");
-  if (typeof password !== "string" || Buffer.byteLength(password, "utf8") > 72 || (password && password.length < 6)) throw authError(400, "Senha inválida.");
+  if (typeof password !== "string") throw authError(400, "Senha inválida.");
+  if (password) requireNewPassword(password);
   const saved = await withAuthTransaction(async (client) => {
     const { rows } = await client.query("SELECT * FROM users WHERE lower(email) = $1 FOR UPDATE", [email]);
     if (rows.length > 1) throw authError(409, "E-mail ambíguo; revise o cadastro de usuários.");

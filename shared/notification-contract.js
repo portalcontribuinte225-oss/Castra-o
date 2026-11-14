@@ -9,6 +9,9 @@ export const NotificationChannel = Object.freeze({ EMAIL: "email", WHATSAPP: "wh
 export const DeliveryStatus = Object.freeze({ SENT: "sent", FAILED: "failed", SKIPPED: "skipped" });
 export const DeliveryCode = Object.freeze({
   NOT_CONFIGURED: "not_configured",
+  INVALID_CREDENTIALS: "invalid_credentials",
+  INSUFFICIENT_BALANCE: "insufficient_balance",
+  INVALID_RESPONSE: "invalid_response",
   INVALID_RECIPIENT: "invalid_recipient",
   RATE_LIMITED: "rate_limited",
   PROVIDER_REJECTED: "provider_rejected",

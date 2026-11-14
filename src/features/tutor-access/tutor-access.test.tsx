@@ -81,10 +81,18 @@ describe("credential isolation", () => {
 });
 
 describe("tutor entry and validation", () => {
-  it("accepts CPF text entry with an explicit municipal context", () => {
-    const html = renderToStaticMarkup(<AuthEntry municipalityId="municipality-a" municipalities={[{ id: "municipality-a", name: "Município A" }]} onMunicipalitySelect={() => {}} onLogin={() => {}} onClose={() => {}} />);
-    expect(html).toContain("CPF ou e-mail"); expect(html).toContain("Município A");
-    expect(html).toContain('type="text"'); expect(html).toContain("Equipe"); expect(html).toContain("use seu CPF");
+  it("accepts CPF in the inherited tutor context without audience or municipality selectors", () => {
+    const html = renderToStaticMarkup(<AuthEntry audience={AuthAudience.TUTOR} municipalityId="municipality-a" onLogin={() => {}} onClose={() => {}} />);
+    expect(html).toContain("CPF ou e-mail"); expect(html).toContain("Entrar como tutor");
+    expect(html).toContain('type="text"'); expect(html).toContain("use seu CPF");
+    expect(html).not.toContain("<select"); expect(html).not.toContain('type="radio"');
+  });
+
+  it("preserves global staff entry without a municipality and blocks missing tutor context", () => {
+    const staff = renderToStaticMarkup(<AuthEntry audience={AuthAudience.STAFF} municipalityId="" onLogin={() => {}} onClose={() => {}} />);
+    expect(staff).toContain("Entrar como equipe"); expect(staff).toContain("E-mail da equipe"); expect(staff).not.toContain("CPF ou e-mail");
+    const tutor = renderToStaticMarkup(<AuthEntry audience={AuthAudience.TUTOR} municipalityId="" onLogin={() => {}} onClose={() => {}} />);
+    expect(tutor).toContain("Selecione o município na página"); expect(tutor).not.toContain("<form");
   });
 
   it("enforces names and password length without artificial composition", () => {
@@ -92,6 +100,7 @@ describe("tutor entry and validation", () => {
     expect(validateTutorName("Ana Maria")).toBe(""); expect(validateTutorName("x".repeat(161))).not.toBe("");
     expect(validateNewPassword("senha com espaços longa")).toBe("");
     expect(validateNewPassword("curta")).not.toBe("");
+    for (const password of ["abcdef", "123456", "a b!? "]) expect(validateNewPassword(password)).toBe("");
     expect(validateNewPassword("😀".repeat(19))).not.toBe("");
   });
 
