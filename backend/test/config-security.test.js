@@ -11,6 +11,10 @@ import { registerTestSession, resolveTestSession } from "./fixtures/session-user
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
 const ADMIN = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
+const ALLOWED_LOCKS = [
+  `schedule:${MUNICIPALITY_ID}`,
+  ...[NOTIFICATIONS_CONFIG_KEY, AUTH_DELIVERY_CONFIG_KEY].flatMap((key) => [MUNICIPALITY_ID, OTHER_MUNICIPALITY_ID].map((id) => `channel-config:${key}:${id}`)),
+];
 const TEST_SECRET = "notification-route-tests-only";
 const clientFetch = globalThis.fetch;
 
@@ -28,15 +32,14 @@ async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
     if (sql === "BEGIN") { transactionStarted = true; return { rows: [] }; }
     if (sql === "COMMIT" || sql === "ROLLBACK") { transactionStarted = false; return { rows: [] }; }
     if (sql.includes("pg_advisory_xact_lock")) {
-      assert.equal(transactionStarted, true, "Schedule-affecting configuration must hold a transaction lock");
-      assert.deepEqual(values, [`schedule:${MUNICIPALITY_ID}`]);
+      assert.equal(transactionStarted, true, "Locked configuration must hold a transaction lock");
+      assert.equal(values.length, 1);
+      assert.ok(ALLOWED_LOCKS.includes(values[0]), `Unexpected advisory lock ${values[0]}`);
       return { rows: [] };
     }
     if (sql.includes("SELECT value FROM config")) {
-      if (values[0] === "whatsapp_quota" && sql.includes("FOR UPDATE")) {
-        assert.equal(transactionStarted, true, "Quota row must be locked inside a transaction");
-        await beforeQuotaLock?.(store);
-      }
+      if (sql.includes("FOR UPDATE")) assert.equal(transactionStarted, true, "Locked rows must be read inside a transaction");
+      if (values[0] === "whatsapp_quota" && sql.includes("FOR UPDATE")) await beforeQuotaLock?.(store);
       const value = store.get(`${values[0]}:${values[1]}`);
       return { rows: value === undefined ? [] : [{ value }] };
     }
@@ -76,7 +79,7 @@ async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    return { status: response.status, body: await response.json() };
+    return { status: response.status, headers: response.headers, body: await response.json() };
   }
   return { request, store, calls };
 }
@@ -316,4 +319,59 @@ test("WhatsApp test requires valid phone and does not expose provider error data
   assert.equal(response.body.providerResponse, undefined);
   assert.equal(JSON.stringify(response.body).includes("private-provider-details"), false);
   assert.equal(JSON.stringify(response.body).includes("private-token"), false);
+});
+
+test("channel configuration saves merge into the stored value under a transaction lock", async (t) => {
+  const { request, store, calls } = await fixture(t);
+  store.set(`${AUTH_DELIVERY_CONFIG_KEY}:${MUNICIPALITY_ID}`, {
+    emailTemplates: { password_reset: "reset_email" }, whatsappTemplates: { initial_password: "welcome_whatsapp" },
+  });
+  const auth = await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}`, {
+    user: ADMIN, method: "PUT", body: { emailTemplates: { initial_password: "welcome_email" } },
+  });
+  assert.equal(auth.status, 200);
+  assert.equal(auth.body.value.emailTemplates.initial_password, "welcome_email");
+  assert.equal(auth.body.value.emailTemplates.password_reset, "reset_email");
+  assert.equal(auth.body.value.whatsappTemplates.initial_password, "welcome_whatsapp");
+
+  store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, { emailTemplateId: "notify_email", whatsappTemplates: { completed: "done" } });
+  const notifications = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}`, {
+    user: ADMIN, method: "PUT", body: { whatsappTemplates: { schedule_changed: "changed" } },
+  });
+  assert.equal(notifications.status, 200);
+  assert.equal(notifications.body.value.emailTemplateId, "notify_email");
+  assert.deepEqual(notifications.body.value.whatsappTemplates, { ...buildDefaultNotificationConfig().whatsappTemplates, completed: "done", schedule_changed: "changed" });
+
+  const order = calls.map(({ sql }) => sql.match(/^(?:BEGIN|COMMIT)$|pg_advisory_xact_lock|FOR UPDATE|INSERT INTO config/)?.[0]).filter(Boolean);
+  const write = ["BEGIN", "pg_advisory_xact_lock", "FOR UPDATE", "INSERT INTO config", "COMMIT"];
+  assert.deepEqual(order, [...write, ...write]);
+});
+
+test("email integration status is admin-only, requires a municipality and exposes no credential values", async (t) => {
+  const { request, calls } = await fixture(t);
+  const secrets = { EMAILJS_SERVICE_ID: "service-secret-value", EMAILJS_PUBLIC_KEY: "public-secret-value", EMAILJS_PRIVATE_KEY: "private-secret-value" };
+  const previous = Object.fromEntries([...Object.keys(secrets), "EMAILJS_TEMPLATE_ID"].map((name) => [name, process.env[name]]));
+  Object.assign(process.env, secrets);
+  delete process.env.EMAILJS_TEMPLATE_ID;
+  t.after(() => {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  const path = `/config/email/status?municipalityId=${MUNICIPALITY_ID}`;
+  assert.equal((await request(path)).status, 401);
+  for (const role of ["tutor", "analista", "servidor_publico", "ong", "protetor"]) {
+    assert.equal((await request(path, { user: { ...ADMIN, role } })).status, 403, `${role} must not read e-mail status`);
+  }
+  assert.equal((await request("/config/email/status", { user: { role: "master" } })).status, 400);
+  assert.equal((await request("/config/email/status?municipalityId=invalid", { user: { role: "master" } })).status, 400);
+  for (const user of [ADMIN, { role: "master" }]) {
+    const response = await request(path, { user });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    assert.deepEqual(response.body, { serviceConfigured: true, publicKeyConfigured: true, privateKeyConfigured: true, recoveryTemplateConfigured: false });
+    for (const secret of Object.values(secrets)) assert.equal(JSON.stringify(response.body).includes(secret), false);
+  }
+  assert.equal(calls.length, 0);
 });

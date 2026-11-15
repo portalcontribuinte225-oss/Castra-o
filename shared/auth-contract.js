@@ -31,6 +31,12 @@ export function normalizeAuthDeliveryConfig(value = {}) {
   ]));
 }
 
+export function mergeAuthDeliveryConfig(current, patch = {}) {
+  const previous = normalizeAuthDeliveryConfig(current);
+  return normalizeAuthDeliveryConfig(Object.fromEntries(Object.entries(previous).map(([channel, templates]) =>
+    [channel, { ...templates, ...patch[channel] }])));
+}
+
 export function validateAuthDeliveryConfig(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "Configuração de autenticação inválida.";
   for (const channel of ["emailTemplates", "whatsappTemplates"]) {

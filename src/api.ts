@@ -131,6 +131,7 @@ export const api = {
   deleteScheduleDay: (id) => request("DELETE", `/schedule/${id}`),
 
   getConfig: (key, municipalityId = "") => request("GET", municipalityId ? `/config/${key}?municipalityId=${encodeURIComponent(municipalityId)}` : `/config/${key}`),
+  getEmailIntegrationStatus: (municipalityId: string) => request("GET", `/config/email/status?municipalityId=${encodeURIComponent(municipalityId)}`),
   testSmsConnection: (body: { municipalityId: string; token?: string }) => request("POST", "/sms/test-connection", body),
   setConfig: (key, value, municipalityId = "") => request(
     "PUT",

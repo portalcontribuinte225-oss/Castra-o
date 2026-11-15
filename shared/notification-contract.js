@@ -66,6 +66,12 @@ export function validateNotificationConfig(value) {
   return "";
 }
 
+export function mergeNotificationConfig(current, patch = {}) {
+  const previous = normalizeNotificationConfig(current);
+  return normalizeNotificationConfig({ ...previous, ...patch,
+    whatsappTemplates: { ...previous.whatsappTemplates, ...patch.whatsappTemplates } });
+}
+
 export function validateFollowUp(value, { whatsappEnabled = false } = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.enabled !== "boolean") {
     return "Informe se deseja acompanhar a solicitação.";

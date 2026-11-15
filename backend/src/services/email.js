@@ -2,6 +2,11 @@ import { DeliveryStatus, DeliveryCode } from "../../../shared/notification-contr
 import { buildNotificationMessage } from "./notifications/notification-message.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
 
+export function getEmailIntegrationStatus(env = process.env) {
+  return { serviceConfigured: Boolean(env.EMAILJS_SERVICE_ID), publicKeyConfigured: Boolean(env.EMAILJS_PUBLIC_KEY),
+    privateKeyConfigured: Boolean(env.EMAILJS_PRIVATE_KEY), recoveryTemplateConfigured: Boolean(env.EMAILJS_TEMPLATE_ID) };
+}
+
 // A bounded admission gate covers both reset and notification messages using the same EmailJS account.
 export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(...args), env = process.env, now = Date.now, timeoutMs = 5000,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
