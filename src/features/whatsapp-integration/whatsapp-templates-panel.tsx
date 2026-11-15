@@ -1,5 +1,6 @@
 import React from "react";
 import { WhatsappTemplatesTable } from "./whatsapp-templates-table";
+import { WhatsappVariablesList } from "./whatsapp-variables-list";
 import type { useWhatsappTemplates } from "./use-whatsapp-templates";
 
 type Templates = ReturnType<typeof useWhatsappTemplates>;
@@ -16,6 +17,7 @@ export function WhatsappTemplatesPanel({ municipalityId, readOnly, canSync, temp
     <section className="whatsapp-section">
       <div className="whatsapp-section-header">
         <span className="whatsapp-section-label">Templates da Meta</span>
+        <WhatsappVariablesList />
       </div>
       {!municipalityId && <p>Selecione um município para ver os templates.</p>}
       {readOnly && <p>Apenas administradores podem ligar ou desligar templates.</p>}

@@ -26,28 +26,24 @@ export function WhatsappQuota({ municipalityId, quota }: { municipalityId: strin
       </div>
       <div className="whatsapp-save-row">
         <button className="primary-action" type="button" onClick={save} disabled={!municipalityId}>Salvar cota</button>
+        {confirmingEnd ? (
+          <>
+            <span className="whatsapp-inline-status">Encerrar contrato hoje ({new Date().toLocaleDateString("pt-BR")})?</span>
+            <button className="primary-action danger-action" type="button" onClick={endContractToday}>Confirmar</button>
+            <button className="ghost-button" type="button" onClick={() => setConfirmingEnd(false)}>Cancelar</button>
+          </>
+        ) : (
+          <>
+            <button className="ghost-button danger-action" type="button" onClick={() => setConfirmingEnd(true)} disabled={!settings.plan || !municipalityId}>
+              Encerrar contrato
+            </button>
+            <button className="ghost-button" type="button" onClick={resetUsed} disabled={!live?.plan || !municipalityId}>
+              Zerar cota do mês
+            </button>
+          </>
+        )}
         {saveStatus && <span className={saved ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{saveStatus}</span>}
       </div>
-
-      <div className="whatsapp-section-heading"><span>Ações</span></div>
-      {confirmingEnd ? (
-        <div className="whatsapp-confirm-block">
-          <p>Encerrar contrato hoje ({new Date().toLocaleDateString("pt-BR")})?</p>
-          <div className="whatsapp-confirm-actions">
-            <button className="whatsapp-btn-danger-solid" type="button" onClick={endContractToday}>Confirmar</button>
-            <button className="btn-secondary" type="button" onClick={() => setConfirmingEnd(false)}>Cancelar</button>
-          </div>
-        </div>
-      ) : (
-        <div className="whatsapp-actions-row">
-          <button className="whatsapp-btn-danger" type="button" onClick={() => setConfirmingEnd(true)} disabled={!settings.plan || !municipalityId}>
-            Encerrar contrato
-          </button>
-          <button className="whatsapp-btn-warning" type="button" onClick={resetUsed} disabled={!live?.plan || !municipalityId}>
-            Zerar cota do mês
-          </button>
-        </div>
-      )}
       <p className="whatsapp-note">Encerrar bloqueia novos envios imediatamente. Zerar reinicia a contagem deste mês.</p>
     </section>
   );

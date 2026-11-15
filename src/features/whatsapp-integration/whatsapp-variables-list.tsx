@@ -1,14 +1,16 @@
 import React from "react";
 import { whatsappFieldLabels } from "../../../shared/whatsapp-templates-contract.js";
 
-// Consultation only: lists the data the system can put in a template, nothing here is selectable.
+export const VARIABLES_LIST_LABEL = "Variáveis existentes no sistema";
+
+// Consultation only: lists the data the system can put in a template. The value never changes, so nothing is selectable.
 export function WhatsappVariablesList() {
   return (
-    <details className="whatsapp-variables">
-      <summary><span className="whatsapp-variables-label">Variáveis</span><span className="whatsapp-variables-trigger">Ver lista</span></summary>
-      <ul>
-        {Object.values(whatsappFieldLabels).map((label) => <li key={label}>{label}</li>)}
-      </ul>
-    </details>
+    <label className="field whatsapp-variables-field">
+      <select aria-label={VARIABLES_LIST_LABEL} value="" onChange={() => undefined}>
+        <option value="">{VARIABLES_LIST_LABEL}</option>
+        {Object.values(whatsappFieldLabels).map((label) => <option key={label} value={label}>{label}</option>)}
+      </select>
+    </label>
   );
 }

@@ -2,6 +2,8 @@ import { encryptSecretStrict } from "./config-secret-cipher.js";
 
 const ID_PATTERN = /^\d{5,30}$/;
 const MAX_TOKEN_LENGTH = 1000;
+// Only the start of the token is kept readable, so the screen can show which token is saved.
+const TOKEN_PREVIEW_LENGTH = 8;
 
 function fail(message, status = 400) {
   return Object.assign(new Error(message), { status });
@@ -19,20 +21,25 @@ export function prepareWhatsappCredentials(current = {}, input = {}) {
   if (wabaId && !ID_PATTERN.test(wabaId)) throw fail("O ID da conta do WhatsApp Business deve conter apenas dígitos.");
   const nextToken = typeof input.accessToken === "string" ? input.accessToken.trim() : "";
   if (nextToken.length > MAX_TOKEN_LENGTH) throw fail("Token do WhatsApp inválido.");
-  let accessToken = typeof current.accessToken === "string" ? current.accessToken : "";
-  if (nextToken) {
+  const removeToken = input.clearAccessToken === true;
+  let accessToken = !removeToken && typeof current.accessToken === "string" ? current.accessToken : "";
+  let tokenPreview = !removeToken && typeof current.tokenPreview === "string" ? current.tokenPreview : "";
+  if (!removeToken && nextToken) {
     try {
       accessToken = encryptSecretStrict(nextToken);
     } catch {
       throw fail("O armazenamento seguro do token do WhatsApp está indisponível.", 503);
     }
+    tokenPreview = nextToken.slice(0, TOKEN_PREVIEW_LENGTH);
   }
   return {
-    active: input.active === undefined ? current.active === true : input.active === true,
+    // Without a token the channel cannot send, so removing it also turns the channel off.
+    active: removeToken ? false : input.active === undefined ? current.active === true : input.active === true,
     provider: "cloud_api",
     phoneNumberId,
     wabaId,
     accessToken,
+    tokenPreview,
   };
 }
 
@@ -47,5 +54,6 @@ export function publicWhatsappConfig(value, internalViewer = false) {
     phoneNumberId: String(source.phoneNumberId || ""),
     wabaId: String(source.wabaId || ""),
     hasAccessToken: Boolean(String(source.accessToken || "").trim()),
+    tokenPreview: String(source.accessToken || "").trim() ? String(source.tokenPreview || "") : "",
   };
 }

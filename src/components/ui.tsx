@@ -114,7 +114,7 @@ export function StatusBadge({ status, className = "" }: AnyRecord) {
   return <span className={`status-badge status-${status} ${className}`}>{statusLabels[status] || status}</span>;
 }
 
-export function Field({ label, value, onChange, placeholder, readOnly = false, invalid = false, type = "text" }: AnyRecord) {
+export function Field({ label, value, onChange, placeholder, readOnly = false, invalid = false, type = "text", autoComplete }: AnyRecord) {
   return (
     <label className={`field ${invalid ? "invalid" : ""}`}>
       <span>{label}</span>
@@ -123,6 +123,7 @@ export function Field({ label, value, onChange, placeholder, readOnly = false, i
         value={value || ""}
         readOnly={readOnly}
         placeholder={placeholder || ""}
+        autoComplete={autoComplete}
         onChange={(event) => onChange?.(event.target.value)}
       />
     </label>

@@ -1,4 +1,4 @@
-import { WHATSAPP_APPROVED_STATUS } from "../../../shared/whatsapp-templates-contract.js";
+import { WHATSAPP_APPROVED_STATUS, WHATSAPP_NOT_A_NOTICE_REASON } from "../../../shared/whatsapp-templates-contract.js";
 import type { WhatsappTemplateRow } from "./whatsapp-integration-types";
 
 export type StatusTone = "ok" | "warn" | "off";
@@ -39,8 +39,16 @@ export function variableOrderHint(row: WhatsappTemplateRow) {
   return row.variables.map((label, index) => `{{${index + 1}}} ${label}`).join(" · ");
 }
 
+export const NOT_USED_BY_SYSTEM_TEXT = "Template padrão da Meta, não usado pelo sistema.";
+
+// A template whose name is not a system notice (e.g. the test template Meta creates) is neutral, not a defect.
+export function isNotUsedBySystem(row: WhatsappTemplateRow) {
+  return !row.label && row.reason === WHATSAPP_NOT_A_NOTICE_REASON;
+}
+
 // Why the switch cannot be turned on (empty when it can, or when it is already on).
 export function lockReason(row: WhatsappTemplateRow) {
   if (row.active || row.canActivate) return "";
+  if (isNotUsedBySystem(row)) return NOT_USED_BY_SYSTEM_TEXT;
   return row.label ? "Liga quando a Meta aprovar o template." : row.reason || "Fora do padrão.";
 }

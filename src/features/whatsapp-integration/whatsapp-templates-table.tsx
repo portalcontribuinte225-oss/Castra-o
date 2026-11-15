@@ -1,6 +1,6 @@
 import React from "react";
 import { Lock } from "lucide-react";
-import { lockReason, templateRowKey, templateStatusLabel, templateStatusTone, variableOrderHint } from "./whatsapp-template-display";
+import { isNotUsedBySystem, lockReason, NOT_USED_BY_SYSTEM_TEXT, templateRowKey, templateStatusLabel, templateStatusTone, variableOrderHint } from "./whatsapp-template-display";
 import type { WhatsappTemplateList, WhatsappTemplateRow } from "./whatsapp-integration-types";
 
 interface Props {
@@ -34,7 +34,9 @@ export function WhatsappTemplatesTable({ list, syncing, busy, readOnly, canSync,
                   <td><code>{row.name}</code> <small>{row.language}</small></td>
                   <td><span className={`whatsapp-badge whatsapp-badge--${templateStatusTone(row.status)}`}>{templateStatusLabel(row.status)}</span></td>
                   <td title={row.variables.length ? variableOrderHint(row) : undefined}>
-                    {row.label || <span className="whatsapp-outside">Fora do padrão{row.reason ? `: ${row.reason}` : ""}</span>}
+                    {row.label || (isNotUsedBySystem(row)
+                      ? <span className="whatsapp-muted">{NOT_USED_BY_SYSTEM_TEXT}</span>
+                      : <span className="whatsapp-outside">Fora do padrão{row.reason ? `: ${row.reason}` : ""}</span>)}
                   </td>
                   <td className="whatsapp-switch-cell">
                     <button

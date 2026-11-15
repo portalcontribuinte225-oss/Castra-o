@@ -78,17 +78,45 @@ test("credentials keep only known fields, encrypt the token and reject malformed
   const saved = prepareWhatsappCredentials({ confirmationTemplate: "old", templateVariables: ["x"], languageCode: "pt_BR" }, {
     active: true, phoneNumberId: " 123456789 ", wabaId: "987654321", accessToken: " secret-token ", confirmationTemplate: "ignored", hasAccessToken: true,
   });
-  assert.deepEqual(Object.keys(saved).sort(), ["accessToken", "active", "phoneNumberId", "provider", "wabaId"]);
+  assert.deepEqual(Object.keys(saved).sort(), ["accessToken", "active", "phoneNumberId", "provider", "tokenPreview", "wabaId"]);
   assert.equal(saved.phoneNumberId, "123456789");
   assert.match(saved.accessToken, /^enc:v1:/);
   assert.equal(saved.accessToken.includes("secret-token"), false);
+  assert.equal(saved.tokenPreview, "secret-t");
   const kept = prepareWhatsappCredentials(saved, { phoneNumberId: "123456789" });
   assert.equal(kept.accessToken, saved.accessToken);
+  assert.equal(kept.tokenPreview, "secret-t");
   assert.equal(kept.wabaId, "987654321");
   assert.equal(prepareWhatsappCredentials({ accessToken: "legacy-plain" }, {}).accessToken, "legacy-plain");
   for (const input of [{ phoneNumberId: "12 34" }, { wabaId: "abc12345" }, { phoneNumberId: "123" }, { accessToken: "x".repeat(1001) }]) {
     assert.throws(() => prepareWhatsappCredentials({}, input), { status: 400 });
   }
+});
+
+test("removing the token clears it and its preview, turns the channel off and wins over a new token", (t) => {
+  const previousKey = process.env.CONFIG_ENCRYPTION_KEY;
+  process.env.CONFIG_ENCRYPTION_KEY = ENCRYPTION_KEY;
+  t.after(() => { if (previousKey === undefined) delete process.env.CONFIG_ENCRYPTION_KEY; else process.env.CONFIG_ENCRYPTION_KEY = previousKey; });
+  const saved = prepareWhatsappCredentials({}, { active: true, phoneNumberId: "123456789", wabaId: "987654321", accessToken: "EAAFAKE0TOKEN1234567" });
+  assert.equal(saved.tokenPreview, "EAAFAKE0");
+  const removed = prepareWhatsappCredentials(saved, { clearAccessToken: true });
+  assert.deepEqual(removed, { active: false, provider: "cloud_api", phoneNumberId: "123456789", wabaId: "987654321", accessToken: "", tokenPreview: "" });
+  assert.deepEqual(prepareWhatsappCredentials(saved, { clearAccessToken: true, accessToken: "another-token", active: true }), removed);
+  assert.equal(prepareWhatsappCredentials(saved, { clearAccessToken: "true" }).accessToken, saved.accessToken);
+  assert.equal(prepareWhatsappCredentials({ accessToken: "legacy-plain" }, {}).tokenPreview, "");
+  assert.equal(prepareWhatsappCredentials(removed, { accessToken: "fresh-token" }).tokenPreview, "fresh-to");
+});
+
+test("turning the switch on or off keeps the saved token and its preview, so it survives a page reload", (t) => {
+  const previousKey = process.env.CONFIG_ENCRYPTION_KEY;
+  process.env.CONFIG_ENCRYPTION_KEY = ENCRYPTION_KEY;
+  t.after(() => { if (previousKey === undefined) delete process.env.CONFIG_ENCRYPTION_KEY; else process.env.CONFIG_ENCRYPTION_KEY = previousKey; });
+  const saved = prepareWhatsappCredentials({}, { active: false, phoneNumberId: "123456789", wabaId: "987654321", accessToken: "EAAFAKE0TOKEN1234567" });
+  assert.equal(saved.active, false);
+  const on = prepareWhatsappCredentials(saved, { provider: "cloud_api", phoneNumberId: "123456789", wabaId: "987654321", active: true });
+  assert.deepEqual(on, { ...saved, active: true });
+  assert.deepEqual(prepareWhatsappCredentials(on, { phoneNumberId: "123456789", wabaId: "987654321", active: false }), saved);
+  assert.equal(publicWhatsappConfig(on, true).active, true);
 });
 
 test("saving a token without the encryption key fails instead of storing plain text", () => {
@@ -103,11 +131,12 @@ test("saving a token without the encryption key fails instead of storing plain t
 });
 
 test("visitors only learn whether WhatsApp is on; staff also see identifiers but never the token", () => {
-  const stored = { active: true, phoneNumberId: "123456", wabaId: "654321", accessToken: "enc:v1:secret", confirmationTemplate: "old" };
+  const stored = { active: true, phoneNumberId: "123456", wabaId: "654321", accessToken: "enc:v1:secret", tokenPreview: "EAAFAKE0", confirmationTemplate: "old" };
   assert.deepEqual(publicWhatsappConfig(stored, false), { active: true });
-  assert.deepEqual(publicWhatsappConfig(stored, true), { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true });
+  assert.deepEqual(publicWhatsappConfig(stored, true), { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true, tokenPreview: "EAAFAKE0" });
+  assert.equal(publicWhatsappConfig({ ...stored, accessToken: "" }, true).tokenPreview, "");
   assert.deepEqual(publicWhatsappConfig(null, false), { active: false });
-  assert.deepEqual(publicWhatsappConfig(undefined, true), { active: false, provider: "cloud_api", phoneNumberId: "", wabaId: "", hasAccessToken: false });
+  assert.deepEqual(publicWhatsappConfig(undefined, true), { active: false, provider: "cloud_api", phoneNumberId: "", wabaId: "", hasAccessToken: false, tokenPreview: "" });
 });
 
 test("the public WhatsApp configuration exposes only the active flag, while staff reads omit the token", async (t) => {
@@ -116,7 +145,7 @@ test("the public WhatsApp configuration exposes only the active flag, while staf
   assert.deepEqual((await request(`/config/whatsapp?municipalityId=${MUNICIPALITY_ID}`)).body, { active: true });
   assert.deepEqual((await request("/config/whatsapp", { user: TUTOR })).body, { active: true });
   const staff = await request("/config/whatsapp", { user: STAFF });
-  assert.deepEqual(staff.body, { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true });
+  assert.deepEqual(staff.body, { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true, tokenPreview: "" });
   assert.equal(JSON.stringify(staff.body).includes("secret"), false);
 });
 
@@ -124,12 +153,16 @@ test("administrators save credentials with an encrypted token and the response n
   const { request, store } = await fixture(t);
   const saved = await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { active: true, phoneNumberId: "123456789", wabaId: "987654321", accessToken: "private-token", confirmationTemplate: "old", templateVariables: ["x"] } });
   assert.equal(saved.status, 200);
-  assert.deepEqual(saved.body.value, { active: true, provider: "cloud_api", phoneNumberId: "123456789", wabaId: "987654321", hasAccessToken: true });
+  assert.deepEqual(saved.body.value, { active: true, provider: "cloud_api", phoneNumberId: "123456789", wabaId: "987654321", hasAccessToken: true, tokenPreview: "private-" });
   const stored = store.get(`whatsapp:${MUNICIPALITY_ID}`);
   assert.match(stored.accessToken, /^enc:v1:/);
   assert.equal(JSON.stringify(stored).includes("private-token"), false);
   assert.equal(Object.hasOwn(stored, "confirmationTemplate"), false);
   assert.equal((await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { phoneNumberId: "12 34 56" } })).status, 400);
+  const removed = await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { clearAccessToken: true } });
+  assert.equal(removed.status, 200);
+  assert.deepEqual(removed.body.value, { active: false, provider: "cloud_api", phoneNumberId: "123456789", wabaId: "987654321", hasAccessToken: false, tokenPreview: "" });
+  assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).accessToken, "");
   delete process.env.CONFIG_ENCRYPTION_KEY;
   const unavailable = await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { accessToken: "another-token" } });
   assert.equal(unavailable.status, 503);

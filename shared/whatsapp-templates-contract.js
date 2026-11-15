@@ -4,6 +4,8 @@ import { AuthPurpose } from "./auth-contract.js";
 export const WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY = "whatsapp_active_templates";
 export const WHATSAPP_CATALOG_CONFIG_KEY = "whatsapp_catalog";
 export const WHATSAPP_APPROVED_STATUS = "APPROVED";
+// Reason for a template whose name is simply not one of the system's notices (not a defect of the template).
+export const WHATSAPP_NOT_A_NOTICE_REASON = "O nome não indica um aviso do sistema.";
 export const WHATSAPP_DEFAULT_LANGUAGE = "pt_BR";
 export const WHATSAPP_MAX_VARIABLES = 20;
 export const WHATSAPP_TEMPLATE_PREFIX = "castracao_";
@@ -108,7 +110,7 @@ function useReason(entry, use) {
 export function recognizeWhatsappTemplate(entry) {
   const part = parseWhatsappTemplateName(entry?.name);
   const candidates = part === null ? [] : whatsappUses.filter((use) => matchesUse(part, use));
-  if (!candidates.length) return { uses: [], reason: "O nome não indica um aviso do sistema." };
+  if (!candidates.length) return { uses: [], reason: WHATSAPP_NOT_A_NOTICE_REASON };
   const structural = structuralReason(entry);
   if (structural) return { uses: [], reason: structural };
   const checked = candidates.map((use) => ({ use, reason: useReason(entry, use) }));

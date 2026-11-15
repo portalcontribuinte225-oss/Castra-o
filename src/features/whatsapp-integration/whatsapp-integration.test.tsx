@@ -5,7 +5,9 @@ import { whatsappFieldLabels } from "../../../shared/whatsapp-templates-contract
 import { useWhatsappCredentials } from "./use-whatsapp-credentials";
 import { useWhatsappQuota } from "./use-whatsapp-quota";
 import { useWhatsappTemplates } from "./use-whatsapp-templates";
+import { WhatsappCredentials } from "./whatsapp-credentials";
 import { WhatsappIntegrationTab } from "./whatsapp-integration-tab";
+import { WhatsappQuota } from "./whatsapp-quota";
 import { WhatsappTemplatesPanel } from "./whatsapp-templates-panel";
 import { WhatsappTemplatesTable } from "./whatsapp-templates-table";
 import { WhatsappVariablesList } from "./whatsapp-variables-list";
@@ -26,8 +28,9 @@ const noop = vi.fn();
 const tableProps = { syncing: false, busy: false, readOnly: false, canSync: true, onSync: noop, onToggle: vi.fn() };
 const templatesState = { list: listOf(), loading: false, ready: true, syncing: false, saving: false, error: "", notice: "", retry: noop, sync: noop, toggle: vi.fn() };
 const credentialsState = {
-  settings: { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true }, setSettings: noop, saveStatus: "",
-  testPhone: "", setTestPhone: noop, testStatus: "", testing: false, hasCredentials: true, isActive: true, canSync: true, save: noop, sendTest: noop,
+  settings: { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true, tokenPreview: "EAAFAKE0" }, setSettings: noop, saveStatus: "",
+  testPhone: "", setTestPhone: noop, testStatus: "", testing: false, hasCredentials: true, isActive: true, canSync: true, idsChanged: false,
+  confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, toggleActive: noop, removeToken: noop, sendTest: noop,
 };
 const quotaState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "", live: { plan: 500, used: 12, active: true, contractEnd: "2026-12-31" },
@@ -55,7 +58,8 @@ describe("template display helpers", () => {
     expect(variableOrderHint(row({ variables: [] }))).toBe("");
     expect(lockReason(row())).toBe("");
     expect(lockReason(row({ canActivate: false, status: "PENDING" }))).toBe("Liga quando a Meta aprovar o template.");
-    expect(lockReason(row({ canActivate: false, label: "", reason: "O nome não indica um aviso do sistema." }))).toBe("O nome não indica um aviso do sistema.");
+    expect(lockReason(row({ canActivate: false, label: "", reason: "O nome não indica um aviso do sistema." }))).toBe("Template padrão da Meta, não usado pelo sistema.");
+    expect(lockReason(row({ canActivate: false, label: "", reason: "O corpo tem 2 variável(is); o esperado é 4." }))).toBe("O corpo tem 2 variável(is); o esperado é 4.");
     expect(lockReason(row({ active: true, canActivate: false }))).toBe("");
   });
 
@@ -81,7 +85,8 @@ describe("templates table", () => {
     expect(html).toContain("Em análise");
     expect(html).toContain("Não encontrado");
     expect(html).toContain("Agendamento cancelado");
-    expect(html).toContain("Fora do padrão: O nome não indica um aviso do sistema.");
+    expect(html).toContain('<span class="whatsapp-muted">Template padrão da Meta, não usado pelo sistema.</span>');
+    expect(html).not.toContain("Fora do padrão");
     expect(html).toContain("Última sincronização");
     expect(html).toContain('title="{{1}} Nome do tutor · {{2}} Data do agendamento');
     const switches = html.match(/<button[^>]*role="switch"[^>]*>/g) || [];
@@ -98,6 +103,14 @@ describe("templates table", () => {
     expect(html).not.toContain("Detalhes");
   });
 
+  it("keeps real template problems in red while a template that is simply not a system notice is neutral", () => {
+    const html = renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(
+      row({ name: "castracao_confirmacao_agendamento", label: "", uses: [], reason: "O corpo tem 2 variável(is); o esperado é 4.", canActivate: false }),
+    )} />);
+    expect(html).toContain('<span class="whatsapp-outside">Fora do padrão: O corpo tem 2 variável(is); o esperado é 4.</span>');
+    expect(html).not.toContain("whatsapp-muted");
+  });
+
   it("explains the empty state and blocks synchronization without credentials or for read-only users", () => {
     const empty = renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={{ syncedAt: "", templates: [] }} canSync={false} />);
     expect(empty).toContain("Ainda não sincronizado");
@@ -110,14 +123,14 @@ describe("templates table", () => {
 });
 
 describe("variables list", () => {
-  it("lists the system variables by name only, without examples and without anything selectable", () => {
+  it("is a standard select that lists the system variables by name only, always showing its own title", () => {
     const html = renderToStaticMarkup(<WhatsappVariablesList />);
-    for (const label of Object.values(whatsappFieldLabels)) expect(html).toContain(`<li>${label}</li>`);
+    expect(html).toContain('class="field whatsapp-variables-field"');
+    expect(html).toContain('<option value="" selected="">Variáveis existentes no sistema</option>');
+    for (const label of Object.values(whatsappFieldLabels)) expect(html).toContain(`<option value="${label}">${label}</option>`);
     expect(Object.values(whatsappFieldLabels)).toHaveLength(11);
-    expect(html).toContain("Ver lista");
-    expect(html).not.toContain("<select");
-    expect(html).not.toContain("<option");
-    expect(html).not.toContain("<input");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain("Ver lista");
     expect(html).not.toMatch(/Maria Silva|123\/2026|20\/11\/2026/);
     expect(html).not.toMatch(/CPF|Telefone|E-mail/);
   });
@@ -128,10 +141,13 @@ describe("templates panel", () => {
     <WhatsappTemplatesPanel municipalityId="municipality-a" readOnly={false} canSync templates={{ ...templatesState, list: listOf(row()), ...overrides }} {...props} />,
   );
 
-  it("renders the table for a ready municipality", () => {
+  it("renders the table for a ready municipality, with the system variables in the same header line", () => {
     const html = panel();
     expect(html).toContain("Templates da Meta");
     expect(html).toContain("castracao_confirmacao_agendamento");
+    const header = html.slice(html.indexOf("whatsapp-section-header"), html.indexOf("</div>"));
+    expect(header).toContain("Templates da Meta");
+    expect(header).toContain("Variáveis existentes no sistema");
   });
 
   it("shows loading, errors with retry, notices and the municipality prompt", () => {
@@ -149,23 +165,111 @@ describe("templates panel", () => {
   });
 });
 
+describe("access token", () => {
+  const credentials = (settings = {}, extra = {}) => renderToStaticMarkup(
+    <WhatsappCredentials municipalityId="municipality-a" credentials={{ ...credentialsState, settings: { ...credentialsState.settings, ...settings }, ...extra }} />,
+  );
+
+  it("keeps the saved token inside its own field, start visible and the rest masked, with only the removal beside it", () => {
+    const html = credentials();
+    expect(html).toContain(`value="EAAFAKE0${"•".repeat(24)}"`);
+    expect(html).toMatch(/<input type="text" readonly=""[^>]*value="EAAFAKE0/);
+    expect(html).not.toContain("Token salvo");
+    expect(html).toContain("Remover token");
+    expect(html).not.toContain("Salvar credenciais");
+    expect(html).not.toContain("Começa com");
+  });
+
+  it("masks everything when only the existence of the token is known, and offers saving instead of removing without a token", () => {
+    expect(credentials({ tokenPreview: "" })).toContain(`value="${"•".repeat(32)}"`);
+    const none = credentials({ hasAccessToken: false, tokenPreview: "" });
+    expect(none).toContain("Salvar credenciais");
+    expect(none).not.toContain("Remover token");
+    expect(none).not.toContain("•");
+  });
+
+  it("offers saving instead of removing while the ids hold something not saved yet", () => {
+    const html = credentials({}, { idsChanged: true });
+    expect(html).toContain("Salvar credenciais");
+    expect(html).not.toContain("Remover token");
+  });
+
+  it("uses the standard buttons of the app, the removal marked as dangerous", () => {
+    expect(credentials()).toContain('class="ghost-button danger-action"');
+    expect(credentials({ hasAccessToken: false })).toContain('class="primary-action"');
+    const confirming = credentials({}, { confirmingRemoval: true });
+    expect(confirming).toContain('class="primary-action danger-action"');
+    expect(confirming).toContain('class="ghost-button"');
+  });
+
+  it("keeps the token field and the number test in the same field-plus-button layout", () => {
+    const html = credentials();
+    expect(html.match(/whatsapp-input-action-row/g)).toHaveLength(2);
+    expect(html).not.toContain("whatsapp-test-row");
+    expect(html).not.toContain("Variáveis");
+  });
+
+  it("shows the start of a token being typed so it can be checked before saving", () => {
+    const html = credentials({ accessToken: "EAAFAKE0TOKEN1234567SECRETPART" });
+    expect(html).toContain("Começa com <code>EAAFAKE0</code>");
+    expect(html).not.toContain("<code>EAAFAKE0T");
+  });
+
+  it("asks for confirmation before removing and warns that the channel is turned off", () => {
+    const confirming = credentials({}, { confirmingRemoval: true });
+    expect(confirming).toContain("Remover o token? O WhatsApp será desativado.");
+    expect(confirming).toContain("Confirmar");
+    expect(confirming).not.toContain(">Remover token<");
+  });
+
+  it("stops the browser from filling the credentials with saved logins", () => {
+    const html = credentials({ hasAccessToken: false });
+    expect(html).toMatch(/type="password"[^>]*autoComplete="new-password"|autoComplete="new-password"[^>]*type="password"/);
+    expect(html.match(/autoComplete="off"/g)).toHaveLength(2);
+  });
+});
+
+describe("contract and quota", () => {
+  const quota = (extra = {}) => renderToStaticMarkup(<WhatsappQuota municipalityId="municipality-a" quota={{ ...quotaState, ...extra }} />);
+
+  it("puts the contract actions beside the save button, without an actions legend, using the standard buttons", () => {
+    const html = quota();
+    expect(html).not.toContain("Ações");
+    expect(html).not.toContain("whatsapp-section-heading");
+    const row = html.slice(html.indexOf("whatsapp-save-row"), html.indexOf("whatsapp-note"));
+    expect(row.indexOf("Salvar cota")).toBeGreaterThan(-1);
+    expect(row.indexOf("Encerrar contrato")).toBeGreaterThan(row.indexOf("Salvar cota"));
+    expect(row.indexOf("Zerar cota do mês")).toBeGreaterThan(row.indexOf("Encerrar contrato"));
+    expect(row).toContain('class="ghost-button danger-action"');
+    expect(row).toContain('class="ghost-button"');
+    expect(html).not.toMatch(/whatsapp-btn|whatsapp-confirm|whatsapp-actions-row/);
+  });
+
+  it("asks for confirmation in the same line before ending the contract", () => {
+    const html = quota({ confirmingEnd: true });
+    expect(html).toContain("Encerrar contrato hoje (");
+    expect(html).toContain("Confirmar");
+    expect(html).toContain("Cancelar");
+    expect(html).not.toContain("Zerar cota do mês");
+    expect(html.indexOf("Confirmar")).toBeGreaterThan(html.indexOf("Salvar cota"));
+  });
+});
+
 describe("integration tab", () => {
   it("orders the screen: status, credentials with the test, templates, then contract and quota last", () => {
     const html = renderToStaticMarkup(<WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} />);
-    const order = ["whatsapp-statusbar", "Credenciais", "Teste de envio", "Variáveis", "Templates da Meta", "Contrato e cota"].map((text) => html.indexOf(text));
+    const order = ["whatsapp-statusbar", "Credenciais", "Teste de envio", "Templates da Meta", "Variáveis existentes no sistema", "Contrato e cota"].map((text) => html.indexOf(text));
     expect(order.every((position) => position >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
-    expect(html.indexOf("Ver lista")).toBeGreaterThan(html.indexOf("Enviar teste"));
-    expect(html.indexOf("Ver lista")).toBeLessThan(html.indexOf("Templates da Meta"));
   });
 
   it("keeps the credentials fields, drops the retired template and language fields, and shows the quota summary", () => {
     const html = renderToStaticMarkup(<WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} />);
-    for (const label of ["ID da conta do WhatsApp Business (WABA)", "ID do número remetente", "Token de acesso", "Salvar credenciais", "Enviar teste", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).toContain(label);
+    for (const label of ["ID da conta do WhatsApp Business (WABA)", "ID do número remetente", "Token de acesso", "Remover token", "Enviar teste", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).toContain(label);
     for (const retired of ["Template de confirmação", "Idioma", "Variáveis do template", "var-chip", "Vincular", "Mensagens de acesso e segurança por WhatsApp"]) expect(html).not.toContain(retired);
     expect(html).toContain("12/500");
     expect(html).toContain("Contrato vigente");
-    expect(html).toContain("Token já salvo");
+    expect(html).toContain("EAAFAKE0");
   });
 
   it("asks for a municipality before anything else and hides the status bar", () => {
