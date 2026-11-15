@@ -51,6 +51,16 @@ O usuário não quer ver código, diffs nem explicações passo a passo enquanto
 - Ao terminar, use o formato da seção "Saída final esperada" abaixo — curto, sem código/diff, terminando com "o que fazer agora?".
 
 
+## Gestão de tokens
+
+Tokens são um orçamento a gerir: invista onde a qualidade importa (decisões, riscos, código de autenticação e privacidade) e evite desperdício.
+
+- Não releia o que já está no contexto da sessão (AGENT.md, plano, arquivos já lidos); vá direto aos trechos necessários.
+- Verificação visual (navegador/CDP/screenshots) só quando o usuário pedir; por padrão valide com typecheck, testes e build e descreva o que ele deve conferir na tela.
+- Rode typecheck/test/build uma vez ao final, não a cada ajuste; não repita checks sem mudança de código.
+- Prefira greps e leituras direcionadas a ler arquivos grandes (App.tsx, styles.css) por inteiro.
+
+
 ## Regras obrigatórias
 
 Antes de implementar:
@@ -146,7 +156,7 @@ Antes de considerar uma restilização/redesign concluído:
 
 - Rode uma busca (grep) pelo nome de **cada classe alterada** no arquivo de estilos inteiro — não só no trecho que você editou. Projetos que já passaram por redesigns anteriores costumam ter blocos escopados (`.modal-x .classe`, `.tela-y .classe`) com especificidade maior que a regra "base" que você acabou de mexer, e essas regras mais específicas vencem silenciosamente.
 - Para cada ocorrência extra encontrada: confirme se ela ainda é alcançável (renderiza de fato) e, se sim, se ela está com a paleta/comportamento antigo. Se estiver, atualize ela — é provavelmente ela quem está realmente na tela, não a que você editou primeiro.
-- Verifique visualmente estados além do padrão: `:hover`, `:focus`/`:focus-within`, `:disabled`, breakpoints mobile. Resíduos de estilo antigo adoram se esconder exatamente nesses estados (ex: um anel de foco azul de uma paleta antiga, escondido atrás da borda verde nova).
+- Quando o usuário pedir verificação visual, confira estados além do padrão: `:hover`, `:focus`/`:focus-within`, `:disabled`, breakpoints mobile. Resíduos de estilo antigo adoram se esconder exatamente nesses estados (ex: um anel de foco azul de uma paleta antiga, escondido atrás da borda verde nova).
 - Depois de identificar a regra que **realmente** vence a cascata (a de maior especificidade, ou a última em ordem de origem quando a especificidade empata), edite essa — não adicione mais uma camada por cima "só para garantir".
 
 ### Checklist específico para lógica/componentes

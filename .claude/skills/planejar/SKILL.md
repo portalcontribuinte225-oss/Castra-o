@@ -22,6 +22,16 @@ Esta skill **não implementa código**. O objetivo é entender o escopo, identif
 
 ---
 
+## Gestão de tokens
+
+Tokens são um orçamento a gerir: invista onde a qualidade importa (decisões, riscos, código de autenticação e privacidade) e evite desperdício.
+
+- Não releia o que já está no contexto da sessão (AGENT.md, plano, arquivos já lidos); vá direto aos trechos necessários.
+- Verificação visual (navegador/CDP/screenshots) só quando o usuário pedir; por padrão valide com typecheck, testes e build e descreva o que ele deve conferir na tela.
+- Rode typecheck/test/build uma vez ao final, não a cada ajuste; não repita checks sem mudança de código.
+- Prefira greps e leituras direcionadas a ler arquivos grandes (App.tsx, styles.css) por inteiro.
+
+
 ## Fluxo obrigatório
 
 ```txt
