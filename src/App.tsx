@@ -183,6 +183,7 @@ import { EmailSettings } from "./features/email/email-settings";
 import { EMAIL_SETTINGS_PERMISSION } from "../shared/email-contract.js";
 import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedule } from "./features/animal-services/animal-history";
 import type { AnimalRecord } from "./features/animal-services/animal-service-types";
+import { RequestTracking } from "./features/request-tracking/request-tracking";
 import { RegistrationContactFields, registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
@@ -1243,6 +1244,7 @@ function canManagePublicAnimalFlows(role = "") {
 
 const publicHomeServices = [
   { id: "procedure_form", label: "Solicitar procedimento", icon: ClipboardCheck },
+  { id: "tracking", label: "Acompanhar solicitação", icon: Search },
   { id: "credential", label: "Credenciamento", icon: Shield },
   { id: "report", label: "Denunciar", icon: AlertCircle, danger: true },
 ];
@@ -1926,6 +1928,8 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
               />
             ) : activePublicService === "credential" ? (
               <PublicAccessRequestInline onSubmit={onAccessRequest} municipalityId={selectedMunicipalityId} />
+            ) : activePublicService === "tracking" ? (
+              <RequestTracking key={selectedMunicipalityId} municipalityId={selectedMunicipalityId} />
             ) : activePublicService === "report" ? (
               <PublicReportPanel
                 municipalityName={activeMunicipality?.name || "Sistema municipal"}

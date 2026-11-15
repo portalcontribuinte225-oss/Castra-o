@@ -7,6 +7,8 @@ export type AuthChannel = typeof NotificationChannel[keyof typeof NotificationCh
 export interface AuthRequestOptions {
   signal?: AbortSignal;
   isCurrent?: () => boolean;
+  // Replaces the stored session token for one request, e.g. a request tracking session.
+  bearerToken?: string;
 }
 
 export interface SessionUser {

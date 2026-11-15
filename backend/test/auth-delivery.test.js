@@ -159,3 +159,48 @@ test("email admission delay cannot release a recovery code that expired while wa
   assert.equal((await sender({ ...input, expiresAt: new Date(current + 250) })).code, DeliveryCode.PREPARATION_FAILED);
   assert.equal(sends, 1);
 });
+
+test("request tracking codes go only to the destination the use case matched, without verified flags", async () => {
+  const f = fixture();
+  const base = { purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: "municipality-a", user: {}, code: "123456" };
+  const email = await deliverAuthMessage({ ...base, email: "citizen@example.test", phone: "" }, f.dependencies);
+  assert.deepEqual(email, [{ purpose: AuthPurpose.REQUEST_TRACKING, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }]);
+  const sent = f.calls.find(([type]) => type === "email")[1];
+  assert.equal(sent.toEmail, "citizen@example.test");
+  assert.equal(sent.templateId, "email_request_tracking");
+  assert.equal(sent.templateParams.code, "123456");
+  assert.equal(f.calls.some(([type]) => type === "whatsapp" || type === "quota"), false);
+
+  const phone = await deliverAuthMessage({ ...base, email: "", phone: "48999991234" }, f.dependencies);
+  assert.deepEqual(phone, [{ purpose: AuthPurpose.REQUEST_TRACKING, channel: NotificationChannel.WHATSAPP, status: DeliveryStatus.SENT }]);
+  const whatsapp = f.calls.find(([type]) => type === "whatsapp");
+  assert.equal(whatsapp[1].templateName, "whatsapp_request_tracking");
+  assert.equal(whatsapp[3][0].parameters[0].text, "123456");
+  assert.equal(JSON.stringify([email, phone]).includes("123456"), false);
+});
+
+test("request tracking needs a six digit code, a destination and a configured template", async () => {
+  const f = fixture();
+  const base = { purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: "municipality-a", user: {}, email: "citizen@example.test", phone: "" };
+  for (const code of [undefined, "", "12345", "1234567", "12ab56"]) {
+    const [result] = await deliverAuthMessage({ ...base, code }, f.dependencies);
+    assert.equal(result.code, DeliveryCode.PREPARATION_FAILED);
+  }
+  assert.deepEqual(await deliverAuthMessage({ ...base, code: "123456", email: "" }, f.dependencies), []);
+  assert.equal(f.calls.some(([type]) => type === "email" || type === "whatsapp"), false);
+
+  f.config.emailTemplates[AuthPurpose.REQUEST_TRACKING] = "";
+  const [missing] = await deliverAuthMessage({ ...base, code: "123456" }, f.dependencies);
+  assert.equal(missing.code, DeliveryCode.NOT_CONFIGURED);
+  assert.equal(f.calls.some(([type]) => type === "email"), false);
+});
+
+test("request tracking never falls back to e-mail when WhatsApp is off, nor reads the request follow-up", async () => {
+  const f = fixture();
+  f.dependencies.loadWhatsappConfig = async () => ({ active: false });
+  const results = await deliverAuthMessage({ purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: "municipality-a", user: {}, code: "123456",
+    email: "", phone: "48999991234", followUp: { enabled: true, email: "attacker@example.test" } }, f.dependencies);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].code, DeliveryCode.CHANNEL_DISABLED);
+  assert.equal(f.calls.some(([type]) => type === "email"), false);
+});

@@ -36,6 +36,7 @@ describe("e-mail settings tab", () => {
     expect(html).toContain("notify_email");
     expect(html).toContain("reset_email");
     expect(html).toContain("Confirmação de e-mail");
+    expect(html).toContain("Acompanhamento de solicitação");
     expect(html).not.toContain("Confirmação de telefone");
     expect(html).not.toContain("WhatsApp: Mudança de agendamento");
     expect(html).not.toContain("phone_whatsapp");
@@ -65,6 +66,7 @@ describe("WhatsApp settings tab keeps only WhatsApp fields", () => {
     expect(notifications).not.toContain("notify_email");
     const access = renderToStaticMarkup(<AuthDeliverySettings municipalityId="municipality-a" channel="whatsappTemplates" />);
     expect(access).toContain("Confirmação de telefone");
+    expect(access).toContain("Acompanhamento de solicitação");
     expect(access).toContain("phone_whatsapp");
     expect(access).not.toContain("Confirmação de e-mail");
     expect(access).not.toContain("reset_email");

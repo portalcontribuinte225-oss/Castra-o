@@ -3,6 +3,7 @@ export const AuthErrorCode = Object.freeze({ CPF_REQUIRED: "CPF_REQUIRED", RECOV
 export const AuthPurpose = Object.freeze({
   INITIAL_PASSWORD: "initial_password", PASSWORD_RESET: "password_reset",
   VERIFY_EMAIL: "verify_email", VERIFY_PHONE: "verify_phone", CONTACT_CHANGED: "contact_changed",
+  REQUEST_TRACKING: "request_tracking",
 });
 export const SessionScope = Object.freeze({ FULL: "full", PASSWORD_CHANGE: "password_change" });
 export const ContactKind = Object.freeze({ EMAIL: "email", PHONE: "phone" });

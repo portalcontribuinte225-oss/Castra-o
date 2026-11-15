@@ -16,6 +16,7 @@ import municipalityRoutes from "./routes/municipalities.js";
 import auditRoutes from "./routes/audit.js";
 import whatsappRoutes from "./routes/whatsapp.js";
 import smsRoutes from "./routes/sms.js";
+import requestTrackingRoutes from "./routes/request-tracking.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,7 @@ app.use("/api/municipalities", municipalityRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/sms", smsRoutes);
+app.use("/api/request-tracking", requestTrackingRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/assets", express.static(path.join(distPath, "assets"), {

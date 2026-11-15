@@ -1,8 +1,9 @@
 import { AuthAudience } from "../shared/auth-contract.js";
 import { splitSubmissionEnvelope } from "./features/tutor-access/submission-envelope";
-import type { AuthRequestOptions, EnrollmentCredential, RecoveryContext } from "./features/tutor-access/auth-types";
+import type { AuthChallenge, AuthRequestOptions, EnrollmentCredential, RecoveryContext } from "./features/tutor-access/auth-types";
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
 import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAnimalRequest } from "./features/animal-services/animal-service-types";
+import type { TrackedRequest, TrackingSession, TrackingStartBody } from "./features/request-tracking/tracking-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 let sessionMutationVersion = 0;
@@ -26,10 +27,10 @@ function getToken() {
   return localStorage.getItem("castragestao:token");
 }
 
-function headers(json = true) {
+function headers(json = true, bearerToken?: string) {
   const h: Record<string, string> = {};
   if (json) h["Content-Type"] = "application/json";
-  const token = getToken();
+  const token = bearerToken ?? getToken();
   if (token) h["Authorization"] = `Bearer ${token}`;
   return h;
 }
@@ -39,13 +40,13 @@ async function request(method: string, path: string, body?: unknown, responseTyp
   const requestSessionVersion = sessionMutationVersion;
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: headers(),
+    headers: headers(true, options?.bearerToken),
     body: body ? JSON.stringify(body) : undefined,
     ...(options?.signal ? { signal: options.signal } : {}),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }));
-    if (res.status === 401 && requestToken && requestToken === getToken() && requestSessionVersion === sessionMutationVersion && !options?.signal?.aborted && (!options?.isCurrent || options.isCurrent()) && !path.startsWith("/auth/login") && typeof window !== "undefined") {
+    if (res.status === 401 && !options?.bearerToken && requestToken && requestToken === getToken() && requestSessionVersion === sessionMutationVersion && !options?.signal?.aborted && (!options?.isCurrent || options.isCurrent()) && !path.startsWith("/auth/login") && typeof window !== "undefined") {
       window.dispatchEvent(new Event(SESSION_INVALID_EVENT));
     }
     throw new ApiError(err.error || res.statusText, res.status, err.code || "", Number(err.retryAfter || res.headers.get("Retry-After")) || 0);
@@ -110,6 +111,10 @@ export const api = {
   consultAnimalById: (animalId: string): Promise<AnimalRecord> => request("POST", "/animals/consult", { animalId }),
   createAnimalDeathRequest: (animalId: string, body: AnimalDeathPayload): Promise<CreatedAnimalRequest> => request("POST", `/animals/${encodeURIComponent(animalId)}/death`, body),
   createAnimalTransferRequest: (animalId: string, body: AnimalTransferPayload): Promise<CreatedAnimalRequest> => request("POST", `/animals/${encodeURIComponent(animalId)}/transfer`, body),
+
+  startRequestTracking: (body: TrackingStartBody, options?: AuthRequestOptions): Promise<AuthChallenge> => request("POST", "/request-tracking/challenges", body, "json", options),
+  confirmRequestTracking: (challengeId: string, code: string, options?: AuthRequestOptions): Promise<TrackingSession> => request("POST", `/request-tracking/challenges/${encodeURIComponent(challengeId)}/confirm`, { code }, "json", options),
+  getTrackedRequest: (token: string, options?: AuthRequestOptions): Promise<{ request: TrackedRequest }> => request("GET", "/request-tracking/request", undefined, "json", { ...options, bearerToken: token }),
 
   getAdoptions: (municipalityId?: string) => request("GET", municipalityId ? `/adoptions?municipalityId=${encodeURIComponent(municipalityId)}` : "/adoptions"),
   createAdoption: (body) => request("POST", "/adoptions", body),

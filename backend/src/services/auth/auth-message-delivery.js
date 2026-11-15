@@ -88,16 +88,18 @@ export async function deliverAuthMessage(input, overrides = {}) {
   const globalStaffReset = purpose === AuthPurpose.PASSWORD_RESET && !input.municipalityId && isGlobalUser(input.user);
   if (!Object.values(AuthPurpose).includes(purpose) || (!input.municipalityId && !globalStaffReset)) return [];
   if (purpose === AuthPurpose.PASSWORD_RESET) return deliverRecoveryChannel(input, dependencies, globalStaffReset);
-  const requiresCode = isVerification(purpose) || purpose === AuthPurpose.PASSWORD_RESET;
+  const requiresCode = isVerification(purpose) || purpose === AuthPurpose.PASSWORD_RESET || purpose === AuthPurpose.REQUEST_TRACKING;
   if ((requiresCode && !/^\d{6}$/.test(input.code || ""))
     || (purpose === AuthPurpose.INITIAL_PASSWORD && (typeof input.temporaryPassword !== "string" || input.temporaryPassword.length < 15))) {
     return [{ purpose, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }];
   }
   const initial = purpose === AuthPurpose.INITIAL_PASSWORD;
+  // The tracking use case matched this destination against the request's follow-up contact before calling.
+  const matched = purpose === AuthPurpose.REQUEST_TRACKING;
   const emailAllowed = purpose !== AuthPurpose.VERIFY_PHONE && Boolean(input.email)
-    && (initial || purpose === AuthPurpose.VERIFY_EMAIL || input.emailVerified === true);
+    && (initial || matched || purpose === AuthPurpose.VERIFY_EMAIL || input.emailVerified === true);
   const phoneAllowed = !globalStaffReset && purpose !== AuthPurpose.VERIFY_EMAIL && Boolean(input.phone)
-    && (initial || purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
+    && (initial || matched || purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
   if (!emailAllowed && !phoneAllowed) return [];
   let config;
   try { config = normalizeAuthDeliveryConfig(globalStaffReset ? undefined : await dependencies.loadConfig(input.municipalityId)); }

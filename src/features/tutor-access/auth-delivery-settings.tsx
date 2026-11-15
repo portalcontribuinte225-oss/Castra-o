@@ -9,6 +9,7 @@ const purposeLabels: Record<string, string> = {
   [AuthPurpose.VERIFY_EMAIL]: "Confirmação de e-mail",
   [AuthPurpose.VERIFY_PHONE]: "Confirmação de telefone",
   [AuthPurpose.CONTACT_CHANGED]: "Contato alterado",
+  [AuthPurpose.REQUEST_TRACKING]: "Acompanhamento de solicitação",
 };
 
 // A code that confirms an e-mail goes only to the new e-mail; a phone code goes only to the new phone.
