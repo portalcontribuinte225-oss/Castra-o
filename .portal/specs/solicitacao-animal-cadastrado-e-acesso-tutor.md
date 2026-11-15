@@ -137,7 +137,7 @@ Hoje o formulário de solicitação é único: quem já tem animal atendido refa
 
 - ~~Documentos de tutor para animal sem tutor~~ e ~~Castração / Microchipagem / Ambos~~: resolvidas na fase 2 (ver "Decididas e implementadas na fase 2").
 - Raça por espécie (ver acima).
-- Há chaves de validação e links em circulação? Define o tamanho do período de transição da fase 7 (o projeto era "ainda não foi para produção" em outro spec; confirmar).
+- ~~Há chaves de validação e links em circulação?~~ Resolvida em 2026-11-15: **não**. O usuário confirmou que só existiam dados de teste e que trabalha somente local; o banco local (`localhost:5433/castracao_db`) foi zerado (todas as tabelas, mantendo só o usuário `master` recriado pelo bootstrap de `runMigrations`). A fase 7 não precisa de período de transição: remover `request_validation_keys` e as consultas por CPF + chave diretamente.
 - Migrations: não executar sem confirmação; sem `DATABASE_URL` local, entregar o SQL ao usuário.
 
 ## Estado do código investigado (2026-11-13, conferir antes de planejar)
