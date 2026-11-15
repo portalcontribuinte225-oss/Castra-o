@@ -1,6 +1,6 @@
 # Solicitação simplificada para animal já cadastrado + acesso do tutor
 
-Roadmap e especificação mestre. É a memória entre conversas: decisões fechadas, estado do código e status de cada fase. Última revisão: 2026-11-13.
+Roadmap e especificação mestre. É a memória entre conversas: decisões fechadas, estado do código e status de cada fase. Última revisão: 2026-11-15.
 
 ## Como retomar (uma conversa por fase)
 
@@ -126,11 +126,24 @@ Hoje o formulário de solicitação é único: quem já tem animal atendido refa
 
 ### Fase 7, parte 7a implementada e enviada ao repositório (2026-11-15, commit e0728b3)
 
-- Plano: [remover-chave-acompanhamento-fase-7](../plans/remover-chave-acompanhamento-fase-7.md). A fase tem duas partes com commits separados: **7a** (remoção da chave + serviços de animal na área do tutor) e **7b** (acompanhamento por protocolo + contato + código), ainda pendente.
+- Plano: [remover-chave-acompanhamento-fase-7](../plans/remover-chave-acompanhamento-fase-7.md). A fase tem duas partes com commits separados: **7a** (remoção da chave + serviços de animal na área do tutor) e **7b** (acompanhamento por protocolo + contato + código), descrita na seção seguinte.
 - Removidos: consultas por CPF + chave de solicitações e adoções (inclusive `GET /requests/public/:chave`), geração e gravação de `validation_key`, credencial legada nas rotas de animais e o bloco de chave do PDF do Requerimento. `/animals/lookup`, `/consult`, `/:id/death` e `/:id/transfer` exigem login; óbito e troca usam o tutor autenticado e nunca o CPF do corpo.
 - `/animals/consult` aceita `animalId` (animal sem microchip). Prontuário (PDF), troca de tutor e óbito passaram para a área do tutor, por animal, em `src/features/animal-services/`; os cartões públicos correspondentes saíram da home. A consulta de adoções por CPF + chave ficou sem substituto.
 - **Pendência de banco:** `backend/src/db/sql/20261115-remove-validation-keys.sql` (DROP da tabela `request_validation_keys` e da coluna `requests.validation_key`) não foi aplicado. Aplicar só depois de o código da 7a estar implantado. O DDL correspondente já saiu de `migrations.js`.
 - Validação: 181 testes de frontend e 228 de backend, typecheck e build. Sem inspeção visual em navegador. O avatar do prontuário passou a ser um ícone (sem foto do animal) e os contatos do tutor aparecem mascarados.
+
+### Fase 7, parte 7b implementada e enviada ao repositório (2026-11-15, commit 9751495)
+
+- Acompanhamento sem conta: protocolo + o contato informado em "Quer acompanhar?" → código de 6 dígitos enviado a esse contato → token curto de uma única solicitação. Só vale para solicitações com `followUp.enabled === true`; e-mail é respondido por e-mail e telefone por WhatsApp, sem fallback entre canais. Não há link nas mensagens.
+- Rotas (`backend/src/routes/request-tracking.js`, montadas em `/api/request-tracking`): `POST /challenges` (iniciar), `POST /challenges/:id/confirm` (código → token) e `GET /request` (visão, com `Authorization: Bearer` do token de acompanhamento). O token nunca vai na URL.
+- Resposta idêntica ao iniciar, exista ou não a solicitação (id de desafio inventado quando não há correspondência); o envio roda depois da resposta. Os limites usam só o que o chamador digitou (IP, protocolo + município, contato, reenvio 1 por 60 s). A confirmação limita pelo id de desafio informado, real ou inventado, e toda falha devolve a mesma mensagem.
+- Código guardado só como digest (HMAC), de uso único, validade de 10 min e 5 tentativas; um desafio novo invalida o anterior. Token assinado (HMAC) com solicitação + município, somente leitura, 30 min.
+- Visão por lista permitida (`services/request-tracking/tracking-view.js`): protocolo, tipo, status, datas, agenda (data, local, endereço do local) e contagens de documentos. Nunca CPF, endereço do tutor, contatos, nomes de arquivos ou justificativas.
+- Novo `AuthPurpose.REQUEST_TRACKING` (`request_tracking`): template "Acompanhamento de solicitação" nas abas E-mail e WhatsApp. `deliverAuthMessage` envia somente ao destino que o caso de uso casou com o contato do acompanhamento.
+- Frontend: `src/features/request-tracking/` e cartão "Acompanhar solicitação" na home pública. O token fica só em memória; `api.ts` aceita `bearerToken` por requisição e um 401 do acompanhamento não derruba a sessão.
+- **Pendências de banco e operação:** aplicar `backend/src/db/sql/20261115-request-tracking.sql` **antes** de implantar este código; `20261115-remove-validation-keys.sql` só depois de o código da 7a estar no ar. Configurar o template "Acompanhamento de solicitação" (sem ele nenhum código é enviado). O servidor não configura `trust proxy`: atrás do proxy do Render os limites por IP (também os do login) podem valer para todos juntos; avaliar antes de ir ao ar.
+- Validação: 198 testes de frontend e 249 de backend, typecheck e build; consultas do repositório conferidas no Postgres local em transação com tabela temporária e `ROLLBACK`. Revisão de segurança feita, sem achados de alta confiança. Sem inspeção visual em navegador.
+- Todas as fases do roadmap estão concluídas. Restam as pendências operacionais das fases 4 e 5 (templates e uma entrega real autorizada) e a aplicação dos SQLs acima.
 
 ### Acompanhamento sem CPF
 - Animal sem tutor e quem escolheu acompanhar sem conta: consulta por **protocolo + contato informado**, com código enviado a esse contato.
@@ -174,7 +187,7 @@ Ordem pensada por dependência e risco. Cada fase é entregável sozinha.
 | 4 | Etapa "Quer acompanhar?" + configuração de canais do município + notificações + solicitação sem CPF quando a configuração dispensa Tutor | — | [acompanhamento-canais-notificacoes-fase-4](../plans/acompanhamento-canais-notificacoes-fase-4.md) | [x] 2026-11-13, commit bc596dc |
 | 5 | Acesso do tutor: senha, login, "esqueci minha senha", perfil, recuperação por atendente | Revisões de código/segurança concluídas, incluindo autorização de config e isolamento municipal | [acesso-tutor-fase-5](../plans/acesso-tutor-fase-5.md) | [x] 2026-11-13, commit 3068ac8 e push concluídos; migration local aplicada e API reiniciada com autorização |
 | 6 | Tela de entrada + "Animal já cadastrado": lista, busca, pré-preenchimento, reuso documental e cadastro por UUID sem chip obrigatório | Revisão de código/segurança concluída, incluindo propriedade, documentos e concorrência de agenda | [animal-cadastrado-fase-6](../plans/animal-cadastrado-fase-6.md) | [x] 2026-11-13, commit 9d44bdd e push concluídos; migration local aplicada e API iniciada com autorização |
-| 7 | Remover chave de validação antiga + acompanhamento por protocolo e token | Revisão de segurança após a 7b | [remover-chave-acompanhamento-fase-7](../plans/remover-chave-acompanhamento-fase-7.md) | 7a [x] 2026-11-15, commit e0728b3; 7b [ ] |
+| 7 | Remover chave de validação antiga + acompanhamento por protocolo e token | Revisão de segurança concluída, sem achados de alta confiança | [remover-chave-acompanhamento-fase-7](../plans/remover-chave-acompanhamento-fase-7.md) | 7a [x] 2026-11-15, commit e0728b3; 7b [x] 2026-11-15, commit 9751495 |
 
 Dependências: 2 antes de 6 (tipo de identificação no animal); 4 antes de 5 (a senha é enviada pelo contato); 5 antes de 6 (login); 7 por último (período de transição).
 
