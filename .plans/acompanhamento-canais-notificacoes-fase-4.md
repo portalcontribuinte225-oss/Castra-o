@@ -2,12 +2,12 @@
 
 ## Origem
 
-- Arquivo de especificação: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`.
+- Arquivo de especificação: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`.
 - Fase: 4 — etapa “Quer acompanhar?”, configuração dos canais municipais e notificações.
 - Data do planejamento: 2026-11-12.
 - Classificação: `fullstack`, com persistência nos campos JSON existentes e sem alteração de schema prevista.
 - Aprovação: proposta aprovada pelo usuário pela opção `1`, após confirmar explicitamente a inclusão de solicitações sem CPF quando a configuração dispensar a etapa Tutor.
-- Destino: `.portal/plans/acompanhamento-canais-notificacoes-fase-4.md`.
+- Destino: `.plans/acompanhamento-canais-notificacoes-fase-4.md`.
 
 ## Resumo
 
@@ -49,7 +49,7 @@ Arquivos e padrões investigados:
 
 - `AGENT.md` da raiz; não foram encontrados `frontend/AGENT.md`, `backend/AGENT.md`, outros `AGENTS.md` ou `CLAUDE.md` no projeto.
 - `.agents/skills/planejar/SKILL_planejar.md`, `.claude/skills/planejar/SKILL.md` e `.claude/skills/planejar/TEMPLATE_planejar.md`.
-- Especificação mestre e plano anterior `.portal/plans/racas-configuraveis.md`, considerando as decisões posteriores registradas na especificação.
+- Especificação mestre e plano anterior `.plans/racas-configuraveis.md`, considerando as decisões posteriores registradas na especificação.
 - `src/App.tsx`: carregamento de configurações, `createRequest`, `LoginView`, `NewRequest`, conclusão pública, revisão de documentos e configuração de WhatsApp.
 - `src/domain.ts`, `src/api.ts`, `src/types.ts`, `src/utils.ts` e padrões de campos em `src/styles.css`.
 - `src/features/request-steps/request-steps.ts` e seus testes; `src/features/identification-types/identification-types.ts`.
@@ -321,7 +321,7 @@ Pendência operacional para validação de entrega real: identificar/configurar 
 
 - Usar este plano aprovado e as decisões fechadas da especificação como contexto. Confirmar os trechos atuais, pois números de linha mudam.
 - Seguir `AGENT.md`; código, campos novos, tipos, enums e testes em inglês, textos da interface em português.
-- Este salvamento não autoriza iniciar implementação. Aguardar uma invocação separada de `/implementar .portal/plans/acompanhamento-canais-notificacoes-fase-4.md`.
+- Este salvamento não autoriza iniciar implementação. Aguardar uma invocação separada de `/implementar .plans/acompanhamento-canais-notificacoes-fase-4.md`.
 - Não executar migrations nem iniciar a aplicação para validar testes de unidade. Não editar migrations já existentes.
 - Não ativar “Animal sem Tutor” automaticamente; apenas remover a limitação que impedia seu uso configurado.
 - Deletar os itens substituídos da seção de remoções; não manter dois caminhos de notificação ativos.

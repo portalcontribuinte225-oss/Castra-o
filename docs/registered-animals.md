@@ -1,6 +1,6 @@
 # Animal já cadastrado — fase 6
 
-Plano: `.portal/plans/animal-cadastrado-fase-6.md`.
+Plano: `.plans/animal-cadastrado-fase-6.md`.
 
 ## Schema antes de executar
 

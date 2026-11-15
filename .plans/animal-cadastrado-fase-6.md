@@ -2,12 +2,12 @@
 
 ## Origem
 
-- Especificação: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`, fase 6.
+- Especificação: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`, fase 6.
 - Classificação: `fullstack + database`.
 - Data: 2026-11-13.
 - Base investigada: `3068ac8`, fase 5 concluída e enviada para `main`.
 - Aprovação: o usuário respondeu **“sim”** à pergunta para salvar esta proposta neste caminho.
-- Destino aprovado: `.portal/plans/animal-cadastrado-fase-6.md`, conforme a organização do roadmap. Esta autorização específica prevalece sobre a pasta `.plans/` indicada pela skill global.
+- Destino aprovado: `.plans/animal-cadastrado-fase-6.md`, conforme a organização do roadmap. Esta autorização específica prevalece sobre a pasta `.plans/` indicada pela skill global.
 - Decisões explícitas: animal aparece após o envio da primeira solicitação, inclusive sem microchip; validade para reaproveitamento em dias por tipo de documento, contados do envio; ausência de prazo significa sem vencimento por idade do arquivo.
 - Contexto operacional confirmado: trabalho local e envio ao repositório Git. Isso não autoriza migrations, seeds, alterações de ambiente ou implantação durante a implementação.
 
@@ -67,7 +67,7 @@ O cadastro passa a ter um UUID por animal desde a primeira submissão bem-sucedi
 ### Arquivos inspecionados
 
 - `AGENT.md`; não foi encontrado `CLAUDE.md` na raiz ou instrução de domínio adicional durante a investigação.
-- Especificação mestre e `.portal/plans/acesso-tutor-fase-5.md`.
+- Especificação mestre e `.plans/acesso-tutor-fase-5.md`.
 - `src/App.tsx`: fronteira de sessão, entrada pública, consulta legada, `NewRequest`, documentos, análise interna e disponibilidade de agenda.
 - `src/api.ts`, `src/domain.ts`, `src/types.ts`, `src/utils.ts`.
 - `src/features/tutor-access/session-boundary.tsx`, `tutor-area.tsx`, `auth-entry.tsx`, `auth-types.ts`, `tutor-identity.ts`.
@@ -76,7 +76,7 @@ O cadastro passa a ter um UUID por animal desde a primeira submissão bem-sucedi
 - `backend/src/services/request-submission.js`, `request-animal-link.js`, `auth/tutor-enrollment.js`, `auth/profile-handlers.js`.
 - `backend/src/repositories/request-settings.js`, `tutor-profiles.js`; `backend/src/tenant.js`.
 - `backend/src/db/index.js`, `db/migrations.js`, `db/sql/20261113-tutor-access.sql`, `server.js` e manifests.
-- `.portal/plans/reorganizar-documentos-pdf.md`, apenas para identificar a demanda alheia que deve continuar separada.
+- `.plans/reorganizar-documentos-pdf.md`, apenas para identificar a demanda alheia que deve continuar separada.
 
 ### Constatações verificadas
 
@@ -375,7 +375,7 @@ Pendências operacionais que não constituem autorização implícita:
 
 ## Instruções para /implementar
 
-- Implementar a partir deste plano somente após invocação separada de `/implementar .portal/plans/animal-cadastrado-fase-6.md`.
+- Implementar a partir deste plano somente após invocação separada de `/implementar .plans/animal-cadastrado-fase-6.md`.
 - Começar confirmando o estado do repositório e as instruções atuais; preservar as alterações preexistentes em skills, `AGENT.md`, specs e plano de PDFs.
 - Não confundir a aprovação deste Markdown com autorização de migration, seed, boot que escreve no banco, `.env`, mensagens reais, commit/push ou deploy.
 - Preparar o schema novo e validar com testes simulados. Não editar `backend/src/db/migrations.js` nem a migration SQL já aplicada da fase 5.

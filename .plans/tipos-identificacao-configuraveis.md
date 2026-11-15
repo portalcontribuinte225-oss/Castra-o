@@ -2,7 +2,7 @@
 
 ## Origem
 
-- Arquivo de especificação: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 2 do roadmap)
+- Arquivo de especificação: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 2 do roadmap)
 - Data do planejamento: `2026-11-12`
 - Classificação: `fullstack`
 
@@ -56,8 +56,8 @@ No formulário público, o campo "Tipo de Procedimento" (Castração / Microchip
 Arquivos lidos para esta análise:
 
 - `/AGENT.md` (único AGENT.md do projeto: não existem `frontend/AGENT.md` nem `backend/AGENT.md`). Observação: o AGENT.md raiz descreve um backend em Drizzle/TypeScript, mas o backend real é JavaScript com SQL cru (`pg`); seguir os padrões existentes. Este plano não cria nenhuma operação nova de banco.
-- `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`
-- `.portal/plans/funcao-unica-etapas-visiveis.md` (fase 1, já implementada no commit `e84c4d4`)
+- `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`
+- `.plans/funcao-unica-etapas-visiveis.md` (fase 1, já implementada no commit `e84c4d4`)
 - `src/App.tsx` (números de linha abaixo são do momento do planejamento e vão deslocar): `environmentConfigTabs` (~186-192); loaders e auto-persist de config (~424-500); estados do App (~308-311); escopo por município (~794-805); `ActiveView` (~816-824, props ~1059-1093); `LoginView` e portal público (~2226-2329, `NewRequest` público ~2473-2493); `NewRequest` (props ~3330-3350, estado ~3369-3414, `formSteps` ~3442, validações ~3539-3588, `submitInternal`/`submitAccepted` ~3767-3900, card "Tipo e identificação" ~4112-4180); `buildDeclarationPdfHtml` (~4421-4468); `ConfigView` (props ~6857-6886, `createRequestType` ~7183, `patchRequestType` ~7313, `createSpecies`/`openSpeciesModal` ~7401-7422, criação de município ~7571-7604, aba de tipos ~8541-8569, modal de tipo ~9685-9785, `SimpleConfigList` ~9941); PDF do prontuário (~11629)
 - `src/domain.ts` (`CONFIG_KEYS`, `initial*`, `getItemMunicipalityId`, `filterByMunicipalityScope`), `src/components/ui.tsx`, `src/utils.ts` (`normalizeText`), `src/api.ts`, `src/types.ts`
 - `src/features/request-steps/request-steps.ts` e `request-steps.test.ts`
@@ -223,7 +223,7 @@ Sem impacto esperado. Sem env vars, Render, build, jobs ou storage. Custo margin
 - `src/features/identification-types/identification-types.test.ts` (novo)
 - `src/features/identification-types/identification-types-config.tsx` (novo)
 - `src/App.tsx` (fiação, `NewRequest`, `LoginView`, `ConfigView`, modal de tipo de solicitação, `buildDeclarationPdfHtml`)
-- Após o commit, pelo `/finalizar`: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`
+- Após o commit, pelo `/finalizar`: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`
 
 Nenhuma alteração em `src/styles.css` está prevista.
 
@@ -355,7 +355,7 @@ O último comando importa apenas o módulo puro (sem banco). Não subir o backen
 - **Usuários globais (master/suporte):** pelo código, o efeito de auto-persist não roda para eles, então edições de cadastro feitas nesse perfil não são gravadas pelo mesmo mecanismo. Os tipos de identificação herdam o comportamento dos outros cadastros (não verificado em execução).
 - **Sem teste de backend e sem banco local:** a parte de backend é um default estático e um fallback de 3 linhas, mas só será exercitada de fato após o deploy.
 - **Risco de afetar produção:** commit/push direto em `main`, sem `staging`. `runMigrations()` roda a cada boot e este plano não o altera.
-- O working tree já tinha alterações não relacionadas no momento do planejamento (`.claude/skills/*`, `AGENT.md`, `.claude/skills/rodar/`, `.portal/plans/reorganizar-documentos-pdf.md` e `.portal/specs/` não versionados). Não devem entrar no commit desta fase.
+- O working tree já tinha alterações não relacionadas no momento do planejamento (`.claude/skills/*`, `AGENT.md`, `.claude/skills/rodar/`, `.plans/reorganizar-documentos-pdf.md` e `.plans/` não versionados). Não devem entrar no commit desta fase.
 
 ---
 
@@ -396,9 +396,9 @@ A implementação deve ser considerada pronta quando:
 - Usar `import type` para interfaces (`isolatedModules: true`) e não renomear `stepTutor`, `stepAgenda`, `stepDocuments`.
 - Manter a alteração focada: módulos novos + fiação mínima em `App.tsx`. Não refatorar o `ConfigView` além da prop, da aba e do bloco de criação de município; não tocar em `currentConfigItems`, no `stepDocuments: true` forçado do tipo de solicitação, em CSS ou no fluxo interno.
 - Deletar tudo que está em "O que será removido" — não ocultar.
-- Não incluir no commit os arquivos já alterados ou não versionados que não pertencem a esta fase (ver "Riscos"). `.portal/specs/` está fora do controle de versão; atualizar o arquivo local, e o usuário decide se o versiona.
+- Não incluir no commit os arquivos já alterados ou não versionados que não pertencem a esta fase (ver "Riscos"). `.plans/` está fora do controle de versão; atualizar o arquivo local, e o usuário decide se o versiona.
 - Sem verificação visual (navegador/CDP/screenshots) a menos que o usuário peça.
-- **Pelo `/finalizar`, depois do commit, atualizar o spec** (`.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`):
+- **Pelo `/finalizar`, depois do commit, atualizar o spec** (`.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`):
   - marcar a fase 2 como `[x]` com data e hash e preencher o link deste plano na tabela;
   - registrar as decisões fechadas: controle da etapa Documentos no tipo de identificação; "Animal sem Tutor" inativo de fábrica; Castração/Microchipagem/Ambos viram tipos de solicitação; fluxo interno sem tipo de identificação; sem backfill (leitura com default);
   - registrar que **falta atribuir a uma fase** o backend aceitar solicitação sem CPF (recomendação: fase 4), pré-requisito para ativar "Animal sem Tutor";

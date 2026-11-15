@@ -2,7 +2,7 @@
 
 ## Origem
 
-- Arquivo de especificação: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 3 do roadmap)
+- Arquivo de especificação: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 3 do roadmap)
 - Data do planejamento: `2026-11-12`
 - Classificação: `fullstack`
 
@@ -55,8 +55,8 @@ No formulário de solicitação (público e balcão), quando o animal tem "Raça
 Arquivos lidos para esta análise:
 
 - `/AGENT.md` (único AGENT.md do projeto: não existem `frontend/AGENT.md` nem `backend/AGENT.md`). O backend real é JavaScript com SQL cru; este plano não cria nenhuma operação nova de banco.
-- `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`
-- `.portal/plans/tipos-identificacao-configuraveis.md` (fase 2, implementada no commit `5ee05b5`; é o padrão a espelhar) e `.portal/plans/funcao-unica-etapas-visiveis.md`
+- `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`
+- `.plans/tipos-identificacao-configuraveis.md` (fase 2, implementada no commit `5ee05b5`; é o padrão a espelhar) e `.plans/funcao-unica-etapas-visiveis.md`
 - `src/App.tsx` (números de linha abaixo são do momento do planejamento, depois do commit `5ee05b5`, e vão deslocar): `environmentConfigTabs` (~186-194); estados do App (~312-317); loaders e auto-persist de config (~449, ~482, ~505); escopo por município (~812); `<LoginView>` no App (~776); props do `ActiveView` (~1089-1090); `LoginView` (~2238, estado ~2255, sincronização ~2330, loader por município ~2343, `NewRequest` público ~2506); `NewRequest` (props ~3347-3365, `updateAnimal` ~3525, `updateRequestField` ~3535, render por animal ~4136-4195 com o card de tipo de solicitação ~4170-4184 e a linha Espécie/Sexo/Raça ~4186-4195); `AdminDashboard` (~4584-4600) e o `NewRequest` do modal interno (~4831-4848); `ConfigView` (~6880-6890), criação de município (~7625) e render da aba de tipos de identificação (~8602); PDFs que leem `breedDescription` (~3222, ~3335, ~4470, ~11660, ~11841)
 - `src/domain.ts` (`CONFIG_KEYS`, `initial*`, `getItemMunicipalityId`, `filterByMunicipalityScope`), `src/components/ui.tsx`, `src/utils.ts` (`normalizeText`), `src/api.ts`
 - `src/features/identification-types/` (padrão de módulo puro, testes e componente de config)
@@ -214,7 +214,7 @@ Sem impacto esperado. Sem env vars, Render, build, jobs ou storage. Custo margin
 - `src/features/breeds/breeds-config.tsx` (novo)
 - `src/features/breeds/breed-form-modal.tsx` (novo)
 - `src/App.tsx` (fiação, `NewRequest`, `LoginView`, `AdminDashboard`, `ConfigView`)
-- Após o commit, pelo `/finalizar`: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`
+- Após o commit, pelo `/finalizar`: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`
 
 Nenhuma alteração em `src/styles.css` está prevista.
 
@@ -325,7 +325,7 @@ Não subir o backend contra banco real e não executar scripts de `backend/src/s
 - **`PUT /api/config/:key` aberto a qualquer autenticado:** preexistente; ver "Regras multi-tenant e segurança".
 - **Sem teste de backend e sem banco local:** a parte de backend é um fallback de uma linha, mas só será exercitada de fato após o deploy.
 - **Risco de afetar produção:** commit/push direto em `main`, sem `staging`. `runMigrations()` roda a cada boot e este plano não o altera.
-- O working tree já tinha alterações não relacionadas no momento do planejamento (`.claude/skills/*`, `AGENT.md`, `.claude/skills/rodar/`, `.portal/plans/reorganizar-documentos-pdf.md` e `.portal/specs/` não versionados). Não devem entrar no commit desta fase.
+- O working tree já tinha alterações não relacionadas no momento do planejamento (`.claude/skills/*`, `AGENT.md`, `.claude/skills/rodar/`, `.plans/reorganizar-documentos-pdf.md` e `.plans/` não versionados). Não devem entrar no commit desta fase.
 
 ---
 
@@ -366,9 +366,9 @@ A implementação deve ser considerada pronta quando:
 - Usar `import type` para interfaces (`isolatedModules: true`) e os genéricos de `getBreedOptions` para aceitar `AnyRecord` sem `as unknown as`.
 - Manter a alteração focada: módulos novos + fiação mínima em `App.tsx`. Não refatorar o `ConfigView` além das props, da aba e do bloco de criação de município; não tocar em `currentConfigItems`, nos PDFs, em `breedType` nem em CSS.
 - Não deixar a lógica de limpeza da raça espalhada: concentrar em duas funções pequenas dentro de `NewRequest`.
-- Não incluir no commit os arquivos já alterados ou não versionados que não pertencem a esta fase (ver "Riscos"). `.portal/specs/` está fora do controle de versão; atualizar o arquivo local, e o usuário decide se o versiona.
+- Não incluir no commit os arquivos já alterados ou não versionados que não pertencem a esta fase (ver "Riscos"). `.plans/` está fora do controle de versão; atualizar o arquivo local, e o usuário decide se o versiona.
 - Sem verificação visual (navegador/CDP/screenshots) a menos que o usuário peça.
-- **Pelo `/finalizar`, depois do commit, atualizar o spec** (`.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`):
+- **Pelo `/finalizar`, depois do commit, atualizar o spec** (`.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`):
   - marcar a fase 3 como `[x]` com data e hash e preencher o link deste plano na tabela;
   - registrar as decisões fechadas: uma espécie por raça; texto livre quando não há raça para o tipo e a espécie; vínculo explícito com todos os tipos ativos pré-marcados ao criar e sem herança para tipos criados depois; cadastro em lote; nome da raça em `breedDescription` sem `breedId`; sem catálogo de fábrica; sem busca na lista;
   - anotar para a fase 6 que `animals.breed` (cadastro de animais, backend) nunca é preenchido pelo formulário, que grava `breedDescription` dentro de `requests.animals`; ao criar ou vincular o animal do cadastro, mapear `breedDescription` para `breed`;

@@ -9,7 +9,7 @@ Cria uma task técnica estruturada a partir de uma descrição livre fornecida p
 
 A task gerada deve seguir um formato rico e detalhado, semelhante a uma especificação de entrada para planejamento técnico. Ela deve ser adequada para ser usada depois pela skill `planejar`.
 
-A skill não implementa código, não cria plano de execução e não altera arquivos. Ela apenas transforma uma descrição informal em uma task técnica clara, contextualizada e acionável, criando um arquivo no formato `{titulo}.md` em `.portal/tasks`.
+A skill não implementa código, não cria plano de execução e não altera arquivos. Ela apenas transforma uma descrição informal em uma task técnica clara, contextualizada e acionável, criando um arquivo no formato `{titulo}.md` em `.plans/`.
 
 ---
 
@@ -68,8 +68,6 @@ Antes de criar a task, ler obrigatoriamente:
 
 ```txt
 /AGENT.md
-/frontend/AGENT.md
-/backend/AGENT.md
 ```
 
 Se algum arquivo não existir:
@@ -111,7 +109,7 @@ Exemplos:
 * “a geração de PDF”
 * “o fluxo de protocolo”
 * “as strings mágicas no backend”
-* “a importação financeira”
+* “o envio de notificações”
 * “o módulo de documentos”
 
 A task não deve inventar caminhos de arquivos sem verificar.
@@ -226,13 +224,13 @@ Nem todas as seções precisam ter grande conteúdo, mas a estrutura deve ser pr
 ## Instruções Para a Skill Planejar
 
 - Use este arquivo como especificação de entrada.
-- Leia `/AGENTS.md`, `/frontend/AGENTS.md` e `/backend/AGENTS.md`.
+- Leia `/AGENT.md`.
 - Inspecione os arquivos citados antes de escrever o plano.
 - Classifique a implementação como `frontend`, `backend`, `database`, `infra` ou combinação deles.
 - Não implemente código durante o planejamento.
 - Não instale dependências durante o planejamento.
 - Não execute migrations.
-- Gere um plano em `.portal/plans/` com etapas pequenas, revisáveis e seguras para produção (este projeto não usa branch `staging` — commit/push são feitos direto em `main`).
+- Gere um plano em `.plans/` com etapas pequenas, revisáveis e seguras para produção (este projeto não usa branch `staging` — commit/push são feitos direto em `main`).
 ```
 
 ---
@@ -282,15 +280,15 @@ Padronizar valores de domínio com enums
 ```
 
 ```txt
-Migrar editor de documentos para Tiptap
+Extrair a tela de configuração do WhatsApp para uma feature
 ```
 
 ```txt
-Isolar geração de PDFs em jobs assíncronos
+Separar a geração do PDF do prontuário em um módulo testável
 ```
 
 ```txt
-Criar pipeline auditável de importação financeira
+Criar histórico auditável dos envios de notificação
 ```
 
 Exemplos ruins:
@@ -500,13 +498,13 @@ Se durante o planejamento for identificada necessidade de enum no banco, migrati
 ## Instruções Para a Skill Planejar
 
 * Use este arquivo como especificação de entrada.
-* Leia `/AGENTS.md`, `/frontend/AGENTS.md` e `/backend/AGENTS.md`.
+* Leia `/AGENT.md`.
 * Inspecione os arquivos citados antes de escrever o plano.
 * Classifique a implementação como `frontend + backend`, salvo se a investigação mostrar outro escopo.
 * Não implemente código durante o planejamento.
 * Não instale dependências durante o planejamento.
 * Não execute migrations.
-* Gere um plano em `.portal/plans/` com etapas pequenas, revisáveis e seguras para produção (este projeto não usa branch `staging` — commit/push são feitos direto em `main`).
+* Gere um plano em `.plans/` com etapas pequenas, revisáveis e seguras para produção (este projeto não usa branch `staging` — commit/push são feitos direto em `main`).
 
 ```
 

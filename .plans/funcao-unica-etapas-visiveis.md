@@ -2,7 +2,7 @@
 
 ## Origem
 
-- Arquivo de especificação: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 1 do roadmap)
+- Arquivo de especificação: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 1 do roadmap)
 - Data do planejamento: `2026-11-12`
 - Classificação: `frontend-only`
 
@@ -19,7 +19,7 @@ Esta fase extrai uma função pura e testada, `getVisibleSteps`, em módulo pró
 ### Correções em relação ao texto do spec (estado do código conferido em 2026-11-12)
 
 - O "bug" de `createRequestType` **já está corrigido**: ele persiste `stepTutor`, `stepAgenda` e `stepDocuments` (`src/App.tsx:7224-7226`).
-- O plano `.portal/plans/reorganizar-etapas-tipo-solicitacao.md` **já foi implementado** (commit `8185937`): toggles acima do campo Nome, um por linha, e toggle "Documentos" removido do modal. Não há nada a absorver.
+- O plano `.plans/reorganizar-etapas-tipo-solicitacao.md` **já foi implementado** (commit `8185937`): toggles acima do campo Nome, um por linha, e toggle "Documentos" removido do modal. Não há nada a absorver.
 - Existe suíte de testes: `vitest` (`npm test`), com testes em `src/features/request-filters/`. O plano antigo afirmava que não havia.
 
 ---
@@ -51,8 +51,8 @@ Esta fase extrai uma função pura e testada, `getVisibleSteps`, em módulo pró
 Arquivos lidos para esta análise:
 
 - `/AGENT.md` (único AGENT.md do projeto: não existem `frontend/AGENT.md` nem `backend/AGENT.md`)
-- `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`
-- `.portal/plans/reorganizar-etapas-tipo-solicitacao.md`
+- `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`
+- `.plans/reorganizar-etapas-tipo-solicitacao.md`
 - `src/App.tsx` (trechos de `NewRequest`: estado e etapas ~3330-3480, validações ~3561-3649, `submit` ~3759-3782, stepper ~3926-3949, JSX das etapas ~4010-4416; `createRequestType` ~7205-7229; `patchRequestType` ~7335; modal de tipo ~9707-9779)
 - `src/features/request-filters/request-stage.ts` e `request-filters.test.ts` (padrão de enum, labels e testes)
 - `package.json`, `tsconfig.json` (`strict: false`, `isolatedModules: true`), `src/types.ts` (`AnyRecord`)
@@ -150,7 +150,7 @@ Sem impacto esperado.
 - `src/features/request-steps/request-steps.ts` (novo)
 - `src/features/request-steps/request-steps.test.ts` (novo)
 - `src/App.tsx` (apenas `NewRequest`)
-- Após o commit, pelo `/finalizar`: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` (status da fase, link deste plano, correção do texto desatualizado)
+- Após o commit, pelo `/finalizar`: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` (status da fase, link deste plano, correção do texto desatualizado)
 
 ---
 
@@ -256,7 +256,7 @@ npm run build
 - `NewRequest` é o miolo do cadastro público, dentro de um `App.tsx` de ~12 mil linhas. O refactor preserva o comportamento e a lógica nova fica isolada e testada; o código de cola em `App.tsx` é pequeno. Risco geral: baixo.
 - **Mudança de comportamento (única):** tipos legados salvos com `stepDocuments: false` deixam de travar o envio por causa de `accepted`, mas passam a poder ser enviados sem declaração aceita (a etapa que a exibe não existe nesses tipos). Hoje a UI não permite criar esse estado, então só afeta dados antigos, se existirem.
 - As chaves `stepTutor`, `stepAgenda` e `stepDocuments` são dados persistidos: **não renomear**. A fase 2 deve reutilizar esses nomes no tipo de identificação (ou adaptar por um mapeamento explícito).
-- O working tree já tinha alterações não relacionadas no momento do planejamento (`.claude/skills/*`, `AGENT.md`, `.claude/skills/rodar/`, `.portal/plans/reorganizar-documentos-pdf.md` e `.portal/specs/` não versionados). Não devem entrar no commit desta fase.
+- O working tree já tinha alterações não relacionadas no momento do planejamento (`.claude/skills/*`, `AGENT.md`, `.claude/skills/rodar/`, `.plans/reorganizar-documentos-pdf.md` e `.plans/` não versionados). Não devem entrar no commit desta fase.
 - Risco de afetar produção: commit/push direto em `main`, sem `staging`.
 
 ---
@@ -290,5 +290,5 @@ A implementação deve ser considerada pronta quando:
 - Seguir `/AGENT.md` (código novo em inglês, enum para valores finitos, um arquivo por responsabilidade).
 - Manter a alteração pequena e focada: módulo novo + testes + `NewRequest`. Não mexer no modal de tipo de solicitação, em CSS, nem no `stepDocuments: true` forçado ao salvar.
 - Deletar tudo que está em "O que será removido" — não ocultar.
-- Não incluir no commit os arquivos já alterados/não versionados que não pertencem a esta fase (ver "Riscos"). O `.portal/specs/` está fora do controle de versão; atualizar o status da fase no arquivo local, e o usuário decide se o versiona.
+- Não incluir no commit os arquivos já alterados/não versionados que não pertencem a esta fase (ver "Riscos"). O `.plans/` está fora do controle de versão; atualizar o status da fase no arquivo local, e o usuário decide se o versiona.
 - Sem verificação visual (navegador/CDP/screenshots) a menos que o usuário peça.

@@ -2,7 +2,7 @@
 
 ## Origem
 
-- Arquivo de especificação: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 7)
+- Arquivo de especificação: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` (fase 7)
 - Data do planejamento: 2026-11-15
 - Base: commit `89acece`, com as fases 1 a 6 concluídas.
 - Classificação: `frontend + backend + database`
@@ -55,7 +55,7 @@ Entrega em duas partes, com commits separados na mesma conversa: **7a** (remoç�
 Arquivos lidos para esta análise:
 
 - `/AGENT.md`
-- `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`
+- `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`
 - `backend/src/routes/requests.js`, `adoptions.js`, `animals.js`
 - `backend/src/db/migrations.js`, `backend/src/db/sql/20261113-tutor-access.sql`, `backend/src/scripts/rebootMunicipalities.js`
 - `backend/src/services/auth/` (nomes e exports: `auth-security.js`, `auth-message-delivery.js`, `auth-contacts.js`)
@@ -126,7 +126,7 @@ Sem impacto esperado. Nenhuma variável de ambiente, dependência ou configuraç
 - `src/features/request-tracking/` e `src/features/animal-services/` (novas)
 - `src/features/tutor-access/tutor-area.tsx`, `auth-delivery-settings.tsx`, `src/features/registered-animals/registered-animals-view.tsx`
 - `backend/test/animal-access-security.test.js`, `public-data-access.test.js`, `request-routes.test.js`, `notification-transports.test.js`, e novos testes
-- `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` (status da fase 7)
+- `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` (status da fase 7)
 
 ---
 

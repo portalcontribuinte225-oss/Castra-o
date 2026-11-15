@@ -3,14 +3,14 @@
 ## Origem
 
 - Origem: ajustes solicitados pelo usuário após testar o acesso do tutor e a recuperação de senha das fases 5 e 6.
-- Contexto: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` e `.portal/plans/acesso-tutor-fase-5.md`.
+- Contexto: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` e `.plans/acesso-tutor-fase-5.md`.
 - Classificação: `fullstack`.
 - Data: 2026-11-13.
 - Status: **implementado, revisado e validado localmente**.
 - Aprovação: escopo definido e confirmado na conversa; o usuário pediu a confirmação do plano aprovado e salvo.
 - Atualização aprovada em 2026-11-13: o usuário escolheu **SMSMais** e autorizou atualizar o plano com token, campos necessários e toggle de ativar/desativar na aba de integração. Essa decisão substitui o adiamento anterior da escolha do provedor.
 - Implementação e revisão concluídas em 2026-11-13. Validações finais: 213 testes backend e 163 frontend aprovados, typecheck, build e sintaxe JavaScript. Commit e push seguem o fluxo `/finalizar`; configuração do token real e ativação operacional permanecem separadas.
-- Destino: `.plans/`, conforme a skill global `planejar` invocada. O roadmap anterior permanece em `.portal/`.
+- Destino: `.plans/`, conforme a skill global `planejar` invocada.
 
 ## Resumo
 

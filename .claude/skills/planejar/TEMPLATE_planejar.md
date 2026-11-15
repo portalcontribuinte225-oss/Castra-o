@@ -31,8 +31,6 @@ Explique em poucas frases o que será implementado e por quê.
 Arquivos lidos para esta análise:
 
 - `/AGENT.md`
-- `/frontend/AGENT.md` _(se aplicável)_
-- `/backend/AGENT.md` _(se aplicável)_
 - `{FEATURE_FILE}`
 - outros arquivos relevantes encontrados no projeto
 
@@ -42,7 +40,7 @@ Arquivos lidos para esta análise:
 
 ### Frontend
 
-Descreva alterações necessárias. Inclua: telas, componentes, hooks, query keys, forms, validações, estados de loading/error/empty, testes.
+Descreva alterações necessárias. Inclua: telas, componentes, hooks, forms, validações, estados de loading/error/empty, testes.
 
 _Se não houver impacto: `Sem impacto esperado`_
 
@@ -70,10 +68,12 @@ _Se não houver impacto: `Sem impacto esperado`_
 
 ## Arquivos provavelmente afetados
 
-- `frontend/src/hooks/...`
-- `frontend/src/pages/...`
-- `backend/src/modules/...`
-- `backend/src/db/schema/...`
+- `src/features/...`
+- `src/App.tsx` _(arquivo grande: citar só os trechos afetados)_
+- `backend/src/routes/...`
+- `backend/src/services/...`
+- `backend/src/repositories/...`
+- `shared/...`
 
 ---
 
@@ -140,24 +140,19 @@ Liste validações de input, formulário, schemas, params, query strings e paylo
 
 - teste 1
 
-### E2E
+### Conferência manual (tela)
 
-- teste 1
+- o que o usuário deve conferir
 
 ---
 
 ## Comandos de validação sugeridos
 
 ```bash
-npm --prefix frontend run lint
-npm --prefix frontend run typecheck
-npm --prefix frontend run test
-npm --prefix frontend run build
-
-npm --prefix backend run lint
-npm --prefix backend run typecheck
-npm --prefix backend run test
-npm --prefix backend run build
+npm run typecheck
+npm test
+node --test backend/test/*.test.js
+npm run build
 ```
 
 ---
@@ -193,7 +188,7 @@ A implementação deve ser considerada pronta quando:
 
 - Usar este plano como fonte principal de contexto.
 - Não executar migrations sem confirmação explícita.
-- Seguir `/AGENT.md`, `/frontend/AGENT.md` e/ou `/backend/AGENT.md`.
+- Seguir `/AGENT.md`.
 - Manter alterações pequenas e focadas.
 - Deletar tudo que está na seção "O que será removido" — não ocultar.
 - Atualizar testes conforme descrito.

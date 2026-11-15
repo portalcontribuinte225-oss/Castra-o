@@ -1,6 +1,6 @@
 ---
 name: implementar
-description: Implementa uma feature a partir de um plano Markdown gerado pela skill planejar. Use quando o usuário fornecer/linkar um arquivo em `.portal/plans/*.md` e pedir para transformar o plano em mudanças de código, seguindo os AGENT.md do projeto, criando/atualizando testes e rodando validações.
+description: Implementa uma feature a partir de um plano Markdown gerado pela skill planejar. Use quando o usuário fornecer/linkar um arquivo em `.plans/*.md` e pedir para transformar o plano em mudanças de código, seguindo os AGENT.md do projeto, criando/atualizando testes e rodando validações.
 ---
 
 # Implementar a partir de um plano
@@ -13,20 +13,20 @@ Esta skill deve usar o plano como fonte principal de contexto e transformar o pl
 
 ## Entrada esperada
 
-O usuário pode fornecer ou linkar um arquivo de plano ou você pode ir direto na pasta `.porta/plans` e verificar o ultimo plano gerado e pergutar ao usuário se ele deseja usar aquele plano.
+O usuário pode fornecer ou linkar um arquivo de plano ou você pode ir direto na pasta `.plans` e verificar o ultimo plano gerado e pergutar ao usuário se ele deseja usar aquele plano.
 
 Exemplos:
 
 ```txt
-/implementar PLAN_FILE=.portal/plans/emissao-alvara-farmacia.md
+/implementar PLAN_FILE=.plans/racas-configuraveis.md
 ```
 
 ```txt
-/implementar .portal/plans/exportacao-relatorio-contribuintes.md
+/implementar .plans/filtros-multiselecao-solicitacoes.md
 ```
 
 ```txt
-Use a skill implementar com o plano .portal/plans/cadastro-contribuinte.md
+Use a skill implementar com o plano .plans/tipos-identificacao-configuraveis.md
 ```
 
 ---
@@ -74,15 +74,13 @@ Antes de implementar:
    - infra/deploy
    - testes
    - documentação
-4. Se houver impacto no frontend, leia `frontend/AGENT.md`.
-5. Se houver impacto no backend, leia `backend/AGENT.md`.
-6. Siga a estratégia de implementação descrita no plano.
-7. Não implemente escopo que esteja marcado como fora do escopo.
-8. Não faça refactors não relacionados.
-9. Não altere arquivos desnecessários.
-10. Não execute migrations sem confirmação explícita do usuário.
-11. Não execute comandos destrutivos.
-12. Não altere `.env`, secrets, CI/CD ou configuração de deploy sem necessidade explícita.
+4. Siga a estratégia de implementação descrita no plano.
+5. Não implemente escopo que esteja marcado como fora do escopo.
+6. Não faça refactors não relacionados.
+7. Não altere arquivos desnecessários.
+8. Não execute migrations sem confirmação explícita do usuário.
+9. Não execute comandos destrutivos.
+10. Não altere `.env`, secrets, CI/CD ou configuração de deploy sem necessidade explícita.
 
 ---
 
@@ -91,14 +89,12 @@ Antes de implementar:
 Use a seguinte prioridade:
 
 1. Instruções explícitas do usuário.
-2. Plano em `.portal/plans/*.md`.
+2. Plano em `.plans/*.md`.
 3. `/AGENT.md` da raiz.
-4. `frontend/AGENT.md` quando aplicável.
-5. `backend/AGENT.md` quando aplicável.
-6. Padrões existentes no código.
-7. Boas práticas gerais.
+4. Padrões existentes no código.
+5. Boas práticas gerais.
 
-Se houver conflito entre o plano e os AGENT.md, prefira a regra mais segura e explique no resumo final.
+Se houver conflito entre o plano e o `/AGENT.md`, prefira a regra mais segura e explique no resumo final.
 
 ---
 
@@ -123,7 +119,7 @@ Implemente a feature de forma:
 Antes de editar arquivos:
 
 1. Leia o plano inteiro.
-2. Leia os AGENT.md relevantes.
+2. Leia o `/AGENT.md` (se ainda não estiver no contexto).
 3. Inspecione arquivos e módulos mencionados no plano.
 4. Procure implementações similares existentes.
 5. Identifique contratos frontend/backend envolvidos.
@@ -259,20 +255,24 @@ Quando o conjunto de valores for conhecido e estável, prefira `enum`.
 Exemplos:
 
 ```ts
-export enum UserRole {
-  ADMIN = 'admin',
-  MANAGER = 'manager',
-  OPERATOR = 'operator',
+export enum RequestStep {
+  TUTOR = 0,
+  ANIMAL = 1,
+  SCHEDULE = 2,
+  DOCUMENTS = 3,
+  FOLLOW_UP = 4,
 }
 ```
 
-```ts
-export enum ImportJobStatus {
-  PENDING = 'pending',
-  PROCESSING = 'processing',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-}
+No JavaScript (backend e `shared/`), use objeto congelado:
+
+```js
+export const NotificationEvent = Object.freeze({
+  SCHEDULE_CONFIRMED: "schedule_confirmed",
+  SCHEDULE_CHANGED: "schedule_changed",
+  DOCUMENTS_REVIEWED: "documents_reviewed",
+  COMPLETED: "completed",
+});
 ```
 
 ---
@@ -311,19 +311,9 @@ Sempre que surgir a dúvida entre usar uma string literal espalhada pelo código
 
 Quando houver alteração no frontend:
 
-- Lei `frontend/AGENT.md`
-- Não faça `fetch` ou `axios` diretamente dentro de componentes.
-- Crie ou reutilize hooks dedicados para requests.
-- Use React Query para server state.
-- Use `useQuery` para leitura.
-- Use `useMutation` para criação/edição/remoção/ações.
-- Use optimistic updates quando fizer sentido e for seguro.
-- Use rollback em optimistic updates.
-- Não use query keys hardcoded.
-- Use query keys centralizadas por enum, objeto ou factory.
-- Inclua filtros, paginação e IDs relevantes na query key.
-- Use `enabled` para queries condicionais/cold path.
-- Use Zod + React Hook Form para formulários relevantes.
+- Não faça `fetch` diretamente dentro de componentes: use `src/api.ts` e hooks dedicados em `src/features/<feature>/` (padrão `use-*.ts`).
+- Reutilize hooks, validações e componentes da feature antes de criar novos.
+- Este projeto não usa React Query, Zod nem React Hook Form; não adicione dependência sem pedido explícito.
 - Botões de continuar/salvar/submit devem respeitar estado de validação e loading.
 - Trate loading, error, empty, success e disabled states.
 - Preserve acessibilidade.
@@ -335,9 +325,8 @@ Quando houver alteração no frontend:
 
 Quando houver alteração no backend:
 
-- Lei `backend/AGENT.md`
-- Use Drizzle para queries novas.
-- Não use SQL raw sem necessidade clara.
+- Use `pg` com queries parametrizadas (`$1`, `$2`); nunca interpole valores na string SQL.
+- Reutilize os repositórios de `backend/src/repositories` e o `pool` de `backend/src/db/index.js`; não crie pools avulsos.
 - Toda query tenant-specific deve filtrar por prefeitura/tenant.
 - Nunca confie em tenant vindo livremente do client.
 - Preserve isolamento multi-tenant.
@@ -429,11 +418,10 @@ Adicione ou atualize testes conforme o plano.
 Considere testes para:
 
 - formulários
-- validação Zod/RHF
+- validação de formulário
 - hooks
 - loading/error/empty states
-- submit/mutation
-- query invalidation
+- submit
 - permissões/guards
 - interações importantes do usuário
 
@@ -449,15 +437,9 @@ Considere testes para:
 - erros esperados
 - relatórios/PDFs quando aplicável
 
-### E2E
+### Conferência manual
 
-Considere Playwright para fluxos críticos como:
-
-- login
-- cadastro/edição
-- emissão de relatório
-- geração/download de PDF
-- navegação protegida
+Não há suíte E2E neste projeto. Para fluxos críticos (login, solicitação, agenda, PDF), descreva no resumo final o que o usuário deve conferir na tela.
 
 Não remova testes existentes sem motivo claro.
 
@@ -467,38 +449,16 @@ Não remova testes existentes sem motivo claro.
 
 Ao final, tente rodar os comandos relevantes conforme o impacto da alteração.
 
-Comandos gerais:
+Comandos deste projeto (rodar da raiz):
 
 ```bash
-npm run lint
 npm run typecheck
-npm run test
+npm test
+node --test backend/test/*.test.js
 npm run build
 ```
 
-Frontend:
-
-```bash
-npm --prefix frontend run lint
-npm --prefix frontend run typecheck
-npm --prefix frontend run test
-npm --prefix frontend run build
-```
-
-Backend:
-
-```bash
-npm --prefix backend run lint
-npm --prefix backend run typecheck
-npm --prefix backend run test
-npm --prefix backend run build
-```
-
-Biome, quando aplicável:
-
-```bash
-npx biome check .
-```
+Não há lint configurado.
 
 Se algum comando não existir, registre isso no resumo final.
 
@@ -541,9 +501,7 @@ Evite:
 - deixar código morto/inalcançável no arquivo achando que é "mais seguro" não mexer
 - considerar uma restilização concluída sem ter buscado outras ocorrências das classes alteradas no arquivo inteiro
 - usar `any` para calar TypeScript
-- fazer fetch/axios direto no componente
-- criar queryKey hardcoded
-- criar formulário sem Zod/RHF quando há validação relevante
+- fazer fetch direto no componente
 - executar migration sem confirmação
 - alterar `.env`
 - alterar CI/CD sem necessidade
@@ -560,8 +518,6 @@ Antes de concluir:
 
 - [ ] O plano foi lido completamente.
 - [ ] `/AGENT.md` foi lido.
-- [ ] `frontend/AGENT.md` foi lido quando aplicável.
-- [ ] `backend/AGENT.md` foi lido quando aplicável.
 - [ ] A implementação ficou dentro do escopo.
 - [ ] Arquivos desnecessários não foram alterados.
 - [ ] Padrões existentes foram seguidos.

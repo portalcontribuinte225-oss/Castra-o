@@ -37,7 +37,7 @@ Ao revisar o diff, **ler o arquivo inteiro**, não só o hunk. Code duplication 
 - Backend (`backend/src/routes`, `backend/src/services`, `backend/src/middleware`): rotas, services, middlewares
 - Database (`backend/src/db/migrations.js`): orphaned tables/columns — ver seção "Database Audit" abaixo antes de reportar qualquer achado aqui
 
-Se o scope tocar o backend, ler também `backend/AGENT.md` quando existir.
+Se o scope tocar o backend, siga também as regras de backend do `/AGENT.md`.
 
 ---
 
@@ -63,7 +63,7 @@ Leia [CATEGORIAS.md](CATEGORIAS.md) para o catálogo completo de categorias com 
 
 Antes de marcar qualquer símbolo como dead code ou duplicate:
 
-- Executar **monorepo-wide symbol search** (`grep` pelo nome exportado em `frontend/` e `backend/`) — dynamic import, uso em teste, ou consumo por outro pacote do monorepo invalida o achado
+- Executar **monorepo-wide symbol search** (`grep` pelo nome exportado em `src/`, `backend/` e `shared/`) — dynamic import, uso em teste, ou consumo por outro pacote do monorepo invalida o achado
 - Código legado em português (ver "English-Only Codebase" no `/AGENT.md`) **não é automaticamente dead code** — só reportar se não houver nenhuma referência no repositório
 - Duas funções parecidas só configuram code duplication se executarem a mesma lógica — validar o corpo antes de propor merge
 - Em caso de dúvida, classificar como `suspected` com explicação da incerteza, nunca como `confirmed`
@@ -139,7 +139,7 @@ Editar arquivos apenas após approval explícita, e apenas os itens aprovados �
 
 A fase de findings report (antes da approval) continua completa — é o entregável principal desta skill, não deve ser resumida.
 
-Após aplicar, executar lint/typecheck pass do scope afetado (ver `/AGENT.md` — `npm run lint`, `npm run typecheck`, ou equivalentes com `--prefix frontend`/`--prefix backend`) para garantir que nenhuma remoção quebrou o build.
+Após aplicar, executar lint/typecheck pass do scope afetado (ver `/AGENT.md` — `npm run typecheck`, `npm test` e `node --test backend/test/*.test.js`; não há lint) para garantir que nenhuma remoção quebrou o build.
 
 Esta skill não executa commit nem push — isso é responsabilidade da skill `finalizar`.
 

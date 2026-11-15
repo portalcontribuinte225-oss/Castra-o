@@ -12,7 +12,7 @@
 
 O botão "Baixar prontuário PDF" gera um documento com quase todos os campos como "Não informado"/"Animal sem nome", mesmo quando a tela "Consultar prontuário" mostra os dados corretos (tutor, contato, situação, histórico completo) para o mesmo animal.
 
-Causa raiz confirmada: `generateProntuarioPdf(request = {}, fullHistory)` chama `normalizeRequest(request)` mesmo quando `request` é `{}` (caso mais comum, usado pela tela de consulta pública). `normalizeRequest` ([domain.ts:411-451](../../src/domain.ts#L411-L451)) **sintetiza um animal fantasma** quando `request.animals` está vazio: `{ name: "Animal não informado", species: "Não informado", size: "Não informado", sex: "Não informado", ... }` ([domain.ts:420-433](../../src/domain.ts#L420-L433)).
+Causa raiz confirmada: `generateProntuarioPdf(request = {}, fullHistory)` chama `normalizeRequest(request)` mesmo quando `request` é `{}` (caso mais comum, usado pela tela de consulta pública). `normalizeRequest` ([domain.ts:411-451](../src/domain.ts#L411-L451)) **sintetiza um animal fantasma** quando `request.animals` está vazio: `{ name: "Animal não informado", species: "Não informado", size: "Não informado", sex: "Não informado", ... }` ([domain.ts:420-433](../src/domain.ts#L420-L433)).
 
 Como consequência, em `generateProntuarioPdf`:
 ```
@@ -29,7 +29,7 @@ A solução é reescrever a função inteira com uma fonte de dados única e exp
 
 ### Dentro do escopo
 
-- Reescrever `generateProntuarioPdf` ([App.tsx:10970-11229](../../src/App.tsx#L10970-L11229)) do zero — não remendar por cima da versão atual.
+- Reescrever `generateProntuarioPdf` ([App.tsx:10970-11229](../src/App.tsx#L10970-L11229)) do zero — não remendar por cima da versão atual.
 - Definir fonte de dados única e explícita por cenário:
   - Consulta pública sem request específica (`generateProntuarioPdf({}, record)`, chamado em 3140/10173): ler animal/tutor/history **exclusivamente** de `fullHistory`, sem sintetizar nada via `normalizeRequest`.
   - Modal de detalhes de uma solicitação específica (`generateProntuarioPdf(req, history)`, chamado em 3261): priorizar os dados da própria `request`, usando `fullHistory` como enriquecimento do histórico completo (não o contrário).
@@ -40,7 +40,7 @@ A solução é reescrever a função inteira com uma fonte de dados única e exp
 ### Fora do escopo
 
 - Alterar `normalizeRequest` em si — usada em dezenas de outros lugares do app; a mudança é parar de depender dela para animal/tutor neste fluxo específico, não alterar seu comportamento global.
-- Alterar o backend/endpoint `/animals/consult` ([backend/src/routes/animals.js:381](../../backend/src/routes/animals.js#L381)).
+- Alterar o backend/endpoint `/animals/consult` ([backend/src/routes/animals.js:381](../backend/src/routes/animals.js#L381)).
 - Alterar a tela "Consultar prontuário" (`AnimalRecordPanel`) — usada só como referência visual.
 - Verificação visual do PDF renderizado nesta sessão (o usuário não pediu; validação será por leitura de código + teste isolado da lógica de dados + typecheck/build).
 
@@ -63,11 +63,11 @@ Arquivos lidos para esta análise:
 
 ### Frontend
 
-- **`generateProntuarioPdf`** ([App.tsx:10970-11229](../../src/App.tsx#L10970-L11229)): reescrita completa.
+- **`generateProntuarioPdf`** ([App.tsx:10970-11229](../src/App.tsx#L10970-L11229)): reescrita completa.
   - Nova lógica de resolução de animal/tutor/history: ler de `fullHistory` como fonte primária quando `request` está vazio; ler de `request` como fonte primária quando ela tem dados reais (`request.animals?.length`), com `fullHistory` complementando o histórico.
   - Página 1 e 2 recriadas para espelhar exatamente os campos/agrupamentos da tela `AnimalRecordPanel`.
   - Reaproveitar as funções de desenho de baixo nível já existentes (`drawProntuarioHeader`, `drawProntuarioSectionTitle`, `drawProntuarioFields`, `drawProntuarioSummaryCards`, `drawProntuarioTimeline`, `drawProntuarioPhotoBox`) — não são a causa do bug, continuam válidas.
-- **3 call-sites** ([App.tsx:3140](../../src/App.tsx#L3140), [3261](../../src/App.tsx#L3261), [10173](../../src/App.tsx#L10173)): confirmar que continuam funcionando com a nova lógica interna; ajustar a chamada apenas se a assinatura da função mudar (decisão a confirmar durante a implementação, mantendo o menor diff possível).
+- **3 call-sites** ([App.tsx:3140](../src/App.tsx#L3140), [3261](../src/App.tsx#L3261), [10173](../src/App.tsx#L10173)): confirmar que continuam funcionando com a nova lógica interna; ajustar a chamada apenas se a assinatura da função mudar (decisão a confirmar durante a implementação, mantendo o menor diff possível).
 - Sem novos componentes React, hooks, query keys ou formulários — mudança isolada à função de geração de PDF (lógica pura, sem estado de UI).
 - Testes: sem suíte automatizada configurada para este fluxo; validação via teste isolado de extração de dados (script standalone) + typecheck/build.
 
@@ -93,7 +93,7 @@ Sem impacto esperado.
 
 ## O que será removido
 
-- A implementação atual de `generateProntuarioPdf` ([App.tsx:10970-11229](../../src/App.tsx#L10970-L11229)) — deletada por completo e substituída pela nova versão. Não haverá duas versões coexistindo.
+- A implementação atual de `generateProntuarioPdf` ([App.tsx:10970-11229](../src/App.tsx#L10970-L11229)) — deletada por completo e substituída pela nova versão. Não haverá duas versões coexistindo.
 - Toda leitura de campos via `req.tutor`, `req.cpf`, `req.phone`, `req.email`, `histTutor.name` com ordem de fallback invertida em relação à tela — eliminada, substituída por fonte única e explícita por cenário.
 - Nenhuma função de desenho de baixo nível é removida (`drawProntuarioHeader`, `drawProntuarioSectionTitle`, `drawProntuarioFields`, `drawProntuarioSummaryCards`, `drawProntuarioTimeline`, `drawProntuarioPhotoBox`) — continuam sendo a base de renderização, não são a causa do bug.
 - Se, durante a implementação, `drawProntuarioSummaryCards` não servir mais à nova estrutura de dados, deve ser removida e recriada — nunca deixada ao lado de uma nova versão paralela.

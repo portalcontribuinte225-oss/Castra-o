@@ -6,7 +6,7 @@
 - Data do planejamento: `2026-11-12`
 - Classificação: `frontend-only`
 
-Motivo da classificação: `GET /api/requests` já devolve a lista completa do tenant ([requests.js:118-130](../../backend/src/routes/requests.js#L118-L130)), a tela já filtra no cliente, e `assignedUserId` já é gravado em `workflow_data` pelo `PATCH /api/requests/:id` ([requests.js:325-336](../../backend/src/routes/requests.js#L325-L336)). Não há endpoint, schema nem migration a criar.
+Motivo da classificação: `GET /api/requests` já devolve a lista completa do tenant ([requests.js:118-130](../backend/src/routes/requests.js#L118-L130)), a tela já filtra no cliente, e `assignedUserId` já é gravado em `workflow_data` pelo `PATCH /api/requests/:id` ([requests.js:325-336](../backend/src/routes/requests.js#L325-L336)). Não há endpoint, schema nem migration a criar.
 
 ---
 
@@ -47,7 +47,7 @@ Riscos principais: camadas de CSS com `!important` no fim do `styles.css` (exige
 - Persistência dos filtros entre visitas (`localStorage`/URL) — o estado inicial continua sendo "Novas".
 - Fazer a busca global ignorar a etapa selecionada.
 - Corrigir o rótulo de `DENUNCIA` em `requestTypeLabel` (hoje aparece cru na coluna Tipo; o filtro mostrará o mesmo texto da coluna).
-- Migrar as strings de status/tag (`"NOVA"`, `"ATRIBUIDA"`…) para enums no projeto inteiro (pertence à reescrita — ver `.portal/specs/reescrita-completa-sistema.md`).
+- Migrar as strings de status/tag (`"NOVA"`, `"ATRIBUIDA"`…) para enums no projeto inteiro (pertence à reescrita — ver `.plans/reescrita-completa-sistema.md`).
 - Extrair o drawer da agenda para um componente compartilhado.
 - Qualquer alteração em backend, banco, infra, `.topbar` (cabeçalho do admin — nunca mexer) ou nos cartões da lista (`triage-card`).
 - Remover/alterar a função `notAttendedRequest` ou qualquer outro código não relacionado de `AdminDashboard`.
@@ -68,7 +68,7 @@ Arquivos lidos para esta análise:
 - `src/styles.css` — regras de `.request-nav` / `.request-filter-tabs` / `.request-today-segment` (repetidas em ~10 blocos; camada final com `!important` em ~24300-24409), `.ag-drawer*` (10564-10640, cada classe definida uma única vez), variáveis `--ink-*`, `--selected-bg`, `--selected-ink`, `--ui-border`
 - `backend/src/routes/requests.js` — `GET /` e `PATCH /:id`
 - `package.json`, `tsconfig.json` (`strict: false`, `isolatedModules: true`), `vite.config.ts`
-- `.portal/plans/reorganizar-etapas-tipo-solicitacao.md` (convenções de planos anteriores) e `.portal/specs/reescrita-completa-sistema.md` (direção da reescrita: módulos por domínio, inglês, sem sobreposição de CSS)
+- `.plans/reorganizar-etapas-tipo-solicitacao.md` (convenções de planos anteriores) e `.plans/reescrita-completa-sistema.md` (direção da reescrita: módulos por domínio, inglês, sem sobreposição de CSS)
 - Consulta **somente leitura** ao Postgres local (contagens por `request_type` e por presença de `assignedUserId`/`responsible`) — nada gravado; resultado resumido em "Regras de negócio"
 
 ---
@@ -94,7 +94,7 @@ Arquivos (nomes em inglês, kebab-case; cada um ≤ ~250 linhas — se `request-
 
 #### 2. Etapas derivadas (`request-stage.ts`)
 
-`RequestStage` (enum, valores estáveis em inglês) e a regra de derivação, que **replica exatamente** o `filterTabs` atual ([App.tsx:4649-4694](../../src/App.tsx#L4649-L4694)) sobre o request já normalizado:
+`RequestStage` (enum, valores estáveis em inglês) e a regra de derivação, que **replica exatamente** o `filterTabs` atual ([App.tsx:4649-4694](../src/App.tsx#L4649-L4694)) sobre o request já normalizado:
 
 | Etapa | Rótulo | Regra |
 |---|---|---|
@@ -131,7 +131,7 @@ interface RequestListFilters {
 // estado inicial: { stages: [INBOX], types: [], assignees: [], todayOnly: false }  (igual ao "Novas" de hoje)
 ```
 
-Os itens da lista são de **dois tipos**: requests normalizados e adaptadores de credenciamento (`__source: "access_request"`, `visibleAccessRequests` em [App.tsx:4630-4647](../../src/App.tsx#L4630-L4647): sem `assignedUserId`, sem `type`, `tags: []`). Predicados (item `i`, filtros `f`):
+Os itens da lista são de **dois tipos**: requests normalizados e adaptadores de credenciamento (`__source: "access_request"`, `visibleAccessRequests` em [App.tsx:4630-4647](../src/App.tsx#L4630-L4647): sem `assignedUserId`, sem `type`, `tags: []`). Predicados (item `i`, filtros `f`):
 
 - `stageMatch(i, stages)`: se `i` é credenciamento → `stages.includes(INBOX) && stage(i) === INBOX`; senão → `stages.length === 0 || stages.includes(stage(i))`.
 - `typeMatch(i, types)`: `types.length === 0 || (!isAccess(i) && types.includes(requestTypeLabel(i)))`.
@@ -173,14 +173,14 @@ Estado do reducer: `{ filters: RequestListFilters; stagesBeforeToday: RequestSta
 
 O hook expõe `filters` e callbacks estáveis; o reducer é exportado e testado isoladamente (sem React Testing Library).
 
-#### 7. Integração em `AdminDashboard` ([App.tsx:4579+](../../src/App.tsx#L4579))
+#### 7. Integração em `AdminDashboard` ([App.tsx:4579+](../src/App.tsx#L4579))
 
-- Substituir os `useState` de `requestFilter` e `todayOnly` ([4596](../../src/App.tsx#L4596), [4598](../../src/App.tsx#L4598)) por `useRequestFilters()`; manter um `useState` local para `filtersDrawerOpen`.
+- Substituir os `useState` de `requestFilter` e `todayOnly` ([4596](../src/App.tsx#L4596), [4598](../src/App.tsx#L4598)) por `useRequestFilters()`; manter um `useState` local para `filtersDrawerOpen`.
 - Separar `visibleRequests` em dois `useMemo`: `normalizedRequests` (só `normalizeRequest`) e `visibleRequests` (aplica `matchesRequestSearch`). `visibleAccessRequests` e `today` permanecem.
 - `listItems = [...visibleRequests, ...visibleAccessRequests]` (ordem preservada: hoje "Novas" lista requests e depois credenciamentos). `activeRequests = filterRequestItems(listItems, filters, { today })`; contagens/opções em `useMemo`.
-- Trocar o `<nav className="request-nav">` ([4717-4737](../../src/App.tsx#L4717-L4737)) por `<RequestFiltersToolbar … />`, **mantendo** o wrapper `div.page-toolbar.request-page-controls` e o `div.page-actions` (botão "Criar Solicitação") como estão.
+- Trocar o `<nav className="request-nav">` ([4717-4737](../src/App.tsx#L4717-L4737)) por `<RequestFiltersToolbar … />`, **mantendo** o wrapper `div.page-toolbar.request-page-controls` e o `div.page-actions` (botão "Criar Solicitação") como estão.
 - Renderizar `<ActiveFiltersBar … />` entre o toolbar e `.triage-card-grid`, e `<RequestFiltersDrawer … />` junto aos modais.
-- Estado vazio ([4740](../../src/App.tsx#L4740)):
+- Estado vazio ([4740](../src/App.tsx#L4740)):
   - visão representável só por chip/Hoje (sem tipo, responsável nem conjunto de etapas customizado): manter os textos atuais (`"Nenhuma solicitação nesta etapa"` / `"Quando houver registros, eles aparecerão aqui."`; e, para Hoje isolado, `"Nenhuma agenda para hoje"` / `"Solicitações sem agendamento para hoje não entram neste recorte."`);
   - qualquer outro caso: título `"Nenhuma solicitação encontrada"`, texto `"Nenhuma solicitação corresponde aos filtros selecionados."`, `action="Limpar filtros"` → `clearAll`.
 - Os cartões (`triage-card`), `openCard`, `RequestPreviewModal` e `NewRequest` **não mudam**.
@@ -198,14 +198,14 @@ O hook expõe `filters` e callbacks estáveis; o reducer é exportado e testado 
   </nav>
   ```
   O ícone `SlidersHorizontal` existe no `lucide-react` instalado (`filter` e `list-filter` também).
-- **Drawer**: reaproveitar a casca `ag-drawer-overlay`, `ag-drawer`, `ag-drawer-head`, `ag-drawer-head-info`, `ag-drawer-kicker`, `ag-drawer-date` (título), `ag-drawer-close` ([styles.css:10564-10640](../../src/styles.css#L10564-L10640); largura `min(420px, 100vw)` → tela cheia no mobile). Corpo: `request-filters-body` (rolável) com três grupos (Etapa — 6 opções na ordem do fluxo; Tipo; Responsável — com campo de busca quando houver mais de ~6 opções). Opção = `<label><input type="checkbox"> rótulo <small>contagem</small></label>`; opção com contagem 0 e não selecionada fica esmaecida mas selecionável. Rodapé: **Limpar** (`clearAll`) e botão primário **"Ver N solicitações"** (fecha o drawer; singular para N = 1). Aplicação **imediata** (sem botão "Aplicar").
+- **Drawer**: reaproveitar a casca `ag-drawer-overlay`, `ag-drawer`, `ag-drawer-head`, `ag-drawer-head-info`, `ag-drawer-kicker`, `ag-drawer-date` (título), `ag-drawer-close` ([styles.css:10564-10640](../src/styles.css#L10564-L10640); largura `min(420px, 100vw)` → tela cheia no mobile). Corpo: `request-filters-body` (rolável) com três grupos (Etapa — 6 opções na ordem do fluxo; Tipo; Responsável — com campo de busca quando houver mais de ~6 opções). Opção = `<label><input type="checkbox"> rótulo <small>contagem</small></label>`; opção com contagem 0 e não selecionada fica esmaecida mas selecionável. Rodapé: **Limpar** (`clearAll`) e botão primário **"Ver N solicitações"** (fecha o drawer; singular para N = 1). Aplicação **imediata** (sem botão "Aplicar").
 - **Acessibilidade mínima**: `role="dialog"`, `aria-modal="true"`, `aria-labelledby`; fecha por botão, clique no overlay e `Esc` (listener em `useEffect` somente enquanto aberto); foco inicial no botão de fechar e retorno do foco ao botão Filtros ao fechar. Focus trap completo: fora do escopo.
 - **Barra de filtros ativos**: só renderiza se houver pílulas; cada pílula é um `<button>` com "✕" (`aria-label` "Remover filtro …"); ao lado, "Limpar filtros".
 
 #### 9. CSS
 
 - `request-filters.css` (novo), importado por `request-filters-drawer.tsx` e `active-filters-bar.tsx`. Classes com prefixo próprio: `request-filters-body`, `request-filters-group`, `request-filters-group-title`, `request-filters-search`, `request-filters-option` (+ `.is-empty`), `request-filters-footer`, `request-filters-bar`, `request-filter-pill`, `request-filters-clear`. Usar as variáveis existentes (`--ink-50/100/500/700/900`, `--selected-bg`, `--selected-ink`, `--ui-border`) com fallback. **Não** crescer o `styles.css`.
-- A ordem de import garante que o CSS novo vem depois do `styles.css` (importado em [App.tsx:55](../../src/App.tsx#L55)); com nomes de classe únicos não há disputa de cascata.
+- A ordem de import garante que o CSS novo vem depois do `styles.css` (importado em [App.tsx:55](../src/App.tsx#L55)); com nomes de classe únicos não há disputa de cascata.
 - O `styles.css` tem regras globais/`!important` que podem distorcer `input[type=checkbox]`, o campo de busca e botões dentro do drawer. Se a verificação visual mostrar distorção, confirmar a regra vencedora com `CSS.getMatchedStylesForNode` via CDP (memória `feedback-css-styles-debug`) e corrigir com seletor específico; só usar `!important` se a regra concorrente também usar e isso for confirmado.
 - Bug conhecido do projeto: SVG do `lucide-react` pode colapsar para ~1px dentro de flex; se o ícone do botão Filtros sumir, dar `width`/`height` explícitos ao `svg` em CSS.
 - Não editar `.topbar`. O overlay do drawer cobre o topbar apenas enquanto aberto.
@@ -261,9 +261,9 @@ Sem impacto esperado.
 
 Tudo abaixo deve ser **deletado**, não comentado nem ocultado. Localizar por identificador (os números de linha podem deslocar):
 
-- Em `AdminDashboard` ([App.tsx:4596-4598](../../src/App.tsx#L4596-L4598), [4695-4697](../../src/App.tsx#L4695-L4697)): os estados `requestFilter` e `todayOnly` (viram o hook), `todayRequests`, `activeTab` e `activeRequests` antigos (reescritos sobre `filterRequestItems`).
-- O array `filterTabs` inteiro ([App.tsx:4649-4694](../../src/App.tsx#L4649-L4694)) — a derivação passa para `getRequestStage`.
-- O JSX do `<nav className="request-nav">` ([App.tsx:4717-4737](../../src/App.tsx#L4717-L4737)): os 7 chips mapeados e o botão "Hoje" inline.
+- Em `AdminDashboard` ([App.tsx:4596-4598](../src/App.tsx#L4596-L4598), [4695-4697](../src/App.tsx#L4695-L4697)): os estados `requestFilter` e `todayOnly` (viram o hook), `todayRequests`, `activeTab` e `activeRequests` antigos (reescritos sobre `filterRequestItems`).
+- O array `filterTabs` inteiro ([App.tsx:4649-4694](../src/App.tsx#L4649-L4694)) — a derivação passa para `getRequestStage`.
+- O JSX do `<nav className="request-nav">` ([App.tsx:4717-4737](../src/App.tsx#L4717-L4737)): os 7 chips mapeados e o botão "Hoje" inline.
 - O atributo `data-tab` do botão de chip — nenhum CSS ou JS o consome (verificado: única ocorrência é o próprio JSX).
 - Os chips de topo "Reagendadas", "Realizadas" e "Canceladas" (continuam existindo como opções do grupo Etapa no drawer).
 - Os textos de estado vazio antigos que forem substituídos (item 7 de "Frontend").
@@ -308,7 +308,7 @@ Passo a passo para a skill `implementar` (o plano já traz as decisões e os tre
 
 ## Regras multi-tenant e segurança
 
-- Origem confiável do tenant: o backend já escopa `GET /api/requests` por `municipality_id` (ou lista tudo para usuário global), e `App.tsx` ainda aplica `scopedRequests`/`scopedTeams` por município selecionado ([App.tsx:791-804](../../src/App.tsx#L791-L804)). Os filtros operam **somente** sobre as props `requests` e `teams` já escopadas.
+- Origem confiável do tenant: o backend já escopa `GET /api/requests` por `municipality_id` (ou lista tudo para usuário global), e `App.tsx` ainda aplica `scopedRequests`/`scopedTeams` por município selecionado ([App.tsx:791-804](../src/App.tsx#L791-L804)). Os filtros operam **somente** sobre as props `requests` e `teams` já escopadas.
 - Prevenção de vazamento entre prefeituras: opções de Tipo e Responsável são derivadas dessas mesmas props — nunca de listas globais; usar `teams.users` recebido por prop (já escopado), não buscar usuários por conta própria.
 - Nenhum dado sai do cliente: sem chamadas novas, sem query string/URL com IDs de usuário, sem `localStorage` (evita guardar IDs de usuários no navegador).
 - Dados confidenciais: `normalizeRequest` já mascara tutor/CPF de solicitações confidenciais; os filtros não exibem tutor nem CPF.

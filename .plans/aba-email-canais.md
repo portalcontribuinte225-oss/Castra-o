@@ -2,7 +2,7 @@
 
 ## Origem
 
-- Complemento operacional das fases 4 e 5 de `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md` (canais de notificação e templates de acesso). Não é uma fase nova do roadmap.
+- Complemento operacional das fases 4 e 5 de `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md` (canais de notificação e templates de acesso). Não é uma fase nova do roadmap.
 - Data: 2026-11-15. Base: commit `1d380bf` (status de e-mail e merge por canal no backend, com testes).
 - Classificação: `frontend-only`. O backend já está pronto.
 - Decisão do usuário: **separar por canal**. A aba E-mail concentra o que é de e-mail; a aba WhatsApp fica só com o que é de WhatsApp.

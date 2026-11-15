@@ -7,17 +7,17 @@ description: Planeja a implementação de uma solução a partir de um arquivo M
 
 Planejamento é um processo iterativo. A primeira versão do plano é uma proposta — não versão final. O usuário deve revisar, corrigir, reduzir ou expandir o escopo antes de o plano ser salvo.
 
-Esta skill **não implementa código**. O objetivo é entender o escopo, identificar impactos no monorepo e salvar um plano em `.portal/plans/`. A implementação só começa quando o usuário chamar `/implementar` — em uma invocação separada, nunca na mesma resposta.
+Esta skill **não implementa código**. O objetivo é entender o escopo, identificar impactos no monorepo e salvar um plano em `.plans/`. A implementação só começa quando o usuário chamar `/implementar` — em uma invocação separada, nunca na mesma resposta.
 
-**Atenção — erro comum a evitar:** quando o usuário aprovar o plano (responder "1", "sim", "aprovado" etc.), a única ação permitida é salvar o arquivo `.md` em `.portal/plans/` e encerrar. "Aprovar o plano" NUNCA significa "pode começar a codar" — mesmo que o usuário tenha aprovado com entusiasmo ou o plano pareça simples. Se a mensagem de aprovação não citar explicitamente `/implementar`, não escreva nem edite nenhum arquivo de código.
+**Atenção — erro comum a evitar:** quando o usuário aprovar o plano (responder "1", "sim", "aprovado" etc.), a única ação permitida é salvar o arquivo `.md` em `.plans/` e encerrar. "Aprovar o plano" NUNCA significa "pode começar a codar" — mesmo que o usuário tenha aprovado com entusiasmo ou o plano pareça simples. Se a mensagem de aprovação não citar explicitamente `/implementar`, não escreva nem edite nenhum arquivo de código.
 
 ---
 
 ## Entrada esperada
 
 ```txt
-/planejar FEATURE_FILE=docs/features/emissao-alvara.md
-/planejar docs/features/novo-relatorio.md
+/planejar FEATURE_FILE=.plans/integracao-whatsapp-vinculos-templates.md
+/planejar docs/features/lembrete-vespera-agendamento.md
 ```
 
 ---
@@ -37,16 +37,14 @@ Tokens são um orçamento a gerir: invista onde a qualidade importa (decisões, 
 ```txt
 1. Ler o .md da feature
 2. Ler /AGENT.md (sempre)
-3. Ler frontend/AGENT.md (se houver impacto no frontend)
-4. Ler backend/AGENT.md (se houver impacto no backend)
-5. Investigar padrões existentes no projeto
-6. Classificar escopo
-7. Gerar plano preliminar
-8. Apresentar plano ao usuário
-9. Receber feedback e ajustar se necessário
-10. Solicitar aprovação explícita
-11. Salvar em .portal/plans/{nome}.md
-12. Encerrar — aguardar /implementar
+3. Investigar padrões existentes no projeto
+4. Classificar escopo
+5. Gerar plano preliminar
+6. Apresentar plano ao usuário
+7. Receber feedback e ajustar se necessário
+8. Solicitar aprovação explícita
+9. Salvar em .plans/{nome}.md
+10. Encerrar — aguardar /implementar
 ```
 
 ---
@@ -55,14 +53,12 @@ Tokens são um orçamento a gerir: invista onde a qualidade importa (decisões, 
 
 1. Ler completamente o `.md` fornecido antes de qualquer análise.
 2. Ler `/AGENT.md` sempre, sem exceção.
-3. Ler `frontend/AGENT.md` se houver impacto no frontend.
-4. Ler `backend/AGENT.md` se houver impacto no backend.
-5. Não implementar código nesta etapa.
-6. Não executar migrations.
-7. Não alterar arquivos fora de `.portal/plans/`.
-8. Não salvar o plano sem aprovação explícita do usuário.
-9. Não chamar `/implementar` — quem decide quando implementar é o usuário.
-10. Se a feature substituir algo existente, listar explicitamente o que deve ser **deletado** na seção "O que será removido" — nunca planejar ocultação (`display:none`, `if(false)`, flag desativada, bloco comentado) como substituto de remoção.
+3. Não implementar código nesta etapa.
+4. Não executar migrations.
+5. Não alterar arquivos fora de `.plans/`.
+6. Não salvar o plano sem aprovação explícita do usuário.
+7. Não chamar `/implementar` — quem decide quando implementar é o usuário.
+8. Se a feature substituir algo existente, listar explicitamente o que deve ser **deletado** na seção "O que será removido" — nunca planejar ocultação (`display:none`, `if(false)`, flag desativada, bloco comentado) como substituto de remoção.
 
 ---
 
@@ -70,7 +66,7 @@ Tokens são um orçamento a gerir: invista onde a qualidade importa (decisões, 
 
 Antes de escrever o plano, inspecionar o projeto para encontrar padrões existentes:
 
-- módulos, rotas, hooks, schemas, query keys, services, repositories similares
+- módulos, rotas, hooks, schemas, services, repositories similares
 - componentes reutilizáveis
 - padrões de validação, erro, permissão, relatório/PDF
 
@@ -106,7 +102,7 @@ Ao final, exibir obrigatoriamente:
 ```txt
 Escolha uma opção:
 
-1. Aprovar e salvar o plano em .portal/plans/ (isso NÃO inicia a implementação)
+1. Aprovar e salvar o plano em .plans/ (isso NÃO inicia a implementação)
 2. Ajustar o plano antes de salvar
 3. Reduzir o escopo
 4. Expandir o escopo
@@ -124,7 +120,7 @@ Se o usuário responder com a opção 1 (ou equivalente como "sim"/"aprovado"/"p
 Somente após aprovação explícita (`sim`, `aprovado`, `pode salvar`, `prosseguir`):
 
 1. Gerar o arquivo usando [TEMPLATE_planejar.md](TEMPLATE_planejar.md) como estrutura.
-2. Salvar em `.portal/plans/{nome-do-plano}.md`.
+2. Salvar em `.plans/{nome-do-plano}.md`.
 3. Informar o caminho e encerrar — nenhuma outra ação.
 
 A skill encerra aqui, na mesma resposta em que o `.md` é salvo. Não editar/criar arquivos de código. Não rodar lint/typecheck/build do projeto. Não iniciar implementação. Não chamar `/implementar` — mesmo implicitamente. Se quiser implementar, o usuário deve invocar `/implementar` explicitamente numa mensagem separada.
@@ -143,7 +139,7 @@ A skill encerra aqui, na mesma resposta em que o `.md` é salvo. Não editar/cri
 
 - Planejar "desativar" em vez de deletar — se algo será substituído, o plano lista o que será removido, não ocultado
 - Implementar código durante o planejamento
-- Alterar arquivos fora de `.portal/plans/`
+- Alterar arquivos fora de `.plans/`
 - Ignorar AGENT.md relevantes
 - Assumir escopo sem verificar impacto multi-tenant ou banco de dados
 - Executar migrations, rodar comandos destrutivos, alterar `.env`, CI/CD, abrir PR ou fazer commit

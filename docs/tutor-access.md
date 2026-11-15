@@ -1,6 +1,6 @@
 # Acesso do tutor — fase 5
 
-Implementação baseada em `.portal/plans/acesso-tutor-fase-5.md`, com os ajustes de `.plans/ajustes-login-recuperacao-senha.md`. Contas de tutor são municipais; não há migração de contas antigas nem compartilhamento automático de solicitações por CPF.
+Implementação baseada em `.plans/acesso-tutor-fase-5.md`, com os ajustes de `.plans/ajustes-login-recuperacao-senha.md`. Contas de tutor são municipais; não há migração de contas antigas nem compartilhamento automático de solicitações por CPF.
 
 ## Aplicação do schema
 

@@ -58,7 +58,7 @@ Functions, componentes, tipos, imports ou variáveis sem nenhuma referência no 
 import { unusedHelper } from './utils'; // zero references no arquivo
 ```
 
-**Verificar:** executar symbol search pelo nome exportado em todo o monorepo (`frontend/` e `backend/`) — dynamic import, uso em teste ou consumo por outro pacote invalida o achado.
+**Verificar:** executar symbol search pelo nome exportado em todo o monorepo (`src/`, `backend/` e `shared/`) — dynamic import, uso em teste ou consumo por outro pacote invalida o achado.
 
 Ver "Sem Código Morto" no `/AGENT.md`.
 
@@ -154,7 +154,7 @@ Identifier (função, variável, tipo, arquivo, tabela/coluna) em português den
 
 ```ts
 // Ruim, se for código novo:
-function buscarContribuinte() { ... }
+function buscarTutor() { ... }
 ```
 
 Não reportar identifiers em português que já existiam antes do scope revisado — são technical debt aceita. Só os que aparecem como parte da mudança atual, a menos que o usuário solicite naming convention audit de um módulo inteiro.

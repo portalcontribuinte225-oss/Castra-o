@@ -56,14 +56,14 @@ Não há `frontend/AGENT.md`/`backend/AGENT.md` separados neste projeto — a ra
 
 ### Frontend
 
-- **Modal "Editar/Criar tipo de solicitação"** ([App.tsx:9781-9866](../../src/App.tsx#L9781-L9866)):
+- **Modal "Editar/Criar tipo de solicitação"** ([App.tsx:9781-9866](../src/App.tsx#L9781-L9866)):
   - Mover o bloco `<div className="request-type-steps-section">` (linhas 9831-9862) para logo após os 3 toggles do topo (`config-modal-options`, linhas 9785-9808) e antes do `<Field label="Nome" .../>` (linha 9809).
   - Trocar o layout de `.request-type-steps-toggles` de linha para coluna (um toggle por linha).
   - Adicionar um texto de apoio (ex.: `<small>` ou `<span>` secundário) abaixo de cada label de etapa, explicando que desativar oculta a etapa no cadastro público.
   - Remover o toggle "Documentos" (linhas 9852-9860) do bloco de etapas.
-- **`createRequestType`** ([App.tsx:7266-7287](../../src/App.tsx#L7266-L7287)): incluir `stepTutor`, `stepAgenda`, `stepDocuments` (sempre `true` para este último) no objeto retornado, para persistir corretamente ao criar um tipo novo — hoje esses campos são perdidos na criação (só funcionam ao editar via `patchRequestType`).
-- **`emptyRequestType`** ([App.tsx:6970](../../src/App.tsx#L6970)): já tem os 3 campos com default `true` — sem mudança necessária aqui.
-- **Validações em `NewRequest`** ([App.tsx:3469-3471](../../src/App.tsx#L3469-L3471), [3589-3610](../../src/App.tsx#L3589-L3610), [3612-3638](../../src/App.tsx#L3612-L3638)): já gateiam corretamente por `typeStepTutor`/`typeStepAgenda`/`typeStepDocuments` — nenhuma mudança de lógica necessária. Após a remoção do toggle "Documentos" do modal, `typeStepDocuments` sempre será `true` na prática (a menos que exista dado legado com `false`), então o código de validação existente (`typeStepDocuments && ...`) continua funcionando sem alteração.
+- **`createRequestType`** ([App.tsx:7266-7287](../src/App.tsx#L7266-L7287)): incluir `stepTutor`, `stepAgenda`, `stepDocuments` (sempre `true` para este último) no objeto retornado, para persistir corretamente ao criar um tipo novo — hoje esses campos são perdidos na criação (só funcionam ao editar via `patchRequestType`).
+- **`emptyRequestType`** ([App.tsx:6970](../src/App.tsx#L6970)): já tem os 3 campos com default `true` — sem mudança necessária aqui.
+- **Validações em `NewRequest`** ([App.tsx:3469-3471](../src/App.tsx#L3469-L3471), [3589-3610](../src/App.tsx#L3589-L3610), [3612-3638](../src/App.tsx#L3612-L3638)): já gateiam corretamente por `typeStepTutor`/`typeStepAgenda`/`typeStepDocuments` — nenhuma mudança de lógica necessária. Após a remoção do toggle "Documentos" do modal, `typeStepDocuments` sempre será `true` na prática (a menos que exista dado legado com `false`), então o código de validação existente (`typeStepDocuments && ...`) continua funcionando sem alteração.
 - Estados de loading/error/empty: não aplicável (mudança é só de layout + persistência de config).
 - Testes: não há suíte de testes frontend configurada neste projeto (sem `npm run test` no `package.json`).
 
@@ -90,7 +90,7 @@ Sem impacto esperado.
 
 ## O que será removido
 
-- O toggle "Documentos" das etapas do modal ([App.tsx:9852-9860](../../src/App.tsx#L9852-L9860)) — deletado do JSX, não ocultado/comentado.
+- O toggle "Documentos" das etapas do modal ([App.tsx:9852-9860](../src/App.tsx#L9852-L9860)) — deletado do JSX, não ocultado/comentado.
 
 Nenhuma outra remoção prevista. O campo `stepDocuments` permanece no schema/objeto (não é removido do tipo `AnyRecord`/payload) para não quebrar tipos já configurados no passado — apenas deixa de ser setável como `false` pela UI.
 
@@ -98,11 +98,11 @@ Nenhuma outra remoção prevista. O campo `stepDocuments` permanece no schema/ob
 
 ## Estratégia de implementação
 
-1. No JSX do modal ([App.tsx:9781-9866](../../src/App.tsx#L9781-L9866)), mover o bloco `request-type-steps-section` para entre `config-modal-options` (linha 9808) e o `<Field label="Nome" .../>` (linha 9809).
+1. No JSX do modal ([App.tsx:9781-9866](../src/App.tsx#L9781-L9866)), mover o bloco `request-type-steps-section` para entre `config-modal-options` (linha 9808) e o `<Field label="Nome" .../>` (linha 9809).
 2. Remover o toggle "Documentos" (linhas 9852-9860) do bloco de etapas.
 3. Reestruturar os 2 toggles restantes (Dados do tutor, Agenda) para um por linha, cada um com um texto de apoio abaixo explicando o efeito de desativar (ex.: "Oculta esta etapa no cadastro público").
 4. Ajustar CSS de `.request-type-steps-toggles` (ou criar variante) para `flex-direction: column` / `display: grid` com uma coluna, gap adequado entre os toggles.
-5. Em `createRequestType` ([App.tsx:7266-7287](../../src/App.tsx#L7266-L7287)), adicionar `stepTutor: payload.stepTutor !== false, stepAgenda: payload.stepAgenda !== false, stepDocuments: true` ao objeto retornado.
+5. Em `createRequestType` ([App.tsx:7266-7287](../src/App.tsx#L7266-L7287)), adicionar `stepTutor: payload.stepTutor !== false, stepAgenda: payload.stepAgenda !== false, stepDocuments: true` ao objeto retornado.
 6. Rodar grep por `stepDocuments`/`typeStepDocuments` no arquivo inteiro para confirmar que nenhuma lógica de validação quebra com a remoção do toggle (checklist anti-duplicação da skill `implementar`).
 7. `npm run typecheck` e `npm run build`.
 8. Sem verificação visual do resultado final, a menos que o usuário peça explicitamente (preferência já registrada nesta conversa em interações anteriores).

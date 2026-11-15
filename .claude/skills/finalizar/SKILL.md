@@ -83,7 +83,7 @@ Confirmar que a branch atual é `main` (é a única branch de trabalho deste pro
 Se existir um plano em:
 
 ```txt
-.portal/plans/
+.plans/
 ```
 
 ou caminho equivalente informado pelo usuário, ler o plano antes de finalizar.
@@ -161,11 +161,8 @@ Nunca executar migrations sem autorização explícita do usuário.
 Se houver alterações em:
 
 ```txt
-drizzle/
-migrations/
-prisma/migrations/
-db/migrations/
-supabase/migrations/
+backend/src/db/sql/
+backend/src/db/migrations.js
 ```
 
 A skill deve:
@@ -177,10 +174,8 @@ A skill deve:
 Também não deve rodar comandos como:
 
 ```bash
-drizzle-kit push
-drizzle-kit migrate
-prisma migrate
-knex migrate
+psql ... -f backend/src/db/sql/<arquivo>.sql
+node backend/src/server.js   # o boot executa runMigrations()
 ```
 
 sem autorização explícita.
@@ -216,6 +211,8 @@ pnpm build
 ```
 
 ou equivalentes conforme gerenciador.
+
+Neste projeto (rodar da raiz): `npm run typecheck`, `npm test`, `node --test backend/test/*.test.js` e `npm run build`. Não há lint.
 
 Se um check não existir, não inventar comando — registrar isso no resumo final.
 
@@ -263,8 +260,8 @@ Exemplos:
 ```txt
 feat: add async pdf generation flow
 fix: prevent external requests during pdf rendering
-refactor: move pdf generation to worker
-chore: add pdf job infrastructure
+refactor: extract visible request steps into a tested function
+chore: remove unused whatsapp template settings
 ```
 
 A mensagem deve refletir as alterações reais.

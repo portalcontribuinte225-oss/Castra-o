@@ -2,14 +2,14 @@
 
 ## Origem
 
-- Especificação: `.portal/specs/solicitacao-animal-cadastrado-e-acesso-tutor.md`.
+- Especificação: `.plans/solicitacao-animal-cadastrado-e-acesso-tutor.md`.
 - Fase: 5 — conta, senha, login, recuperação, perfil e recuperação assistida do tutor.
 - Data do planejamento: 2026-11-13.
 - Base investigada: commit `bc596dc`, que concluiu a fase 4.
 - Classificação: `fullstack + database`.
 - Aprovação: o usuário autorizou salvar a proposta revisada com a resposta “pode”.
 - Decisões explícitas do usuário: **conta por município**; **o sistema é novo e não tem contas antigas**.
-- Destino aprovado: `.portal/plans/acesso-tutor-fase-5.md`, mantendo a organização do roadmap deste projeto. Essa aprovação específica do destino prevalece sobre a pasta `.plans/` da skill global invocada.
+- Destino aprovado: `.plans/acesso-tutor-fase-5.md`, mantendo a organização do roadmap deste projeto. Essa aprovação específica do destino prevalece sobre a pasta `.plans/` da skill global invocada.
 
 ## Resumo
 
@@ -63,7 +63,7 @@ A fase também precisa fechar caminhos existentes de alteração indevida de con
 
 - `AGENT.md`; não foram encontrados `CLAUDE.md`, `frontend/AGENT.md` ou `backend/AGENT.md` no repositório.
 - Skill global `C:/Users/rodri/.codex/skills/planejar/SKILL.md`, invocada pelo usuário, adaptada à estrutura real deste projeto.
-- Especificação mestre e `.portal/plans/acompanhamento-canais-notificacoes-fase-4.md`.
+- Especificação mestre e `.plans/acompanhamento-canais-notificacoes-fase-4.md`.
 - `backend/src/routes/auth.js`, `middleware/auth.js`, `tenant.js` e `db/migrations.js`.
 - `backend/src/routes/requests.js`, `animals.js`, `config.js`, `accessRequests.js` e `municipalities.js`.
 - `backend/src/services/audit.js`, `email.js`, `whatsapp.js`, `whatsappQuota.js`, `config-secret-cipher.js`, `request-submission.js` e `notifications/`.
@@ -399,7 +399,7 @@ Pendências operacionais, não autorizações implícitas:
 ## Instruções para /implementar
 
 - Usar este plano aprovado como contexto principal e a especificação mestre como roadmap. As decisões do usuário sobre conta municipal e inexistência de contas antigas substituem as hipóteses levantadas na análise inicial.
-- A aprovação atual autoriza somente salvar o plano. Aguardar invocação separada de `/implementar .portal/plans/acesso-tutor-fase-5.md`.
+- A aprovação atual autoriza somente salvar o plano. Aguardar invocação separada de `/implementar .plans/acesso-tutor-fase-5.md`.
 - Não reintroduzir migração de contas antigas, reivindicação de histórico, e-mail fictício ou conta global para resolver a modelagem.
 - Não executar migration, seed, script de escrita no banco ou boot que execute migrations sem a confirmação específica necessária.
 - Aplicar módulos pequenos com nomes em inglês, contratos compartilhados, testes isolados e fiação mínima em `App.tsx`/rotas existentes.
