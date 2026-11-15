@@ -19,7 +19,7 @@ test("EmailJS uses an explicit notification template and sanitizes content", asy
     return { ok: true };
   } });
   const result = await sendNotificationEmail({ toEmail: emailInput.toEmail, templateId: emailInput.templateId, event: NotificationEvent.DOCUMENTS_REVIEWED,
-    request: { protocol: "1/2026", validation_key: "secret-key", documents: [{ message: "private reason" }] } }, sender);
+    request: { protocol: "1/2026", internal_token: "secret-key", documents: [{ message: "private reason" }] } }, sender);
   assert.equal(result.status, DeliveryStatus.SENT);
 });
 
@@ -96,10 +96,10 @@ test("document notifications report aggregate status without exposing documents"
   });
 });
 
-test("WhatsApp templates cannot resolve CPF, contacts, arbitrary fields or legacy validation keys", async () => {
-  const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation", templateVariables: ["protocol", "cpf", "validation_key", "phone", "privateData"] };
+test("WhatsApp templates cannot resolve CPF, contacts or arbitrary fields", async () => {
+  const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation", templateVariables: ["protocol", "cpf", "internal_token", "phone", "privateData"] };
   const result = await sendCloudApiTemplate(config, {
-    phone: "(48) 99999-9999", protocol: "1/2026", cpf: "sensitive-cpf", validation_key: "secret-key", privateData: "sensitive-data",
+    phone: "(48) 99999-9999", protocol: "1/2026", cpf: "sensitive-cpf", internal_token: "secret-key", privateData: "sensitive-data",
   }, { fetchImpl: async (_url, options) => {
     const body = JSON.parse(options.body);
     assert.equal(body.to, "5548999999999");

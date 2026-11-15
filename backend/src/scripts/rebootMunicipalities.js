@@ -10,7 +10,6 @@ async function reboot() {
 
     await client.query("DELETE FROM animal_records");
     await client.query("DELETE FROM requests");
-    await client.query("DELETE FROM request_validation_keys");
     await client.query("DELETE FROM request_protocol_counters");
     await client.query("DELETE FROM animal_tutors");
     await client.query("DELETE FROM adoptions");

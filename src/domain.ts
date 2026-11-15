@@ -146,7 +146,6 @@ export const WHATSAPP_TEMPLATE_VARS = [
   { key: "species", label: "Espécie" },
   { key: "city", label: "Município" },
   { key: "phone", label: "Telefone" },
-  { key: "validation_key", label: "Chave digital" },
 ];
 
 export const CONFIG_KEYS = {
@@ -460,7 +459,6 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     origin: request.origin || "PUBLICA",
     rescheduleCount,
     protocol: request.protocol || String(request.id || "").slice(0, 8).toUpperCase() || "SEM-ID",
-    validationKey: request.validationKey || request.validation_key || "",
     signatureDataUrl: request.signatureDataUrl || request.signature_data_url || "",
     signedAt: request.signedAt || request.signed_at || "",
     isConfidential: Boolean(request.isConfidential || request.is_confidential),

@@ -6,6 +6,7 @@ import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
 import { NOTIFICATIONS_CONFIG_KEY, buildDefaultNotificationConfig } from "../../shared/notification-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
+import { assertInsertShape } from "./fixtures/insert-shape.js";
 
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
@@ -106,16 +107,15 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
         if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: "77777777-7777-4777-8777-777777777777", date: FUTURE_DATE, active: true, slots: [{time:"08:00",vacancies:10}] }] };
         if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) return { rows: requestRow ? [clone(requestRow)] : [] };
         if (sql.includes("INSERT INTO request_protocol_counters")) return { rows: [{ seq: 1 }] };
-        if (sql.includes("SELECT validation_key FROM request_validation_keys")) return { rows: [] };
-        if (sql.includes("INSERT INTO request_validation_keys")) return { rows: [{ validation_key: values[1] }] };
         if (sql.includes("INSERT INTO requests")) {
           if (failRequestInsert) throw new Error("Simulated request write failure");
+          assertInsertShape(sql, values);
           requestRow = {
-            id: values[38] || REQUEST_ID, tutor_id: values[0], protocol: values[1], validation_key: values[2],
-            tutor_name: values[3], tutor_email: values[4], cpf: values[5], phone: values[6],
-            animals: JSON.parse(values[17]), request_type: values[18], municipality_id: values[20],
-            schedule_date: values[22], documents: JSON.parse(values[31]), tags: JSON.parse(values[32]),
-            workflow_data: JSON.parse(values[33]), origin: values[36], status: "NOVA", history: [],
+            id: values[37] || REQUEST_ID, tutor_id: values[0], protocol: values[1],
+            tutor_name: values[2], tutor_email: values[3], cpf: values[4], phone: values[5],
+            animals: JSON.parse(values[16]), request_type: values[17], municipality_id: values[19],
+            schedule_date: values[21], documents: JSON.parse(values[30]), tags: JSON.parse(values[31]),
+            workflow_data: JSON.parse(values[32]), origin: values[35], status: "NOVA", history: [],
           };
           return { rows: [clone(requestRow)] };
         }
@@ -177,7 +177,7 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
     const response = await clientFetch(`http://127.0.0.1:${server.address().port}${path}`, {
       method, headers: { "Content-Type": "application/json", ...(user ? { Authorization: `Bearer ${registerTestSession(sessionUsers, user)}` } : {}) }, body: JSON.stringify(body),
     });
-    return { status: response.status, body: await response.json(), cacheControl: response.headers.get("cache-control") };
+    return { status: response.status, body: await response.json().catch(() => null), cacheControl: response.headers.get("cache-control") };
   }
   return { request, stats, row: () => requestRow, profiles: tutorProfiles, users: createdUsers };
 }
@@ -195,17 +195,23 @@ test("public POST rejects omitted preference and CPF required by configured Tuto
   assert.equal(row(), null);
 });
 
-test("configured no-Tutor POST saves without CPF and never writes an empty CPF validation-key record", async (t) => {
+test("configured no-Tutor POST saves without CPF and without any validation key", async (t) => {
   const { request, stats, row } = await fixture(t);
   const response = await request({ body: procedureBody() });
   assert.equal(response.status, 201);
   assert.equal(row().cpf, null);
-  assert.match(row().validation_key, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-  assert.equal(stats.calls.some(({ sql }) => sql.includes("request_validation_keys")), false);
+  assert.equal(stats.calls.some(({ sql }) => sql.includes("validation_key")), false);
   assert.equal(row().origin, "PUBLICA");
   assert.equal(response.body.request.id, row().id);
-  assert.equal(response.body.request.validation_key, undefined);
   assert.equal(response.body.enrollment, undefined);
+});
+
+test("legacy validation-key consultation routes no longer exist", async (t) => {
+  const { request, stats } = await fixture(t);
+  const legacyKey = "ABCD-EFGH-JKLM";
+  assert.equal((await request({ method: "GET", path: `/requests/public/${legacyKey}?municipalityId=${MUNICIPALITY_ID}` })).status, 404);
+  assert.equal((await request({ method: "POST", path: "/requests/consult", body: { cpf: VALID_CPF, validationKey: legacyKey, municipalityId: MUNICIPALITY_ID } })).status, 404);
+  assert.equal(stats.calls.length, 0);
 });
 
 test("forged origin, skipTutor and stepTutor flags cannot dispense CPF", async (t) => {
@@ -255,7 +261,6 @@ test("new public tutor enrollment returns one ephemeral credential outside the p
   assert.equal(response.cacheControl, "no-store");
   assert.ok(password.length >= 15);
   assert.equal(response.body.enrollment.cpf, VALID_CPF);
-  assert.equal(response.body.request.validation_key, undefined);
   assert.equal(JSON.stringify(row()).includes(password), false);
   assert.equal(JSON.stringify(response.body.request).includes(password), false);
   assert.equal(users.size, 1);
@@ -263,7 +268,7 @@ test("new public tutor enrollment returns one ephemeral credential outside the p
   assert.match([...users.values()][0].password, /^\$2[aby]\$/);
 });
 
-test("repeated anonymous CPF never resets an existing account or returns its credential or key", async (t) => {
+test("repeated anonymous CPF never resets an existing account or returns its credential", async (t) => {
   const { request, row, users } = await fixture(t);
   const body = procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
   const first = await request({ body });
@@ -271,7 +276,6 @@ test("repeated anonymous CPF never resets an existing account or returns its cre
   const second = await request({ body });
   assert.equal(second.status, 201);
   assert.equal(second.body.enrollment, undefined);
-  assert.equal(second.body.request.validation_key, undefined);
   assert.equal(second.body.request.tutor_id, null);
   assert.equal(row().tutor_id, null);
   assert.equal([...users.values()][0].password, storedHash);
@@ -308,13 +312,12 @@ test("authenticated tutor cannot submit a different CPF or delete requests", asy
   assert.equal((await request({ user, method: "DELETE", path: `/requests/${REQUEST_ID}` })).status, 403);
 });
 
-test("tutor request reads require authenticated owner and municipality and omit validation secrets", async (t) => {
-  const existing = { ...pendingRequest(), tutor_id: ADMIN.id, validation_key: "private-existing-key" };
+test("tutor request reads require authenticated owner and municipality", async (t) => {
+  const existing = { ...pendingRequest(), tutor_id: ADMIN.id };
   const { request } = await fixture(t, { existing });
   const response = await request({ user: { ...ADMIN, role: "tutor" }, method: "GET" });
   assert.equal(response.status, 200);
   assert.equal(response.body.length, 1);
-  assert.equal(response.body[0].validation_key, undefined);
 });
 
 test("tutor cannot use operational PATCH to trigger notifications", async (t) => {

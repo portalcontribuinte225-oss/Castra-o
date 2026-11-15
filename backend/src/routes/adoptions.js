@@ -155,69 +155,6 @@ async function ensureAdoptedAnimal(client, adoption, microchip, tutor, notes, ad
   return animal;
 }
 
-router.get("/by-key/:validationKey", async (req, res) => {
-  try {
-    const cleanCpf = normalizeCpf(req.query.cpf);
-    const municipalityId = req.query.municipalityId || null;
-    if (!municipalityId) return res.status(400).json({ error: "Município obrigatório para consulta." });
-    if (!isValidCpf(cleanCpf)) {
-      return res.status(400).json({ error: "CPF obrigatorio para consulta." });
-    }
-
-    const { rows: keyRows } = await pool.query(
-      "SELECT cpf FROM request_validation_keys WHERE cpf = $1 AND validation_key = $2",
-      [cleanCpf, req.params.validationKey]
-    );
-    if (!keyRows[0]) return res.json([]);
-    const cpf = keyRows[0].cpf;
-    const scope = municipalityId ? " AND municipality_id = $2" : "";
-    const values = municipalityId ? [cpf, municipalityId] : [cpf];
-    const { rows } = await pool.query(
-      `SELECT * FROM adoptions
-       WHERE EXISTS (
-         SELECT 1 FROM jsonb_array_elements(interests) AS elem
-         WHERE elem->>'cpf' = $1
-       )${scope}
-       ORDER BY created_at DESC`,
-      values
-    );
-    res.json(rows.map(publicAdoption));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post("/consult", async (req, res) => {
-  try {
-    const { validationKey, cpf, municipalityId } = req.body || {};
-    const cleanCpf = normalizeCpf(cpf);
-    if (!municipalityId) return res.status(400).json({ error: "Município obrigatório para consulta." });
-    if (!isValidCpf(cleanCpf)) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
-    if (!validationKey) return res.status(400).json({ error: "Chave de consulta obrigatoria." });
-
-    const { rows: keyRows } = await pool.query(
-      "SELECT cpf FROM request_validation_keys WHERE cpf = $1 AND validation_key = $2",
-      [cleanCpf, String(validationKey).trim()],
-    );
-    if (!keyRows[0]) return res.status(404).json({ error: "CPF e chave de validacao nao conferem." });
-
-    const scope = municipalityId ? " AND municipality_id = $2" : "";
-    const values = municipalityId ? [cleanCpf, municipalityId] : [cleanCpf];
-    const { rows } = await pool.query(
-      `SELECT * FROM adoptions
-       WHERE EXISTS (
-         SELECT 1 FROM jsonb_array_elements(interests) AS elem
-         WHERE elem->>'cpf' = $1
-       )${scope}
-       ORDER BY created_at DESC`,
-      values,
-    );
-    res.json(rows.map(publicAdoption));
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 router.get("/", optionalAuth, async (req, res) => {
   try {
     const municipalityId = pickMunicipalityId(req);

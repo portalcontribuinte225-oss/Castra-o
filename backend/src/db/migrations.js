@@ -31,7 +31,6 @@ export async function runMigrations() {
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tutor_id UUID REFERENCES users(id),
       protocol TEXT UNIQUE,
-      validation_key TEXT,
       tutor_name TEXT,
       tutor_email TEXT,
       cpf TEXT,
@@ -71,12 +70,6 @@ export async function runMigrations() {
     CREATE TABLE IF NOT EXISTS request_protocol_counters (
       year INT PRIMARY KEY,
       next_seq INT NOT NULL DEFAULT 1
-    );
-
-    CREATE TABLE IF NOT EXISTS request_validation_keys (
-      cpf TEXT PRIMARY KEY,
-      validation_key TEXT UNIQUE NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS adoptions (
@@ -195,7 +188,6 @@ export async function runMigrations() {
     ALTER TABLE users ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
 
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS protocol TEXT UNIQUE;
-    ALTER TABLE requests ADD COLUMN IF NOT EXISTS validation_key TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS cpf TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS phone TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS address TEXT;
@@ -292,9 +284,6 @@ export async function runMigrations() {
     CREATE UNIQUE INDEX IF NOT EXISTS requests_protocol_unique_idx
       ON requests (protocol)
       WHERE protocol IS NOT NULL;
-    CREATE INDEX IF NOT EXISTS requests_validation_key_idx
-      ON requests (validation_key)
-      WHERE validation_key IS NOT NULL;
     CREATE INDEX IF NOT EXISTS adoptions_interests_gin_idx
       ON adoptions USING GIN (interests);
     CREATE UNIQUE INDEX IF NOT EXISTS animals_microchip_unique_idx

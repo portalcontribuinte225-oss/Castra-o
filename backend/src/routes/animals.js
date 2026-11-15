@@ -1,7 +1,6 @@
 import { Router } from "express";
-import crypto from "crypto";
 import { pool } from "../db/index.js";
-import { auth, optionalAuth } from "../middleware/auth.js";
+import { auth } from "../middleware/auth.js";
 import { normalizeCpf, isValidCpf } from "../utils.js";
 import { isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { mine, fromRequest, requestContext, documentContent, confirmMicrochip, animalEndpoint } from "../services/registered-animals/animal-handlers.js";
@@ -14,11 +13,10 @@ router.get("/:id/request-context", auth, animalEndpoint(requestContext));
 router.get("/:id/documents/:sourceRequestId/:attachmentId", auth, animalEndpoint(documentContent));
 router.post("/:id/confirm-microchip", auth, animalEndpoint(confirmMicrochip));
 
+const ANIMAL_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function requireAnimalContext(req, res, next) {
   if (!pickMunicipalityId(req)) return res.status(400).json({ error: "Município obrigatório para esta operação." });
-  if (!req.user && (!isValidCpf(req.body?.cpf) || !String(req.body?.validationKey || "").trim())) {
-    return res.status(403).json({ error: "Autenticação ou credenciais de consulta obrigatórias." });
-  }
   next();
 }
 
@@ -43,16 +41,6 @@ function publicAnimal(row) {
     color: row.color,
     status: row.status,
   };
-}
-
-function randomValidationKey() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let raw = "";
-  while (raw.length < 12) {
-    const bytes = crypto.randomBytes(12);
-    raw += Array.from(bytes, (value) => alphabet[value % alphabet.length]).join("");
-  }
-  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 }
 
 async function nextProtocol(client) {
@@ -86,9 +74,16 @@ async function fetchAnimalByMicrochip(client, microchip, municipalityId) {
 
 function requestOwnerScope(req, alias, parameter) {
   if (isInternalUser(req.user)) return { sql: "", values: [] };
-  return req.user
-    ? { sql: ` AND ${alias}.tutor_id = $${parameter}`, values: [req.user.id] }
-    : { sql: ` AND regexp_replace(COALESCE(${alias}.cpf, ''), '\\D', '', 'g') = $${parameter}`, values: [normalizeCpf(req.body?.cpf)] };
+  return { sql: ` AND ${alias}.tutor_id = $${parameter}`, values: [req.user.id] };
+}
+
+// A microchip or an animal id from the client is only a lookup key, never proof of ownership.
+function readAnimalSelector(body = {}) {
+  if (body.animalId !== undefined) {
+    return ANIMAL_ID_PATTERN.test(String(body.animalId)) ? { animalId: String(body.animalId) } : { error: "Animal invalido." };
+  }
+  const microchip = normalizeMicrochip(body.microchip);
+  return microchip.length >= 4 && microchip.length <= 32 ? { microchip } : { error: "Microchip invalido." };
 }
 
 async function fetchLegacyAnimalRequest(client, microchip, req) {
@@ -184,38 +179,7 @@ async function ensureAnimalFromLegacyRequest(client, microchip, req) {
   return animal;
 }
 
-async function hasLegacyCredential(client, cpf, validationKey) {
-  const cleanCpf = normalizeCpf(cpf);
-  const cleanKey = String(validationKey || "").trim();
-  if (!isValidCpf(cleanCpf) || !cleanKey) return false;
-
-  const { rows: keyRows } = await client.query(
-    "SELECT 1 FROM request_validation_keys WHERE cpf = $1 AND validation_key = $2",
-    [cleanCpf, cleanKey],
-  );
-  return Boolean(keyRows[0]);
-}
-
-async function isCredentialAuthorizedForAnimal(client, animalId, cpf, validationKey, municipalityId) {
-  const cleanCpf = normalizeCpf(cpf);
-  if (!municipalityId || !await hasLegacyCredential(client, cpf, validationKey)) return false;
-  const { rows: tutorRows } = await client.query(
-    `SELECT 1
-     FROM animal_tutors
-     WHERE animal_id = $1
-       AND active = TRUE
-       AND regexp_replace(COALESCE(cpf, ''), '\\D', '', 'g') = $2
-       AND EXISTS (SELECT 1 FROM animal_records ar JOIN requests r ON r.id = ar.request_id
-         WHERE ar.animal_id = $1 AND ar.municipality_id = $3
-           AND regexp_replace(COALESCE(r.cpf, ''), '\\D', '', 'g') = $2)
-     LIMIT 1`,
-    [animalId, cleanCpf, municipalityId],
-  );
-  return Boolean(tutorRows[0]);
-}
-
 async function isUserAuthorizedForAnimal(client, user, animal, municipalityId) {
-  if (!user) return false;
   if (isInternalUser(user)) {
     const { rows: recordRows } = await client.query(
       "SELECT 1 FROM animal_records WHERE animal_id = $1 AND municipality_id = $2 LIMIT 1",
@@ -237,16 +201,8 @@ async function isUserAuthorizedForAnimal(client, user, animal, municipalityId) {
   return Boolean(rows[0]);
 }
 
-async function ensureAuthorized(client, req, animal) {
-  const municipalityId = pickMunicipalityId(req);
-  if (await isUserAuthorizedForAnimal(client, req.user, animal, municipalityId)) return true;
-  return isCredentialAuthorizedForAnimal(client, animal.id, req.body?.cpf, req.body?.validationKey, municipalityId);
-}
-
 async function fetchActiveTutor(client, animalId, req) {
-  const owner = isInternalUser(req.user) ? { sql: "", values: [] }
-    : req.user ? { sql: " AND at.user_id = $3", values: [req.user.id] }
-    : { sql: " AND regexp_replace(COALESCE(at.cpf, ''), '\\D', '', 'g') = $3", values: [normalizeCpf(req.body?.cpf)] };
+  const owner = isInternalUser(req.user) ? { sql: "", values: [] } : { sql: " AND at.user_id = $3", values: [req.user.id] };
   const { rows } = await client.query(
     `SELECT at.*
      FROM animal_tutors at
@@ -369,7 +325,7 @@ async function buildAnimalHistory(client, animal, req) {
   );
 }
 
-router.post("/lookup", optionalAuth, requireAnimalContext, async (req, res) => {
+router.post("/lookup", auth, requireAnimalContext, async (req, res) => {
   const microchip = normalizeMicrochip(req.body?.microchip);
   if (microchip.length < 4 || microchip.length > 32) {
     return res.status(400).json({ error: "Microchip invalido." });
@@ -380,7 +336,7 @@ router.post("/lookup", optionalAuth, requireAnimalContext, async (req, res) => {
     await client.query("BEGIN");
     if (isInternalUser(req.user)) await lockMunicipalSchedule(client, pickMunicipalityId(req));
     const animal = await ensureAnimalFromLegacyRequest(client, microchip, req);
-    if (!animal || !await ensureAuthorized(client, req, animal)) {
+    if (!animal || !await isUserAuthorizedForAnimal(client, req.user, animal, pickMunicipalityId(req))) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Animal não encontrado ou consulta não autorizada." });
     }
@@ -394,23 +350,23 @@ router.post("/lookup", optionalAuth, requireAnimalContext, async (req, res) => {
   }
 });
 
-router.post("/consult", optionalAuth, requireAnimalContext, async (req, res) => {
-  const microchip = normalizeMicrochip(req.body?.microchip);
-  if (microchip.length < 4 || microchip.length > 32) {
-    return res.status(400).json({ error: "Microchip invalido." });
-  }
+router.post("/consult", auth, requireAnimalContext, async (req, res) => {
+  const selector = readAnimalSelector(req.body);
+  if (selector.error) return res.status(400).json({ error: selector.error });
 
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     if (isInternalUser(req.user)) await lockMunicipalSchedule(client, pickMunicipalityId(req));
-    const animal = await ensureAnimalFromLegacyRequest(client, microchip, req);
+    const animal = selector.animalId
+      ? await fetchAnimalById(client, selector.animalId, pickMunicipalityId(req))
+      : await ensureAnimalFromLegacyRequest(client, selector.microchip, req);
     if (!animal) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Animal nao encontrado." });
     }
 
-    const authorized = await ensureAuthorized(client, req, animal);
+    const authorized = await isUserAuthorizedForAnimal(client, req.user, animal, pickMunicipalityId(req));
     if (!authorized) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Consulta nao autorizada para este animal." });
@@ -433,7 +389,7 @@ router.post("/consult", optionalAuth, requireAnimalContext, async (req, res) => 
   }
 });
 
-router.post("/:id/death", optionalAuth, requireAnimalContext, async (req, res) => {
+router.post("/:id/death", auth, requireAnimalContext, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -444,7 +400,7 @@ router.post("/:id/death", optionalAuth, requireAnimalContext, async (req, res) =
       return res.status(404).json({ error: "Animal nao encontrado." });
     }
 
-    const authorized = await ensureAuthorized(client, req, animal);
+    const authorized = await isUserAuthorizedForAnimal(client, req.user, animal, pickMunicipalityId(req));
     if (!authorized) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Solicitacao nao autorizada para este animal." });
@@ -452,8 +408,7 @@ router.post("/:id/death", optionalAuth, requireAnimalContext, async (req, res) =
 
     const tutor = await fetchActiveTutor(client, animal.id, req);
     const protocol = await nextProtocol(client);
-    const cpf = pick(tutor?.cpf, req.user?.cpf, req.body?.cpf);
-    const validationKey = randomValidationKey();
+    const cpf = pick(tutor?.cpf, req.user?.cpf);
     const deathDate = pick(req.body?.death_date, req.body?.deathDate);
     const deathCause = pick(req.body?.death_cause, req.body?.deathCause);
     if (!deathDate || !String(deathCause || "").trim()) {
@@ -475,21 +430,20 @@ router.post("/:id/death", optionalAuth, requireAnimalContext, async (req, res) =
 
     const { rows } = await client.query(
       `INSERT INTO requests (
-        tutor_id, protocol, validation_key, tutor_name, tutor_email, cpf, phone,
+        tutor_id, protocol, tutor_name, tutor_email, cpf, phone,
         address, neighborhood, city, state, cep, animal_id, animal_microchip,
         animal_name, species, size, animals, request_type, notes, status,
         death_date, death_cause, tags, workflow_data, municipality_id
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'ANIMAL_OBITO', $19, 'NOVA', $20, $21, $22::jsonb, $23::jsonb, $24
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        $10, $11, $12, $13, $14, $15, $16, $17::jsonb,
+        'ANIMAL_OBITO', $18, 'NOVA', $19, $20, $21::jsonb, $22::jsonb, $23
       )
       RETURNING *`,
       [
         req.user && !isInternalUser(req.user) ? req.user.id : tutor?.user_id || null,
         protocol,
-        validationKey,
         pick(req.body?.tutor_name, req.body?.tutorName, tutor?.tutor_name),
         pick(req.body?.tutor_email, req.body?.tutorEmail, tutor?.tutor_email),
         cpf,
@@ -537,7 +491,7 @@ router.post("/:id/death", optionalAuth, requireAnimalContext, async (req, res) =
   }
 });
 
-router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res) => {
+router.post("/:id/transfer", auth, requireAnimalContext, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -548,7 +502,7 @@ router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res
       return res.status(404).json({ error: "Animal nao encontrado." });
     }
 
-    const authorized = await ensureAuthorized(client, req, animal);
+    const authorized = await isUserAuthorizedForAnimal(client, req.user, animal, pickMunicipalityId(req));
     if (!authorized) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Solicitacao nao autorizada para este animal." });
@@ -563,8 +517,7 @@ router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res
     }
 
     const protocol = await nextProtocol(client);
-    const cpf = pick(tutor?.cpf, req.user?.cpf, req.body?.cpf);
-    const validationKey = randomValidationKey();
+    const cpf = pick(tutor?.cpf, req.user?.cpf);
     const notes = req.body?.notes || null;
     const target = {
       name: targetName,
@@ -586,7 +539,7 @@ router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res
 
     const { rows } = await client.query(
       `INSERT INTO requests (
-        tutor_id, protocol, validation_key, tutor_name, tutor_email, cpf, phone,
+        tutor_id, protocol, tutor_name, tutor_email, cpf, phone,
         address, neighborhood, city, state, cep, animal_id, animal_microchip,
         animal_name, species, size, animals, request_type, notes, status,
         target_tutor_name, target_tutor_email, target_tutor_cpf, target_tutor_phone,
@@ -594,16 +547,15 @@ router.post("/:id/transfer", optionalAuth, requireAnimalContext, async (req, res
         target_tutor_state, target_tutor_cep, tags, workflow_data, municipality_id
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-        $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        'TROCA_TUTOR', $19, 'NOVA', $20, $21, $22, $23,
-        $24, $25, $26, $27, $28, $29::jsonb, $30::jsonb, $31
+        $1, $2, $3, $4, $5, $6, $7, $8, $9,
+        $10, $11, $12, $13, $14, $15, $16, $17::jsonb,
+        'TROCA_TUTOR', $18, 'NOVA', $19, $20, $21, $22,
+        $23, $24, $25, $26, $27, $28::jsonb, $29::jsonb, $30
       )
       RETURNING *`,
       [
         req.user && !isInternalUser(req.user) ? req.user.id : tutor?.user_id || null,
         protocol,
-        validationKey,
         pick(req.body?.tutor_name, req.body?.tutorName, tutor?.tutor_name),
         pick(req.body?.tutor_email, req.body?.tutorEmail, tutor?.tutor_email),
         cpf,

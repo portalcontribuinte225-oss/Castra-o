@@ -2455,61 +2455,6 @@ button:disabled {
 }
 
 
-.consultation-adoptions {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-
-.section-eyebrow-title {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: .07em;
-  color: #64748b;
-  margin: 0;
-}
-
-
-.consult-adoption-list {
-  display: grid;
-  gap: 10px;
-}
-
-
-.consult-adoption-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid #dbe5f1;
-  border-radius: 14px;
-  background: #fff;
-  padding: 10px 14px;
-}
-
-
-.consult-adoption-photo {
-  width: 56px;
-  height: 56px;
-  border-radius: 8px;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-
-.consult-adoption-info {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-
-.consult-adoption-info strong { font-size: 14px; }
-
-.consult-adoption-info span { font-size: 12px; color: #64748b; }
-
-
 .animal-status-chip {
   border-radius: 999px;
   background: #dcfce7;
@@ -2544,11 +2489,6 @@ button:disabled {
   margin-top: 4px;
   overflow-wrap: anywhere;
   color: var(--ink);
-}
-
-
-.animal-form-notes {
-  grid-column: 1 / -2;
 }
 
 
@@ -2678,23 +2618,6 @@ button:disabled {
 .danger-soft {
   color: #b91c1c;
 }
-
-
-.adoption-status-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: 99px;
-  width: fit-content;
-}
-
-
-.adoption-status-badge.disponivel { background: #dcfce7; color: #15803d; }
-
-.adoption-status-badge.em_processo { background: #f1f5f9; color: #374151; }
-
-.adoption-status-badge.adotado { background: #e0f2fe; color: #0369a1; }
 
 
 .auth-modal {
@@ -8881,11 +8804,6 @@ main {
   }
 
 
-  .animal-form-notes {
-    grid-column: auto;
-  }
-
-
   .schedule-rule-row,
   .health-grid,
   .animal-choice-grid,
@@ -13752,7 +13670,6 @@ body * {
 .document-upload-card,
 .animal-photo-upload-card,
 .attachment-card,
-.consult-adoption-card,
 .workflow-item,
 .info-tile {
   min-width: 0;
@@ -13762,9 +13679,6 @@ body * {
 .document-upload-title,
 .document-upload-title strong,
 .document-upload-title small,
-.consult-adoption-info,
-.consult-adoption-info strong,
-.consult-adoption-info span,
 .animal-record-header,
 .animal-record-header h3,
 .selected-schedule-note,
@@ -13944,14 +13858,6 @@ body * {
 
 
 /* ── Prontuário — novo layout profissional ─────────────────────── */
-.cons-shell {
-  display: flex;
-  flex-direction: column;
-  min-height: 100dvh;
-  background: #f8fafc;
-  font-family: "Poppins", sans-serif;
-}
-
 .cons-topbar {
   display: flex;
   justify-content: center;
@@ -14110,25 +14016,6 @@ body * {
 .cons-service-card.danger:hover { border-color: #ddb0a0; box-shadow: 0 2px 8px rgba(181,72,47,0.1); }
 
 /* ── Service Modal (GED layout) ────────────────────── */
-.svc-modal {
-  background: #ffffff;
-  border-radius: 18px;
-  width: min(780px, calc(100vw - 24px));
-  max-height: calc(100vh - 48px);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 20px 60px rgba(43,36,32,0.18);
-}
-
-.svc-modal-body {
-  padding: 24px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
 .svc-step-context {
   font-size: 0.84rem;
   color: #64748b;
@@ -14178,16 +14065,6 @@ body * {
   margin-top: 4px;
 }
 
-.cons-results {
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 0 40px 60px 100px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
 @media (max-width: 900px) {
   .cons-search-card {
     grid-template-columns: 1fr 1fr;
@@ -14207,9 +14084,6 @@ body * {
   }
   .cons-body {
     padding: 24px 16px 32px 16px;
-  }
-  .cons-results {
-    padding: 0 16px 40px;
   }
   .cons-topbar-inner {
     padding-left: 56px;
@@ -14239,10 +14113,6 @@ body * {
   padding: 0;
   align-items: start;
   background: transparent;
-}
-
-.tutor-screen--full > .cons-shell {
-  min-height: 100%;
 }
 
 .tutor-screen--full > .consultation-stack {
@@ -14814,12 +14684,6 @@ body * {
   border-radius: 10px;
   background: #0f172a;
   color: #ffffff;
-}
-
-
-.animal-record-avatar-photo {
-  object-fit: cover;
-  background: #dbe5f1;
 }
 
 
@@ -21573,7 +21437,7 @@ form textarea:focus,
 }
 
 
-/* Tela "Prontuário" (ValidationKeyConsultation, uso exclusivo):
+/* Tela "Prontuário" (AnimalRecordView, uso exclusivo):
    .animal-record-summary-card/.animal-record-grid .info-tile também aparecem num
    seletor agrupado do design system do staff (".summary-card, .report-card, ...
    { border: var(--ui-border) ... }"), então sobrepomos aqui em vez de editar
@@ -21583,17 +21447,6 @@ form textarea:focus,
 .animal-record-grid .info-tile {
   border-color: #dbe5f1;
   box-shadow: none;
-}
-
-/* Os 3 modais de ação (procedimento/óbito/troca) reaproveitam .workflow-modal
-   (compartilhado com o staff) — .animal-action-modal é a classe composta exclusiva
-   desta tela, então só o "shell" (borda/raio/sombra) é alinhado ao padrão dos
-   modais de serviço; .field/ModalHeader/botões continuam com o padrão neutro
-   já usado no resto do admin (compartilhados, fora de escopo). */
-.animal-action-modal {
-  border-color: #dbe5f1;
-  border-radius: 18px;
-  box-shadow: 0 20px 60px rgba(15, 23, 42, 0.18);
 }
 
 /* .icon-btn-flat é compartilhado com o admin — só o hover, escopado às duas áreas
@@ -21744,22 +21597,7 @@ form textarea:focus,
   white-space: nowrap;
 }
 
-.cons-shell--embedded {
-  min-height: auto;
-  background: transparent;
-  font-family: inherit;
-}
-
-.cons-shell--embedded .cons-results,
-.svc-inline-shell {
-  width: 100%;
-  max-width: none;
-  margin: 0;
-  padding: 0;
-}
-
-.public-service-panel .modal-backdrop,
-.public-service-panel .svc-inline-shell {
+.public-service-panel .modal-backdrop {
   position: static;
   inset: auto;
   min-height: auto;
@@ -21817,7 +21655,6 @@ form textarea:focus,
 
 .public-service-panel .form-sub-card,
 .public-service-panel .public-schedule-picker,
-.public-service-panel .svc-panel--inline,
 .public-inline-card {
   width: 100%;
   max-width: none;
@@ -21836,16 +21673,6 @@ form textarea:focus,
   background: #ffffff;
   box-shadow: none;
 }
-.public-service-panel .svc-panel--inline {
-  max-height: none;
-  overflow: visible;
-}
-
-.public-service-panel .svc-panel--inline .svc-modal-body {
-  overflow: visible;
-  padding: 0;
-}
-
 .public-service-panel .nr-home-btn,
 .public-service-panel .consultation-home-btn {
   display: none !important;
@@ -23774,7 +23601,6 @@ textarea::placeholder,
 .cr-badge,
 .tc-result-badge,
 .prm-reschedule-badge,
-.adoption-status-badge,
 .adoption-card-status,
 .animal-status-chip,
 .schedule-status {
@@ -23816,9 +23642,7 @@ textarea::placeholder,
 .status-badge.status-REALIZADA,
 .tc-result-badge--success,
 .cr-badge.is-success,
-.ag-badge--success,
-.adoption-status-badge.disponivel,
-.adoption-status-badge.adotado {
+.ag-badge--success {
   background: var(--status-success-bg) !important;
   color: var(--status-success-ink) !important;
 }
@@ -25168,7 +24992,6 @@ textarea::placeholder,
 .cr-badge,
 .tc-result-badge,
 .prm-reschedule-badge,
-.adoption-status-badge,
 .adoption-card-status,
 .animal-status-chip,
 .schedule-status,
@@ -26048,6 +25871,8 @@ small,
 .procedure-entry-card span { line-height: 1.5; }
 .registered-animal-card h3,
 .registered-animal-card p { margin: 0; }
+.registered-animal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.animal-service-form { display: grid; gap: 16px; }
 .registered-readonly-summary dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; }
 .registered-readonly-summary dt { color: #60716a; }
 .registered-readonly-summary dd { margin: 0; overflow-wrap: anywhere; }

@@ -2,6 +2,7 @@ import { AuthAudience } from "../shared/auth-contract.js";
 import { splitSubmissionEnvelope } from "./features/tutor-access/submission-envelope";
 import type { AuthRequestOptions, EnrollmentCredential, RecoveryContext } from "./features/tutor-access/auth-types";
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
+import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAnimalRequest } from "./features/animal-services/animal-service-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 let sessionMutationVersion = 0;
@@ -97,7 +98,6 @@ export const api = {
     onEnrollment?.(envelope.enrollment);
     return envelope.request;
   },
-  consultRequestsByCredentials: (cpf, validationKey, municipalityId) => request("POST", "/requests/consult", { cpf, validationKey, municipalityId }),
   patchRequest: (id, patch) => request("PATCH", `/requests/${id}`, patch),
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),
 
@@ -107,11 +107,11 @@ export const api = {
   getAnimalRequestContext: (id: string, requestTypeId = "") => request("GET", `/animals/${encodeURIComponent(id)}/request-context${requestTypeId ? `?requestTypeId=${encodeURIComponent(requestTypeId)}` : ""}`),
   getReusedDocumentContent: (animalId: string, reference: ReusedDocumentReference) => request("GET", `/animals/${encodeURIComponent(animalId)}/documents/${encodeURIComponent(reference.sourceRequestId)}/${encodeURIComponent(reference.attachmentId)}?hash=${encodeURIComponent(reference.hash)}`, undefined, "blob"),
   consultAnimalByMicrochip: (body) => request("POST", "/animals/consult", body),
-  createAnimalDeathRequest: (animalId, body) => request("POST", `/animals/${animalId}/death`, body),
-  createAnimalTransferRequest: (animalId, body) => request("POST", `/animals/${animalId}/transfer`, body),
+  consultAnimalById: (animalId: string): Promise<AnimalRecord> => request("POST", "/animals/consult", { animalId }),
+  createAnimalDeathRequest: (animalId: string, body: AnimalDeathPayload): Promise<CreatedAnimalRequest> => request("POST", `/animals/${encodeURIComponent(animalId)}/death`, body),
+  createAnimalTransferRequest: (animalId: string, body: AnimalTransferPayload): Promise<CreatedAnimalRequest> => request("POST", `/animals/${encodeURIComponent(animalId)}/transfer`, body),
 
   getAdoptions: (municipalityId?: string) => request("GET", municipalityId ? `/adoptions?municipalityId=${encodeURIComponent(municipalityId)}` : "/adoptions"),
-  consultAdoptionsByCredentials: (cpf, validationKey, municipalityId) => request("POST", "/adoptions/consult", { cpf, validationKey, municipalityId }),
   createAdoption: (body) => request("POST", "/adoptions", body),
   updateAdoption: (id, body) => request("PATCH", `/adoptions/${id}`, body),
   deleteAdoption: (id) => request("DELETE", `/adoptions/${id}`),

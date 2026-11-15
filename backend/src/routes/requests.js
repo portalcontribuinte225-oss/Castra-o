@@ -2,7 +2,6 @@ import { Router } from "express";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
-import { normalizeCpf, isValidCpf } from "../utils.js";
 import { isGlobalUser, isInternalUser, requireMunicipality } from "../tenant.js";
 import { DeliveryStatus } from "../../../shared/notification-contract.js";
 import { loadRequestSettings, loadDocumentReviewSettings } from "../repositories/request-settings.js";
@@ -36,23 +35,6 @@ const ALLOWED_REQUEST_TAGS = new Set([
 
 function pick(...values) {
   return values.find((value) => value !== undefined);
-}
-
-function withoutValidationKey(request) {
-  const visible = { ...request };
-  delete visible.validation_key;
-  delete visible.validationKey;
-  return visible;
-}
-
-function randomValidationKey() {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let raw = "";
-  while (raw.length < 12) {
-    const bytes = crypto.randomBytes(12);
-    raw += Array.from(bytes, (value) => alphabet[value % alphabet.length]).join("");
-  }
-  return `${raw.slice(0, 4)}-${raw.slice(4, 8)}-${raw.slice(8, 12)}`;
 }
 
 async function nextProtocol(client) {
@@ -118,51 +100,7 @@ router.get("/", auth, async (req, res) => {
     const { rows } = await pool.query(query.text, query.values);
     const catalogs = await loadDocumentReviewSettings(rows.filter((row) => row.documents?.length).map((row) => row.municipality_id));
     const visible = rows.map((row) => row.documents?.length ? decorateRequestDocuments(row, catalogs.get(row.municipality_id)) : row);
-    res.json(req.user.role === "tutor" ? visible.map(withoutValidationKey) : visible);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.get("/public/:validationKey", async (req, res) => {
-  try {
-    const municipalityId = requireMunicipality(req, res);
-    if (!municipalityId) return;
-    const values = [req.params.validationKey, municipalityId];
-    const scope = " AND municipality_id = $2";
-    const { rows } = await pool.query(
-      `SELECT * FROM requests WHERE validation_key = $1${scope} ORDER BY created_at DESC`,
-      values
-    );
-    res.json(rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-router.post("/consult", async (req, res) => {
-  try {
-    const { validationKey, cpf, municipalityId } = req.body || {};
-    if (!municipalityId) return res.status(400).json({ error: "Município obrigatório para consulta." });
-    const cleanCpf = normalizeCpf(cpf);
-    if (!isValidCpf(cleanCpf)) return res.status(400).json({ error: "CPF obrigatorio para consulta." });
-    if (!validationKey) return res.status(400).json({ error: "Chave de consulta obrigatoria." });
-
-    const { rows: keyRows } = await pool.query(
-      "SELECT cpf FROM request_validation_keys WHERE cpf = $1 AND validation_key = $2",
-      [cleanCpf, validationKey.trim()],
-    );
-    if (!keyRows[0]) {
-      return res.status(404).json({ error: "CPF e chave de validacao nao conferem." });
-    }
-
-    const scope = municipalityId ? " AND municipality_id = $2" : "";
-    const values = municipalityId ? [cleanCpf, municipalityId] : [cleanCpf];
-    const { rows } = await pool.query(
-      `SELECT * FROM requests WHERE regexp_replace(COALESCE(cpf, ''), '\\D', '', 'g') = $1${scope} ORDER BY created_at DESC`,
-      values
-    );
-    res.json(rows.map((row) => ({ ...row, validation_key: row.validation_key || validationKey.trim() })));
+    res.json(visible);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -197,7 +135,6 @@ router.post("/", optionalAuth, async (req, res) => {
       tutorRequired: tutorRequired && !internal && requestType !== "DENUNCIA",
     });
     const protocol = await nextProtocol(client);
-    const validationKey = randomValidationKey();
     const requestId = crypto.randomUUID();
     const animals = Array.isArray(body.animals) ? body.animals : [];
     const firstAnimal = animals[0] || {};
@@ -207,7 +144,6 @@ router.post("/", optionalAuth, async (req, res) => {
       `INSERT INTO requests (
         tutor_id,
         protocol,
-        validation_key,
         tutor_name,
         tutor_email,
         cpf,
@@ -247,17 +183,16 @@ router.post("/", optionalAuth, async (req, res) => {
         id
       )
       VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8,
-        $9, $10, $11, $12, $13, $14, $15, $16, $17, $18::jsonb,
-        $19, $20, $21, $22, 'NOVA', $23, $24, $25, $26,
-        $27, $28, $29, $30, $31, $32::jsonb, $33::jsonb, $34::jsonb,
-        $35, $36, $37, $38, $39
+        $1, $2, $3, $4, $5, $6, $7,
+        $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb,
+        $18, $19, $20, $21, 'NOVA', $22, $23, $24, $25,
+        $26, $27, $28, $29, $30, $31::jsonb, $32::jsonb, $33::jsonb,
+        $34, $35, $36, $37, $38
       )
       RETURNING *`,
       [
         tutorId,
         protocol,
-        validationKey,
         pick(body.tutor_name, body.tutorName, body.tutor),
         pick(body.tutor_email, body.tutorEmail, body.email),
         cpf,
@@ -323,7 +258,7 @@ router.post("/", optionalAuth, async (req, res) => {
       }
     }
     res.set("Cache-Control", "no-store");
-    res.status(201).json({ request: withoutValidationKey(rows[0]), ...(enrollment ? { enrollment } : {}) });
+    res.status(201).json({ request: rows[0], ...(enrollment ? { enrollment } : {}) });
   } catch (err) {
     if (client && !committed) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar a solicitação." });

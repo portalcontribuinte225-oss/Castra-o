@@ -28,7 +28,6 @@ async function fixture(t) {
     const session = resolveTestSession(sql, values, users);
     if (session) return session;
     calls.push({ sql, values });
-    if (sql.includes("SELECT cpf FROM request_validation_keys")) return { rows: [{ cpf: CPF }] };
     if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK" || sql.includes("pg_advisory_xact_lock")) return { rows: [] };
     if (sql.includes("SELECT interests, status FROM adoptions")) return { rows: [{ interests: adoption.interests, status: adoption.status }] };
     if (sql.includes("SELECT interests FROM adoptions")) return { rows: [{ interests: adoption.interests }] };
@@ -59,7 +58,7 @@ async function fixture(t) {
       method, headers: { "Content-Type": "application/json", ...(user ? { Authorization: `Bearer ${registerTestSession(users, user)}` } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    return { status: response.status, body: await response.json() };
+    return { status: response.status, body: await response.json().catch(() => null) };
   }
   return { request, calls, adoption };
 }
@@ -102,17 +101,12 @@ test("public interest registration returns no previous interests, adopter contac
   }
 });
 
-test("legacy adoption credentials require municipality and return public records without other applicants", async (t) => {
+test("legacy validation-key adoption consultation routes no longer exist", async (t) => {
   const { request, calls } = await fixture(t);
-  assert.equal((await request("/adoptions/consult", { method: "POST", body: { cpf: CPF, validationKey: "legacy-key" } })).status, 400);
-  assert.equal((await request(`/adoptions/by-key/legacy-key?cpf=${CPF}`)).status, 400);
+  const legacy = await request("/adoptions/consult", { method: "POST", body: { cpf: CPF, validationKey: "legacy-key", municipalityId: MUNICIPALITY } });
+  assert.equal(legacy.status, 404);
+  assert.equal((await request(`/adoptions/by-key/legacy-key?cpf=${CPF}&municipalityId=${MUNICIPALITY}`)).status, 404);
   assert.equal(calls.length, 0);
-  const consulted = await request("/adoptions/consult", { method: "POST", body: { cpf: CPF, validationKey: "legacy-key", municipalityId: MUNICIPALITY } });
-  assert.equal(consulted.status, 200); assertPublicView(consulted.body[0], 2);
-  const byKey = await request(`/adoptions/by-key/legacy-key?cpf=${CPF}&municipalityId=${MUNICIPALITY}`);
-  assert.equal(byKey.status, 200); assertPublicView(byKey.body[0], 2);
-  const adoptionQueries = calls.filter(({ sql }) => sql.includes("FROM adoptions"));
-  assert.equal(adoptionQueries.every(({ sql, values }) => sql.includes("AND municipality_id = $2") && values[1] === MUNICIPALITY), true);
 });
 
 test("existing internal and accredited adoption operators retain scoped private operational reads", async (t) => {
