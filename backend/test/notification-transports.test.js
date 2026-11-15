@@ -99,15 +99,14 @@ test("document notifications report aggregate status without exposing documents"
 
 test("WhatsApp parameters come only from mapped fields and never from CPF, contacts or arbitrary request data", async () => {
   const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation", languageCode: "pt_BR" };
-  const binding = { mapping: [{ kind: "field", value: "protocol" }, { kind: "field", value: "cpf" }, { kind: "field", value: "phone" }, { kind: "text", value: "fixed" }] };
-  const components = buildBodyComponents(binding, {
+  const components = buildBodyComponents(["protocol", "cpf", "phone", "tutor_name"], {
     phone: "(48) 99999-9999", protocol: "1/2026", cpf: "sensitive-cpf", internal_token: "secret-key", privateData: "sensitive-data",
   });
   const result = await sendWhatsappTemplateComponents(config, "(48) 99999-9999", components, { fetchImpl: async (_url, options) => {
     const body = JSON.parse(options.body);
     assert.equal(body.to, "5548999999999");
     assert.equal(body.template.language.code, "pt_BR");
-    assert.deepEqual(body.template.components[0].parameters.map(({ text }) => text), ["1/2026", "não informado", "não informado", "fixed"]);
+    assert.deepEqual(body.template.components[0].parameters.map(({ text }) => text), ["1/2026", "não informado", "não informado", "Solicitante"]);
     assert.equal(options.body.includes("sensitive"), false);
     assert.ok(options.signal instanceof AbortSignal);
     return { ok: true };

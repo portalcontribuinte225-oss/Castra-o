@@ -1,4 +1,4 @@
-import { WhatsappMappingKind, WhatsappTemplateField } from "../../../../shared/whatsapp-binding-contract.js";
+import { WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
 import { formatScheduleDate } from "./notification-message.js";
 
 const MAX_PARAMETER_LENGTH = 1024;
@@ -28,11 +28,9 @@ function parameterText(value) {
   return String(value).replace(/\s+/g, " ").trim().slice(0, MAX_PARAMETER_LENGTH) || EMPTY_PARAMETER;
 }
 
-export function buildBodyComponents(binding, request) {
-  const parameters = binding.mapping.map((item) => ({
-    type: "text",
-    text: parameterText(item.kind === WhatsappMappingKind.TEXT ? item.value : resolveWhatsappField(item.value, request)),
-  }));
+// `fields` is the ordered field list of the use: parameter n of the template receives fields[n - 1].
+export function buildBodyComponents(fields, request) {
+  const parameters = fields.map((item) => ({ type: "text", text: parameterText(resolveWhatsappField(item, request)) }));
   return parameters.length ? [{ type: "body", parameters }] : [];
 }
 

@@ -3,8 +3,8 @@ import { auth, requireMunicipalAdmin } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
 import { auditCtx } from "../services/audit.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../services/whatsapp.js";
-import { loadWhatsappCatalog, syncWhatsappCatalog } from "../services/whatsapp-catalog.js";
-import { loadWhatsappBindings, removeWhatsappBinding, saveWhatsappBinding } from "../services/whatsapp-bindings.js";
+import { syncWhatsappCatalog } from "../services/whatsapp-catalog.js";
+import { listWhatsappTemplates, setWhatsappTemplateActive } from "../services/whatsapp-active-templates.js";
 
 const router = Router();
 router.use(auth, requireMunicipalAdmin);
@@ -20,57 +20,36 @@ function municipalityOf(req, res) {
   return municipalityId;
 }
 
-router.get("/catalog", async (req, res) => {
+router.get("/templates", async (req, res) => {
   const municipalityId = municipalityOf(req, res);
   if (!municipalityId) return;
   try {
-    res.set("Cache-Control", "no-store").json(await loadWhatsappCatalog(municipalityId));
+    res.set("Cache-Control", "no-store").json(await listWhatsappTemplates(municipalityId));
   } catch (error) {
-    sendFailure(res, error, "Não foi possível consultar o catálogo de templates.");
+    sendFailure(res, error, "Não foi possível consultar os templates do WhatsApp.");
   }
 });
 
-router.post("/catalog/sync", async (req, res) => {
+router.post("/templates/sync", async (req, res) => {
   const municipalityId = municipalityOf(req, res);
   if (!municipalityId) return;
   try {
     const runtime = getRuntimeConfig(await getMunicipalityWhatsappConfig(municipalityId));
-    const catalog = await syncWhatsappCatalog({ municipalityId, runtime, audit: auditCtx(req) });
-    res.set("Cache-Control", "no-store").json(catalog);
+    await syncWhatsappCatalog({ municipalityId, runtime, audit: auditCtx(req) });
+    res.set("Cache-Control", "no-store").json(await listWhatsappTemplates(municipalityId));
   } catch (error) {
     sendFailure(res, error, "Não foi possível sincronizar os templates.");
   }
 });
 
-router.get("/bindings", async (req, res) => {
+router.put("/templates/active", async (req, res) => {
   const municipalityId = municipalityOf(req, res);
   if (!municipalityId) return;
   try {
-    res.set("Cache-Control", "no-store").json({ bindings: await loadWhatsappBindings(municipalityId) });
+    const { name, language, active } = req.body || {};
+    res.set("Cache-Control", "no-store").json(await setWhatsappTemplateActive({ municipalityId, name, language, active, audit: auditCtx(req) }));
   } catch (error) {
-    sendFailure(res, error, "Não foi possível consultar os vínculos de templates.");
-  }
-});
-
-router.put("/bindings/:event", async (req, res) => {
-  const municipalityId = municipalityOf(req, res);
-  if (!municipalityId) return;
-  try {
-    const bindings = await saveWhatsappBinding({ municipalityId, event: req.params.event, input: req.body, audit: auditCtx(req) });
-    res.set("Cache-Control", "no-store").json({ bindings });
-  } catch (error) {
-    sendFailure(res, error, "Não foi possível salvar o vínculo.");
-  }
-});
-
-router.delete("/bindings/:event", async (req, res) => {
-  const municipalityId = municipalityOf(req, res);
-  if (!municipalityId) return;
-  try {
-    const bindings = await removeWhatsappBinding({ municipalityId, event: req.params.event, audit: auditCtx(req) });
-    res.set("Cache-Control", "no-store").json({ bindings });
-  } catch (error) {
-    sendFailure(res, error, "Não foi possível remover o vínculo.");
+    sendFailure(res, error, "Não foi possível alterar o template.");
   }
 });
 

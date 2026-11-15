@@ -2,6 +2,7 @@ import { pool } from "../../db/index.js";
 import { AuthPurpose, normalizeAuthDeliveryConfig } from "../../../../shared/auth-contract.js";
 import { NotificationChannel } from "../../../../shared/notification-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../whatsapp.js";
+import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { isWhatsappQuotaAvailable } from "../whatsappQuota.js";
 import { getSmsAvailability } from "../sms-integration-settings.js";
 import { loadAuthDeliveryConfig } from "./auth-message-delivery.js";
@@ -14,6 +15,7 @@ export async function getRecoveryOptions(user, token, overrides = {}) {
   const database = overrides.database || pool;
   const deps = { env: process.env, loadConfig: (id) => loadAuthDeliveryConfig(id, database),
     loadWhatsapp: (id) => getMunicipalityWhatsappConfig(id, database), quotaAvailable: (id) => isWhatsappQuotaAvailable(id, database),
+    resolveTemplate: (id, purpose) => resolveActiveTemplate(id, purpose, database),
     smsAvailable: (id) => getSmsAvailability(id, { database }), ...overrides };
   const contacts = recoveryContacts(user);
   const municipalityId = user.municipality_id;
@@ -25,7 +27,7 @@ export async function getRecoveryOptions(user, token, overrides = {}) {
     const raw = await deps.loadWhatsapp(municipalityId);
     const runtime = getRuntimeConfig(raw);
     if (raw.active === true && runtime.provider === "cloud_api" && runtime.accessToken && runtime.phoneNumberId
-      && config.whatsappTemplates[AuthPurpose.PASSWORD_RESET] && await deps.quotaAvailable(municipalityId)) available.push(NotificationChannel.WHATSAPP);
+      && (await deps.resolveTemplate(municipalityId, AuthPurpose.PASSWORD_RESET)).ok && await deps.quotaAvailable(municipalityId)) available.push(NotificationChannel.WHATSAPP);
     if ((await deps.smsAvailable(municipalityId)).available) available.push(NotificationChannel.SMS);
   }
   return available.map((channel) => ({ id: recoveryOptionId(token, channel, contacts[channel]), channel,

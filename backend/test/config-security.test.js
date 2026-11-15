@@ -310,6 +310,9 @@ test("WhatsApp test requires valid phone and does not expose provider error data
   const { request, store } = await fixture(t);
   assert.equal((await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { phone: "123" } })).status, 400);
   store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: true, accessToken: "private-token", phoneNumberId: "12345" });
+  store.set(`whatsapp_active_templates:${MUNICIPALITY_ID}`, { active: { schedule_confirmed: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } } });
+  store.set(`whatsapp_catalog:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [{ name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "APPROVED", category: "UTILITY",
+    parameterFormat: "POSITIONAL", hasBody: true, bodyVariables: 4, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false }] });
   globalThis.fetch = async () => ({ ok: false, status: 400, statusText: "refused", json: async () => ({ error: { message: "private-provider-details", code: 400 } }) });
   const response = await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { phone: "48999991234" } });
   assert.equal(response.status, 200);
@@ -322,7 +325,7 @@ test("WhatsApp test requires valid phone and does not expose provider error data
 test("channel configuration saves merge into the stored value under a transaction lock", async (t) => {
   const { request, store, calls } = await fixture(t);
   store.set(`${AUTH_DELIVERY_CONFIG_KEY}:${MUNICIPALITY_ID}`, {
-    emailTemplates: { password_reset: "reset_email" }, whatsappTemplates: { initial_password: "welcome_whatsapp" },
+    emailTemplates: { password_reset: "reset_email" }, whatsappTemplates: { initial_password: "legacy_whatsapp" },
   });
   const auth = await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}`, {
     user: ADMIN, method: "PUT", body: { emailTemplates: { initial_password: "welcome_email" } },
@@ -330,7 +333,7 @@ test("channel configuration saves merge into the stored value under a transactio
   assert.equal(auth.status, 200);
   assert.equal(auth.body.value.emailTemplates.initial_password, "welcome_email");
   assert.equal(auth.body.value.emailTemplates.password_reset, "reset_email");
-  assert.equal(auth.body.value.whatsappTemplates.initial_password, "welcome_whatsapp");
+  assert.equal(Object.hasOwn(auth.body.value, "whatsappTemplates"), false);
 
   store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, { emailTemplateId: "notify_email" });
   const notifications = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}`, {

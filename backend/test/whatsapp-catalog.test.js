@@ -4,14 +4,19 @@ import express from "express";
 import whatsappTemplateRoutes from "../src/routes/whatsapp-templates.js";
 import { pool } from "../src/db/index.js";
 import { DeliveryCode } from "../../shared/notification-contract.js";
-import { WHATSAPP_CATALOG_CONFIG_KEY } from "../../shared/whatsapp-binding-contract.js";
+import { WHATSAPP_CATALOG_CONFIG_KEY, recognizeWhatsappTemplate } from "../../shared/whatsapp-templates-contract.js";
 import { describeGraphTemplate, fetchGraphTemplates } from "../src/services/whatsapp-graph-templates.js";
-import { findCatalogTemplateByName, markCatalogTemplateStatus, normalizeWhatsappCatalog, syncWhatsappCatalog } from "../src/services/whatsapp-catalog.js";
+import { markCatalogTemplateStatus, normalizeWhatsappCatalog, syncWhatsappCatalog } from "../src/services/whatsapp-catalog.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 
 const clientFetch = globalThis.fetch;
 const credentials = { accessToken: "private-token", wabaId: "987654321" };
 const body = (text) => ({ type: "BODY", text });
+const graph = (name, components, extra = {}) => ({ name, language: "pt_BR", status: "approved", category: "utility", components, ...extra });
+const facts = (overrides = {}) => ({
+  name: "t", language: "pt_BR", status: "APPROVED", category: "UTILITY", parameterFormat: "POSITIONAL", hasBody: true,
+  bodyVariables: 0, bodySequential: true, header: "NONE", buttons: [], extraComponents: false, ...overrides,
+});
 
 function fakeDatabase(initial = {}) {
   const store = new Map(Object.entries(initial));
@@ -32,37 +37,44 @@ function fakeDatabase(initial = {}) {
 
 const page = (data, after = "") => ({ ok: true, status: 200, json: async () => ({ data, ...(after ? { paging: { cursors: { after }, next: "https://evil.example/next?access_token=leak" } } : {}) }) });
 
-test("a template with a numbered body, optional footer and fixed buttons is supported with its variable count", () => {
-  const described = describeGraphTemplate({
-    name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "approved", category: "utility",
-    components: [{ type: "HEADER", format: "TEXT", text: "Castração" }, body("Olá {{1}}, {{2}} às {{3}} em {{4}}."), { type: "FOOTER", text: "Prefeitura" },
-      { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Ok" }, { type: "URL", text: "Site", url: "https://example.com" }, { type: "PHONE_NUMBER", text: "Ligar", phone_number: "+5548000000000" }] }],
-  });
-  assert.deepEqual(described, {
-    name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "APPROVED", category: "UTILITY",
-    bodyText: "Olá {{1}}, {{2}} às {{3}} em {{4}}.", variableCount: 4, supported: true, unsupportedReason: "",
-  });
-  assert.equal(describeGraphTemplate({ name: "no_variables", language: "pt_BR", status: "APPROVED", components: [body("Texto fixo")] }).variableCount, 0);
+test("a template with a numbered body, text header, footer and fixed buttons is described by its structure", () => {
+  const described = describeGraphTemplate(graph("castracao_confirmacao_agendamento", [
+    { type: "HEADER", format: "TEXT", text: "Castração" }, body("Olá {{1}}, {{2}} às {{3}} em {{4}}."), { type: "FOOTER", text: "Prefeitura" },
+    { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Ok" }, { type: "URL", text: "Site", url: "https://example.com" }, { type: "PHONE_NUMBER", text: "Ligar", phone_number: "+5548000000000" }] },
+  ], { parameter_format: "POSITIONAL" }));
+  assert.deepEqual(described, facts({
+    name: "castracao_confirmacao_agendamento", bodyVariables: 4, header: "TEXT", buttons: ["QUICK_REPLY", "URL", "PHONE_NUMBER"],
+  }));
+  assert.deepEqual(recognizeWhatsappTemplate(described).uses, ["schedule_confirmed"]);
+  assert.equal(describeGraphTemplate(graph("castracao_x", [body("Texto fixo")])).bodyVariables, 0);
 });
 
-test("formats the bindings cannot fill are flagged instead of failing at send time", () => {
-  const unsupported = (components) => describeGraphTemplate({ name: "t", language: "pt_BR", status: "APPROVED", category: "UTILITY", components });
-  const cases = [
-    [[body("Olá {{nome}}")], /nomeados/],
-    [[body("Olá {{1}} {{3}}")], /fora de sequência/],
-    [[{ type: "HEADER", format: "IMAGE" }, body("Olá")], /Cabeçalho/],
-    [[{ type: "HEADER", format: "TEXT", text: "Oi {{1}}" }, body("Olá")], /Cabeçalho/],
-    [[body("Olá"), { type: "BUTTONS", buttons: [{ type: "URL", url: "https://example.com/{{1}}" }] }], /Botão/],
-    [[body("Seu código é {{1}}"), { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE" }] }], /Botão/],
-    [[{ type: "CAROUSEL" }, body("Olá")], /componente/],
-    [[{ type: "FOOTER", text: "sem corpo" }], /corpo/],
-  ];
-  for (const [components, reason] of cases) {
-    const described = unsupported(components);
-    assert.equal(described.supported, false);
-    assert.equal(described.variableCount, 0);
-    assert.match(described.unsupportedReason, reason);
-  }
+test("the facts expose everything the convention needs to reject a format the sender cannot fill", () => {
+  const describe = (components, extra) => describeGraphTemplate(graph("t", components, extra));
+  assert.equal(describe([body("Olá {{nome}}")]).parameterFormat, "NAMED");
+  assert.equal(describe([body("Olá {{1}}")], { parameter_format: "NAMED" }).parameterFormat, "NAMED");
+  assert.equal(describe([body("Olá {{1}}")], { parameter_format: "POSITIONAL" }).parameterFormat, "POSITIONAL");
+  assert.equal(describe([body("Olá {{1}} {{3}}")]).bodySequential, false);
+  assert.equal(describe([body("Olá {{2}}")]).bodySequential, false);
+  const repeated = describe([body("{{1}} e de novo {{1}} com {{2}}")]);
+  assert.deepEqual({ variables: repeated.bodyVariables, sequential: repeated.bodySequential }, { variables: 2, sequential: true });
+  assert.equal(describe([body("Olá {{1}}")]).bodySequential, true);
+  assert.equal(describe([{ type: "HEADER", format: "IMAGE" }, body("Olá")]).header, "MEDIA");
+  assert.equal(describe([{ type: "HEADER", format: "TEXT", text: "Oi {{1}}" }, body("Olá")]).header, "TEXT_VARIABLE");
+  assert.deepEqual(describe([body("Olá"), { type: "BUTTONS", buttons: [{ type: "URL", url: "https://example.com/{{1}}" }] }]).buttons, ["URL_VARIABLE"]);
+  assert.deepEqual(describe([body("Olá"), { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE" }, { type: "OTP", otp_type: "ONE_TAP" }, { type: "FLOW" }] }]).buttons, ["OTP_COPY_CODE", "OTP_OTHER", "OTHER"]);
+  assert.equal(describe([{ type: "CAROUSEL" }, body("Olá")]).extraComponents, true);
+  assert.equal(describe([{ type: "FOOTER", text: "sem corpo" }]).hasBody, false);
+  assert.equal(describe([body("x".repeat(1200))]).hasBody, false);
+});
+
+test("an authentication template that comes without body text is read as a single code variable", () => {
+  const described = describeGraphTemplate(graph("castracao_codigo_verificacao", [{ type: "BODY", add_security_recommendation: true }, { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE", text: "Copiar código" }] }], { category: "authentication" }));
+  assert.deepEqual({ category: described.category, hasBody: described.hasBody, variables: described.bodyVariables, sequential: described.bodySequential, buttons: described.buttons },
+    { category: "AUTHENTICATION", hasBody: true, variables: 1, sequential: true, buttons: ["OTP_COPY_CODE"] });
+  assert.equal(recognizeWhatsappTemplate(described).uses.length, 3);
+  const utilityWithoutText = describeGraphTemplate(graph("castracao_x", [{ type: "BODY" }]));
+  assert.equal(utilityWithoutText.hasBody, false);
   for (const invalid of [null, "text", {}, { name: "only-name" }, { name: "x".repeat(513), language: "pt_BR" }]) assert.equal(describeGraphTemplate(invalid), null);
 });
 
@@ -77,7 +89,7 @@ test("the catalog is read page by page through the cursor and never follows the 
   assert.equal(requests.length, 2);
   assert.equal(requests[0].url.origin, "https://graph.facebook.com");
   assert.equal(requests[0].url.pathname.endsWith("/987654321/message_templates"), true);
-  assert.equal(requests[0].url.searchParams.get("fields"), "name,language,status,category,components");
+  assert.equal(requests[0].url.searchParams.get("fields"), "name,language,status,category,components,parameter_format");
   assert.equal(requests[0].url.searchParams.has("after"), false);
   assert.equal(requests[1].url.searchParams.get("after"), "cursor-1");
   assert.equal(requests[0].options.headers.Authorization, "Bearer private-token");
@@ -104,16 +116,16 @@ test("catalog errors become safe codes without provider bodies or credentials", 
   }
 });
 
-test("a synchronization stores a sorted catalog per municipality, audits it and is rate limited", async () => {
+test("a synchronization stores a sorted catalog of facts per municipality, audits it and is rate limited", async () => {
   const database = fakeDatabase();
   const fetchImpl = async () => page([
-    { name: "zeta", language: "pt_BR", status: "APPROVED", category: "UTILITY", components: [body("Olá {{1}}")] },
-    { name: "alpha", language: "pt_BR", status: "PAUSED", category: "UTILITY", components: [body("Oi")] },
+    graph("zeta", [body("Olá {{1}}")]),
+    graph("alpha", [body("Oi")], { status: "paused" }),
     { language: "pt_BR" },
   ]);
-  const audit = { userId: "user", action: "ignored" };
-  const catalog = await syncWhatsappCatalog({ municipalityId: "municipality-sync", runtime: credentials, audit, fetchImpl, now: 1_000_000, database });
+  const catalog = await syncWhatsappCatalog({ municipalityId: "municipality-sync", runtime: credentials, audit: { userId: "user", action: "ignored" }, fetchImpl, now: 1_000_000, database });
   assert.deepEqual(catalog.templates.map(({ name }) => name), ["alpha", "zeta"]);
+  assert.equal(catalog.templates[1].bodyVariables, 1);
   assert.equal(catalog.syncedAt, new Date(1_000_000).toISOString());
   assert.deepEqual(database.store.get(`${WHATSAPP_CATALOG_CONFIG_KEY}:municipality-sync`), catalog);
   const auditCall = database.calls.find(({ sql }) => sql.includes("INSERT INTO audit_logs"));
@@ -133,10 +145,7 @@ test("a failed synchronization keeps the previous catalog", async () => {
 });
 
 test("marking a template changes only that entry and writes nothing when there is nothing to change", async () => {
-  const entries = [
-    { name: "a", language: "pt_BR", status: "APPROVED", category: "", bodyText: "", variableCount: 0, supported: true, unsupportedReason: "" },
-    { name: "a", language: "en_US", status: "APPROVED", category: "", bodyText: "", variableCount: 0, supported: true, unsupportedReason: "" },
-  ];
+  const entries = [facts({ name: "a" }), facts({ name: "a", language: "en_US" })];
   const database = fakeDatabase({ [`${WHATSAPP_CATALOG_CONFIG_KEY}:municipality-mark`]: { syncedAt: "x", templates: entries } });
   await markCatalogTemplateStatus("municipality-mark", "a", "pt_BR", "PAUSED", database);
   const stored = database.store.get(`${WHATSAPP_CATALOG_CONFIG_KEY}:municipality-mark`);
@@ -151,21 +160,19 @@ test("marking a template changes only that entry and writes nothing when there i
   assert.equal(unsynced.store.size, 0);
 });
 
-test("stored catalogs are validated on read and access templates are found by name preferring Brazilian Portuguese", () => {
-  const catalog = normalizeWhatsappCatalog({ syncedAt: 5, templates: [{ name: "ok", language: "en_US", status: "APPROVED", category: "", bodyText: "", variableCount: 0, supported: true, unsupportedReason: "" }, { name: "broken" }, null,
-    { name: "ok", language: "pt_BR", status: "PAUSED", category: "", bodyText: "", variableCount: 0, supported: true, unsupportedReason: "" }] });
+test("stored catalogs are validated on read and entries cached in an older format are dropped", () => {
+  const legacy = { name: "old", language: "pt_BR", status: "APPROVED", category: "UTILITY", bodyText: "Olá {{1}}", variableCount: 1, supported: true, unsupportedReason: "" };
+  const catalog = normalizeWhatsappCatalog({ syncedAt: 5, templates: [facts({ name: "ok" }), legacy, { name: "broken" }, null, facts({ name: "bad-format", parameterFormat: "OTHER" }), facts({ name: "bad-buttons", buttons: [1] })] });
   assert.equal(catalog.syncedAt, "");
-  assert.equal(catalog.templates.length, 2);
-  assert.equal(findCatalogTemplateByName(catalog, "ok").language, "pt_BR");
-  assert.equal(findCatalogTemplateByName(catalog, "missing"), null);
+  assert.deepEqual(catalog.templates.map(({ name }) => name), ["ok"]);
   assert.deepEqual(normalizeWhatsappCatalog(null), { syncedAt: "", templates: [] });
 });
 
-test("the sync endpoint uses the municipal credentials, hides provider failures and ignores forged municipalities", async (t) => {
+async function routeFixture(t, municipalityId, user, initial = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, key: process.env.CONFIG_ENCRYPTION_KEY };
   process.env.JWT_SECRET = "whatsapp-catalog-tests-only";
   delete process.env.CONFIG_ENCRYPTION_KEY;
-  const database = fakeDatabase({ "whatsapp:99999999-9999-4999-8999-999999999999": { active: true, wabaId: "987654321", accessToken: "legacy-private-token" } });
+  const database = fakeDatabase(initial);
   const users = new Map();
   const queries = [];
   pool.query = async (sql, values = []) => { const session = resolveTestSession(sql, values, users); if (session) return session; queries.push(values); return database.query(sql, values); };
@@ -184,59 +191,47 @@ test("the sync endpoint uses the municipal credentials, hides provider failures 
       if (value === undefined) delete process.env[name]; else process.env[name] = value;
     }
   });
-  const admin = { id: "66666666-6666-4666-8666-666666666666", role: "admin_municipal", municipalityId: "99999999-9999-4999-8999-999999999999" };
   const call = async (method, path, requestBody) => {
     const response = await clientFetch(`http://127.0.0.1:${server.address().port}${path}`, {
-      method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${registerTestSession(users, admin)}` },
+      method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${registerTestSession(users, user)}` },
       ...(requestBody ? { body: JSON.stringify(requestBody) } : {}),
     });
     return { status: response.status, body: await response.json() };
   };
+  return { call, database, queries, municipalityId };
+}
+
+test("the sync endpoint uses the municipal credentials, returns the template list and ignores forged municipalities", async (t) => {
+  const municipalityId = "99999999-9999-4999-8999-999999999999";
+  const admin = { id: "66666666-6666-4666-8666-666666666666", role: "admin_municipal", municipalityId };
+  const { call, database, queries } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", accessToken: "legacy-private-token" } });
   const sentTo = [];
   globalThis.fetch = async (url, options) => {
     sentTo.push({ url: String(url), auth: options.headers.Authorization });
-    return page([{ name: "castracao_cancelamento", language: "pt_BR", status: "APPROVED", category: "UTILITY", components: [body("{{1}} {{2}} {{3}}")] }]);
+    return page([graph("castracao_cancelamento", [body("{{1}} {{2}} {{3}}")]), graph("lembrete_atendimento", [body("Oi")])]);
   };
-  const synced = await call("POST", "/whatsapp/catalog/sync", { municipalityId: "11111111-1111-4111-8111-111111111111" });
+  const synced = await call("POST", "/whatsapp/templates/sync", { municipalityId: "11111111-1111-4111-8111-111111111111" });
   assert.equal(synced.status, 200);
-  assert.equal(synced.body.templates[0].variableCount, 3);
+  assert.deepEqual(synced.body.templates.map(({ name, canActivate, label }) => ({ name, canActivate, label })), [
+    { name: "castracao_cancelamento", canActivate: true, label: "Agendamento cancelado" },
+    { name: "lembrete_atendimento", canActivate: false, label: "" },
+  ]);
   assert.equal(sentTo[0].auth, "Bearer legacy-private-token");
   assert.equal(sentTo[0].url.includes("/987654321/message_templates"), true);
-  assert.equal(database.store.has(`${WHATSAPP_CATALOG_CONFIG_KEY}:99999999-9999-4999-8999-999999999999`), true);
+  assert.equal(database.store.has(`${WHATSAPP_CATALOG_CONFIG_KEY}:${municipalityId}`), true);
   assert.equal(queries.every((values) => !values.includes("11111111-1111-4111-8111-111111111111")), true);
-  assert.deepEqual((await call("GET", "/whatsapp/catalog")).body, synced.body);
-  const limited = await call("POST", "/whatsapp/catalog/sync");
-  assert.equal(limited.status, 429);
+  assert.deepEqual((await call("GET", "/whatsapp/templates")).body, synced.body);
+  assert.equal((await call("POST", "/whatsapp/templates/sync")).status, 429);
 });
 
 test("the sync endpoint answers with a safe message when the provider rejects the request", async (t) => {
-  const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
-  process.env.JWT_SECRET = "whatsapp-catalog-tests-only";
   const municipalityId = "88888888-8888-4888-8888-888888888888";
-  const database = fakeDatabase({ [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", accessToken: "plain-private-token" } });
-  const users = new Map();
-  pool.query = async (sql, values = []) => resolveTestSession(sql, values, users) || database.query(sql, values);
-  pool.connect = database.connect;
-  const app = express();
-  app.use(express.json());
-  app.use("/whatsapp", whatsappTemplateRoutes);
-  const server = await new Promise((resolve) => { const listener = app.listen(0, "127.0.0.1", () => resolve(listener)); });
-  t.after(async () => {
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-    pool.query = previous.query;
-    pool.connect = previous.connect;
-    globalThis.fetch = clientFetch;
-    if (previous.secret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous.secret;
-  });
   const admin = { id: "77777777-7777-4777-8777-777777777777", role: "admin_municipal", municipalityId };
+  const { call, database } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", accessToken: "plain-private-token" } });
   globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "plain-private-token expired" } }) });
-  const response = await clientFetch(`http://127.0.0.1:${server.address().port}/whatsapp/catalog/sync`, {
-    method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${registerTestSession(users, admin)}` },
-  });
-  const result = await response.json();
-  assert.equal(response.status, 502);
-  assert.equal(result.code, DeliveryCode.INVALID_CREDENTIALS);
-  assert.equal(JSON.stringify(result).includes("plain-private-token"), false);
+  const result = await call("POST", "/whatsapp/templates/sync");
+  assert.equal(result.status, 502);
+  assert.equal(result.body.code, DeliveryCode.INVALID_CREDENTIALS);
+  assert.equal(JSON.stringify(result.body).includes("plain-private-token"), false);
   assert.equal(database.store.has(`${WHATSAPP_CATALOG_CONFIG_KEY}:${municipalityId}`), false);
 });

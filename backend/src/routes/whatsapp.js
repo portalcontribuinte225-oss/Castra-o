@@ -3,11 +3,11 @@ import { pool } from "../db/index.js";
 import { auth, requireMunicipalAdmin, requireRole } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
 import { isValidPhone } from "../utils.js";
-import { NotificationEvent } from "../../../shared/notification-contract.js";
-import { WHATSAPP_APPROVED_STATUS } from "../../../shared/whatsapp-binding-contract.js";
-import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents } from "../services/whatsapp.js";
-import { loadEventBinding } from "../services/whatsapp-bindings.js";
-import { markCatalogTemplateStatus } from "../services/whatsapp-catalog.js";
+import { DeliveryCode, NotificationEvent } from "../../../shared/notification-contract.js";
+import { getWhatsappUse } from "../../../shared/whatsapp-templates-contract.js";
+import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../services/whatsapp.js";
+import { resolveActiveTemplate } from "../services/whatsapp-active-templates.js";
+import { sendResolvedTemplate } from "../services/whatsapp-template-sender.js";
 import { buildBodyComponents, previewRequest } from "../services/notifications/whatsapp-template-parameters.js";
 import { getQuotaStatus } from "../services/whatsappQuota.js";
 
@@ -71,19 +71,19 @@ router.post("/test", auth, requireMunicipalAdmin, async (req, res) => {
     if (!config.accessToken || !config.phoneNumberId) {
       return res.json({ status: "skipped", reason: "Credenciais do WhatsApp incompletas" });
     }
-    const { binding, template } = await loadEventBinding(mId, NotificationEvent.SCHEDULE_CONFIRMED);
-    if (!binding) {
-      return res.json({ status: "skipped", reason: "Vincule um template ao evento de agendamento confirmado antes de testar." });
+    const resolved = await resolveActiveTemplate(mId, NotificationEvent.SCHEDULE_CONFIRMED);
+    if (!resolved.ok) {
+      return res.json({
+        status: "skipped",
+        reason: resolved.code === DeliveryCode.NOT_CONFIGURED
+          ? "Ative o template do aviso de agendamento confirmado na lista de templates antes de testar."
+          : "O template ativo do aviso de agendamento confirmado não está aprovado ou mudou.",
+      });
     }
-    if (template && template.status !== WHATSAPP_APPROVED_STATUS) {
-      return res.json({ status: "skipped", reason: "O template vinculado ao agendamento confirmado não está aprovado." });
-    }
-    const result = await sendWhatsappTemplateComponents(
-      { ...config, templateName: binding.templateName, languageCode: binding.languageCode },
-      phone,
-      buildBodyComponents(binding, { ...previewRequest(), tutor_name: "Teste" }),
-    );
-    if (result.templateStatus) await markCatalogTemplateStatus(mId, binding.templateName, binding.languageCode, result.templateStatus).catch(() => {});
+    const result = await sendResolvedTemplate({
+      municipalityId: mId, runtime: config, template: resolved.template, phone,
+      components: buildBodyComponents(getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields, { ...previewRequest(), tutor_name: "Teste" }),
+    });
     res.json({
       status: result.status,
       reason: result.status === "failed" && !result.templateStatus && result.code !== "template_unavailable" ? "O provedor recusou o envio de teste." : result.reason,

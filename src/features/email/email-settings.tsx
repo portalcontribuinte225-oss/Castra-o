@@ -28,6 +28,6 @@ export function EmailSettings({ municipalityId, canManage }: { municipalityId: s
       {status && !(status.serviceConfigured && status.publicKeyConfigured) && <p role="alert">Sem o ID do serviço e a chave pública, nenhum e-mail é enviado. Procure o responsável técnico.</p>}
     </section>
     <NotificationSettings key={`notifications:${municipalityId}`} municipalityId={municipalityId} />
-    <AuthDeliverySettings key={`auth:${municipalityId}`} municipalityId={municipalityId} channel="emailTemplates" />
+    <AuthDeliverySettings key={`auth:${municipalityId}`} municipalityId={municipalityId} />
   </div>;
 }

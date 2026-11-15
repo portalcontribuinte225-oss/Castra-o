@@ -1,7 +1,10 @@
-import { WHATSAPP_APPROVED_STATUS, whatsappFieldExamples } from "../../../shared/whatsapp-binding-contract.js";
-import type { CatalogTemplate, EventBinding, MappingItem, TemplateCatalog } from "./whatsapp-integration-types";
+import { WHATSAPP_APPROVED_STATUS } from "../../../shared/whatsapp-templates-contract.js";
+import type { WhatsappTemplateRow } from "./whatsapp-integration-types";
 
 export type StatusTone = "ok" | "warn" | "off";
+
+// A silent synchronization on open only runs when the last one is older than this.
+export const TEMPLATE_SYNC_STALE_MS = 10 * 60 * 1000;
 
 const statusLabels: Record<string, string> = {
   APPROVED: "Aprovado",
@@ -22,37 +25,22 @@ export function templateStatusTone(status: string): StatusTone {
   return status === "PENDING" || status === "IN_APPEAL" ? "warn" : "off";
 }
 
-export function templateKey(template: { name: string; language: string }) {
-  return `${template.name}|${template.language}`;
+export function templateRowKey(row: Pick<WhatsappTemplateRow, "name" | "language">) {
+  return `${row.name}|${row.language}`;
 }
 
-export function findTemplate(catalog: TemplateCatalog, name: string, language: string): CatalogTemplate | null {
-  return catalog.templates.find((template) => template.name === name && template.language === language) || null;
+export function needsAutoSync(syncedAt: string, now = Date.now()) {
+  const last = Date.parse(syncedAt);
+  return Number.isNaN(last) || now - last > TEMPLATE_SYNC_STALE_MS;
 }
 
-// Templates the bindings can use: approved and with a format the system can fill.
-export function bindableTemplates(catalog: TemplateCatalog) {
-  return catalog.templates.filter((template) => template.status === WHATSAPP_APPROVED_STATUS && template.supported);
+// Order in which the use fills the template: {{1}} is the first variable, {{2}} the second, and so on.
+export function variableOrderHint(row: WhatsappTemplateRow) {
+  return row.variables.map((label, index) => `{{${index + 1}}} ${label}`).join(" · ");
 }
 
-function mappingText(item: MappingItem | undefined, position: number) {
-  if (!item || !item.value) return `{{${position}}}`;
-  return item.kind === "text" ? item.value : (whatsappFieldExamples as Record<string, string>)[item.value] || `{{${position}}}`;
-}
-
-export function renderTemplatePreview(bodyText: string, mapping: MappingItem[]) {
-  return bodyText.replace(/\{\{\s*(\d+)\s*\}\}/g, (_match, position) => mappingText(mapping[Number(position) - 1], Number(position)));
-}
-
-export interface BindingSituation { label: string; tone: StatusTone }
-
-// What the administrator needs to know about one event: is it linked and is the linked template still usable?
-export function describeBinding(binding: EventBinding | null, catalog: TemplateCatalog): BindingSituation {
-  if (!binding) return { label: "Sem vínculo: o aviso segue por e-mail", tone: "off" };
-  if (!catalog.syncedAt) return { label: "Não verificado: sincronize os templates", tone: "warn" };
-  const template = findTemplate(catalog, binding.templateName, binding.languageCode);
-  if (!template) return { label: "Não encontrado no catálogo", tone: "off" };
-  if (template.status !== WHATSAPP_APPROVED_STATUS) return { label: templateStatusLabel(template.status), tone: templateStatusTone(template.status) };
-  if (template.variableCount !== binding.mapping.length) return { label: "Variáveis do template mudaram: revise o vínculo", tone: "off" };
-  return { label: "Pronto para enviar", tone: "ok" };
+// Why the switch cannot be turned on (empty when it can, or when it is already on).
+export function lockReason(row: WhatsappTemplateRow) {
+  if (row.active || row.canActivate) return "";
+  return row.label ? "Liga quando a Meta aprovar o template." : row.reason || "Fora do padrão.";
 }

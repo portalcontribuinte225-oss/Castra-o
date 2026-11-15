@@ -1,30 +1,20 @@
-export interface CatalogTemplate {
+// One row of the template table, already judged by the server: what the template serves, why it does not fit, whether it is on.
+export interface WhatsappTemplateRow {
   name: string;
   language: string;
   status: string;
   category: string;
-  bodyText: string;
-  variableCount: number;
-  supported: boolean;
-  unsupportedReason: string;
+  label: string;
+  uses: string[];
+  variables: string[];
+  reason: string;
+  active: boolean;
+  canActivate: boolean;
 }
 
-export interface TemplateCatalog {
+export interface WhatsappTemplateList {
   syncedAt: string;
-  templates: CatalogTemplate[];
+  templates: WhatsappTemplateRow[];
 }
 
-export interface MappingItem {
-  kind: "field" | "text";
-  value: string;
-}
-
-export interface EventBinding {
-  templateName: string;
-  languageCode: string;
-  mapping: MappingItem[];
-}
-
-export type EventBindings = Record<string, EventBinding | null>;
-
-export const emptyCatalog: TemplateCatalog = { syncedAt: "", templates: [] };
+export const emptyTemplateList: WhatsappTemplateList = { syncedAt: "", templates: [] };

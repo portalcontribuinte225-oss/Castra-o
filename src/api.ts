@@ -4,7 +4,7 @@ import type { AuthChallenge, AuthRequestOptions, EnrollmentCredential, RecoveryC
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
 import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAnimalRequest } from "./features/animal-services/animal-service-types";
 import type { TrackedRequest, TrackingSession, TrackingStartBody } from "./features/request-tracking/tracking-types";
-import type { EventBinding } from "./features/whatsapp-integration/whatsapp-integration-types";
+import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 let sessionMutationVersion = 0;
@@ -155,9 +155,7 @@ export const api = {
   getWhatsappQuotaStatus: (municipalityId: string) => request("GET", `/whatsapp/quota-status?municipalityId=${encodeURIComponent(municipalityId)}`),
   resetWhatsappQuota: (municipalityId: string) => request("POST", "/whatsapp/reset-quota", { municipalityId }),
   sendWhatsappTest: (municipalityId: string, phone: string) => request("POST", "/whatsapp/test", { municipalityId, phone }),
-  getWhatsappCatalog: (municipalityId: string) => request("GET", `/whatsapp/catalog?municipalityId=${encodeURIComponent(municipalityId)}`),
-  syncWhatsappCatalog: (municipalityId: string) => request("POST", "/whatsapp/catalog/sync", { municipalityId }),
-  getWhatsappBindings: (municipalityId: string) => request("GET", `/whatsapp/bindings?municipalityId=${encodeURIComponent(municipalityId)}`),
-  saveWhatsappBinding: (municipalityId: string, event: string, binding: EventBinding) => request("PUT", `/whatsapp/bindings/${encodeURIComponent(event)}`, { ...binding, municipalityId }),
-  removeWhatsappBinding: (municipalityId: string, event: string) => request("DELETE", `/whatsapp/bindings/${encodeURIComponent(event)}?municipalityId=${encodeURIComponent(municipalityId)}`),
+  getWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("GET", `/whatsapp/templates?municipalityId=${encodeURIComponent(municipalityId)}`),
+  syncWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("POST", "/whatsapp/templates/sync", { municipalityId }),
+  setWhatsappTemplateActive: (municipalityId: string, body: { name: string; language: string; active: boolean }): Promise<WhatsappTemplateList> => request("PUT", "/whatsapp/templates/active", { ...body, municipalityId }),
 };

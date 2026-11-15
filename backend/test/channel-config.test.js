@@ -16,14 +16,13 @@ function fakeDatabase(storedValue) {
   } };
 }
 
-test("auth delivery merge changes only the patched template and keeps the other channel", () => {
-  const stored = buildDefaultAuthDeliveryConfig();
+test("auth delivery merge changes only the patched template and drops the retired WhatsApp templates", () => {
+  const stored = { ...buildDefaultAuthDeliveryConfig(), whatsappTemplates: { initial_password: "legacy_whatsapp" } };
   stored.emailTemplates.password_reset = "reset_email";
-  stored.whatsappTemplates.initial_password = "welcome_whatsapp";
-  const merged = mergeAuthDeliveryConfig(stored, { emailTemplates: { initial_password: " welcome_email " } });
+  const merged = mergeAuthDeliveryConfig(stored, { emailTemplates: { initial_password: " welcome_email " }, whatsappTemplates: { initial_password: "x" } });
   assert.equal(merged.emailTemplates.initial_password, "welcome_email");
   assert.equal(merged.emailTemplates.password_reset, "reset_email");
-  assert.equal(merged.whatsappTemplates.initial_password, "welcome_whatsapp");
+  assert.equal(Object.hasOwn(merged, "whatsappTemplates"), false);
   assert.equal(mergeAuthDeliveryConfig(stored, { emailTemplates: { password_reset: "" } }).emailTemplates.password_reset, "");
 });
 
@@ -69,17 +68,17 @@ test("channel merge reads the municipal row with a row lock and merges the right
   assert.deepEqual(notifications.calls[0].values, [NOTIFICATIONS_CONFIG_KEY, MUNICIPALITY_ID]);
   assert.equal(savedNotifications.emailTemplateId, "notify_email");
 
-  const auth = fakeDatabase({ whatsappTemplates: { initial_password: "welcome_whatsapp" } });
+  const auth = fakeDatabase({ emailTemplates: { password_reset: "reset_email" } });
   const savedAuth = await mergeChannelConfig(auth, AUTH_DELIVERY_CONFIG_KEY, MUNICIPALITY_ID, { emailTemplates: { initial_password: "welcome_email" } });
   assert.deepEqual(auth.calls[0].values, [AUTH_DELIVERY_CONFIG_KEY, MUNICIPALITY_ID]);
-  assert.equal(savedAuth.whatsappTemplates.initial_password, "welcome_whatsapp");
+  assert.equal(savedAuth.emailTemplates.password_reset, "reset_email");
   assert.equal(savedAuth.emailTemplates.initial_password, "welcome_email");
 });
 
 test("channel merge falls back to defaults when the municipality has no stored row", async () => {
   const saved = await mergeChannelConfig(fakeDatabase(), AUTH_DELIVERY_CONFIG_KEY, MUNICIPALITY_ID, { emailTemplates: { initial_password: "welcome_email" } });
   assert.equal(saved.emailTemplates.initial_password, "welcome_email");
-  assert.equal(saved.whatsappTemplates.initial_password, "");
+  assert.equal(saved.emailTemplates.password_reset, "");
 });
 
 test("e-mail integration status reports presence only and treats blanks as missing", () => {

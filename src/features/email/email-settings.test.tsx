@@ -23,7 +23,7 @@ beforeEach(() => {
   vi.mocked(useNotificationSettings).mockReturnValue({ ...settingsBase,
     value: normalizeNotificationConfig({ emailTemplateId: "notify_email" }) });
   vi.mocked(useAuthDeliverySettings).mockReturnValue({ ...settingsBase, value: normalizeAuthDeliveryConfig({
-    emailTemplates: { password_reset: "reset_email" }, whatsappTemplates: { verify_phone: "phone_whatsapp" } }) });
+    emailTemplates: { password_reset: "reset_email" } }) });
 });
 
 describe("e-mail settings tab", () => {
@@ -58,26 +58,29 @@ describe("e-mail settings tab", () => {
   });
 });
 
-describe("WhatsApp settings tab keeps only WhatsApp fields", () => {
-  it("shows access templates for WhatsApp only, while notification settings no longer carry WhatsApp templates", () => {
+describe("e-mail templates carry no WhatsApp fields", () => {
+  it("notification and access settings list only e-mail templates", () => {
     const notifications = renderToStaticMarkup(<NotificationSettings municipalityId="municipality-a" />);
     expect(notifications).toContain("Template de notificações por e-mail");
     expect(notifications).not.toContain("WhatsApp:");
-    const access = renderToStaticMarkup(<AuthDeliverySettings municipalityId="municipality-a" channel="whatsappTemplates" />);
-    expect(access).toContain("Confirmação de telefone");
+    expect(notifications).not.toContain("Mudança de agendamento");
+    const access = renderToStaticMarkup(<AuthDeliverySettings municipalityId="municipality-a" />);
+    expect(access).toContain("reset_email");
+    expect(access).toContain("Confirmação de e-mail");
     expect(access).toContain("Acompanhamento de solicitação");
-    expect(access).toContain("phone_whatsapp");
-    expect(access).not.toContain("Confirmação de e-mail");
-    expect(access).not.toContain("reset_email");
+    expect(access).not.toContain("Confirmação de telefone");
+    expect(access).not.toContain("WhatsApp");
   });
 });
 
-describe("channel save payloads", () => {
-  it("send only the fields owned by the channel so the other channel is never rewritten", () => {
+describe("e-mail save payloads", () => {
+  it("send only the e-mail templates, so retired fields are never written back", () => {
     const notifications = normalizeNotificationConfig({ emailTemplateId: "notify_email" });
     expect(notificationChannelPatch(notifications)).toEqual({ emailTemplateId: "notify_email" });
-    const access = normalizeAuthDeliveryConfig({ emailTemplates: { password_reset: "reset_email" } });
-    expect(Object.keys(authChannelPatch(access, "emailTemplates"))).toEqual(["emailTemplates"]);
-    expect(authChannelPatch(access, "whatsappTemplates")).toEqual({ whatsappTemplates: buildDefaultAuthDeliveryConfig().whatsappTemplates });
+    const access = normalizeAuthDeliveryConfig({ emailTemplates: { password_reset: "reset_email" }, whatsappTemplates: { verify_phone: "legacy" } });
+    expect(Object.keys(authChannelPatch(access))).toEqual(["emailTemplates"]);
+    expect(authChannelPatch(access).emailTemplates.password_reset).toBe("reset_email");
+    expect(JSON.stringify(access)).not.toContain("legacy");
+    expect(Object.keys(access)).toEqual(Object.keys(buildDefaultAuthDeliveryConfig()));
   });
 });

@@ -20,7 +20,7 @@ export function validateNewPassword(value) {
 
 export function buildDefaultAuthDeliveryConfig() {
   const templates = () => Object.fromEntries(Object.values(AuthPurpose).map((purpose) => [purpose, ""]));
-  return { emailTemplates: templates(), whatsappTemplates: templates() };
+  return { emailTemplates: templates() };
 }
 
 export function normalizeAuthDeliveryConfig(value = {}) {
@@ -40,12 +40,10 @@ export function mergeAuthDeliveryConfig(current, patch = {}) {
 
 export function validateAuthDeliveryConfig(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "Configuração de autenticação inválida.";
-  for (const channel of ["emailTemplates", "whatsappTemplates"]) {
-    const templates = value[channel];
-    if (templates === undefined) continue;
-    if (!templates || typeof templates !== "object" || Array.isArray(templates)) return "Templates de autenticação inválidos.";
-    if (Object.entries(templates).some(([purpose, template]) => !Object.values(AuthPurpose).includes(purpose)
-      || typeof template !== "string" || template.length > 200)) return "Template de autenticação inválido.";
-  }
+  const templates = value.emailTemplates;
+  if (templates === undefined) return "";
+  if (!templates || typeof templates !== "object" || Array.isArray(templates)) return "Templates de autenticação inválidos.";
+  if (Object.entries(templates).some(([purpose, template]) => !Object.values(AuthPurpose).includes(purpose)
+    || typeof template !== "string" || template.length > 200)) return "Template de autenticação inválido.";
   return "";
 }

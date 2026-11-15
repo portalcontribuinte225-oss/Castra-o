@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { api } from "../../api";
-import { emptyCatalog } from "./whatsapp-integration-types";
-import type { EventBinding, EventBindings, TemplateCatalog } from "./whatsapp-integration-types";
+import { api, ApiError } from "../../api";
+import { emptyTemplateList } from "./whatsapp-integration-types";
+import type { WhatsappTemplateList, WhatsappTemplateRow } from "./whatsapp-integration-types";
+import { needsAutoSync } from "./whatsapp-template-display";
 
+// Only messages the server wrote are shown; anything else (network, malformed response) gets the fallback.
 function messageOf(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
+  return error instanceof ApiError && error.message ? error.message : fallback;
 }
 
-export function useWhatsappTemplates(municipalityId: string) {
+export function useWhatsappTemplates(municipalityId: string, canSync: boolean) {
   const [attempt, setAttempt] = useState(0);
-  const [catalog, setCatalog] = useState<TemplateCatalog>(emptyCatalog);
-  const [bindings, setBindings] = useState<EventBindings>({});
+  const [list, setList] = useState<WhatsappTemplateList>(emptyTemplateList);
   const [loadedId, setLoadedId] = useState("");
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -18,22 +19,22 @@ export function useWhatsappTemplates(municipalityId: string) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const activeId = useRef(municipalityId);
+  const autoSyncedFor = useRef("");
   activeId.current = municipalityId;
   const retry = useCallback(() => setAttempt((current) => current + 1), []);
+  const ready = Boolean(municipalityId) && loadedId === municipalityId;
 
   useEffect(() => {
     let cancelled = false;
-    setCatalog(emptyCatalog);
-    setBindings({});
+    setList(emptyTemplateList);
     setLoadedId("");
     setError("");
     setNotice("");
     if (!municipalityId) return;
     setLoading(true);
-    Promise.all([api.getWhatsappCatalog(municipalityId), api.getWhatsappBindings(municipalityId)]).then(([loadedCatalog, loadedBindings]) => {
+    api.getWhatsappTemplates(municipalityId).then((loaded) => {
       if (cancelled) return;
-      setCatalog(loadedCatalog);
-      setBindings(loadedBindings.bindings || {});
+      setList(loaded);
       setLoadedId(municipalityId);
     }).catch((failure) => {
       if (!cancelled) setError(messageOf(failure, "Não foi possível carregar os templates do WhatsApp."));
@@ -41,45 +42,41 @@ export function useWhatsappTemplates(municipalityId: string) {
     return () => { cancelled = true; };
   }, [municipalityId, attempt]);
 
-  const ready = Boolean(municipalityId) && loadedId === municipalityId;
-
-  async function sync() {
+  async function runSync(silent: boolean) {
     if (syncing || !ready) return;
     const syncedId = municipalityId;
     setSyncing(true);
-    setError("");
-    setNotice("");
+    if (!silent) { setError(""); setNotice(""); }
     try {
-      const synced = await api.syncWhatsappCatalog(syncedId);
+      const synced = await api.syncWhatsappTemplates(syncedId);
       if (activeId.current !== syncedId) return;
-      setCatalog(synced);
-      setNotice(`${synced.templates.length} template(s) sincronizado(s).`);
+      setList(synced);
+      if (!silent) setNotice(`${synced.templates.length} template(s) sincronizado(s).`);
     } catch (failure) {
-      if (activeId.current === syncedId) setError(messageOf(failure, "Não foi possível sincronizar os templates."));
+      if (!silent && activeId.current === syncedId) setError(messageOf(failure, "Não foi possível sincronizar os templates."));
     } finally { setSyncing(false); }
   }
 
-  // Resolves to an error message, or an empty string when the change was saved.
-  async function change(run: () => Promise<{ bindings: EventBindings }>, fallback: string) {
-    if (saving || !ready) return fallback;
+  // Opening the screen refreshes a stale catalog once, so new templates appear without a click.
+  useEffect(() => {
+    if (!ready || !canSync || autoSyncedFor.current === municipalityId) return;
+    autoSyncedFor.current = municipalityId;
+    if (needsAutoSync(list.syncedAt)) void runSync(true);
+  }, [ready, canSync, municipalityId]);
+
+  async function toggle(row: WhatsappTemplateRow) {
+    if (saving || !ready) return;
     const changedId = municipalityId;
     setSaving(true);
     setError("");
     setNotice("");
     try {
-      const saved = await run();
-      if (activeId.current === changedId) {
-        setBindings(saved.bindings || {});
-        setNotice("Vínculo salvo.");
-      }
-      return "";
+      const updated = await api.setWhatsappTemplateActive(changedId, { name: row.name, language: row.language, active: !row.active });
+      if (activeId.current === changedId) setList(updated);
     } catch (failure) {
-      return messageOf(failure, fallback);
+      if (activeId.current === changedId) setError(messageOf(failure, "Não foi possível alterar o template."));
     } finally { setSaving(false); }
   }
 
-  const saveBinding = (event: string, binding: EventBinding) => change(() => api.saveWhatsappBinding(municipalityId, event, binding), "Não foi possível salvar o vínculo.");
-  const removeBinding = (event: string) => change(() => api.removeWhatsappBinding(municipalityId, event), "Não foi possível remover o vínculo.");
-
-  return { catalog, bindings, loading, ready, syncing, saving, error, notice, retry, sync, saveBinding, removeBinding };
+  return { list, loading, ready, syncing, saving, error, notice, retry, sync: () => runSync(false), toggle };
 }

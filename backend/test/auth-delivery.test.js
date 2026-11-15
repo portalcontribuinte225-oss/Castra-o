@@ -10,7 +10,6 @@ function fixture() {
   const config = buildDefaultAuthDeliveryConfig();
   for (const purpose of Object.values(AuthPurpose)) {
     config.emailTemplates[purpose] = `email_${purpose}`;
-    config.whatsappTemplates[purpose] = `whatsapp_${purpose}`;
   }
   const input = { purpose: AuthPurpose.PASSWORD_RESET, municipalityId: "municipality-a", user: { name: "Tutor" },
     email: "tutor@example.test", phone: "48999999999", emailVerified: true, phoneVerified: true, code: "012345",
@@ -18,8 +17,8 @@ function fixture() {
   const dependencies = {
     loadConfig: async (id) => { calls.push(["config", id]); return config; },
     loadWhatsappConfig: async (id) => { calls.push(["whatsappConfig", id]); return { active: true, accessToken: "private", phoneNumberId: "number" }; },
-    loadTemplate: async () => null,
-    markTemplateStatus: async () => {},
+    resolveTemplate: async (id, purpose) => { calls.push(["template", id, purpose]); return { ok: true, template: { name: `whatsapp_${purpose}`, language: "pt_BR" } }; },
+    markTemplateStatus: async (...args) => { calls.push(["mark", ...args]); },
     consumeQuota: async (id) => { calls.push(["quota", id]); return { allowed: true }; },
     sendWhatsapp: async (...args) => { calls.push(["whatsapp", ...args]); return { status: DeliveryStatus.SENT }; },
     sendEmail: async (value) => { calls.push(["email", value]); return { status: DeliveryStatus.SENT }; },
@@ -38,6 +37,27 @@ test("auth recovery sends only selected WhatsApp and keeps codes outside returne
   assert.equal(call[3][1].parameters[0].text, "012345");
   assert.equal(f.calls.some(([type]) => type === "email"), false);
   assert.equal(JSON.stringify(results).includes("012345"), false);
+});
+
+test("WhatsApp access messages need an active, usable template and stop before quota or provider when there is none", async () => {
+  for (const code of [DeliveryCode.NOT_CONFIGURED, DeliveryCode.TEMPLATE_UNAVAILABLE]) {
+    const f = fixture();
+    f.dependencies.resolveTemplate = async () => ({ ok: false, code });
+    const results = await deliverAuthMessage(f.input, f.dependencies);
+    assert.equal(results.length, 1);
+    assert.equal(results[0].status, DeliveryStatus.SKIPPED);
+    assert.equal(results[0].code, code);
+    assert.equal(f.calls.some(([type]) => type === "quota" || type === "whatsapp" || type === "email"), false);
+  }
+});
+
+test("a provider template error on an access message is reported safely and updates the cached status", async () => {
+  const f = fixture();
+  f.dependencies.sendWhatsapp = async () => ({ status: DeliveryStatus.FAILED, code: DeliveryCode.TEMPLATE_UNAVAILABLE, templateStatus: "PAUSED", reason: "private provider body" });
+  const results = await deliverAuthMessage(f.input, f.dependencies);
+  assert.equal(results[0].code, DeliveryCode.TEMPLATE_UNAVAILABLE);
+  assert.deepEqual(f.calls.find(([type]) => type === "mark"), ["mark", "municipality-a", "whatsapp_password_reset", "pt_BR", "PAUSED"]);
+  assert.doesNotMatch(JSON.stringify(results), /private|012345/);
 });
 
 test("recovery requires an explicit channel and never uses operational followUp", async () => {

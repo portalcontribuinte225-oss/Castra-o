@@ -1,0 +1,54 @@
+import React from "react";
+import { Field } from "../../components/ui";
+import type { useWhatsappQuota } from "./use-whatsapp-quota";
+
+type Quota = ReturnType<typeof useWhatsappQuota>;
+
+export function WhatsappQuota({ municipalityId, quota }: { municipalityId: string; quota: Quota }) {
+  const { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed } = quota;
+  const patch = (changes: Record<string, string>) => setSettings((current) => ({ ...current, ...changes }));
+  const saved = saveStatus.includes("sucesso") || saveStatus.includes("zerada") || saveStatus.includes("encerrado");
+  return (
+    <section className="whatsapp-section">
+      <div className="whatsapp-section-header">
+        <span className="whatsapp-section-label">Contrato e cota</span>
+      </div>
+      <div className="whatsapp-fields-row">
+        <Field label="Limite mensal" value={settings.plan} placeholder="Ex: 500" onChange={(value) => patch({ plan: value })} />
+        <label className="field">
+          <span>Início</span>
+          <input type="date" value={settings.contractStart} onChange={(event) => patch({ contractStart: event.target.value })} />
+        </label>
+        <label className="field">
+          <span>Fim</span>
+          <input type="date" value={settings.contractEnd} onChange={(event) => patch({ contractEnd: event.target.value })} />
+        </label>
+      </div>
+      <div className="whatsapp-save-row">
+        <button className="primary-action" type="button" onClick={save} disabled={!municipalityId}>Salvar cota</button>
+        {saveStatus && <span className={saved ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{saveStatus}</span>}
+      </div>
+
+      <div className="whatsapp-section-heading"><span>Ações</span></div>
+      {confirmingEnd ? (
+        <div className="whatsapp-confirm-block">
+          <p>Encerrar contrato hoje ({new Date().toLocaleDateString("pt-BR")})?</p>
+          <div className="whatsapp-confirm-actions">
+            <button className="whatsapp-btn-danger-solid" type="button" onClick={endContractToday}>Confirmar</button>
+            <button className="btn-secondary" type="button" onClick={() => setConfirmingEnd(false)}>Cancelar</button>
+          </div>
+        </div>
+      ) : (
+        <div className="whatsapp-actions-row">
+          <button className="whatsapp-btn-danger" type="button" onClick={() => setConfirmingEnd(true)} disabled={!settings.plan || !municipalityId}>
+            Encerrar contrato
+          </button>
+          <button className="whatsapp-btn-warning" type="button" onClick={resetUsed} disabled={!live?.plan || !municipalityId}>
+            Zerar cota do mês
+          </button>
+        </div>
+      )}
+      <p className="whatsapp-note">Encerrar bloqueia novos envios imediatamente. Zerar reinicia a contagem deste mês.</p>
+    </section>
+  );
+}

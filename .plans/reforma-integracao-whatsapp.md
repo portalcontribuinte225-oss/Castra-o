@@ -1,5 +1,7 @@
 # Plano de Implementação: Reforma da integração do WhatsApp (vínculos de template + sincronização com a Meta)
 
+> **Substituído** por `whatsapp-templates-reconhecimento-automatico.md` (2026-11-15). O modelo de vínculos com mapeamento de variáveis descrito aqui foi trocado por reconhecimento automático pelo nome do template e interruptor. Este arquivo fica só como histórico.
+
 ## Origem
 
 - Arquivo de especificação: `.plans/integracao-whatsapp-vinculos-templates.md` (decisões fechadas e estado atual) e `registro_configuracoes_meta_sistema_castracao.md` (configuração real na Meta).

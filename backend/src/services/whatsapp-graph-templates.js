@@ -1,12 +1,11 @@
 import { DeliveryCode } from "../../../shared/notification-contract.js";
-import { WHATSAPP_MAX_VARIABLES } from "../../../shared/whatsapp-binding-contract.js";
+import { WHATSAPP_MAX_VARIABLES } from "../../../shared/whatsapp-templates-contract.js";
 import { GRAPH_API_BASE } from "./whatsapp.js";
 
 const MAX_PAGES = 10;
 const PAGE_SIZE = 100;
 const MAX_TEMPLATES = 500;
 const MAX_BODY_LENGTH = 1100;
-const SUPPORTED_BUTTON_TYPES = new Set(["QUICK_REPLY", "PHONE_NUMBER", "URL"]);
 const SUPPORTED_COMPONENT_TYPES = new Set(["HEADER", "BODY", "FOOTER", "BUTTONS"]);
 
 const syncErrorMessages = Object.freeze({
@@ -32,7 +31,7 @@ export async function fetchGraphTemplates({ accessToken, wabaId }, { fetchImpl =
   const templates = [];
   let after = "";
   for (let page = 0; page < MAX_PAGES; page += 1) {
-    const query = new URLSearchParams({ fields: "name,language,status,category,components", limit: String(PAGE_SIZE) });
+    const query = new URLSearchParams({ fields: "name,language,status,category,components,parameter_format", limit: String(PAGE_SIZE) });
     if (after) query.set("after", after);
     let response;
     try {
@@ -57,39 +56,50 @@ function text(value, max) {
   return typeof value === "string" && value.length <= max ? value : "";
 }
 
-function unsupportedReason(components, bodyText, positions) {
-  if (!bodyText) return "Template sem corpo de texto.";
-  if (components.some((component) => !SUPPORTED_COMPONENT_TYPES.has(component?.type))) return "Template com componente não suportado.";
-  if (/\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(bodyText)) return "Parâmetros nomeados não são suportados.";
-  const highest = positions.length ? Math.max(...positions) : 0;
-  if (new Set(positions).size !== highest || highest > WHATSAPP_MAX_VARIABLES) return "Variáveis do corpo fora de sequência.";
-  const header = components.find((component) => component?.type === "HEADER");
-  if (header && (header.format !== "TEXT" || /\{\{/.test(header.text || ""))) return "Cabeçalho com variável ou mídia não é suportado.";
-  const buttons = components.find((component) => component?.type === "BUTTONS")?.buttons;
-  if (Array.isArray(buttons) && buttons.some((button) => !SUPPORTED_BUTTON_TYPES.has(button?.type) || /\{\{/.test(button?.url || ""))) {
-    return "Botão com variável ou de código não é suportado.";
-  }
-  return "";
+function headerKind(header) {
+  if (!header) return "NONE";
+  if (header.format !== "TEXT") return "MEDIA";
+  return /\{\{/.test(header.text || "") ? "TEXT_VARIABLE" : "TEXT";
 }
 
-// Turns one Graph template into the cached catalog entry (null when it has no usable identity).
+function buttonKind(button) {
+  switch (button?.type) {
+    case "QUICK_REPLY": return "QUICK_REPLY";
+    case "PHONE_NUMBER": return "PHONE_NUMBER";
+    case "URL": return /\{\{/.test(button.url || "") ? "URL_VARIABLE" : "URL";
+    case "OTP": return button.otp_type === "COPY_CODE" ? "OTP_COPY_CODE" : "OTP_OTHER";
+    default: return "OTHER";
+  }
+}
+
+// Turns one Graph template into the cached catalog entry: structural facts only.
+// Whether the system can use it (and for what) is decided when the catalog is read, by the shared contract.
 export function describeGraphTemplate(raw) {
   if (!raw || typeof raw !== "object") return null;
   const name = text(raw.name, 512);
   const language = text(raw.language, 20);
   if (!name || !language) return null;
   const components = Array.isArray(raw.components) ? raw.components : [];
-  const bodyText = text(components.find((component) => component?.type === "BODY")?.text, MAX_BODY_LENGTH);
-  const positions = [...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((match) => Number(match[1]));
-  const reason = unsupportedReason(components, bodyText, positions);
+  const body = components.find((component) => component?.type === "BODY");
+  const category = text(raw.category, 40).toUpperCase();
+  const bodyText = text(body?.text, MAX_BODY_LENGTH);
+  const named = /\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(bodyText);
+  const indexes = [...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((match) => Number(match[1]));
+  const highest = indexes.length ? Math.max(...indexes) : 0;
+  // Authentication templates may come without text: Meta composes it around the single code variable.
+  const codeOnly = category === "AUTHENTICATION" && Boolean(body) && bodyText === "";
+  const buttons = components.find((component) => component?.type === "BUTTONS")?.buttons;
   return {
     name,
     language,
     status: text(raw.status, 40).toUpperCase(),
-    category: text(raw.category, 40).toUpperCase(),
-    bodyText,
-    variableCount: reason ? 0 : positions.length,
-    supported: !reason,
-    unsupportedReason: reason,
+    category,
+    parameterFormat: named || raw.parameter_format === "NAMED" ? "NAMED" : "POSITIONAL",
+    hasBody: bodyText !== "" || codeOnly,
+    bodyVariables: codeOnly ? 1 : highest,
+    bodySequential: codeOnly || (new Set(indexes).size === highest && highest <= WHATSAPP_MAX_VARIABLES),
+    header: headerKind(components.find((component) => component?.type === "HEADER")),
+    buttons: Array.isArray(buttons) ? buttons.map(buttonKind) : [],
+    extraComponents: components.some((component) => !SUPPORTED_COMPONENT_TYPES.has(component?.type)),
   };
 }

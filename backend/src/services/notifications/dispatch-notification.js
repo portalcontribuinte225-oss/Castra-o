@@ -1,8 +1,9 @@
 import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, normalizeNotificationConfig } from "../../../../shared/notification-contract.js";
-import { WHATSAPP_APPROVED_STATUS } from "../../../../shared/whatsapp-binding-contract.js";
+import { getWhatsappUse } from "../../../../shared/whatsapp-templates-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
-import { loadEventBinding } from "../whatsapp-bindings.js";
+import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
+import { sendResolvedTemplate } from "../whatsapp-template-sender.js";
 import { checkAndConsumeQuota } from "../whatsappQuota.js";
 import { sendNotificationEmail } from "../email.js";
 import { buildNotificationMessage } from "./notification-message.js";
@@ -23,18 +24,6 @@ function sanitizedTransportResult(event, channel, value) {
     : "O provedor não aceitou a mensagem ou o prazo de envio foi excedido.");
 }
 
-// A template known to the catalog is sent only while approved and with the variables the binding maps.
-function templateIsUsable(template, binding) {
-  return !template || (template.status === WHATSAPP_APPROVED_STATUS && template.variableCount === binding.mapping.length);
-}
-
-async function rememberTemplateStatus(dependencies, request, binding, status) {
-  try {
-    await dependencies.markTemplateStatus(request.municipality_id, binding.templateName, binding.languageCode, status);
-  } catch {
-    // The send result is already known; the next synchronization corrects the cache.
-  }
-}
 
 async function tryWhatsapp({ event, request, legacy, phone }, dependencies) {
   const channel = NotificationChannel.WHATSAPP;
@@ -49,19 +38,15 @@ async function tryWhatsapp({ event, request, legacy, phone }, dependencies) {
   if (runtime.provider !== "cloud_api" || !runtime.accessToken || !runtime.phoneNumberId) {
     return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) };
   }
-  const { binding, template } = await dependencies.loadBinding(request.municipality_id, event);
-  if (!binding) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) };
-  if (!templateIsUsable(template, binding)) {
-    return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.TEMPLATE_UNAVAILABLE) };
-  }
+  const resolved = await dependencies.resolveTemplate(request.municipality_id, event);
+  if (!resolved.ok) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, resolved.code) };
   const content = buildNotificationMessage(event, request);
-  const components = buildBodyComponents(binding, { ...request, notification_message: content.message });
+  const components = buildBodyComponents(getWhatsappUse(event).fields, { ...request, notification_message: content.message });
   const quota = await dependencies.consumeQuota(request.municipality_id);
   if (!quota.allowed) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE) };
-  const transport = await dependencies.sendWhatsapp(
-    { ...runtime, templateName: binding.templateName, languageCode: binding.languageCode }, phone, components,
+  const transport = await sendResolvedTemplate(
+    { municipalityId: request.municipality_id, runtime, template: resolved.template, phone, components }, dependencies,
   );
-  if (transport?.templateStatus) await rememberTemplateStatus(dependencies, request, binding, transport.templateStatus);
   return sanitizedTransportResult(event, channel, transport);
 }
 
@@ -74,7 +59,7 @@ export async function dispatchNotification({ event, request, config: inputConfig
   if (!legacy && followUp?.enabled !== true) return [];
   const dependencies = {
     loadWhatsappConfig: getMunicipalityWhatsappConfig,
-    loadBinding: loadEventBinding,
+    resolveTemplate: resolveActiveTemplate,
     markTemplateStatus: markCatalogTemplateStatus,
     consumeQuota: checkAndConsumeQuota,
     sendWhatsapp: sendWhatsappTemplateComponents,

@@ -35,10 +35,9 @@ test("discovery token and option IDs bind account revisions, context, expiry and
 test("availability lists unverified cadastral contacts only with active configured channels and does not consume quota", async (t) => {
   secret(t);
   const user = authUser({ profile_phone: "48999991234" }); const config = buildDefaultAuthDeliveryConfig();
-  config.whatsappTemplates.password_reset = "authentication";
   const deps = { env: { EMAILJS_SERVICE_ID: "test", EMAILJS_PUBLIC_KEY: "test", EMAILJS_TEMPLATE_ID: "reset" },
     loadConfig: async () => config, loadWhatsapp: async () => ({ active: true, accessToken: "test", phoneNumberId: "test" }),
-    quotaAvailable: async () => true, smsAvailable: async () => ({ available: true }) };
+    resolveTemplate: async () => ({ ok: true }), quotaAvailable: async () => true, smsAvailable: async () => ({ available: true }) };
   const options = await getRecoveryOptions(user, createRecoveryToken(user), deps);
   assert.deepEqual(options.map(item => item.channel), Object.values(NotificationChannel));
   assert.equal(options[1].maskedDestination, "(48) *****-1234");
@@ -46,6 +45,7 @@ test("availability lists unverified cadastral contacts only with active configur
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, loadWhatsapp: async () => ({ active: false }),
     smsAvailable: async () => ({ available: false }) })).map(item => item.channel), [NotificationChannel.EMAIL]);
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, quotaAvailable: async () => false })).map(item => item.channel), [NotificationChannel.EMAIL, NotificationChannel.SMS]);
+  assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, resolveTemplate: async () => ({ ok: false }) })).map(item => item.channel), [NotificationChannel.EMAIL, NotificationChannel.SMS]);
 });
 
 test("availability inside a transaction uses the supplied client for every read without borrowing another pool connection", async (t) => {
@@ -56,8 +56,11 @@ test("availability inside a transaction uses the supplied client for every read 
   const queried = [];
   const database = { query: async (_sql, values) => {
     assert.equal(values[1], MUNICIPALITY); queried.push(values[0]);
-    const valuesByKey = { "whatsapp": { active: true, accessToken: "test", phoneNumberId: "test" },
-      "whatsapp_quota": { plan: 10 }, "castragestao:auth-delivery": { whatsappTemplates: { password_reset: "auth" } } };
+    const authTemplate = { name: "castracao_codigo_verificacao", language: "pt_BR", status: "APPROVED", category: "AUTHENTICATION", parameterFormat: "POSITIONAL",
+      hasBody: true, bodyVariables: 1, bodySequential: true, header: "NONE", buttons: ["OTP_COPY_CODE"], extraComponents: false };
+    const valuesByKey = { "whatsapp": { active: true, accessToken: "test", phoneNumberId: "test" }, "whatsapp_quota": { plan: 10 },
+      "whatsapp_active_templates": { active: { password_reset: { name: authTemplate.name, language: "pt_BR" } } },
+      "whatsapp_catalog": { syncedAt: "2026-11-15T10:00:00.000Z", templates: [authTemplate] } };
     return { rows: valuesByKey[values[0]] ? [{ value: valuesByKey[values[0]] }] : [] };
   } };
   const options = await getRecoveryOptions(authUser({ profile_phone: "48999991234" }), "handle", { database, env: {} });

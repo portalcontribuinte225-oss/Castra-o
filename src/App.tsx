@@ -82,7 +82,6 @@ import {
   initialSizes,
   initialSpecies,
   initialTeams,
-  initialWhatsappSettings,
   isPastScheduleDay,
   mergeTags,
   normalizeDocumentType,
@@ -170,7 +169,7 @@ import { buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./featur
 import { FollowUpSummary } from "./features/request-follow-up/follow-up-summary";
 import type { FollowUpValue } from "./features/request-follow-up/follow-up";
 import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-policy";
-import { WhatsappTemplatesPanel } from "./features/whatsapp-integration/whatsapp-templates-panel";
+import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
 import type { NotificationResult } from "./features/notifications/notification-results";
 import { configsAllowStep } from "../shared/notification-contract.js";
 import { useSession } from "./features/tutor-access/use-session";
@@ -6407,17 +6406,7 @@ function ConfigView({
   const [municipalityStateFilter, setMunicipalityStateFilter] = useState("");
   const [userSaveError, setUserSaveError] = useState("");
   const [agendaForm, setAgendaForm] = useState(emptyAgendaForm);
-  const [whatsappSettings, setWhatsappSettings] = useState(initialWhatsappSettings);
-  const [whatsappSaveStatus, setWhatsappSaveStatus] = useState("");
   const [aiSaveStatus, setAiSaveStatus] = useState("");
-  const initialQuotaSettings = { plan: "", contractStart: "", contractEnd: "" };
-  const [quotaSettings, setQuotaSettings] = useState(initialQuotaSettings);
-  const [quotaSaveStatus, setQuotaSaveStatus] = useState("");
-  const [whatsappQuotaLive, setWhatsappQuotaLive] = useState<AnyRecord | null>(null);
-  const [testPhone, setTestPhone] = useState("");
-  const [testSendStatus, setTestSendStatus] = useState("");
-  const [testSending, setTestSending] = useState(false);
-  const [confirmEndContract, setConfirmEndContract] = useState(false);
   const [singleDate, setSingleDate] = useState("");
   const [singleVacancies, setSingleVacancies] = useState("20");
   const [recurringStart, setRecurringStart] = useState("");
@@ -6547,40 +6536,6 @@ function ConfigView({
     }
   }
 
-  useEffect(() => {
-    if (configArea !== "integrations" || configTab !== "whatsapp") return;
-    setTestPhone("");
-    setTestSendStatus("");
-    setConfirmEndContract(false);
-    if (!configMunicipalityScopeId) {
-      setWhatsappSettings(initialWhatsappSettings);
-      setWhatsappSaveStatus("Selecione um município para configurar o WhatsApp.");
-      setQuotaSettings(initialQuotaSettings);
-      setQuotaSaveStatus("");
-      setWhatsappQuotaLive(null);
-      return;
-    }
-    let cancelled = false;
-    setWhatsappSaveStatus("Carregando configuração...");
-    Promise.all([
-      api.getConfig(CONFIG_KEYS.whatsapp, configMunicipalityScopeId).catch(() => null),
-      api.getConfig(CONFIG_KEYS.whatsappQuota, configMunicipalityScopeId).catch(() => null),
-      api.getWhatsappQuotaStatus(configMunicipalityScopeId).catch(() => null),
-    ]).then(([whatsapp, quota, quotaLive]) => {
-      if (cancelled) return;
-      setWhatsappSettings({ ...initialWhatsappSettings, ...(whatsapp || {}) });
-      setWhatsappSaveStatus("");
-      setQuotaSettings({
-        plan: String(quota?.plan ?? ""),
-        contractStart: quota?.contractStart ?? "",
-        contractEnd: quota?.contractEnd ?? "",
-      });
-      setQuotaSaveStatus("");
-      setWhatsappQuotaLive(quotaLive);
-    });
-    return () => { cancelled = true; };
-  }, [configArea, configTab, configMunicipalityScopeId]);
-
   function matchesScopedConfigItem(item: AnyRecord = {}, itemId = "") {
     if (item.id !== itemId) return false;
     if (!configMunicipalityScopeId) return true;
@@ -6624,106 +6579,6 @@ function ConfigView({
         stepDocuments: true,
       },
     ]);
-  }
-
-  async function saveWhatsappSettings() {
-    if (!configMunicipalityScopeId) {
-      setWhatsappSaveStatus("Selecione um município antes de salvar.");
-      return;
-    }
-    const hasCredentials = Boolean(
-      (whatsappSettings.accessToken || whatsappSettings.hasAccessToken) &&
-      whatsappSettings.phoneNumberId
-    );
-    const nextSettings = {
-      ...whatsappSettings,
-      // Ativa automaticamente quando credenciais estão preenchidas; só salva false se explicitamente desativado pelo toggle
-      active: hasCredentials ? (whatsappSettings.active !== false) : false,
-      provider: whatsappSettings.provider || "cloud_api",
-      phoneNumberId: whatsappSettings.phoneNumberId || "",
-      wabaId: whatsappSettings.wabaId || "",
-      accessToken: whatsappSettings.accessToken || "",
-    };
-    setWhatsappSaveStatus("Salvando configuração...");
-    try {
-      const saved = await api.setConfig(CONFIG_KEYS.whatsapp, nextSettings, configMunicipalityScopeId);
-      setWhatsappSettings({
-        ...nextSettings,
-        ...(saved?.value || {}),
-        accessToken: "",
-        hasAccessToken: Boolean(saved?.value?.hasAccessToken || nextSettings.accessToken || whatsappSettings.hasAccessToken),
-      });
-      setWhatsappSaveStatus("Configuração salva com sucesso.");
-    } catch (err) {
-      setWhatsappSaveStatus(`Não foi possível salvar: ${err.message}`);
-    }
-  }
-
-  async function saveQuotaSettings() {
-    if (!configMunicipalityScopeId) {
-      setQuotaSaveStatus("Selecione um município antes de salvar.");
-      return;
-    }
-    if (!quotaSettings.plan || Number(quotaSettings.plan) <= 0) {
-      setQuotaSaveStatus("Informe um limite mensal válido.");
-      return;
-    }
-    setQuotaSaveStatus("Salvando...");
-    try {
-      await api.setConfig(CONFIG_KEYS.whatsappQuota, {
-        plan: Number(quotaSettings.plan),
-        contractStart: quotaSettings.contractStart || "",
-        contractEnd: quotaSettings.contractEnd || "",
-      }, configMunicipalityScopeId);
-      setQuotaSaveStatus("Cota salva com sucesso.");
-      api.getWhatsappQuotaStatus(configMunicipalityScopeId).then(setWhatsappQuotaLive).catch(() => {});
-    } catch (err) {
-      setQuotaSaveStatus(`Não foi possível salvar: ${err.message}`);
-    }
-  }
-
-  async function endContractToday() {
-    if (!configMunicipalityScopeId) return;
-    const today = new Date().toISOString().slice(0, 10);
-    try {
-      await api.setConfig(CONFIG_KEYS.whatsappQuota, {
-        plan: Number(quotaSettings.plan),
-        contractStart: quotaSettings.contractStart || "",
-        contractEnd: today,
-      }, configMunicipalityScopeId);
-      setQuotaSettings((c) => ({ ...c, contractEnd: today }));
-      setConfirmEndContract(false);
-      setQuotaSaveStatus("Contrato encerrado hoje.");
-      api.getWhatsappQuotaStatus(configMunicipalityScopeId).then(setWhatsappQuotaLive).catch(() => {});
-    } catch (err) {
-      setQuotaSaveStatus(`Erro ao encerrar contrato: ${err.message}`);
-    }
-  }
-
-  async function resetQuotaUsed() {
-    if (!configMunicipalityScopeId) return;
-    try {
-      await api.resetWhatsappQuota(configMunicipalityScopeId);
-      setQuotaSaveStatus("Cota do mês zerada.");
-      api.getWhatsappQuotaStatus(configMunicipalityScopeId).then(setWhatsappQuotaLive).catch(() => {});
-    } catch (err) {
-      setQuotaSaveStatus(`Erro ao zerar cota: ${err.message}`);
-    }
-  }
-
-  async function sendWhatsappTest() {
-    if (!testPhone.trim()) { setTestSendStatus("Informe um número para o teste."); return; }
-    setTestSending(true);
-    setTestSendStatus("Enviando...");
-    try {
-      const result = await api.sendWhatsappTest(configMunicipalityScopeId, testPhone.trim());
-      if (result.status === "sent") setTestSendStatus("Mensagem de teste enviada com sucesso!");
-      else setTestSendStatus(`Não enviado: ${result.reason || "erro desconhecido"}`);
-    } catch (err) {
-      setTestSendStatus(`Erro: ${err.message}`);
-    } finally {
-      setTestSending(false);
-    }
   }
 
   function patchRequestType(typeId, patch) {
@@ -8473,196 +8328,9 @@ function ConfigView({
         </div>
       )}
 
-      {configArea === "integrations" && configTab === "whatsapp" && (() => {
-
-        const hasCredentials = Boolean(
-          (whatsappSettings.accessToken || whatsappSettings.hasAccessToken) && whatsappSettings.phoneNumberId,
-        );
-        const isActive = hasCredentials && whatsappSettings.active !== false;
-        const contractEnd = whatsappQuotaLive?.contractEnd || quotaSettings.contractEnd;
-        const contractEndLabel = contractEnd
-          ? new Date(contractEnd + "T00:00:00").toLocaleDateString("pt-BR")
-          : null;
-        return (
-          <div className="config-panel wide">
-            <PanelHeader title="Canais de notificação por município" />
-            <WhatsappTemplatesPanel key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
-
-            {configMunicipalityScopeId && (
-              <div className="whatsapp-statusbar">
-                <span className={`whatsapp-dot ${isActive ? "whatsapp-dot--on" : "whatsapp-dot--off"}`} />
-                <span className={`whatsapp-statusbar-state ${isActive ? "whatsapp-status-ok" : "whatsapp-status-err"}`}>
-                  {isActive ? "Ativo" : "Inativo"}
-                </span>
-                {whatsappQuotaLive?.plan ? (
-                  <>
-                    <span className="whatsapp-statusbar-sep">·</span>
-                    <span className="whatsapp-statusbar-text">
-                      <strong>{whatsappQuotaLive.used ?? 0}/{whatsappQuotaLive.plan}</strong> mensagens este mês
-                    </span>
-                    <span className="whatsapp-statusbar-sep">·</span>
-                    <span className={`whatsapp-statusbar-text ${whatsappQuotaLive.active ? "" : "whatsapp-status-err"}`}>
-                      Contrato {whatsappQuotaLive.active ? "vigente" : "encerrado"}
-                      {contractEndLabel ? ` até ${contractEndLabel}` : ""}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="whatsapp-statusbar-sep">·</span>
-                    <span className="whatsapp-statusbar-text">Cota não configurada</span>
-                  </>
-                )}
-              </div>
-            )}
-
-            <div className="whatsapp-settings-grid">
-              <section className="whatsapp-section">
-                <div className="whatsapp-section-header">
-                  <span className="whatsapp-section-label">Credenciais</span>
-                  <ConfigActiveToggle
-                    checked={Boolean(whatsappSettings.active)}
-                    onChange={(checked) => setWhatsappSettings((current) => ({ ...current, active: checked }))}
-                  />
-                </div>
-                <div className="whatsapp-fields-row">
-                  <label className="field">
-                    <span>Provedor</span>
-                    <select
-                      value={whatsappSettings.provider || "cloud_api"}
-                      onChange={(event) => setWhatsappSettings((current) => ({ ...current, provider: event.target.value }))}
-                    >
-                      <option value="cloud_api">WhatsApp Cloud API</option>
-                    </select>
-                  </label>
-                  <Field
-                    label="ID da conta do WhatsApp Business (WABA)"
-                    value={whatsappSettings.wabaId || ""}
-                    placeholder="WhatsApp Business Account ID da Meta"
-                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, wabaId: value }))}
-                  />
-                </div>
-                <div className="whatsapp-fields-row">
-                  <Field
-                    label="ID do número remetente"
-                    value={whatsappSettings.phoneNumberId || ""}
-                    placeholder="Phone Number ID da Meta"
-                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, phoneNumberId: value }))}
-                  />
-
-                </div>
-
-                <label className="field">
-                  <span>Token de acesso</span>
-                  <input
-                    value={whatsappSettings.accessToken || ""}
-                    type="password"
-                    placeholder={whatsappSettings.hasAccessToken ? "Token já salvo" : "Cole o token da Cloud API"}
-                    onChange={(event) => setWhatsappSettings((current) => ({ ...current, accessToken: event.target.value }))}
-                  />
-                </label>
-                <div className="whatsapp-save-row">
-                  <button className="primary-action" type="button" onClick={saveWhatsappSettings} disabled={!configMunicipalityScopeId}>
-                    Salvar credenciais
-                  </button>
-                  {whatsappSaveStatus && <span className={whatsappSaveStatus.includes("sucesso") ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{whatsappSaveStatus}</span>}
-                </div>
-
-                <div className="whatsapp-section-heading"><span>Teste de envio</span></div>
-                <div className="whatsapp-test-row">
-                  <Field
-                    label="Número"
-                    value={testPhone}
-                    placeholder="(00) 00000-0000"
-                    onChange={(value) => { setTestPhone(value); setTestSendStatus(""); }}
-                  />
-                  <button
-                    className="primary-action"
-                    type="button"
-                    onClick={sendWhatsappTest}
-                    disabled={testSending || !configMunicipalityScopeId || !hasCredentials}
-                  >
-                    {testSending ? "Enviando..." : "Enviar teste"}
-                  </button>
-                </div>
-                {testSendStatus && (
-                  <p className={testSendStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{testSendStatus}</p>
-                )}
-              </section>
-
-              <section className="whatsapp-section">
-                <div className="whatsapp-section-header">
-                  <span className="whatsapp-section-label">Contrato e cota</span>
-                </div>
-                <div className="whatsapp-fields-row">
-                  <Field
-                    label="Limite mensal"
-                    value={quotaSettings.plan}
-                    placeholder="Ex: 500"
-                    onChange={(value) => setQuotaSettings((current) => ({ ...current, plan: value }))}
-                  />
-                  <label className="field">
-                    <span>Início</span>
-                    <input
-                      type="date"
-                      value={quotaSettings.contractStart}
-                      onChange={(event) => setQuotaSettings((current) => ({ ...current, contractStart: event.target.value }))}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Fim</span>
-                    <input
-                      type="date"
-                      value={quotaSettings.contractEnd}
-                      onChange={(event) => setQuotaSettings((current) => ({ ...current, contractEnd: event.target.value }))}
-                    />
-                  </label>
-                </div>
-                <div className="whatsapp-save-row">
-                  <button className="primary-action" type="button" onClick={saveQuotaSettings} disabled={!configMunicipalityScopeId}>
-                    Salvar cota
-                  </button>
-                  {quotaSaveStatus && (
-                    <span className={quotaSaveStatus.includes("sucesso") || quotaSaveStatus.includes("zerada") || quotaSaveStatus.includes("encerrado") ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>
-                      {quotaSaveStatus}
-                    </span>
-                  )}
-                </div>
-
-                <div className="whatsapp-section-heading"><span>Ações</span></div>
-                {confirmEndContract ? (
-                  <div className="whatsapp-confirm-block">
-                    <p>Encerrar contrato hoje ({new Date().toLocaleDateString("pt-BR")})?</p>
-                    <div className="whatsapp-confirm-actions">
-                      <button className="whatsapp-btn-danger-solid" type="button" onClick={endContractToday}>Confirmar</button>
-                      <button className="btn-secondary" type="button" onClick={() => setConfirmEndContract(false)}>Cancelar</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="whatsapp-actions-row">
-                    <button
-                      className="whatsapp-btn-danger"
-                      type="button"
-                      onClick={() => setConfirmEndContract(true)}
-                      disabled={!quotaSettings.plan || !configMunicipalityScopeId}
-                    >
-                      Encerrar contrato
-                    </button>
-                    <button
-                      className="whatsapp-btn-warning"
-                      type="button"
-                      onClick={resetQuotaUsed}
-                      disabled={!whatsappQuotaLive?.plan || !configMunicipalityScopeId}
-                    >
-                      Zerar cota do mês
-                    </button>
-                  </div>
-                )}
-                <p className="whatsapp-note">Encerrar bloqueia novos envios imediatamente. Zerar reinicia a contagem deste mês.</p>
-              </section>
-            </div>
-          </div>
-        );
-      })()}
+      {configArea === "integrations" && configTab === "whatsapp" && (
+        <WhatsappIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
+      )}
 
       {configArea === "environment" && configTab === "documents" && (
         <div className="config-panel wide">
