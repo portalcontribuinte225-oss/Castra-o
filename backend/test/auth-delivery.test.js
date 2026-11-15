@@ -18,6 +18,8 @@ function fixture() {
   const dependencies = {
     loadConfig: async (id) => { calls.push(["config", id]); return config; },
     loadWhatsappConfig: async (id) => { calls.push(["whatsappConfig", id]); return { active: true, accessToken: "private", phoneNumberId: "number" }; },
+    loadTemplate: async () => null,
+    markTemplateStatus: async () => {},
     consumeQuota: async (id) => { calls.push(["quota", id]); return { allowed: true }; },
     sendWhatsapp: async (...args) => { calls.push(["whatsapp", ...args]); return { status: DeliveryStatus.SENT }; },
     sendEmail: async (value) => { calls.push(["email", value]); return { status: DeliveryStatus.SENT }; },

@@ -1,6 +1,7 @@
 export const NotificationEvent = Object.freeze({
   SCHEDULE_CONFIRMED: "schedule_confirmed",
   SCHEDULE_CHANGED: "schedule_changed",
+  SCHEDULE_CANCELLED: "schedule_cancelled",
   DOCUMENTS_REVIEWED: "documents_reviewed",
   COMPLETED: "completed",
 });
@@ -20,6 +21,7 @@ export const DeliveryCode = Object.freeze({
   PREPARATION_FAILED: "preparation_failed",
   CHANNEL_DISABLED: "channel_disabled",
   QUOTA_UNAVAILABLE: "quota_unavailable",
+  TEMPLATE_UNAVAILABLE: "template_unavailable",
 });
 export const NOTIFICATIONS_CONFIG_KEY = "castragestao:notifications";
 
@@ -28,11 +30,6 @@ export function buildDefaultNotificationConfig() {
     emailEnabled: true,
     smsEnabled: false,
     emailTemplateId: "",
-    whatsappTemplates: {
-      [NotificationEvent.SCHEDULE_CHANGED]: "",
-      [NotificationEvent.DOCUMENTS_REVIEWED]: "",
-      [NotificationEvent.COMPLETED]: "",
-    },
   };
 }
 
@@ -42,8 +39,6 @@ export function normalizeNotificationConfig(value = {}) {
   return {
     ...defaults,
     emailTemplateId: text(value?.emailTemplateId),
-    whatsappTemplates: Object.fromEntries(Object.keys(defaults.whatsappTemplates)
-      .map((event) => [event, text(value?.whatsappTemplates?.[event])])),
   };
 }
 
@@ -54,22 +49,12 @@ export function validateNotificationConfig(value) {
   if (value.emailTemplateId !== undefined && (typeof value.emailTemplateId !== "string" || value.emailTemplateId.length > 200)) {
     return "Identificador do template de e-mail inválido.";
   }
-  if (value.whatsappTemplates !== undefined && (!value.whatsappTemplates || typeof value.whatsappTemplates !== "object" || Array.isArray(value.whatsappTemplates))) {
-    return "Templates de WhatsApp inválidos.";
-  }
-  if (Object.values(value.whatsappTemplates || {}).some((template) => typeof template !== "string" || template.length > 200)) {
-    return "Identificador do template de WhatsApp inválido.";
-  }
-  if (Object.keys(value.whatsappTemplates || {}).some((event) => !Object.hasOwn(buildDefaultNotificationConfig().whatsappTemplates, event))) {
-    return "Evento de template de WhatsApp inválido.";
-  }
   return "";
 }
 
 export function mergeNotificationConfig(current, patch = {}) {
   const previous = normalizeNotificationConfig(current);
-  return normalizeNotificationConfig({ ...previous, ...patch,
-    whatsappTemplates: { ...previous.whatsappTemplates, ...patch.whatsappTemplates } });
+  return normalizeNotificationConfig({ ...previous, ...patch });
 }
 
 export function validateFollowUp(value, { whatsappEnabled = false } = {}) {

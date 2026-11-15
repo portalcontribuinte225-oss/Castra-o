@@ -154,14 +154,14 @@ test("public notification configuration whitelists fields even for older malform
   const { request, store } = await fixture(t);
   store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, {
     emailEnabled: false, smsEnabled: true, emailTemplateId: "template_notifications", accessToken: "must-not-be-public",
-    whatsappTemplates: { completed: "finished", accessToken: "must-not-be-public" },
+    whatsappTemplates: { completed: "legacy-name", accessToken: "must-not-be-public" },
   });
   const response = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}?municipalityId=${MUNICIPALITY_ID}`);
   assert.equal(response.status, 200);
   assert.equal(response.body.emailEnabled, true);
   assert.equal(response.body.smsEnabled, false);
   assert.equal(response.body.emailTemplateId, "template_notifications");
-  assert.equal(response.body.whatsappTemplates.completed, "finished");
+  assert.equal(Object.hasOwn(response.body, "whatsappTemplates"), false);
   assert.equal(JSON.stringify(response.body).includes("must-not-be-public"), false);
 });
 
@@ -209,8 +209,6 @@ test("notification configuration rejects disabled email, enabled SMS and malform
   for (const body of [
     { emailEnabled: false }, { emailEnabled: "true" }, { smsEnabled: true },
     { emailTemplateId: {} }, { emailTemplateId: "x".repeat(201) },
-    { whatsappTemplates: [] }, { whatsappTemplates: { completed: false } },
-    { whatsappTemplates: { unrecognized_event: "not_a_supported_event" } },
   ]) {
     assert.equal((await request(`/config/${NOTIFICATIONS_CONFIG_KEY}`, { method: "PUT", user: ADMIN, body })).status, 400);
   }
@@ -311,7 +309,7 @@ test("quota setting and reset transactions rollback failed writes", async (t) =>
 test("WhatsApp test requires valid phone and does not expose provider error data", async (t) => {
   const { request, store } = await fixture(t);
   assert.equal((await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { phone: "123" } })).status, 400);
-  store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: true, accessToken: "private-token", phoneNumberId: "12345", confirmationTemplate: "test_template" });
+  store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: true, accessToken: "private-token", phoneNumberId: "12345" });
   globalThis.fetch = async () => ({ ok: false, status: 400, statusText: "refused", json: async () => ({ error: { message: "private-provider-details", code: 400 } }) });
   const response = await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { phone: "48999991234" } });
   assert.equal(response.status, 200);
@@ -334,13 +332,12 @@ test("channel configuration saves merge into the stored value under a transactio
   assert.equal(auth.body.value.emailTemplates.password_reset, "reset_email");
   assert.equal(auth.body.value.whatsappTemplates.initial_password, "welcome_whatsapp");
 
-  store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, { emailTemplateId: "notify_email", whatsappTemplates: { completed: "done" } });
+  store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, { emailTemplateId: "notify_email" });
   const notifications = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}`, {
-    user: ADMIN, method: "PUT", body: { whatsappTemplates: { schedule_changed: "changed" } },
+    user: ADMIN, method: "PUT", body: {},
   });
   assert.equal(notifications.status, 200);
-  assert.equal(notifications.body.value.emailTemplateId, "notify_email");
-  assert.deepEqual(notifications.body.value.whatsappTemplates, { ...buildDefaultNotificationConfig().whatsappTemplates, completed: "done", schedule_changed: "changed" });
+  assert.deepEqual(notifications.body.value, { ...buildDefaultNotificationConfig(), emailTemplateId: "notify_email" });
 
   const order = calls.map(({ sql }) => sql.match(/^(?:BEGIN|COMMIT)$|pg_advisory_xact_lock|FOR UPDATE|INSERT INTO config/)?.[0]).filter(Boolean);
   const write = ["BEGIN", "pg_advisory_xact_lock", "FOR UPDATE", "INSERT INTO config", "COMMIT"];

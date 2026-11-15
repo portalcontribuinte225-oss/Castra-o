@@ -2,7 +2,9 @@ import { pool } from "../../db/index.js";
 import { AuthPurpose, AUTH_DELIVERY_CONFIG_KEY, normalizeAuthDeliveryConfig } from "../../../../shared/auth-contract.js";
 import { NotificationChannel, DeliveryStatus, DeliveryCode } from "../../../../shared/notification-contract.js";
 import { sendEmailTemplate } from "../email.js";
+import { WHATSAPP_APPROVED_STATUS, WHATSAPP_DEFAULT_LANGUAGE } from "../../../../shared/whatsapp-binding-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
+import { loadAccessTemplate, markCatalogTemplateStatus } from "../whatsapp-catalog.js";
 import { checkAndConsumeQuota } from "../whatsappQuota.js";
 import { deliveryFailure, knownDeliveryCode } from "../notifications/delivery-result.js";
 import { isGlobalUser } from "../../tenant.js";
@@ -63,9 +65,13 @@ async function tryWhatsapp(input, config, dependencies) {
   if (runtime.provider !== "cloud_api" || !runtime.accessToken || !runtime.phoneNumberId || !templateName) {
     return unavailable(input.purpose, channel, DeliveryCode.NOT_CONFIGURED);
   }
+  const template = await dependencies.loadTemplate(input.municipalityId, templateName);
+  if (template && template.status !== WHATSAPP_APPROVED_STATUS) return unavailable(input.purpose, channel, DeliveryCode.TEMPLATE_UNAVAILABLE);
   if (!(await dependencies.consumeQuota(input.municipalityId)).allowed) return unavailable(input.purpose, channel, DeliveryCode.QUOTA_UNAVAILABLE);
   if (isRecoveryExpired(input)) return unavailable(input.purpose, channel, DeliveryCode.PREPARATION_FAILED);
-  const sent = await dependencies.sendWhatsapp({ ...runtime, templateName }, input.phone, whatsappComponents(input));
+  const languageCode = template?.language || WHATSAPP_DEFAULT_LANGUAGE;
+  const sent = await dependencies.sendWhatsapp({ ...runtime, templateName, languageCode }, input.phone, whatsappComponents(input));
+  if (sent?.templateStatus) await dependencies.markTemplateStatus(input.municipalityId, templateName, languageCode, sent.templateStatus).catch(() => {});
   return safeResult(input.purpose, channel, sent);
 }
 
@@ -83,6 +89,7 @@ async function tryEmail(input, config, dependencies) {
 export async function deliverAuthMessage(input, overrides = {}) {
   const dependencies = { loadConfig: loadAuthDeliveryConfig, loadWhatsappConfig: getMunicipalityWhatsappConfig,
     consumeQuota: checkAndConsumeQuota, sendEmail: sendEmailTemplate, sendWhatsapp: sendWhatsappTemplateComponents,
+    loadTemplate: loadAccessTemplate, markTemplateStatus: markCatalogTemplateStatus,
     sendSms: sendSmsRecoveryCode, env: process.env, ...overrides };
   const { purpose } = input;
   const globalStaffReset = purpose === AuthPurpose.PASSWORD_RESET && !input.municipalityId && isGlobalUser(input.user);

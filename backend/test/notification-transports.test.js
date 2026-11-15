@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createEmailSender, sendNotificationEmail } from "../src/services/email.js";
-import { sendCloudApiTemplate } from "../src/services/whatsapp.js";
+import { sendWhatsappTemplateComponents } from "../src/services/whatsapp.js";
+import { buildBodyComponents } from "../src/services/notifications/whatsapp-template-parameters.js";
 import { DeliveryStatus, DeliveryCode, NotificationEvent } from "../../shared/notification-contract.js";
 
 const emailEnv = { EMAILJS_SERVICE_ID: "test-service", EMAILJS_PUBLIC_KEY: "test-public", EMAILJS_PRIVATE_KEY: "test-private" };
@@ -96,14 +97,18 @@ test("document notifications report aggregate status without exposing documents"
   });
 });
 
-test("WhatsApp templates cannot resolve CPF, contacts or arbitrary fields", async () => {
-  const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation", templateVariables: ["protocol", "cpf", "internal_token", "phone", "privateData"] };
-  const result = await sendCloudApiTemplate(config, {
+test("WhatsApp parameters come only from mapped fields and never from CPF, contacts or arbitrary request data", async () => {
+  const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation", languageCode: "pt_BR" };
+  const binding = { mapping: [{ kind: "field", value: "protocol" }, { kind: "field", value: "cpf" }, { kind: "field", value: "phone" }, { kind: "text", value: "fixed" }] };
+  const components = buildBodyComponents(binding, {
     phone: "(48) 99999-9999", protocol: "1/2026", cpf: "sensitive-cpf", internal_token: "secret-key", privateData: "sensitive-data",
-  }, { fetchImpl: async (_url, options) => {
+  });
+  const result = await sendWhatsappTemplateComponents(config, "(48) 99999-9999", components, { fetchImpl: async (_url, options) => {
     const body = JSON.parse(options.body);
     assert.equal(body.to, "5548999999999");
-    assert.deepEqual(body.template.components[0].parameters.map(({ text }) => text), ["1/2026", "-", "-", "-", "-"]);
+    assert.equal(body.template.language.code, "pt_BR");
+    assert.deepEqual(body.template.components[0].parameters.map(({ text }) => text), ["1/2026", "não informado", "não informado", "fixed"]);
+    assert.equal(options.body.includes("sensitive"), false);
     assert.ok(options.signal instanceof AbortSignal);
     return { ok: true };
   } });
@@ -111,9 +116,27 @@ test("WhatsApp templates cannot resolve CPF, contacts or arbitrary fields", asyn
 });
 
 test("WhatsApp refuses missing recipient before network and sanitizes network errors", async () => {
-  const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation" };
-  assert.equal((await sendCloudApiTemplate(config, { phone: "123" }, { fetchImpl: async () => assert.fail("no request") })).status, DeliveryStatus.SKIPPED);
-  const result = await sendCloudApiTemplate(config, { phone: "48999999999" }, { fetchImpl: async () => { throw new Error("secret-token private-number"); } });
+  const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation", languageCode: "pt_BR" };
+  assert.equal((await sendWhatsappTemplateComponents(config, "123", [], { fetchImpl: async () => assert.fail("no request") })).status, DeliveryStatus.SKIPPED);
+  const result = await sendWhatsappTemplateComponents(config, "48999999999", [], { fetchImpl: async () => { throw new Error("secret-token private-number"); } });
   assert.equal(result.status, DeliveryStatus.FAILED);
   assert.equal(JSON.stringify(result).includes("secret-token"), false);
+});
+
+test("WhatsApp maps provider template errors to a safe code and reports the template status", async () => {
+  const config = { accessToken: "test-token", phoneNumberId: "test-number", templateName: "confirmation", languageCode: "pt_BR" };
+  for (const [code, templateStatus] of [[132015, "PAUSED"], [132016, "DISABLED"], [132001, "NOT_FOUND"], [132000, ""]]) {
+    const result = await sendWhatsappTemplateComponents(config, "48999999999", [], {
+      fetchImpl: async () => ({ ok: false, status: 400, json: async () => ({ error: { code, message: "private-provider-details" } }) }),
+    });
+    assert.equal(result.status, DeliveryStatus.FAILED);
+    assert.equal(result.code, DeliveryCode.TEMPLATE_UNAVAILABLE);
+    assert.equal(result.templateStatus, templateStatus);
+    assert.equal(JSON.stringify(result).includes("private-provider-details"), false);
+  }
+  const other = await sendWhatsappTemplateComponents(config, "48999999999", [], {
+    fetchImpl: async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 100 } }) }),
+  });
+  assert.equal(other.code, DeliveryCode.PROVIDER_REJECTED);
+  assert.equal(other.templateStatus, undefined);
 });

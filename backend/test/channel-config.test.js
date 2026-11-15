@@ -33,13 +33,11 @@ test("auth delivery merge starts from defaults and drops unknown purposes and ch
   assert.deepEqual(mergeAuthDeliveryConfig(null, undefined), buildDefaultAuthDeliveryConfig());
 });
 
-test("notification merge keeps omitted fields and merges WhatsApp templates per event", () => {
+test("notification merge keeps omitted fields and drops the retired WhatsApp templates", () => {
   const stored = { emailTemplateId: "notify_email", whatsappTemplates: { completed: "done" } };
-  const merged = mergeNotificationConfig(stored, { whatsappTemplates: { schedule_changed: "changed" } });
-  assert.equal(merged.emailTemplateId, "notify_email");
-  assert.equal(merged.whatsappTemplates.completed, "done");
-  assert.equal(merged.whatsappTemplates.schedule_changed, "changed");
-  assert.equal(mergeNotificationConfig(stored, { emailTemplateId: "other" }).whatsappTemplates.completed, "done");
+  assert.deepEqual(mergeNotificationConfig(stored, {}), { ...buildDefaultNotificationConfig(), emailTemplateId: "notify_email" });
+  assert.equal(mergeNotificationConfig(stored, { emailTemplateId: "other" }).emailTemplateId, "other");
+  assert.equal(Object.hasOwn(mergeNotificationConfig(stored, { whatsappTemplates: { completed: "x" } }), "whatsappTemplates"), false);
 });
 
 test("notification merge keeps e-mail on, SMS off and strips untrusted fields", () => {
@@ -66,11 +64,10 @@ test("channel locks are scoped by key and municipality", async () => {
 
 test("channel merge reads the municipal row with a row lock and merges the right contract", async () => {
   const notifications = fakeDatabase({ emailTemplateId: "notify_email" });
-  const savedNotifications = await mergeChannelConfig(notifications, NOTIFICATIONS_CONFIG_KEY, MUNICIPALITY_ID, { whatsappTemplates: { completed: "done" } });
+  const savedNotifications = await mergeChannelConfig(notifications, NOTIFICATIONS_CONFIG_KEY, MUNICIPALITY_ID, {});
   assert.match(notifications.calls[0].sql, /FOR UPDATE/);
   assert.deepEqual(notifications.calls[0].values, [NOTIFICATIONS_CONFIG_KEY, MUNICIPALITY_ID]);
   assert.equal(savedNotifications.emailTemplateId, "notify_email");
-  assert.equal(savedNotifications.whatsappTemplates.completed, "done");
 
   const auth = fakeDatabase({ whatsappTemplates: { initial_password: "welcome_whatsapp" } });
   const savedAuth = await mergeChannelConfig(auth, AUTH_DELIVERY_CONFIG_KEY, MUNICIPALITY_ID, { emailTemplates: { initial_password: "welcome_email" } });

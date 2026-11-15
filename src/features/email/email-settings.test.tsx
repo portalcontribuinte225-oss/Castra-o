@@ -21,7 +21,7 @@ const complete = { serviceConfigured: true, publicKeyConfigured: true, privateKe
 beforeEach(() => {
   vi.mocked(useEmailStatus).mockReturnValue({ status: complete, loading: false, error: "", retry });
   vi.mocked(useNotificationSettings).mockReturnValue({ ...settingsBase,
-    value: normalizeNotificationConfig({ emailTemplateId: "notify_email", whatsappTemplates: { completed: "done" } }) });
+    value: normalizeNotificationConfig({ emailTemplateId: "notify_email" }) });
   vi.mocked(useAuthDeliverySettings).mockReturnValue({ ...settingsBase, value: normalizeAuthDeliveryConfig({
     emailTemplates: { password_reset: "reset_email" }, whatsappTemplates: { verify_phone: "phone_whatsapp" } }) });
 });
@@ -59,11 +59,10 @@ describe("e-mail settings tab", () => {
 });
 
 describe("WhatsApp settings tab keeps only WhatsApp fields", () => {
-  it("shows WhatsApp events and templates but no e-mail template fields", () => {
-    const notifications = renderToStaticMarkup(<NotificationSettings municipalityId="municipality-a" channel="whatsapp" />);
-    expect(notifications).toContain("WhatsApp: Mudança de agendamento");
-    expect(notifications).not.toContain("Template de notificações por e-mail");
-    expect(notifications).not.toContain("notify_email");
+  it("shows access templates for WhatsApp only, while notification settings no longer carry WhatsApp templates", () => {
+    const notifications = renderToStaticMarkup(<NotificationSettings municipalityId="municipality-a" />);
+    expect(notifications).toContain("Template de notificações por e-mail");
+    expect(notifications).not.toContain("WhatsApp:");
     const access = renderToStaticMarkup(<AuthDeliverySettings municipalityId="municipality-a" channel="whatsappTemplates" />);
     expect(access).toContain("Confirmação de telefone");
     expect(access).toContain("Acompanhamento de solicitação");
@@ -75,9 +74,8 @@ describe("WhatsApp settings tab keeps only WhatsApp fields", () => {
 
 describe("channel save payloads", () => {
   it("send only the fields owned by the channel so the other channel is never rewritten", () => {
-    const notifications = normalizeNotificationConfig({ emailTemplateId: "notify_email", whatsappTemplates: { completed: "done" } });
-    expect(notificationChannelPatch(notifications, "email")).toEqual({ emailTemplateId: "notify_email" });
-    expect(Object.keys(notificationChannelPatch(notifications, "whatsapp"))).toEqual(["whatsappTemplates"]);
+    const notifications = normalizeNotificationConfig({ emailTemplateId: "notify_email" });
+    expect(notificationChannelPatch(notifications)).toEqual({ emailTemplateId: "notify_email" });
     const access = normalizeAuthDeliveryConfig({ emailTemplates: { password_reset: "reset_email" } });
     expect(Object.keys(authChannelPatch(access, "emailTemplates"))).toEqual(["emailTemplates"]);
     expect(authChannelPatch(access, "whatsappTemplates")).toEqual({ whatsappTemplates: buildDefaultAuthDeliveryConfig().whatsappTemplates });

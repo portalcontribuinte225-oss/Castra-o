@@ -35,6 +35,7 @@ export function selectNotificationEvents(before, after) {
     if (before.status !== "AGENDADA") events.push(NotificationEvent.SCHEDULE_CONFIRMED);
     else if (scheduleSignature(before) !== scheduleSignature(after)) events.push(NotificationEvent.SCHEDULE_CHANGED);
   }
+  if (before.status === "AGENDADA" && after.status === "CANCELADA") events.push(NotificationEvent.SCHEDULE_CANCELLED);
   if (hasDocumentDecisionChange(before, after)) events.push(NotificationEvent.DOCUMENTS_REVIEWED);
   if (after.status === "REALIZADA" && before.status !== "REALIZADA") events.push(NotificationEvent.COMPLETED);
   return events;

@@ -2,14 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { NOTIFICATIONS_CONFIG_KEY, normalizeNotificationConfig } from "../../../shared/notification-contract.js";
 
-export type NotificationChannel = "email" | "whatsapp";
-
-// Each channel tab saves only its own fields; the server merges them into the stored value.
-export function notificationChannelPatch(value: ReturnType<typeof normalizeNotificationConfig>, channel: NotificationChannel) {
-  return channel === "email" ? { emailTemplateId: value.emailTemplateId } : { whatsappTemplates: value.whatsappTemplates };
+// The tab saves only its own fields; the server merges them into the stored value.
+export function notificationChannelPatch(value: ReturnType<typeof normalizeNotificationConfig>) {
+  return { emailTemplateId: value.emailTemplateId };
 }
 
-export function useNotificationSettings(municipalityId: string, channel: NotificationChannel) {
+export function useNotificationSettings(municipalityId: string) {
   const [attempt, setAttempt] = useState(0);
   const [value, setValue] = useState(() => normalizeNotificationConfig());
   const [loadedId, setLoadedId] = useState("");
@@ -46,7 +44,7 @@ export function useNotificationSettings(municipalityId: string, channel: Notific
     setError("");
     setSuccess(false);
     try {
-      const saved = await api.setConfig(NOTIFICATIONS_CONFIG_KEY, notificationChannelPatch(normalizeNotificationConfig(value), channel), savedId);
+      const saved = await api.setConfig(NOTIFICATIONS_CONFIG_KEY, notificationChannelPatch(normalizeNotificationConfig(value)), savedId);
       if (activeId.current !== savedId) return;
       setValue(normalizeNotificationConfig(saved?.value));
       setSuccess(true);

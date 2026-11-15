@@ -13,6 +13,7 @@ const deliveryCodeLabels = Object.freeze({
   [DeliveryCode.PREPARATION_FAILED]: "Não foi possível preparar o envio da mensagem.",
   [DeliveryCode.CHANNEL_DISABLED]: "Canal desativado para o município.",
   [DeliveryCode.QUOTA_UNAVAILABLE]: "Envio indisponível por contrato ou cota municipal.",
+  [DeliveryCode.TEMPLATE_UNAVAILABLE]: "Template do WhatsApp indisponível: não está aprovado, foi pausado, desativado ou alterado.",
 });
 
 export function knownDeliveryCode(code) {

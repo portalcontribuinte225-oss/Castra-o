@@ -15,6 +15,7 @@ import aiRoutes from "./routes/ai.js";
 import municipalityRoutes from "./routes/municipalities.js";
 import auditRoutes from "./routes/audit.js";
 import whatsappRoutes from "./routes/whatsapp.js";
+import whatsappTemplateRoutes from "./routes/whatsapp-templates.js";
 import smsRoutes from "./routes/sms.js";
 import requestTrackingRoutes from "./routes/request-tracking.js";
 
@@ -38,6 +39,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/municipalities", municipalityRoutes);
 app.use("/api/audit", auditRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
+app.use("/api/whatsapp", whatsappTemplateRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/request-tracking", requestTrackingRoutes);
 

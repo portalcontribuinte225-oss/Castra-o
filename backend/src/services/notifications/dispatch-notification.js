@@ -1,8 +1,12 @@
 import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, normalizeNotificationConfig } from "../../../../shared/notification-contract.js";
-import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendCloudApiTemplate, toE164Brazil } from "../whatsapp.js";
+import { WHATSAPP_APPROVED_STATUS } from "../../../../shared/whatsapp-binding-contract.js";
+import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
+import { loadEventBinding } from "../whatsapp-bindings.js";
+import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
 import { checkAndConsumeQuota } from "../whatsappQuota.js";
 import { sendNotificationEmail } from "../email.js";
 import { buildNotificationMessage } from "./notification-message.js";
+import { buildBodyComponents } from "./whatsapp-template-parameters.js";
 import { deliveryFailure, knownDeliveryCode } from "./delivery-result.js";
 
 function result(event, channel, status, reason = "") {
@@ -19,7 +23,20 @@ function sanitizedTransportResult(event, channel, value) {
     : "O provedor não aceitou a mensagem ou o prazo de envio foi excedido.");
 }
 
-async function tryWhatsapp({ event, request, config, legacy, phone }, dependencies) {
+// A template known to the catalog is sent only while approved and with the variables the binding maps.
+function templateIsUsable(template, binding) {
+  return !template || (template.status === WHATSAPP_APPROVED_STATUS && template.variableCount === binding.mapping.length);
+}
+
+async function rememberTemplateStatus(dependencies, request, binding, status) {
+  try {
+    await dependencies.markTemplateStatus(request.municipality_id, binding.templateName, binding.languageCode, status);
+  } catch {
+    // The send result is already known; the next synchronization corrects the cache.
+  }
+}
+
+async function tryWhatsapp({ event, request, legacy, phone }, dependencies) {
   const channel = NotificationChannel.WHATSAPP;
   const raw = await dependencies.loadWhatsappConfig(request.municipality_id);
   if (legacy ? raw.active === false : raw.active !== true) {
@@ -29,19 +46,22 @@ async function tryWhatsapp({ event, request, config, legacy, phone }, dependenci
     return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.INVALID_RECIPIENT) };
   }
   const runtime = getRuntimeConfig(raw);
-  const confirmation = event === NotificationEvent.SCHEDULE_CONFIRMED;
-  const templateName = confirmation || legacy ? runtime.templateName : config.whatsappTemplates[event];
-  if (runtime.provider !== "cloud_api" || !runtime.accessToken || !runtime.phoneNumberId || !templateName) {
+  if (runtime.provider !== "cloud_api" || !runtime.accessToken || !runtime.phoneNumberId) {
     return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) };
   }
+  const { binding, template } = await dependencies.loadBinding(request.municipality_id, event);
+  if (!binding) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) };
+  if (!templateIsUsable(template, binding)) {
+    return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.TEMPLATE_UNAVAILABLE) };
+  }
+  const content = buildNotificationMessage(event, request);
+  const components = buildBodyComponents(binding, { ...request, notification_message: content.message });
   const quota = await dependencies.consumeQuota(request.municipality_id);
   if (!quota.allowed) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE) };
-  const content = buildNotificationMessage(event, request);
-  const transport = await dependencies.sendWhatsapp({
-    ...runtime,
-    templateName,
-    templateVariables: confirmation || legacy ? runtime.templateVariables : ["protocol", "notification_message"],
-  }, { ...request, phone, notification_message: content.message });
+  const transport = await dependencies.sendWhatsapp(
+    { ...runtime, templateName: binding.templateName, languageCode: binding.languageCode }, phone, components,
+  );
+  if (transport?.templateStatus) await rememberTemplateStatus(dependencies, request, binding, transport.templateStatus);
   return sanitizedTransportResult(event, channel, transport);
 }
 
@@ -54,15 +74,17 @@ export async function dispatchNotification({ event, request, config: inputConfig
   if (!legacy && followUp?.enabled !== true) return [];
   const dependencies = {
     loadWhatsappConfig: getMunicipalityWhatsappConfig,
+    loadBinding: loadEventBinding,
+    markTemplateStatus: markCatalogTemplateStatus,
     consumeQuota: checkAndConsumeQuota,
-    sendWhatsapp: sendCloudApiTemplate,
+    sendWhatsapp: sendWhatsappTemplateComponents,
     sendEmail: sendNotificationEmail,
     ...overrides,
   };
   const config = normalizeNotificationConfig(inputConfig);
   const results = [];
   try {
-    results.push(await tryWhatsapp({ event, request, config, legacy, phone: legacy ? request.phone : followUp.phone }, dependencies));
+    results.push(await tryWhatsapp({ event, request, legacy, phone: legacy ? request.phone : followUp.phone }, dependencies));
   } catch {
     results.push({ event, channel: NotificationChannel.WHATSAPP, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) });
   }

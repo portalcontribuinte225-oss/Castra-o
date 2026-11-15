@@ -83,7 +83,6 @@ import {
   initialSpecies,
   initialTeams,
   initialWhatsappSettings,
-  WHATSAPP_TEMPLATE_VARS,
   isPastScheduleDay,
   mergeTags,
   normalizeDocumentType,
@@ -171,7 +170,7 @@ import { buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./featur
 import { FollowUpSummary } from "./features/request-follow-up/follow-up-summary";
 import type { FollowUpValue } from "./features/request-follow-up/follow-up";
 import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-policy";
-import { NotificationSettings } from "./features/notifications/notification-settings";
+import { WhatsappTemplatesPanel } from "./features/whatsapp-integration/whatsapp-templates-panel";
 import type { NotificationResult } from "./features/notifications/notification-results";
 import { configsAllowStep } from "../shared/notification-contract.js";
 import { useSession } from "./features/tutor-access/use-session";
@@ -189,7 +188,7 @@ import { PasswordChangeForm } from "./features/tutor-access/password-change-form
 import { TutorArea } from "./features/tutor-access/tutor-area";
 import { EnrollmentNotice } from "./features/tutor-access/enrollment-notice";
 import { AssistedRecovery } from "./features/tutor-access/assisted-recovery";
-import { AuthDeliverySettings } from "./features/tutor-access/auth-delivery-settings";
+
 import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./features/tutor-access/submission-envelope";
 import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
 import { validateTutorName } from "./features/tutor-access/tutor-identity";
@@ -6642,11 +6641,7 @@ function ConfigView({
       active: hasCredentials ? (whatsappSettings.active !== false) : false,
       provider: whatsappSettings.provider || "cloud_api",
       phoneNumberId: whatsappSettings.phoneNumberId || "",
-      confirmationTemplate: whatsappSettings.confirmationTemplate || "confirmacao_agenda_castracao",
-      languageCode: whatsappSettings.languageCode || "pt_BR",
-      templateVariables: Array.isArray(whatsappSettings.templateVariables)
-        ? whatsappSettings.templateVariables.map((variable) => String(variable || "").trim()).filter(Boolean)
-        : initialWhatsappSettings.templateVariables,
+      wabaId: whatsappSettings.wabaId || "",
       accessToken: whatsappSettings.accessToken || "",
     };
     setWhatsappSaveStatus("Salvando configuração...");
@@ -8479,9 +8474,7 @@ function ConfigView({
       )}
 
       {configArea === "integrations" && configTab === "whatsapp" && (() => {
-        const templateVars: string[] = Array.isArray(whatsappSettings.templateVariables)
-          ? whatsappSettings.templateVariables
-          : initialWhatsappSettings.templateVariables;
+
         const hasCredentials = Boolean(
           (whatsappSettings.accessToken || whatsappSettings.hasAccessToken) && whatsappSettings.phoneNumberId,
         );
@@ -8493,8 +8486,7 @@ function ConfigView({
         return (
           <div className="config-panel wide">
             <PanelHeader title="Canais de notificação por município" />
-            <NotificationSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} channel="whatsapp" readOnly={!canManageAiSettings(currentUser?.role)} />
-            <AuthDeliverySettings key={`auth:${configMunicipalityScopeId}`} municipalityId={configMunicipalityScopeId} channel="whatsappTemplates" readOnly={!canManageAiSettings(currentUser?.role)} />
+            <WhatsappTemplatesPanel key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
 
             {configMunicipalityScopeId && (
               <div className="whatsapp-statusbar">
@@ -8543,10 +8535,10 @@ function ConfigView({
                     </select>
                   </label>
                   <Field
-                    label="Idioma"
-                    value={whatsappSettings.languageCode || ""}
-                    placeholder="pt_BR"
-                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, languageCode: value }))}
+                    label="ID da conta do WhatsApp Business (WABA)"
+                    value={whatsappSettings.wabaId || ""}
+                    placeholder="WhatsApp Business Account ID da Meta"
+                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, wabaId: value }))}
                   />
                 </div>
                 <div className="whatsapp-fields-row">
@@ -8556,38 +8548,9 @@ function ConfigView({
                     placeholder="Phone Number ID da Meta"
                     onChange={(value) => setWhatsappSettings((current) => ({ ...current, phoneNumberId: value }))}
                   />
-                  <Field
-                    label="Template de confirmação"
-                    value={whatsappSettings.confirmationTemplate || ""}
-                    placeholder="confirmacao_agenda_castracao"
-                    onChange={(value) => setWhatsappSettings((current) => ({ ...current, confirmationTemplate: value }))}
-                  />
+
                 </div>
-                <div className="field">
-                  <span>Variáveis do template</span>
-                  <div className="whatsapp-vars-chips">
-                    {WHATSAPP_TEMPLATE_VARS.map(({ key, label }) => {
-                      const idx = templateVars.indexOf(key);
-                      const selected = idx >= 0;
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          className={`var-chip${selected ? " var-chip--on" : ""}`}
-                          onClick={() => {
-                            const next = selected
-                              ? templateVars.filter((v) => v !== key)
-                              : [...templateVars, key];
-                            setWhatsappSettings((c) => ({ ...c, templateVariables: next }));
-                          }}
-                        >
-                          {selected && <code className="var-chip-pos">{"{{" + (idx + 1) + "}}"}</code>}
-                          {label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+
                 <label className="field">
                   <span>Token de acesso</span>
                   <input

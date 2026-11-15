@@ -3,7 +3,12 @@ import { pool } from "../db/index.js";
 import { auth, requireMunicipalAdmin, requireRole } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
 import { isValidPhone } from "../utils.js";
-import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendCloudApiTemplate } from "../services/whatsapp.js";
+import { NotificationEvent } from "../../../shared/notification-contract.js";
+import { WHATSAPP_APPROVED_STATUS } from "../../../shared/whatsapp-binding-contract.js";
+import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents } from "../services/whatsapp.js";
+import { loadEventBinding } from "../services/whatsapp-bindings.js";
+import { markCatalogTemplateStatus } from "../services/whatsapp-catalog.js";
+import { buildBodyComponents, previewRequest } from "../services/notifications/whatsapp-template-parameters.js";
 import { getQuotaStatus } from "../services/whatsappQuota.js";
 
 const router = Router();
@@ -63,19 +68,25 @@ router.post("/test", auth, requireMunicipalAdmin, async (req, res) => {
     if (rawConfig.active === false) {
       return res.json({ status: "skipped", reason: "WhatsApp desativado para o município" });
     }
-    if (!config.accessToken || !config.phoneNumberId || !config.templateName) {
-      return res.json({ status: "skipped", reason: "Credenciais ou template do WhatsApp incompletos" });
+    if (!config.accessToken || !config.phoneNumberId) {
+      return res.json({ status: "skipped", reason: "Credenciais do WhatsApp incompletas" });
     }
-    const today = new Date().toLocaleDateString("pt-BR");
-    const result = await sendCloudApiTemplate(config, {
+    const { binding, template } = await loadEventBinding(mId, NotificationEvent.SCHEDULE_CONFIRMED);
+    if (!binding) {
+      return res.json({ status: "skipped", reason: "Vincule um template ao evento de agendamento confirmado antes de testar." });
+    }
+    if (template && template.status !== WHATSAPP_APPROVED_STATUS) {
+      return res.json({ status: "skipped", reason: "O template vinculado ao agendamento confirmado não está aprovado." });
+    }
+    const result = await sendWhatsappTemplateComponents(
+      { ...config, templateName: binding.templateName, languageCode: binding.languageCode },
       phone,
-      tutor_name: "Teste",
-      schedule_date: `${today} (mensagem de teste)`,
-      municipality_id: mId,
-    });
+      buildBodyComponents(binding, { ...previewRequest(), tutor_name: "Teste" }),
+    );
+    if (result.templateStatus) await markCatalogTemplateStatus(mId, binding.templateName, binding.languageCode, result.templateStatus).catch(() => {});
     res.json({
       status: result.status,
-      reason: result.status === "failed" ? "O provedor recusou o envio de teste." : result.reason,
+      reason: result.status === "failed" && !result.templateStatus && result.code !== "template_unavailable" ? "O provedor recusou o envio de teste." : result.reason,
       providerMessageId: result.providerMessageId || "",
     });
   } catch (err) {

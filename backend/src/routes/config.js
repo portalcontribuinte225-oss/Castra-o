@@ -4,6 +4,7 @@ import { auth, optionalAuth, requireMunicipalAdmin } from "../middleware/auth.js
 import { isGlobalUser, isMunicipalAdmin, isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
+import { prepareWhatsappCredentials, publicWhatsappConfig } from "../services/whatsapp-credentials.js";
 import { testProviderKey } from "./ai.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
 import {
@@ -199,7 +200,7 @@ router.get("/:key", optionalAuth, async (req, res) => {
       const buildDefault = DEFAULT_CONFIG_VALUE_BUILDERS[key];
       return res.json(buildDefault ? buildDefault() : null);
     }
-    res.json(publicConfigValue(key, rows[0].value));
+    res.json(publicConfigValue(key, rows[0].value, req.user));
   } catch (err) {
     if (key === SMS_CONFIG_KEY) return res.set("Cache-Control", "no-store").status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível consultar a configuração de SMS." });
     res.status(500).json({ error: err.message });
@@ -318,7 +319,7 @@ router.put("/:key", auth, async (req, res) => {
       await client.query("COMMIT");
       writeTransaction = false;
     }
-    res.json({ ...rows[0], value: publicConfigValue(key, rows[0].value) });
+    res.json({ ...rows[0], value: publicConfigValue(key, rows[0].value, req.user) });
   } catch (err) {
     if (writeTransaction) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar a configuração." });
@@ -329,15 +330,12 @@ router.put("/:key", auth, async (req, res) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
-function publicConfigValue(key, value = {}) {
+function publicConfigValue(key, value = {}, viewer = null) {
   if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
   if (key === AUTH_DELIVERY_CONFIG_KEY) return normalizeAuthDeliveryConfig(value);
   if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
-  if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
-  if (key === "whatsapp") {
-    const accessToken = String(value.accessToken || "").trim();
-    return { ...value, accessToken: "", hasAccessToken: Boolean(accessToken) };
-  }
+  if (key === "whatsapp") return publicWhatsappConfig(value, Boolean(viewer) && isInternalUser(viewer));
+  if (!["ai", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
   if (key === "whatsapp_quota") return value;
   const apiKey = String(value.apiKey || "").trim();
   return { ...value, apiKey: "", hasApiKey: Boolean(apiKey) };
@@ -354,10 +352,7 @@ async function prepareConfigValue(key, value = {}, municipalityId = null, client
   const db = client || pool;
   const { rows } = await db.query(query.text, query.values);
   const current = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
-  if (key === "whatsapp") {
-    const nextAccessToken = String(value.accessToken || "").trim();
-    return { ...current, ...value, accessToken: nextAccessToken || current.accessToken || "" };
-  }
+  if (key === "whatsapp") return prepareWhatsappCredentials(current, value);
   if (key === "whatsapp_quota") {
     return {
       plan: Number(value.plan) || current.plan || 0,

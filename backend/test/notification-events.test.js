@@ -10,6 +10,13 @@ test("confirmation and completion only notify on transitions", () => {
   assert.deepEqual(selectNotificationEvents({ status: "REALIZADA" }, { status: "REALIZADA", notes: "updated" }), []);
 });
 
+test("cancelling a scheduled request notifies once, but cancelling an unscheduled one does not", () => {
+  assert.deepEqual(selectNotificationEvents({ status: "AGENDADA" }, { status: "CANCELADA" }), [NotificationEvent.SCHEDULE_CANCELLED]);
+  assert.deepEqual(selectNotificationEvents({ status: "CANCELADA" }, { status: "CANCELADA", notes: "updated" }), []);
+  assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, { status: "CANCELADA" }), []);
+  assert.deepEqual(selectNotificationEvents({ status: "REALIZADA" }, { status: "CANCELADA" }), []);
+});
+
 test("real schedule changes include date, time and place, but not assignment or notes", () => {
   const scheduled = { status: "AGENDADA", schedule_date: "2026-11-20", workflow_data: { scheduleTime: "08:00" } };
   for (const change of [{ schedule_date: "2026-11-21" }, { workflow_data: { scheduleTime: "09:00" } }, { schedule_location_name: "New venue" }, { schedule_address: "New address" }]) {

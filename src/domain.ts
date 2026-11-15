@@ -126,27 +126,9 @@ export const initialWhatsappSettings: AnyRecord = {
   active: false,
   provider: "cloud_api",
   phoneNumberId: "",
+  wabaId: "",
   accessToken: "",
-  confirmationTemplate: "confirmacao_agenda_castracao",
-  languageCode: "pt_BR",
-  templateVariables: [
-    "tutor_name",
-    "schedule_date",
-  ],
 };
-
-export const WHATSAPP_TEMPLATE_VARS = [
-  { key: "tutor_name", label: "Nome do tutor" },
-  { key: "schedule_date", label: "Data agendamento" },
-  { key: "schedule_time", label: "Hora agendamento" },
-  { key: "protocol", label: "Protocolo" },
-  { key: "schedule_location_name", label: "Local" },
-  { key: "schedule_address", label: "Endereço" },
-  { key: "animal_name", label: "Nome do animal" },
-  { key: "species", label: "Espécie" },
-  { key: "city", label: "Município" },
-  { key: "phone", label: "Telefone" },
-];
 
 export const CONFIG_KEYS = {
   requestTypes: "castragestao:request-types",
