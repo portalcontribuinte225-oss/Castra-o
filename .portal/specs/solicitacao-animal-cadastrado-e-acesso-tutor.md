@@ -117,6 +117,13 @@ Hoje o formulário de solicitação é único: quem já tem animal atendido refa
 - **Ambiente local preparado após autorização específica:** `backend/src/db/sql/20261113-registered-animals.sql` aplicada e verificada em `localhost:5433/castracao_db`. Microchip nullable, unicidade preservada e três índices conferidos. API iniciada na porta 3002 com o boot existente autorizado; frontend 5175 e health retornaram HTTP 200, rota privada de animais retornou HTTP 401 sem sessão e disponibilidade da fase 6 retornou HTTP 200 pelo proxy com leitura real do banco. Guia: `docs/registered-animals.md`. Outro ambiente continua dependendo de aplicação autorizada do schema.
 - A fase 7 permanece pendente; as consultas/chaves legadas foram preservadas.
 
+### Complemento das fases 4 e 5: aba E-mail e configuração por canal (2026-11-15)
+
+- Plano: [aba-email-canais](../plans/aba-email-canais.md). Decisão do usuário: separar por canal. A aba **E-mail** (Integrações) mostra o status somente leitura do EmailJS (`GET /api/config/email/status`, só indicadores) e concentra o template de notificações por e-mail e os templates de acesso por e-mail. A aba **WhatsApp** ficou só com os templates de WhatsApp.
+- Cada aba salva somente os campos do seu canal; o servidor faz merge com lock transacional (`backend/src/repositories/channel-config.js`), então salvar um canal não apaga o outro.
+- Permissão `email_settings` ("Aba E-mail"), mesma regra da aba SMS. Grupos de permissão já existentes não a têm: quem editava templates de e-mail pela aba WhatsApp precisa receber a permissão nova.
+- Sem alteração de `.env`, dependências ou migrations. Sem inspeção visual em navegador.
+
 ### Acompanhamento sem CPF
 - Animal sem tutor e quem escolheu acompanhar sem conta: consulta por **protocolo + contato informado**, com código enviado a esse contato.
 - Token próprio por solicitação nos links de acompanhamento. A chave nunca vai na URL.

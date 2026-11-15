@@ -181,6 +181,8 @@ import { AuthEntry } from "./features/tutor-access/auth-entry";
 import { AuthEntryOrigin, authEntryKey, createAuthEntryContext } from "./features/tutor-access/auth-entry-context";
 import type { AuthEntryContext } from "./features/tutor-access/auth-entry-context";
 import { SmsSettings } from "./features/sms/sms-settings";
+import { EmailSettings } from "./features/email/email-settings";
+import { EMAIL_SETTINGS_PERMISSION } from "../shared/email-contract.js";
 import { RegistrationContactFields, registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
@@ -240,6 +242,7 @@ const environmentConfigTabs: ConfigTabItem[] = [
 
 const integrationsConfigTabs: ConfigTabItem[] = [
   { id: "whatsapp", label: "WhatsApp" },
+  { id: "email", label: "E-mail" },
   { id: "sms", label: "SMS" },
   { id: "ai_settings", label: "Intelig\u00eancia Artificial", aiSettingsOnly: true },
 ];
@@ -262,6 +265,7 @@ const permissionConfigItems: ConfigTabItem[] = [
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
   { id: "whatsapp_settings", label: "Aba WhatsApp" },
+  { id: EMAIL_SETTINGS_PERMISSION, label: "Aba E-mail" },
   { id: "sms_settings", label: "Aba SMS" },
   { id: "ai_settings", label: "Configurar IA" },
 ];
@@ -274,6 +278,7 @@ function filterVisibleConfigTabs(tabs: ConfigTabItem[] = [], currentUser: AnyRec
       return canManageAiSettings(currentUser?.role);
     }
     if (tab.id === "whatsapp" && canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("whatsapp_settings")) return false;
+    if (tab.id === "email" && (!canManageAiSettings(currentUser?.role) || (canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))) return false;
     if (tab.id === "sms" && (!canManageAiSettings(currentUser?.role) || (canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))) return false;
     return true;
   });
@@ -8399,6 +8404,8 @@ function ConfigView({
         );
       })()}
 
+      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))} />}
+
       {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))} />}
 
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
@@ -9010,8 +9017,8 @@ function ConfigView({
         return (
           <div className="config-panel wide">
             <PanelHeader title="Canais de notificação por município" />
-            <NotificationSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
-            <AuthDeliverySettings key={`auth:${configMunicipalityScopeId}`} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
+            <NotificationSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} channel="whatsapp" readOnly={!canManageAiSettings(currentUser?.role)} />
+            <AuthDeliverySettings key={`auth:${configMunicipalityScopeId}`} municipalityId={configMunicipalityScopeId} channel="whatsappTemplates" readOnly={!canManageAiSettings(currentUser?.role)} />
 
             {configMunicipalityScopeId && (
               <div className="whatsapp-statusbar">

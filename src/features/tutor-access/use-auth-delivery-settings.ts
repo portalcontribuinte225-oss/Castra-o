@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { AUTH_DELIVERY_CONFIG_KEY, normalizeAuthDeliveryConfig } from "../../../shared/auth-contract.js";
 
-export function useAuthDeliverySettings(municipalityId: string) {
+export type AuthTemplateChannel = "emailTemplates" | "whatsappTemplates";
+
+// Each channel tab saves only its own templates; the server merges them into the stored value.
+export function authChannelPatch(value: ReturnType<typeof normalizeAuthDeliveryConfig>, channel: AuthTemplateChannel) {
+  return { [channel]: value[channel] };
+}
+
+export function useAuthDeliverySettings(municipalityId: string, channel: AuthTemplateChannel) {
   const [value, setValue] = useState(() => normalizeAuthDeliveryConfig());
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,7 +30,7 @@ export function useAuthDeliverySettings(municipalityId: string) {
   async function save() {
     if (!ready || !municipalityId || saving) return;
     setSaving(true); setError(""); setSuccess(false);
-    try { const saved = await api.setConfig(AUTH_DELIVERY_CONFIG_KEY, normalizeAuthDeliveryConfig(value), municipalityId); setValue(normalizeAuthDeliveryConfig(saved.value)); setSuccess(true); }
+    try { const saved = await api.setConfig(AUTH_DELIVERY_CONFIG_KEY, authChannelPatch(normalizeAuthDeliveryConfig(value), channel), municipalityId); setValue(normalizeAuthDeliveryConfig(saved.value)); setSuccess(true); }
     catch { setError("Não foi possível salvar os templates de acesso. Verifique sua permissão e tente novamente."); }
     finally { setSaving(false); }
   }
