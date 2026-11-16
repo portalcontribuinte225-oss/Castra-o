@@ -445,6 +445,13 @@ export async function runMigrations() {
     ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS department_name TEXT;
   `);
 
+  /* ── Endereço do município em campos separados: a rua continua em `address` ── */
+  await pool.query(`
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS address_number TEXT;
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS address_complement TEXT;
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS neighborhood TEXT;
+  `);
+
   const adminEmail = process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD || process.env.VITE_ADMIN_PASSWORD;
   if (adminEmail && adminPassword) {

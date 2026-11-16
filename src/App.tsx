@@ -59,7 +59,6 @@ import {
   CONFIG_KEYS_LIST,
   accessRequesterTypes,
   aiProviderOptions,
-  brazilStatesFallback,
   countRequestAnimals,
   countUsedVacancies,
   DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE,
@@ -178,6 +177,9 @@ import {
 import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, resolveRequestTypes } from "../shared/request-types-contract.js";
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
+import { MunicipalityAddressFields } from "./features/municipality-form/municipality-address-fields";
+import { emptyMunicipalityForm, formFromMunicipality, formatMunicipalityAddress, municipalityContactIssue } from "./features/municipality-form/municipality-address";
+import type { MunicipalityForm } from "./features/municipality-form/municipality-address";
 import { NeighborhoodField } from "./features/neighborhoods/neighborhood-field";
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
@@ -5161,7 +5163,7 @@ function buildPrescriptionInstitutionName(municipality: AnyRecord = {}, request:
 }
 
 function buildPrescriptionFooterLines(municipality: AnyRecord = {}) {
-  const location = [municipality.address, municipality.cep ? `CEP ${formatCep(municipality.cep)}` : ""].filter(Boolean).join(" - ");
+  const location = [formatMunicipalityAddress(municipality), municipality.cep ? `CEP ${formatCep(municipality.cep)}` : ""].filter(Boolean).join(" - ");
   const contact = [municipality.contact, municipality.email].filter(Boolean).join(" | ");
   return [location, contact].filter(Boolean);
 }
@@ -6319,14 +6321,10 @@ function ConfigView({
   ].map((section) => ({ ...section, items: section.items.filter((item) => item.label) }));
   const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
   const [newTeamUser, setNewTeamUser] = useState(emptyTeamUser);
-  const emptyMunicipalityForm = { name: "", state: "", active: true, brasao: "", contact: "", email: "", address: "", cep: "", departmentName: "" };
-  const [newMunicipality, setNewMunicipality] = useState(emptyMunicipalityForm);
+  const [newMunicipality, setNewMunicipality] = useState<MunicipalityForm>(emptyMunicipalityForm);
   const [editingMunicipalityId, setEditingMunicipalityId] = useState(null);
   const [municipalitySaving, setMunicipalitySaving] = useState(false);
   const [municipalitySaveStatus, setMunicipalitySaveStatus] = useState("");
-  const [brazilStates, setBrazilStates] = useState(brazilStatesFallback);
-  const [brazilMunicipalities, setBrazilMunicipalities] = useState([]);
-  const [brazilLocationStatus, setBrazilLocationStatus] = useState("");
   const [editingTeamUserId, setEditingTeamUserId] = useState(null);
   const [userModal, setUserModal] = useState(false);
   const [sectorPickerOpen, setSectorPickerOpen] = useState(false);
@@ -6360,54 +6358,6 @@ function ConfigView({
     }
     setConfigTab(configArea);
   }, [configArea, integrationsTabs.map((tab) => tab.id).join("|")]);
-
-  useEffect(() => {
-    if (configModal !== "municipality") return;
-    let cancelled = false;
-    fetch("https://servicodados.ibge.gov.br/api/v1/localidades/estados?orderBy=nome")
-      .then((response) => {
-        if (!response.ok) throw new Error("Estados indisponíveis");
-        return response.json();
-      })
-      .then((states) => {
-        if (!cancelled && Array.isArray(states) && states.length) {
-          setBrazilStates(states);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setBrazilStates(brazilStatesFallback);
-      });
-    return () => { cancelled = true; };
-  }, [configModal]);
-
-  useEffect(() => {
-    if (configModal !== "municipality") return;
-    if (!newMunicipality.state) {
-      setBrazilMunicipalities([]);
-      setBrazilLocationStatus("");
-      return;
-    }
-    let cancelled = false;
-    setBrazilLocationStatus("Carregando municípios...");
-    fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${encodeURIComponent(newMunicipality.state)}/municipios?orderBy=nome`)
-      .then((response) => {
-        if (!response.ok) throw new Error("Municípios indisponíveis");
-        return response.json();
-      })
-      .then((cities) => {
-        if (!cancelled) {
-          setBrazilMunicipalities(Array.isArray(cities) ? cities : []);
-          setBrazilLocationStatus("");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setBrazilMunicipalities([]);
-          setBrazilLocationStatus("Não foi possível carregar os municípios. Digite manualmente.");
-        }
-      });
-    return () => { cancelled = true; };
-  }, [configModal, newMunicipality.state]);
 
   const configMunicipalityScopeId = selectedMunicipalityId || currentUser?.municipalityId || "";
 
@@ -6709,17 +6659,7 @@ function ConfigView({
   function openMunicipalityModal(municipality = null) {
     if (municipality) {
       setEditingMunicipalityId(municipality.id);
-      setNewMunicipality({
-        name: municipality.name || "",
-        state: municipality.state || "",
-        active: municipality.active !== false,
-        brasao: municipality.brasao || "",
-        contact: municipality.contact || "",
-        email: municipality.email || "",
-        address: municipality.address || "",
-        cep: municipality.cep || "",
-        departmentName: municipality.department_name || municipality.departmentName || "",
-      });
+      setNewMunicipality(formFromMunicipality(municipality));
     } else {
       setEditingMunicipalityId(null);
       setNewMunicipality(emptyMunicipalityForm);
@@ -6730,6 +6670,11 @@ function ConfigView({
   async function saveMunicipality() {
     if (!newMunicipality.name.trim()) {
       setMunicipalitySaveStatus("Selecione ou informe o município.");
+      return;
+    }
+    const issue = municipalityContactIssue(newMunicipality);
+    if (issue) {
+      setMunicipalitySaveStatus(issue);
       return;
     }
     if (municipalitySaving) return;
@@ -8323,65 +8268,7 @@ function ConfigView({
                 />
               </div>
             )}
-            {isGlobalRole(currentUser?.role) ? (
-              <>
-                <label className="field">
-                  <span>Estado</span>
-                  <select
-                    value={newMunicipality.state}
-                    onChange={(event) => {
-                      const state = event.target.value;
-                      setNewMunicipality((current) => ({
-                        ...current,
-                        state,
-                        name: state === current.state ? current.name : "",
-                      }));
-                    }}
-                  >
-                    <option value="">Selecione o estado</option>
-                    {brazilStates.map((state) => (
-                      <option key={state.id || state.sigla} value={state.sigla}>
-                        {state.sigla} - {state.nome}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                {brazilLocationStatus.startsWith("Não foi possível") ? (
-                  <Field
-                    label="Município"
-                    value={newMunicipality.name}
-                    placeholder="Digite o município"
-                    onChange={(value) => setNewMunicipality((current) => ({ ...current, name: value }))}
-                  />
-                ) : (
-                  <label className="field">
-                    <span>Município</span>
-                    <select
-                      value={newMunicipality.name}
-                      disabled={!newMunicipality.state || brazilLocationStatus.startsWith("Carregando")}
-                      onChange={(event) => setNewMunicipality((current) => ({ ...current, name: event.target.value }))}
-                    >
-                      <option value="">
-                        {newMunicipality.state ? "Selecione o município" : "Selecione um estado primeiro"}
-                      </option>
-                      {newMunicipality.name && !brazilMunicipalities.some((city) => city.nome === newMunicipality.name) && (
-                        <option value={newMunicipality.name}>{newMunicipality.name}</option>
-                      )}
-                      {brazilMunicipalities.map((city) => (
-                        <option key={city.id || city.nome} value={city.nome}>
-                          {city.nome}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-                {brazilLocationStatus && <p className="helper-text">{brazilLocationStatus}</p>}
-              </>
-            ) : (
-              <p className="helper-text">
-                {[newMunicipality.name, newMunicipality.state].filter(Boolean).join(" / ")}
-              </p>
-            )}
+            <MunicipalityAddressFields form={newMunicipality} setForm={setNewMunicipality} canEditCity={isGlobalRole(currentUser?.role)} />
 
             <Field
               label="Nome do órgão / secretaria"
@@ -8390,13 +8277,14 @@ function ConfigView({
               onChange={(value) => setNewMunicipality((current) => ({ ...current, departmentName: value }))}
             />
             <div className="modal-form-grid">
-              <Field label="Contato" value={newMunicipality.contact} placeholder="Telefone, WhatsApp ou setor responsável" onChange={(value) => setNewMunicipality((current) => ({ ...current, contact: value }))} />
+              <label className="field">
+                <span>Contato</span>
+                <input type="tel" value={newMunicipality.contact} placeholder="(00) 00000-0000" onChange={(event) => setNewMunicipality((current) => ({ ...current, contact: formatPhone(event.target.value) }))} />
+              </label>
               <label className="field">
                 <span>Email</span>
                 <input type="email" value={newMunicipality.email} placeholder="contato@municipio.gov.br" onChange={(event) => setNewMunicipality((current) => ({ ...current, email: event.target.value }))} />
               </label>
-              <Field label="Endereço" value={newMunicipality.address} placeholder="Rua, número, bairro" onChange={(value) => setNewMunicipality((current) => ({ ...current, address: value }))} />
-              <Field label="CEP" value={newMunicipality.cep} placeholder="00000-000" onChange={(value) => setNewMunicipality((current) => ({ ...current, cep: value }))} />
             </div>
             <div className="field">
               <span>Brasão do município</span>
@@ -8437,7 +8325,7 @@ function ConfigView({
             </div>
 
             {municipalitySaveStatus && (
-              <p className={municipalitySaveStatus.includes("Não") || municipalitySaveStatus.includes("Selecione") ? "form-error" : "helper-text"}>
+              <p className={municipalitySaveStatus.includes("Não") || municipalitySaveStatus.includes("Selecione") || municipalitySaveStatus.includes("Informe") ? "form-error" : "helper-text"}>
                 {municipalitySaveStatus}
               </p>
             )}

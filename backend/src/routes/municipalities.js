@@ -6,6 +6,7 @@ import { auth } from "../middleware/auth.js";
 import { MUNICIPALITY_ADMIN_ROLE, isGlobalUser } from "../tenant.js";
 import { upsertMunicipalityDefaultConfigs } from "../municipalityDefaults.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
+import { readMunicipalityLocation } from "../services/municipality-location.js";
 
 const router = Router();
 
@@ -67,10 +68,14 @@ router.post("/", auth, async (req, res) => {
   const name = String(req.body?.name || "").trim();
   const state = String(req.body?.state || "").trim().toUpperCase().slice(0, 2);
   const active = req.body?.active !== false;
-  const contact = String(req.body?.contact || "").trim();
+  let location;
+  try {
+    location = readMunicipalityLocation(req.body);
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
+  const { contact = "", cep = "", address = "", address_number: addressNumber = "", address_complement: addressComplement = "", neighborhood = "" } = location;
   const email = String(req.body?.email || "").trim().toLowerCase();
-  const address = String(req.body?.address || "").trim();
-  const cep = String(req.body?.cep || "").trim();
   const departmentName = String(req.body?.department_name || req.body?.departmentName || "").trim();
   const slug = slugify(req.body?.slug || name);
   if (!name || !slug) return res.status(400).json({ error: "Nome do municipio e obrigatorio." });
@@ -80,8 +85,8 @@ router.post("/", auth, async (req, res) => {
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `INSERT INTO municipalities (name, state, slug, contact, email, address, cep, department_name, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO municipalities (name, state, slug, contact, email, address, address_number, address_complement, neighborhood, cep, department_name, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (slug)
        DO UPDATE SET
          name = EXCLUDED.name,
@@ -89,12 +94,15 @@ router.post("/", auth, async (req, res) => {
          contact = EXCLUDED.contact,
          email = EXCLUDED.email,
          address = EXCLUDED.address,
+         address_number = EXCLUDED.address_number,
+         address_complement = EXCLUDED.address_complement,
+         neighborhood = EXCLUDED.neighborhood,
          cep = EXCLUDED.cep,
          department_name = EXCLUDED.department_name,
          active = EXCLUDED.active,
          updated_at = NOW()
        RETURNING *`,
-      [name, state, slug, contact, email, address, cep, departmentName, active],
+      [name, state, slug, contact, email, address, addressNumber, addressComplement, neighborhood, cep, departmentName, active],
     );
     const municipality = rows[0];
 
@@ -181,7 +189,7 @@ router.post("/", auth, async (req, res) => {
 
 // Non-global authenticated users can edit only contact/branding data for their
 // own municipality. Tenant identity and activation fields remain master/support-only.
-const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "contact", "email", "address", "cep", "department_name"];
+const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "contact", "email", "address", "address_number", "address_complement", "neighborhood", "cep", "department_name"];
 const MUNICIPALITY_GLOBAL_EDIT_FIELDS = ["name", "state", "active", ...MUNICIPALITY_SELF_EDIT_FIELDS];
 
 router.patch("/:id", auth, async (req, res) => {
@@ -195,10 +203,19 @@ router.patch("/:id", auth, async (req, res) => {
     req.body.department_name = req.body.departmentName;
   }
 
+  let location;
+  try {
+    location = readMunicipalityLocation(req.body);
+  } catch (error) {
+    return res.status(error.status || 400).json({ error: error.message });
+  }
   const fields = [];
   const values = [];
   (isGlobal ? MUNICIPALITY_GLOBAL_EDIT_FIELDS : MUNICIPALITY_SELF_EDIT_FIELDS).forEach((field) => {
-    if (req.body?.[field] !== undefined) {
+    if (location[field] !== undefined) {
+      values.push(location[field]);
+      fields.push(`${field} = $${values.length}`);
+    } else if (req.body?.[field] !== undefined) {
       values.push(field === "state" ? String(req.body[field]).trim().toUpperCase().slice(0, 2) : field === "email" ? String(req.body[field] || "").trim().toLowerCase() : field === "active" ? req.body[field] : String(req.body[field] || "").trim());
       fields.push(`${field} = $${values.length}`);
     }
