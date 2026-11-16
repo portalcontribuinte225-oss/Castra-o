@@ -5528,6 +5528,14 @@ main {
 }
 
 
+/* Cor da borda de um campo obrigatório não preenchido: as regras de cada formulário (público e balcão) usam esta cor no lugar da
+   padrão, já que elas vencem as regras base de .invalid. */
+.compact-choice-field.invalid,
+.access-field.is-invalid {
+  --field-invalid-border: #ef4444;
+}
+
+
 .field input:not([readonly]),
 .field select,
 .field textarea {
@@ -16489,6 +16497,7 @@ form textarea:focus,
   min-height: auto;
   display: grid;
   align-items: stretch;
+  align-content: start;
   gap: 7px;
   padding: 0;
   border: 0;
@@ -20640,7 +20649,7 @@ form textarea:focus,
 .nr-shell--public .anm-type-card,
 .nr-shell--public .compact-choice-field button,
 .nr-shell--public .single-request-form .animal-form .compact-choice-field button {
-  border: 1px solid #dbe5f1;
+  border: 1px solid var(--field-invalid-border, #dbe5f1);
   border-radius: 10px;
   background: #ffffff;
   color: #64748b;
@@ -25038,8 +25047,8 @@ small,
 .internal-request-modal .nr-shell--internal .compact-choice-field > div,
 .internal-request-modal .nr-shell--internal .single-request-form .animal-form .compact-choice-field > div {
   gap: 4px !important;
-  padding: 4px !important;
-  border: 0 !important;
+  padding: 3px !important;
+  border: 1px solid var(--field-invalid-border, transparent) !important;
   border-radius: 10px !important;
   background: #eef3f9 !important;
 }
@@ -25142,7 +25151,7 @@ small,
 
 .internal-request-modal .nr-shell--internal .access-field input,
 .internal-request-modal .nr-shell--internal .field textarea {
-  border-color: #dbe5f1 !important;
+  border-color: var(--field-invalid-border, #dbe5f1) !important;
   background: #f8fafc !important;
   color: #0f172a !important;
 }
@@ -25390,7 +25399,7 @@ small,
   width: 100%;
   min-height: 36px;
   padding: 0 13px;
-  border: 1px solid #dbe5f1;
+  border: 1px solid var(--field-invalid-border, #dbe5f1);
   border-radius: 10px;
   outline: 0;
   background: #ffffff;

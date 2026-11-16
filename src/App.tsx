@@ -3506,7 +3506,6 @@ function NewRequest({
                       <span className="doc-check-box" />
                       <span>Li e concordo com os termos<span className="required-asterisk">*</span></span>
                     </label>
-                    {showInvalid("accepted") && <small className="field-error-message">Campo obrigatório</small>}
                   </div>}
                 </div>
               </div>

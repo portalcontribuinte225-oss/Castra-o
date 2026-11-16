@@ -178,7 +178,6 @@ export function CompactChoiceField({ label, value, options, onChange, invalid = 
           );
         })}
       </div>
-      {invalid && <small className="field-error-message">Campo obrigatório</small>}
     </div>
   );
 }
