@@ -19,8 +19,9 @@ test("declining follow-up clears contacts without inferring consent", () => {
   });
 });
 
-test("phone is optional and is accepted only when the municipality has a phone channel (WhatsApp or SMS)", () => {
+test("the phone is accepted only when the municipality has a phone channel (WhatsApp or SMS), and must be a mobile", () => {
   assert.equal(validateFollowUp({ enabled: true, email: "a@example.com" }, { phoneEnabled: true }), "");
+  assert.throws(() => normalizeFollowUp({ enabled: true, email: "a@example.com", phone: "(48) 3333-4444" }, { phoneEnabled: true }), { status: 400, message: /celular/ });
   assert.throws(() => normalizeFollowUp({ enabled: true, email: "a@example.com", phone: "123" }, { phoneEnabled: true }), { status: 400 });
   assert.deepEqual(normalizeFollowUp({ enabled: true, email: "a@example.com", phone: "(48) 99999-9999" }, { phoneEnabled: true }), {
     enabled: true, email: "a@example.com", phone: "48999999999",
@@ -46,4 +47,25 @@ test("step configuration shares the explicit-false combination rule", () => {
   assert.equal(configsAllowStep([null, {}, { stepTutor: true }], "stepTutor"), true);
   assert.equal(configsAllowStep([{ stepTutor: true }, { stepTutor: false }], "stepTutor"), false);
   assert.equal(configsAllowStep([], "stepTutor"), true);
+});
+
+test("accepting the follow-up needs at least one contact that can be reached: an e-mail, or a mobile when there is a phone channel", () => {
+  const phoneEnabled = { phoneEnabled: true };
+  assert.deepEqual(normalizeFollowUp({ enabled: true, phone: "(48) 99999-1234" }, phoneEnabled), { enabled: true, email: "", phone: "48999991234" });
+  assert.deepEqual(normalizeFollowUp({ enabled: true, email: "a@example.com", phone: "(48) 99999-1234" }, phoneEnabled), { enabled: true, email: "a@example.com", phone: "48999991234" });
+  for (const input of [{ enabled: true }, { enabled: true, email: "", phone: "" }, { enabled: true, email: null, phone: null }]) {
+    assert.match(validateFollowUp(input, phoneEnabled), /ao menos um contato/, JSON.stringify(input));
+  }
+  assert.match(validateFollowUp({ enabled: true, phone: "(48) 99999-1234" }), /ao menos um contato/, "a phone alone is nothing without a phone channel");
+  assert.match(validateFollowUp({ enabled: true, email: "bad", phone: "(48) 99999-1234" }, phoneEnabled), /e-mail/, "a contact that is given must be valid");
+  assert.equal(validateFollowUp({ enabled: false }, phoneEnabled), "");
+});
+
+test("the usable contacts of a follow-up come back empty when they cannot be reached", () => {
+  const { followUpContacts } = notificationContract;
+  assert.deepEqual(followUpContacts({ email: " A@Example.com ", phone: "(48) 99999-1234" }, { phoneEnabled: true }), { email: "a@example.com", phone: "48999991234" });
+  assert.deepEqual(followUpContacts({ email: "a@example.com", phone: "(48) 99999-1234" }), { email: "a@example.com", phone: "" });
+  assert.deepEqual(followUpContacts({ email: "bad", phone: "(48) 3333-4444" }, { phoneEnabled: true }), { email: "", phone: "" });
+  assert.deepEqual(followUpContacts(undefined, { phoneEnabled: true }), { email: "", phone: "" });
+  assert.deepEqual(followUpContacts({ email: "x".repeat(250) + "@a.co", phone: 48999991234 }, { phoneEnabled: true }), { email: "", phone: "" });
 });

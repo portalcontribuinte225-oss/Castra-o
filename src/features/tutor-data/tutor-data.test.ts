@@ -22,8 +22,14 @@ describe("tutorFormIssues", () => {
     expect(Object.keys(tutorFormIssues(form)).sort()).toEqual(["cep", "email", "name", "password", "phone", "state"]);
   });
 
-  it("lets the e-mail, phone, address and password stay empty", () => {
-    expect(tutorFormIssues({ ...formFromTutor(tutor), email: "", phone: "", cep: "", state: "", password: "" })).toEqual({});
+  it("lets the e-mail, address and password stay empty, but not the mobile", () => {
+    expect(tutorFormIssues({ ...formFromTutor(tutor), email: "", cep: "", state: "", password: "" })).toEqual({});
+    expect(tutorFormIssues({ ...formFromTutor(tutor), phone: "" }).phone).toMatch(/celular completo/);
+  });
+
+  it("accepts only a complete mobile as the tutor's phone", () => {
+    for (const phone of ["(48) 3333-4444", "(48) 8999-1234", "(48) 99999-12", "123"]) expect(tutorFormIssues({ ...formFromTutor(tutor), phone }).phone, phone).toMatch(/celular completo/);
+    for (const phone of ["(48) 99999-1234", "48999991234"]) expect(tutorFormIssues({ ...formFromTutor(tutor), phone }).phone, phone).toBeUndefined();
   });
 });
 

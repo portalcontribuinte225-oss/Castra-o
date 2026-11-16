@@ -5,9 +5,10 @@ import { loadRequestSettings } from "../src/repositories/request-settings.js";
 import { SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
 
 const cpf = "52998224725";
+const phone = "(48) 99999-1234";
 const municipalityId = "municipality-a";
 const defaults = {
-  body: { requestTypeId: "surgery", cpf }, municipalityId,
+  body: { requestTypeId: "surgery", cpf, phone }, municipalityId,
   workflow: { identificationTypeId: "owned", followUp: { enabled: false } },
   settings: {
     requestTypes: [{ id: "surgery", name: "Cirurgia", active: true }],
@@ -104,7 +105,8 @@ test("the phone is kept only when the municipality has a phone channel, and must
   const settings = { ...structuredClone(defaults.settings), phoneEnabled: true };
   assert.deepEqual(prepare({ settings, workflow: followUp("(48) 99999-1234") }).workflow.followUp, { enabled: true, email: "citizen@example.com", phone: "48999991234" });
   assert.equal(prepare({ settings, workflow: followUp("") }).workflow.followUp.phone, "");
-  assert.throws(() => prepare({ settings, workflow: followUp("123") }), /telefone/);
+  assert.throws(() => prepare({ settings, workflow: followUp("123") }), /celular/);
+  assert.throws(() => prepare({ settings, workflow: followUp("(48) 3333-4444") }), /celular/, "a landline cannot receive the notices");
   assert.equal(prepare({ workflow: followUp("(48) 99999-1234") }).workflow.followUp.phone, "");
 });
 
@@ -119,7 +121,7 @@ test("staff may register an animal without a tutor only through an active identi
   assert.equal(result.tutorRequired, false);
   assert.throws(() => prepare(input({ identificationTypeId: "owned" })), /CPF/);
   assert.throws(() => prepare(input({})), /CPF/);
-  assert.equal(prepare({ ...input({ identificationTypeId: "owned" }), body: { requestTypeId: "surgery", cpf } }).cpf, cpf);
+  assert.equal(prepare({ ...input({ identificationTypeId: "owned" }), body: { requestTypeId: "surgery", cpf, phone } }).cpf, cpf);
   assert.throws(() => prepare({ ...input({ identificationTypeId: "stray" }), body: { requestTypeId: "surgery", cpf: "123" } }), /CPF/);
 });
 
@@ -209,7 +211,7 @@ const procedureInput = (animals, extra = {}) => ({ body: { animals }, settings: 
 
 test("with procedures per animal the request type is derived from them, whole, and the animals come back normalized", () => {
   const animals = [{ name: "Rex", ...bairro, requestTypeIds: ["microchip", "castration"] }, { name: "Mia", ...bairro, requestTypeIds: ["castration", "castration"] }];
-  const result = prepare(procedureInput(animals, { body: { animals, cpf } }));
+  const result = prepare(procedureInput(animals, { body: { animals, cpf, phone } }));
   assert.equal(result.requestType, "Microchipagem, Castração");
   assert.deepEqual(result.animals, [{ name: "Rex", ...bairro, requestTypeIds: ["microchip", "castration"] }, { name: "Mia", ...bairro, requestTypeIds: ["castration"] }]);
   assert.deepEqual(result.workflow.requestTypeIds, ["microchip", "castration"]);
@@ -219,7 +221,7 @@ test("with procedures per animal the request type is derived from them, whole, a
 
 test("the single type, the type text and the derived workflow keys a client sends are ignored when procedures are present", () => {
   const animals = [{ ...bairro, requestTypeIds: ["microchip"] }];
-  const result = prepare({ ...procedureInput(animals, { body: { animals, cpf, requestTypeId: "castration", type: "Castração", request_type: "Castração" } }),
+  const result = prepare({ ...procedureInput(animals, { body: { animals, cpf, phone, requestTypeId: "castration", type: "Castração", request_type: "Castração" } }),
     workflow: { identificationTypeId: "owned", followUp: { enabled: false }, requestTypeIds: ["castration"], requestTypeNames: ["Forjado"], requestTypeId: "castration" } });
   assert.equal(result.requestType, "Microchipagem");
   assert.deepEqual(result.workflow.requestTypeIds, ["microchip"]);
@@ -228,7 +230,7 @@ test("the single type, the type text and the derived workflow keys a client send
 });
 
 test("an old-style request keeps working, and its forged derived workflow keys are dropped", () => {
-  const result = prepare({ body: { requestTypeId: "castration", cpf, animals: [{ name: "Rex" }] }, settings: procedureSettings(),
+  const result = prepare({ body: { requestTypeId: "castration", cpf, phone, animals: [{ name: "Rex" }] }, settings: procedureSettings(),
     workflow: { identificationTypeId: "owned", followUp: { enabled: false }, requestTypeIds: ["no-tutor"], requestTypeNames: ["Forjado"] } });
   assert.equal(result.requestType, "castration");
   assert.equal(result.animals, undefined);
@@ -248,13 +250,13 @@ test("the tutor step is dispensed when any procedure or the identification type 
   assert.equal(run([{ ...bairro, requestTypeIds: ["castration", "no-tutor"] }], "owned").tutorRequired, false);
   assert.equal(run(needsTutor, "stray").tutorRequired, false, "the identification type alone may dispense it");
   assert.throws(() => run(needsTutor, "owned"), /CPF/);
-  assert.equal(run(needsTutor, "owned", { cpf }).tutorRequired, true);
+  assert.equal(run(needsTutor, "owned", { cpf, phone }).tutorRequired, true);
 });
 
 test("a request with procedures refuses unknown, switched-off or missing ones for public and staff alike", () => {
   const staff = { role: "analista" };
   for (const user of [undefined, staff]) {
-    const input = (animals) => procedureInput(animals, { user, body: { animals, cpf } });
+    const input = (animals) => procedureInput(animals, { user, body: { animals, cpf, phone } });
     assert.throws(() => prepare(input([{ ...bairro, requestTypeIds: ["unknown"] }])), /solicitação/);
     assert.throws(() => prepare(input([{ ...bairro, requestTypeIds: ["vaccine"] }])), /solicitação/);
     assert.throws(() => prepare(input([{ ...bairro, requestTypeIds: ["castration"] }, { ...bairro, name: "Sem procedimento", requestTypeIds: [] }])), /ao menos um procedimento/);
@@ -266,7 +268,7 @@ test("staff also get the derived type, and still need a CPF unless the identific
   const staff = { role: "analista" };
   const animals = [{ ...bairro, requestTypeIds: ["microchip"] }, { ...bairro, requestTypeIds: ["castration"] }];
   assert.throws(() => prepare(procedureInput(animals, { user: staff })), /CPF/);
-  const withCpf = prepare(procedureInput(animals, { user: staff, body: { animals, cpf } }));
+  const withCpf = prepare(procedureInput(animals, { user: staff, body: { animals, cpf, phone } }));
   assert.deepEqual([withCpf.internal, withCpf.requestType, withCpf.tutorRequired], [true, "Microchipagem, Castração", true]);
   const settings = procedureSettings({ identificationTypes: [{ id: "stray", active: true, stepTutor: false }] });
   const stray = prepare({ body: { animals }, user: staff, settings, workflow: { identificationTypeId: "stray" } });
@@ -286,4 +288,36 @@ test("PATCH cannot overwrite the derived procedures, which only the server recom
   assert.deepEqual(mergeProtectedWorkflow(current, { requestTypeIds: ["forged"], requestTypeNames: ["Forjado"], scheduleTime: "09:00" }),
     { requestTypeIds: ["castration"], requestTypeNames: ["Castração"], scheduleTime: "09:00" });
   assert.deepEqual(mergeProtectedWorkflow({ scheduleTime: "08:00" }, { requestTypeIds: ["forged"], requestTypeNames: ["Forjado"] }), { scheduleTime: "08:00" });
+});
+
+test("the tutor's mobile is required wherever the tutor is, whoever fills the form, and only a mobile counts", () => {
+  for (const user of [undefined, { role: "analista" }]) {
+    for (const bad of [undefined, null, "", "   ", "123", "(48) 3333-4444", "4833334444", "(48) 8999-1234", "(00) 99999-1234", "(48) 99999-12345", "abc", 48999991234.5]) {
+      assert.throws(() => prepare({ user, body: { ...defaults.body, phone: bad } }), { status: 400, message: /celular completo/ }, `${user?.role || "public"} ${String(bad)}`);
+    }
+    for (const good of [phone, "48999991234", "(11) 91234-5678"]) assert.equal(prepare({ user, body: { ...defaults.body, phone: good } }).cpf, cpf, good);
+  }
+});
+
+test("the mobile is not asked of a logged tutor (the profile has it), a tutorless flow or a complaint, which keeps its own phone rule", () => {
+  const { phone: _omitted, ...withoutPhone } = defaults.body;
+  assert.equal(prepare({ user: { role: "tutor", profileComplete: true }, body: withoutPhone }).cpf, cpf);
+  for (const user of [undefined, { role: "analista" }]) {
+    assert.equal(prepare({ user, body: { requestTypeId: "surgery" }, workflow: { identificationTypeId: "stray", followUp: { enabled: false } } }).cpf, null);
+  }
+  const complaint = { request_type: "DENUNCIA", cpf, tutor_name: "Cidadão" };
+  assert.throws(() => prepare({ body: complaint, workflow: {} }), /telefone/);
+  assert.equal(prepare({ body: { ...complaint, phone: "(48) 3333-4444" }, workflow: {} }).requestType, "DENUNCIA", "the complaint still accepts any valid phone");
+});
+
+test("the follow-up needs at least one contact, and an internal request carries its follow-up through", () => {
+  const settings = { ...structuredClone(defaults.settings), phoneEnabled: true };
+  const only = (contacts, extra = {}) => prepare({ settings, ...extra, workflow: { followUp: { enabled: true, ...contacts } } }).workflow.followUp;
+  assert.deepEqual(only({ email: "citizen@example.com" }), { enabled: true, email: "citizen@example.com", phone: "" });
+  assert.deepEqual(only({ phone: "(48) 99999-1234" }), { enabled: true, email: "", phone: "48999991234" });
+  assert.deepEqual(only({ email: "citizen@example.com", phone: "(48) 99999-1234" }), { enabled: true, email: "citizen@example.com", phone: "48999991234" });
+  for (const contacts of [{}, { email: "", phone: "" }]) assert.throws(() => only(contacts), /ao menos um contato/);
+  assert.throws(() => prepare({ workflow: { followUp: { enabled: true, phone: "(48) 99999-1234" } } }), /ao menos um contato/, "no phone channel, no e-mail");
+  assert.deepEqual(only({ phone: "(48) 99999-1234" }, { user: { role: "analista" } }), { enabled: true, email: "", phone: "48999991234" });
+  assert.equal(prepare({ user: { role: "analista" }, workflow: {} }).workflow.followUp, undefined, "the internal request may still go without the answer");
 });

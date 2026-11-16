@@ -34,7 +34,7 @@ export interface VisibleStepsInput {
   configs: Array<StepToggles | null | undefined>;
 }
 
-const internalStepOrder: RequestStep[] = [RequestStep.TUTOR, RequestStep.ANIMAL, RequestStep.SCHEDULE];
+const internalStepOrder: RequestStep[] = [RequestStep.TUTOR, RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP];
 
 const publicStepOrder: RequestStep[] = [
   RequestStep.ANIMAL,
@@ -62,9 +62,14 @@ function isAllowedByConfigs(step: RequestStep, configs: VisibleStepsInput["confi
 }
 
 export function getVisibleSteps({ internal, skipTutor, configs }: VisibleStepsInput): RequestStepItem[] {
-  // The internal form has fixed steps; only an explicit `stepTutor: false` in the configs it is given (the identification
-  // type, for staff) takes the Tutor step away.
-  if (internal) return internalStepOrder.filter((step) => isAllowedByConfigs(step, step === RequestStep.TUTOR ? configs : [])).map(toStepItem);
+  // The internal form has fixed steps, ending as the public one does with the follow-up; only an explicit `stepTutor: false` in the
+  // configs it is given (the identification type, for staff) takes the Tutor step away, and with no tutor there is nobody to follow up.
+  if (internal) {
+    const tutorVisible = isAllowedByConfigs(RequestStep.TUTOR, configs);
+    return internalStepOrder
+      .filter((step) => (step === RequestStep.TUTOR ? tutorVisible : step !== RequestStep.FOLLOW_UP || tutorVisible))
+      .map(toStepItem);
+  }
 
   return publicStepOrder
     .filter((step) => !(step === RequestStep.TUTOR && skipTutor))

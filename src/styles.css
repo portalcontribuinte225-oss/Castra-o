@@ -5273,53 +5273,6 @@ main {
 }
 
 
-.single-request-form .cadunico-checkbox {
-  gap: 7px;
-  font-size: 0.76rem;
-  color: #64748b;
-  font-weight: 500;
-  white-space: nowrap;
-  padding-bottom: 0;
-  min-height: unset;
-  align-self: center;
-}
-
-
-.single-request-form .cadunico-checkbox input[type="checkbox"] {
-  appearance: none;
-  -webkit-appearance: none;
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid #cbd5e1;
-  border-radius: 4px;
-  background: #f8fafc;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
-  position: relative;
-}
-
-
-.single-request-form .cadunico-checkbox input[type="checkbox"]:checked {
-  background: #2563eb;
-  border-color: #2563eb;
-}
-
-
-.single-request-form .cadunico-checkbox input[type="checkbox"]:checked::after {
-  content: "";
-  position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 5px;
-  height: 9px;
-  border: 2px solid #fff;
-  border-top: none;
-  border-left: none;
-  transform: rotate(45deg);
-}
-
-
 .empty-state {
   border: 1px dashed #cbd5e1;
   background: #f8fafc;
@@ -6539,30 +6492,6 @@ main {
 .sector-picker-list button:hover {
   border-color: var(--blue);
   background: #eff8ff;
-}
-
-
-.cadunico-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 16px;
-  align-items: end;
-}
-
-
-.cadunico-row .toggle-switch {
-  min-height: 44px;
-  padding-bottom: 8px;
-  font-weight: 600;
-  justify-content: flex-start;
-}
-
-
-.cadunico-checkbox {
-  min-height: 44px;
-  align-self: end;
-  padding-bottom: 10px;
-  white-space: nowrap;
 }
 
 
@@ -8714,7 +8643,6 @@ main {
   .reports-breakdown-grid,
   .workflow-grid,
   .two-column-fields,
-  .cadunico-row,
   .address-lookup-grid,
   .address-city-grid,
   .health-grid,
@@ -12750,14 +12678,6 @@ body * {
 }
 
 
-.internal-request-modal .cadunico-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
-  align-items: end;
-}
-
-
 .internal-request-modal .checkbox-row {
   min-height: 40px;
   border: 1px solid #cbd5e1;
@@ -12980,7 +12900,6 @@ body * {
   }
 
 
-  .internal-request-modal .cadunico-row,
   .internal-request-modal .two-column-fields,
   .internal-request-modal .animal-main-grid,
   .internal-request-modal .address-lookup-grid {
@@ -15176,7 +15095,6 @@ body * {
 
 
   .public-form-page:not(.public-form-page--consultation) .two-column-fields,
-  .public-form-page:not(.public-form-page--consultation) .cadunico-row,
   .public-form-page:not(.public-form-page--consultation) .address-lookup-grid,
   .public-form-page:not(.public-form-page--consultation) .address-city-grid,
   .public-form-page:not(.public-form-page--consultation) .phone-validation-row,
@@ -15187,7 +15105,6 @@ body * {
   }
 
 
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .cadunico-checkbox,
   .public-form-page:not(.public-form-page--consultation) .doc-accept-check {
     min-height: 44px;
     align-items: center;
@@ -16228,7 +16145,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .cadunico-row,
 .nr-shell .two-column-fields,
 .nr-shell .address-lookup-grid,
 .nr-shell .address-city-grid,
@@ -16242,13 +16158,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .cadunico-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: end;
-}
-
-
-.nr-shell .cadunico-checkbox,
 .nr-shell .internal-chip-check {
   min-height: 48px;
   padding: 0 14px;
@@ -16635,7 +16544,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .cadunico-row,
 .nr-shell .two-column-fields,
 .nr-shell .address-lookup-grid,
 .nr-shell .address-city-grid,
@@ -16644,18 +16552,11 @@ form textarea:focus,
 }
 
 
-.nr-shell .cadunico-row {
-  grid-template-columns: minmax(0, 1fr) 104px;
-  align-items: end;
-}
-
-
 .nr-shell .address-lookup-grid {
   grid-template-columns: minmax(120px, 0.9fr) minmax(110px, 0.7fr) 86px;
 }
 
 
-.nr-shell .cadunico-checkbox,
 .nr-shell .internal-chip-check {
   min-height: 36px;
   align-self: end;
@@ -16713,7 +16614,6 @@ form textarea:focus,
   }
 
 
-  .nr-shell .cadunico-row,
   .nr-shell .two-column-fields,
   .nr-shell .address-lookup-grid,
   .nr-shell .address-city-grid,
@@ -16722,7 +16622,6 @@ form textarea:focus,
   }
 
 
-  .nr-shell .cadunico-checkbox,
   .nr-shell .internal-chip-check {
     width: 100%;
   }
@@ -20897,7 +20796,6 @@ form textarea:focus,
 }
 
 
-.nr-shell--public .cadunico-checkbox,
 .nr-shell--public .animal-photo-upload-card,
 .nr-shell--public .public-schedule-picker,
 .nr-shell--public .doc-empty-note,
@@ -20964,7 +20862,6 @@ form textarea:focus,
 }
 
 
-.nr-shell--public .single-request-form .cadunico-checkbox input[type="checkbox"]:checked,
 .nr-shell--public .doc-accept-check input:checked ~ .doc-check-box {
   background: #1f8a5f;
   border-color: #1f8a5f;

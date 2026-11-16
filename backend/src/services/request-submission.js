@@ -1,4 +1,5 @@
 import { configsAllowStep, normalizeFollowUp } from "../../../shared/notification-contract.js";
+import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../shared/phone-contract.js";
 import { isInternalUser } from "../tenant.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
 import { prepareAnimalNeighborhoods } from "./request-neighborhoods.js";
@@ -69,6 +70,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   if ((hasCpfInput || tutorRequired || isComplaint || user?.role === "tutor") && !isValidCpf(cleanCpf)) {
     invalid(isComplaint ? "CPF válido é obrigatório para registrar a denúncia." : "Informe um CPF válido para o tutor.");
   }
+  // The mobile is how the municipality reaches the tutor, whoever fills the form. A logged tutor's comes from their profile, and a
+  // complaint has its own phone rule below.
+  if (tutorRequired && !isComplaint && user?.role !== "tutor" && !isMobilePhone(body.phone)) invalid(MOBILE_PHONE_MESSAGE);
   if (isComplaint) {
     const name = body.tutor_name ?? body.tutorName ?? body.tutor;
     if (typeof name !== "string" || !name.trim()) invalid("Nome do denunciante é obrigatório.");

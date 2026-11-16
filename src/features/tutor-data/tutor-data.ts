@@ -1,3 +1,4 @@
+import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../shared/phone-contract.js";
 import { formatCep, formatPhone, onlyDigits } from "../../utils";
 
 // What the server answers for the tutor of a request (the CPF identifies the account and is never edited).
@@ -46,8 +47,7 @@ export function tutorFormIssues(form: TutorForm): Partial<Record<keyof TutorForm
   const issues: Partial<Record<keyof TutorForm, string>> = {};
   if (form.name.trim().length < 2) issues.name = "Informe o nome do tutor.";
   if (form.email.trim() && !EMAIL_PATTERN.test(form.email.trim())) issues.email = "Informe um e-mail válido.";
-  const phone = onlyDigits(form.phone);
-  if (phone && !/^[1-9]\d{9,10}$/.test(phone)) issues.phone = "Informe um telefone válido com DDD.";
+  if (!isMobilePhone(form.phone)) issues.phone = MOBILE_PHONE_MESSAGE;
   const cep = onlyDigits(form.cep);
   if (cep && cep.length !== 8) issues.cep = "Informe um CEP com 8 dígitos.";
   if (form.state.trim() && !/^[A-Za-z]{2}$/.test(form.state.trim())) issues.state = "Informe a UF com duas letras.";

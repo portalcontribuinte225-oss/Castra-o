@@ -18,13 +18,13 @@ export async function loadFollowUpPolicy(municipalityId: string, readConfig = ap
   return { phoneEnabled: whatsapp?.active === true || sms?.active === true };
 }
 
-export function useFollowUpPolicy(municipalityId: string, enabled: boolean) {
+export function useFollowUpPolicy(municipalityId: string) {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<PolicyState>({ municipalityId: "", loading: false, error: "", phoneEnabled: false });
   const retry = useCallback(() => setAttempt((current) => current + 1), []);
 
   useEffect(() => {
-    if (!enabled || !municipalityId) return;
+    if (!municipalityId) return;
     let cancelled = false;
     setState({ municipalityId, loading: true, error: "", phoneEnabled: false });
     loadFollowUpPolicy(municipalityId).then((policy) => {
@@ -34,10 +34,10 @@ export function useFollowUpPolicy(municipalityId: string, enabled: boolean) {
       if (!cancelled) setState({ municipalityId, loading: false, phoneEnabled: false, error: "Não foi possível carregar os canais de acompanhamento. Tente novamente." });
     });
     return () => { cancelled = true; };
-  }, [municipalityId, enabled, attempt]);
+  }, [municipalityId, attempt]);
 
   const current = state.municipalityId === municipalityId;
   const error = !municipalityId ? "Selecione um município para continuar." : current ? state.error : "";
-  const loading = enabled && Boolean(municipalityId) && (!current || state.loading);
-  return { phoneEnabled: enabled && current && !loading && !error && state.phoneEnabled, loading, error, retry, ready: !enabled || (current && !loading && !error) };
+  const loading = Boolean(municipalityId) && (!current || state.loading);
+  return { phoneEnabled: current && !loading && !error && state.phoneEnabled, loading, error, retry, ready: current && !loading && !error };
 }

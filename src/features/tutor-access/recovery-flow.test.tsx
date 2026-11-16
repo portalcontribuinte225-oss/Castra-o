@@ -89,13 +89,14 @@ describe("three-step password recovery", () => {
 });
 
 describe("password policy and server challenge time", () => {
-  it("keeps registration contacts optional and in the payload when operational follow-up is declined", () => {
+  it("asks for the mobile, keeps the e-mail optional, and keeps both in the payload when operational follow-up is declined", () => {
     const html = renderToStaticMarkup(<RegistrationContactFields email="" phone="" onEmailChange={() => {}} onPhoneChange={() => {}} />);
-    expect(html).toContain("opcional"); expect(html).toContain('type="email"'); expect(html).toContain('type="tel"');
-    expect(html).not.toContain("required"); expect(html).not.toContain("WhatsApp");
-    expect(registrationContactIssues("", "")).toEqual({ email: "", phone: "" });
+    expect(html).toContain("E-mail (opcional)"); expect(html).toContain("Celular *"); expect(html).toContain('type="email"'); expect(html).toContain('type="tel"');
+    expect(html).not.toContain("WhatsApp");
+    expect(registrationContactIssues("", "")).toEqual({ email: "", phone: expect.stringContaining("celular completo") });
     expect(registrationContactIssues("inválido", "123")).toMatchObject({ email: expect.any(String), phone: expect.any(String) });
     expect(registrationContactIssues("inválido", "123").email).not.toBe("");
+    expect(registrationContactIssues("", "(48) 99999-1234")).toEqual({ email: "", phone: "" });
     expect(registrationContactIssues("inválido", "123", false)).toEqual({ email: "", phone: "" });
     const body = buildRequestPayload({ email: "ana@example.com", phone: "48999991234", workflowData: { followUp: { enabled: false, email: "", phone: "" } } });
     expect(body).toMatchObject({ tutor_email: "ana@example.com", phone: "48999991234", workflow_data: { followUp: { enabled: false, email: "", phone: "" } } });

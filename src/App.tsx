@@ -181,7 +181,6 @@ import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-conf
 import { MunicipalityAddressFields } from "./features/municipality-form/municipality-address-fields";
 import { emptyMunicipalityForm, formFromMunicipality, formatMunicipalityAddress, municipalityContactIssue } from "./features/municipality-form/municipality-address";
 import type { MunicipalityForm } from "./features/municipality-form/municipality-address";
-import { NeighborhoodField } from "./features/neighborhoods/neighborhood-field";
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
@@ -205,7 +204,8 @@ import { canUseIntegration, integrationTabItems } from "./features/integrations/
 import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedule } from "./features/animal-services/animal-history";
 import type { AnimalRecord } from "./features/animal-services/animal-service-types";
 import { RequestTracking } from "./features/request-tracking/request-tracking";
-import { RegistrationContactFields, registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
+import { registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
+import { TutorStepFields } from "./features/tutor-access/tutor-step-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
 import { EnrollmentNotice } from "./features/tutor-access/enrollment-notice";
@@ -2658,7 +2658,7 @@ function NewRequest({
     neighborhood: registeredContext?.tutor.neighborhood || currentUser.neighborhood || "",
     address: registeredContext?.tutor.address || currentUser.address || "",
     cpf: registeredContext?.tutor.cpf || currentUser.cpf || "",
-    email: currentUser.email || "",
+    email: currentUser.role === "tutor" ? currentUser.email || "" : "",
     cep: currentUser.cep || "",
     number: currentUser.number || "",
     city: currentUser.city || "",
@@ -2669,7 +2669,7 @@ function NewRequest({
     latitude: "",
     longitude: "",
     identificationTypeId: registeredContext?.animal.identificationTypeId || "",
-    phone: currentUser.phone || "",
+    phone: currentUser.role === "tutor" ? currentUser.phone || "" : "",
     notes: "",
     schedule: initialSchedule,
     municipalityId: initialMunicipalityId || currentUser.municipalityId || "",
@@ -2694,7 +2694,9 @@ function NewRequest({
   const [submissionError, setSubmissionError] = useState("");
   const [followUp, setFollowUp] = useState<FollowUpValue>(emptyFollowUp);
   const followUpMunicipalityId = selectedMunicipalityId || requestData.municipalityId || currentUser.municipalityId || "";
-  const followUpPolicy = useFollowUpPolicy(followUpMunicipalityId, !internalSimple);
+  const followUpPolicy = useFollowUpPolicy(followUpMunicipalityId);
+  // The follow-up offers the contacts the tutor gave in the Tutor step (or the profile's), so nothing is typed twice.
+  const tutorContacts = { email: requestData.email, phone: requestData.phone };
   const availability = useScheduleAvailability(followUpMunicipalityId, initialSchedule);
   const scheduleDays = availability.days;
   useEffect(() => {
@@ -2718,12 +2720,6 @@ function NewRequest({
   useEffect(() => {
     setFollowUp({ ...emptyFollowUp });
   }, [followUpMunicipalityId]);
-
-  useEffect(() => {
-    if (followUpPolicy.ready && !followUpPolicy.phoneEnabled) {
-      setFollowUp((current) => current.phone ? { ...current, phone: "" } : current);
-    }
-  }, [followUpPolicy.ready, followUpPolicy.phoneEnabled]);
 
   useEffect(() => {
     if (initialSchedule) {
@@ -2887,9 +2883,9 @@ function NewRequest({
     if (requiresTutorIdentity && validateTutorName(requestData.tutor)) issues.push(validateTutorName(requestData.tutor));
     if (!registered && contactIssues.email) issues.push(contactIssues.email);
     if (contactIssues.phone) issues.push(contactIssues.phone);
-    if (!internalSimple) {
+    if (hasStep(RequestStep.FOLLOW_UP)) {
       if (!followUpPolicy.ready) issues.push(followUpPolicy.error || "Aguarde o carregamento dos canais de acompanhamento.");
-      issues.push(...getFollowUpIssues(followUp, followUpPolicy.phoneEnabled));
+      issues.push(...getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled));
     }
 
     return issues;
@@ -2901,7 +2897,7 @@ function NewRequest({
     }
 
     if (step === RequestStep.FOLLOW_UP) {
-      return [!followUpPolicy.ready, ...getFollowUpIssues(followUp, followUpPolicy.phoneEnabled)].filter(Boolean);
+      return [!followUpPolicy.ready, ...getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled)].filter(Boolean);
     }
 
     if (step === RequestStep.ANIMAL) {
@@ -3164,6 +3160,7 @@ function NewRequest({
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
         ...(selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {}),
+        ...(hasStep(RequestStep.FOLLOW_UP) ? { followUp: buildFollowUpPayload(followUp, tutorContacts, followUpPolicy.phoneEnabled) } : {}),
       },
       animals: payloadAnimals(animals.map((animal) => ({
         ...animal,
@@ -3238,7 +3235,7 @@ function NewRequest({
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
         ...identificationPayload,
-        followUp: buildFollowUpPayload(followUp, followUpPolicy.phoneEnabled),
+        followUp: buildFollowUpPayload(followUp, tutorContacts, followUpPolicy.phoneEnabled),
       },
       animalId: registeredContext?.animal.id || "",
       animals: registeredContext ? [{ id: registeredContext.animal.id }] : payloadAnimals(animals.map((animal) => ({
@@ -3350,109 +3347,18 @@ function NewRequest({
           {submissionError && <p className="form-error">{submissionError}</p>}
           <div className="single-request-form clean-form">
           {formStep === RequestStep.TUTOR && <FormSection title="Tutor">
-            {publicFlow ? (
-              <>
-                <div className="form-sub-card">
-                  <span className="form-sub-card-title">Responsável</span>
-                  <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Nome completo">
-                    <input type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} aria-invalid={showInvalid("tutor")} />
-                    {showInvalid("tutor") && <small className="field-error-message">{validateTutorName(requestData.tutor)}</small>}
-                  </div>
-                  <div className="two-column-fields">
-                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
-                      <input type="text" placeholder="000.000.000-00" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} aria-invalid={showInvalid("cpf")} />
-                      {showInvalid("cpf") && <small className="field-error-message">Informe um CPF válido.</small>}
-                    </div>
-                    <div className="access-field" data-label="CadÚnico (se aplica)">
-                      <div className="access-field-action-row">
-                        <input type="text" placeholder="Número" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
-                        <label className={`cadunico-square-toggle${!requestData.cadUnicoNotApplicable ? " is-checked" : ""}`}>
-                          <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
-                          <span className="cadunico-check-box" />
-                        </label>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="form-sub-card">
-                  <span className="form-sub-card-title">Endereço</span>
-                  <div className="address-lookup-grid">
-                    <div className="access-field" data-label="CEP">
-                      <input type="text" placeholder="00000-000" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
-                    </div>
-                    <div className="access-field" data-label="Número">
-                      <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
-                    </div>
-                    <div className="access-field" data-label="UF">
-                      <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="access-field" data-label="Endereço">
-                    <input type="text" placeholder="Rua, complemento" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
-                  </div>
-                  <div className="address-city-grid">
-                    <NeighborhoodField value={requestData.neighborhood} names={neighborhoodList} onChange={(value) => updateRequestField("neighborhood", value)} />
-                    <div className="access-field" data-label="Cidade">
-                      <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
-                    </div>
-                  </div>
-                  {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="form-sub-card">
-                  <span className="form-sub-card-title">Identificação</span>
-                  <div className="two-column-fields">
-                    <div className={`access-field${showInvalid("tutor") ? " is-invalid" : ""}`} data-label="Tutor">
-                      <input type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={requestData.tutor} onChange={(e) => updateRequestField("tutor", e.target.value)} aria-invalid={showInvalid("tutor")} />
-                      {showInvalid("tutor") && <small className="field-error-message">{validateTutorName(requestData.tutor)}</small>}
-                    </div>
-                    <div className={`access-field${showInvalid("cpf") ? " is-invalid" : ""}`} data-label="CPF">
-                      <input type="text" placeholder="CPF (000.000.000-00)" value={requestData.cpf} onChange={(e) => updateMaskedRequestField("cpf", e.target.value)} aria-invalid={showInvalid("cpf")} />
-                      {showInvalid("cpf") && <small className="field-error-message">Informe um CPF válido.</small>}
-                    </div>
-                  </div>
-                  <div className="cadunico-row">
-                    <div className="access-field" data-label="CadÚnico">
-                      <input type="text" placeholder="Número do CadÚnico" value={requestData.cadUnico} onChange={(e) => updateRequestField("cadUnico", e.target.value)} readOnly={requestData.cadUnicoNotApplicable} />
-                    </div>
-                    <label className="checkbox-row cadunico-checkbox">
-                      <input type="checkbox" checked={!requestData.cadUnicoNotApplicable} onChange={(event) => toggleCadUnicoNotApplicable(event.target.checked)} />
-                      Se aplica
-                    </label>
-                  </div>
-                </div>
-
-                <div className="form-sub-card">
-                  <span className="form-sub-card-title">Endereço</span>
-                  <div className="address-lookup-grid">
-                    <div className="access-field" data-label="CEP">
-                      <input type="text" placeholder="CEP (00000-000)" value={requestData.cep} onChange={(e) => lookupCep(e.target.value)} />
-                    </div>
-                    <div className="access-field" data-label="Número">
-                      <input type="text" placeholder="Número" value={requestData.number} onChange={(e) => updateRequestField("number", e.target.value)} />
-                    </div>
-                    <div className="access-field" data-label="UF">
-                      <input type="text" placeholder="UF" value={requestData.state} maxLength={2} onChange={(e) => updateMaskedRequestField("state", e.target.value)} />
-                    </div>
-                  </div>
-                  <div className="access-field" data-label="Endereço">
-                    <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
-                  </div>
-                  <div className="address-city-grid">
-                    <NeighborhoodField value={requestData.neighborhood} names={neighborhoodList} onChange={(value) => updateRequestField("neighborhood", value)} />
-                    <div className="access-field" data-label="Cidade">
-                      <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
-                    </div>
-                  </div>
-                  {requestData.latitude && requestData.longitude && <p className="map-selected-place">Localização registrada: {requestData.latitude}, {requestData.longitude}.</p>}
-                </div>
-
-              </>
-            )}
-            {(publicFlow || internalSimple) && <RegistrationContactFields email={requestData.email} phone={requestData.phone} onEmailChange={(value) => updateRequestField("email", value)} onPhoneChange={(value) => updateMaskedRequestField("phone", value)} showErrors={submitAttempted} />}
+            <TutorStepFields
+              data={requestData}
+              nameInvalid={showInvalid("tutor")}
+              nameIssue={validateTutorName(requestData.tutor)}
+              cpfInvalid={showInvalid("cpf")}
+              neighborhoodNames={neighborhoodList}
+              showErrors={submitAttempted}
+              onField={updateRequestField}
+              onMaskedField={updateMaskedRequestField}
+              onCadUnicoApplies={toggleCadUnicoNotApplicable}
+              onCepChange={lookupCep}
+            />
           </FormSection>}
 
           {formStep === RequestStep.ANIMAL && <FormSection title="Dados do animal">
@@ -3605,7 +3511,7 @@ function NewRequest({
             </div>
           </FormSection>}
           {formStep === RequestStep.FOLLOW_UP && <FormSection title="Acompanhamento">
-            <FollowUpStep value={followUp} onChange={setFollowUp} phoneEnabled={followUpPolicy.phoneEnabled} loading={followUpPolicy.loading} error={followUpPolicy.error} onRetry={followUpPolicy.retry} showErrors={submitAttempted || followUp.enabled === true} />
+            <FollowUpStep value={followUp} onChange={setFollowUp} contacts={tutorContacts} phoneEnabled={followUpPolicy.phoneEnabled} loading={followUpPolicy.loading} error={followUpPolicy.error} onRetry={followUpPolicy.retry} showErrors={submitAttempted || followUp.enabled === true} onEditContacts={hasStep(RequestStep.TUTOR) ? () => navigateToStep(RequestStep.TUTOR) : undefined} />
           </FormSection>}
           </div>
           {submissionError && <p className="form-error nr-bottom-error">{submissionError}</p>}
@@ -3642,7 +3548,7 @@ function NewRequest({
               <button
                 className="nr-topbar-continue primary-action"
                 type="button"
-                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) || (!internalSimple && (!followUpPolicy.ready || getFollowUpIssues(followUp, followUpPolicy.phoneEnabled).length > 0))}
+                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) || (hasStep(RequestStep.FOLLOW_UP) && (!followUpPolicy.ready || getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled).length > 0))}
                 onClick={submit}
               >
                 {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}

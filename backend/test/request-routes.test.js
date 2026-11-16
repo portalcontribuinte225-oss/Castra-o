@@ -262,7 +262,7 @@ test("municipal POST cannot override the authenticated municipality", async (t) 
 
 test("new public tutor enrollment returns one ephemeral credential outside the persisted request", async (t) => {
   const { request, row, users, profiles } = await fixture(t);
-  const response = await request({ body: procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
   assert.equal(response.status, 201);
   const password = response.body.enrollment.temporaryPassword;
   assert.equal(response.cacheControl, "no-store");
@@ -277,7 +277,7 @@ test("new public tutor enrollment returns one ephemeral credential outside the p
 
 test("repeated anonymous CPF never resets an existing account or returns its credential", async (t) => {
   const { request, row, users } = await fixture(t);
-  const body = procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
+  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
   const first = await request({ body });
   const storedHash = [...users.values()][0].password;
   const second = await request({ body });
@@ -291,7 +291,7 @@ test("repeated anonymous CPF never resets an existing account or returns its cre
 
 test("concurrent initial submissions create one municipal account and reveal only the newly created credential", async (t) => {
   const { request, users, profiles, stats } = await fixture(t);
-  const body = procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
+  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
   const results = await Promise.all([request({ body }), request({ body })]);
   assert.ok(results.every((result) => result.status === 201));
   assert.equal(results.filter((result) => result.body.enrollment?.temporaryPassword).length, 1);
@@ -304,7 +304,7 @@ test("concurrent initial submissions create one municipal account and reveal onl
 
 test("failed request insert rolls back both new account and profile", async (t) => {
   const { request, users, profiles, stats } = await fixture(t, { failRequestInsert: true });
-  const response = await request({ body: procedureBody({ cpf: VALID_CPF, tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
   assert.equal(response.status, 500);
   assert.equal(users.size, 0);
   assert.equal(profiles.size, 0);
@@ -314,7 +314,7 @@ test("failed request insert rolls back both new account and profile", async (t) 
 test("authenticated tutor cannot submit a different CPF or delete requests", async (t) => {
   const { request } = await fixture(t);
   const user = { ...ADMIN, role: "tutor" };
-  const response = await request({ user, body: procedureBody({ cpf: "16899535009", tutor_name: "Another Tutor" }) });
+  const response = await request({ user, body: procedureBody({ cpf: "16899535009", phone: "(48) 99999-4321", tutor_name: "Another Tutor" }) });
   assert.equal(response.status, 403);
   assert.equal((await request({ user, method: "DELETE", path: `/requests/${REQUEST_ID}` })).status, 403);
 });

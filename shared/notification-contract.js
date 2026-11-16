@@ -1,3 +1,5 @@
+import { MOBILE_PHONE_MESSAGE, isMobilePhone, onlyPhoneDigits } from "./phone-contract.js";
+
 export const NotificationEvent = Object.freeze({
   SCHEDULE_CONFIRMED: "schedule_confirmed",
   SCHEDULE_CHANGED: "schedule_changed",
@@ -35,29 +37,35 @@ export const DeliveryCode = Object.freeze({
   TEMPLATE_UNAVAILABLE: "template_unavailable",
 });
 
-// The phone is accepted only when the municipality uses a phone channel (WhatsApp or SMS).
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const isEmailAddress = (value) => typeof value === "string" && value.length <= 254 && EMAIL_PATTERN.test(value.trim());
+const isFilled = (value) => value !== undefined && value !== null && value !== "";
+
+// The contacts of a follow-up the municipality can use: the e-mail, and the mobile phone only when it has a phone channel (WhatsApp or SMS).
+// A contact that is not usable comes back empty.
+export function followUpContacts(value, { phoneEnabled = false } = {}) {
+  return {
+    email: isEmailAddress(value?.email) ? value.email.trim().toLowerCase() : "",
+    phone: phoneEnabled && typeof value?.phone === "string" && value.phone.length <= 30 && isMobilePhone(value.phone) ? onlyPhoneDigits(value.phone) : "",
+  };
+}
+
+// Accepting the follow-up needs at least one contact that can be reached, and a contact that is given must be valid.
 export function validateFollowUp(value, { phoneEnabled = false } = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.enabled !== "boolean") {
     return "Informe se deseja acompanhar a solicitação.";
   }
   if (!value.enabled) return "";
-  if (typeof value.email !== "string" || value.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email.trim())) {
-    return "Informe um e-mail válido para acompanhar a solicitação.";
-  }
-  if (phoneEnabled && value.phone !== undefined && value.phone !== "") {
-    if (typeof value.phone !== "string" || value.phone.length > 30 || !/^\d{10,11}$/.test(value.phone.replace(/\D/g, ""))) {
-      return "Informe um telefone válido com DDD.";
-    }
-  }
-  return "";
+  if (isFilled(value.email) && !isEmailAddress(value.email)) return "Informe um e-mail válido para acompanhar a solicitação.";
+  if (phoneEnabled && isFilled(value.phone) && !followUpContacts(value, { phoneEnabled }).phone) return MOBILE_PHONE_MESSAGE;
+  const { email, phone } = followUpContacts(value, { phoneEnabled });
+  return email || phone ? "" : "Selecione ao menos um contato para acompanhar a solicitação.";
 }
 
 export function normalizeFollowUp(value, options = {}) {
   const error = validateFollowUp(value, options);
   if (error) throw Object.assign(new Error(error), { status: 400 });
-  return value.enabled
-    ? { enabled: true, email: value.email.trim().toLowerCase(), phone: options.phoneEnabled ? String(value.phone || "").replace(/\D/g, "") : "" }
-    : { enabled: false, email: "", phone: "" };
+  return value.enabled ? { enabled: true, ...followUpContacts(value, options) } : { enabled: false, email: "", phone: "" };
 }
 
 export function configsAllowStep(configs, key) {

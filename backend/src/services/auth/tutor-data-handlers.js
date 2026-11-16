@@ -6,6 +6,7 @@ import { findAuthUser, savePassword, strictAuthAudit, withAuthTransaction } from
 import { consumeAuthLimit } from "../../repositories/auth-limits.js";
 import { authError, requireNewPassword } from "./auth-security.js";
 import { normalizeAuthEmail, normalizeAuthPhone } from "./auth-contacts.js";
+import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../../shared/phone-contract.js";
 
 // What the staff edits of a tutor, with the limits the form shows; the CPF is the identity of the account and is never edited here.
 const TEXT_LIMITS = { address: 200, neighborhood: 120, city: 120 };
@@ -80,8 +81,8 @@ function readTutorInput(body = {}) {
   const email = emailText ? normalizeAuthEmail(emailText) : "";
   if (emailText && !email) throw authError(400, "Informe um e-mail válido.");
   const phoneText = typeof body.phone === "string" ? body.phone.trim() : "";
-  const phone = phoneText ? normalizeAuthPhone(phoneText) : "";
-  if (phoneText && !phone) throw authError(400, "Informe um telefone válido com DDD.");
+  if (!isMobilePhone(phoneText)) throw authError(400, MOBILE_PHONE_MESSAGE);
+  const phone = normalizeAuthPhone(phoneText);
   const state = cleanText(body.state, 2, "UF").toUpperCase();
   if (state && !/^[A-Z]{2}$/.test(state)) throw authError(400, "Informe a UF com duas letras.");
   const cep = typeof body.cep === "string" ? body.cep.replace(/\D/g, "") : "";

@@ -96,7 +96,7 @@ test("without a password the current one is kept and no session is revoked", asy
 test("invalid data is refused before anything is written", async (t) => {
   const { fixture, tutor, analyst, partner, path } = await fixtureWithTutor(t);
   const token = fixture.token(analyst);
-  for (const [patch, message] of [[{ name: "A" }, /nome/i], [{ email: "not-an-email" }, /e-mail/i], [{ phone: "123" }, /telefone/i],
+  for (const [patch, message] of [[{ name: "A" }, /nome/i], [{ email: "not-an-email" }, /e-mail/i], [{ phone: "123" }, /celular/i], [{ phone: "" }, /celular/i], [{ phone: "(48) 3333-4444" }, /celular/i],
     [{ state: "Santa" }, /UF/], [{ cep: "123" }, /CEP/], [{ password: "123" }, /senha/i], [{ neighborhood: "x".repeat(121) }, /Bairro/]]) {
     const result = await fixture.request(path(), { method: "PUT", token, body: { ...changes, ...patch } });
     assert.equal(result.status, 400, JSON.stringify(patch)); assert.match(result.body.error, message);
