@@ -122,6 +122,7 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
     if (!allowed()) return;
     const phone = state.testPhone.trim();
     if (!phone) { publish({ testOutcome: notSent("Informe um número para o teste.") }); return; }
+    if (phone.replace(/\D/g, "").length !== 11) { publish({ testOutcome: notSent("Informe o celular completo, com DDD e o 9: (00) 00000-0000.") }); return; }
     if (!state.config.hasToken) { publish({ testOutcome: notSent("Salve o token antes de enviar um teste.") }); return; }
     const captured = revision;
     publish({ sendingTest: true, testOutcome: null, error: "", notice: "" });

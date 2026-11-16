@@ -2,6 +2,7 @@ import React from "react";
 import { SmsEnvironment } from "../../../shared/sms-contract.js";
 import { SavedSecretField } from "../../components/saved-secret-field";
 import { ConfigActiveToggle, Field } from "../../components/ui";
+import { formatPhone } from "../../utils";
 import type { SmsTestOutcome } from "./sms-types";
 import type { useSmsSettings } from "./use-sms-settings";
 
@@ -71,7 +72,7 @@ export function SmsCredentials({ state }: { state: SmsState }) {
 
       <div className="whatsapp-section-heading"><span>Teste de envio</span></div>
       <div className="whatsapp-input-action-row">
-        <Field label="Número" value={state.testPhone} placeholder="(00) 00000-0000" onChange={state.setTestPhone} />
+        <Field label="Número" type="tel" autoComplete="tel" value={state.testPhone} placeholder="(00) 00000-0000" onChange={(value: string) => state.setTestPhone(formatPhone(value))} />
         <button className="primary-action" type="button" onClick={state.sendTest} disabled={busy || !config.hasToken}>
           {state.sendingTest ? "Enviando..." : "Enviar teste"}
         </button>

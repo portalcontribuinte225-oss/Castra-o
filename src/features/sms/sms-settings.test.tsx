@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDefaultSmsConfig, SMS_CONFIG_KEY, SmsEnvironment } from "../../../shared/sms-contract.js";
 import { smsUses } from "../../../shared/sms-uses-contract.js";
 import { createSmsSettingsController } from "./sms-settings-controller";
+import { SmsCredentials } from "./sms-credentials";
 import { SmsSettings } from "./sms-settings";
 import { useSmsSettings } from "./use-sms-settings";
 import type { SmsConfig, SmsConnectionResult, SmsSettingsApi } from "./sms-types";
@@ -197,6 +198,17 @@ describe("municipal SMS settings", () => {
     expect(controller.getSnapshot()).toMatchObject({ sendingTest: false, error: "" });
   });
 
+  it("sends the test only to a complete mobile number: eleven digits, with the DDD and the 9", async () => {
+    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true); await controller.load();
+    for (const phone of ["(48) 9999-9999", "(48) 99999-12", "48", "(48) 99999-12345", "abc"]) {
+      controller.setTestPhone(phone); await controller.sendTest();
+      expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Informe o celular completo, com DDD e o 9: (00) 00000-0000.", detail: "", providerMessageId: "" });
+    }
+    expect(api.sendSmsTest).not.toHaveBeenCalled();
+    controller.setTestPhone("(48) 99999-1234"); await controller.sendTest();
+    expect(api.sendSmsTest).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps one test in flight and ignores its answer after another municipality opens", async () => {
     const api = apiFixture(channelOn); const old = createSmsSettingsController(api, "municipality-a", true); await old.load();
     const pending = deferred<{ status: string; providerMessageId: string }>(); api.sendSmsTest.mockReturnValue(pending.promise);
@@ -317,6 +329,23 @@ describe("SMS settings interface", () => {
     const sending = screen({ sendingTest: true });
     expect(sending).toMatch(/<button[^>]*disabled=""[^>]*>Enviando\.\.\./); expect(sending).not.toContain("Enviar teste");
     expect(screen({ testPhone: "48999991234" })).toContain('value="48999991234"');
+  });
+
+  it("masks the number as it is typed: (00) 00000-0000, digits only, never more than eleven", () => {
+    const setTestPhone = vi.fn();
+    const tree = SmsCredentials({ state: view({ setTestPhone }) }) as React.ReactElement<{ children: React.ReactNode }>;
+    const find = (node: React.ReactNode): React.ReactElement<{ onChange?: (value: string) => void; type?: string }> | null => {
+      if (!React.isValidElement(node)) return Array.isArray(node) ? node.map(find).find(Boolean) ?? null : null;
+      const props = node.props as { label?: string; children?: React.ReactNode };
+      return props.label === "Número" ? node as never : find(props.children);
+    };
+    const field = find(tree);
+    expect(field?.props.type).toBe("tel");
+    for (const [typed, shown] of [["4", "4"], ["48", "48"], ["489", "(48) 9"], ["48999991234", "(48) 99999-1234"], ["489999912345678", "(48) 99999-1234"],
+      ["(48) 99999-12a34", "(48) 99999-1234"], ["abc", ""], ["", ""]]) {
+      setTestPhone.mockClear(); field?.props.onChange?.(typed);
+      expect(setTestPhone).toHaveBeenCalledWith(shown);
+    }
   });
 
   it("shows the result of a test: taken by the provider with its code, and told to check the phone, or why it was not sent", () => {
