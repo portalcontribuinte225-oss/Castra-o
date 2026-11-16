@@ -71,10 +71,3 @@ export interface TutorProfile {
   phoneVerifiedAt?: string;
 }
 
-export interface RecoveryTutor {
-  id: string;
-  name: string;
-  cpf: string;
-  maskedEmail?: string;
-  maskedPhone?: string;
-}

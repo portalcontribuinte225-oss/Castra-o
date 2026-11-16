@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { CONFIG_KEYS } from "../../domain";
 
-const optionKeys = [CONFIG_KEYS.requestTypes, CONFIG_KEYS.identificationTypes, CONFIG_KEYS.documentTypes, CONFIG_KEYS.species, CONFIG_KEYS.sizes, CONFIG_KEYS.breeds, "ai"];
+const optionKeys = [CONFIG_KEYS.requestTypes, CONFIG_KEYS.identificationTypes, CONFIG_KEYS.documentTypes, CONFIG_KEYS.species, CONFIG_KEYS.sizes, CONFIG_KEYS.breeds, CONFIG_KEYS.neighborhoods, "ai"];
 
 export function useRequestOptions(municipalityId: string) {
   const [options, setOptions] = useState<Record<string, unknown>>({});

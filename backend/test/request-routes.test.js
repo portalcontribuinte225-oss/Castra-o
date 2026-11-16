@@ -431,7 +431,7 @@ test("public requestType alias cannot omit the configured mandatory document", a
   assert.equal(stats.calls.some(({ sql }) => sql === "ROLLBACK"), true);
 });
 
-const dog = { species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida" };
+const dog = { species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida", neighborhood: "Centro" };
 
 test("public POST with procedures per animal stores the derived type, the animals and the procedures, ignoring the single type sent", async (t) => {
   const { request, row } = await fixture(t);

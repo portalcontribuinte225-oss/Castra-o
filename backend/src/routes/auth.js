@@ -3,7 +3,7 @@ import { auth, restrictedAuth } from "../middleware/auth.js";
 import { login, me, changePassword } from "../services/auth/session-handlers.js";
 import { recoveryOptions, forgotPassword, resetPassword } from "../services/auth/recovery-handlers.js";
 import { profile, requestContactChallenge, confirmContactChallenge } from "../services/auth/profile-handlers.js";
-import { searchTutors, assistedRecovery } from "../services/auth/assisted-recovery-handlers.js";
+import { getRequestTutor, updateRequestTutor } from "../services/auth/tutor-data-handlers.js";
 import { upsertInternalUser } from "../services/auth/internal-user-handlers.js";
 
 const router = Router();
@@ -18,8 +18,8 @@ router.put("/users", auth, endpoint(upsertInternalUser));
 router.get("/tutor/profile", auth, endpoint(profile));
 router.post("/tutor/contact-challenges", auth, endpoint(requestContactChallenge));
 router.post("/tutor/contact-challenges/:id/confirm", auth, endpoint(confirmContactChallenge));
-router.get("/tutors", auth, endpoint(searchTutors));
-router.post("/tutors/:id/assisted-recovery", auth, endpoint(assistedRecovery));
+router.get("/request-tutor/:requestId", auth, endpoint(getRequestTutor));
+router.put("/request-tutor/:requestId", auth, endpoint(updateRequestTutor));
 router.use((error, _req, res, _next) => {
   const status = error.code === "23505" ? 409 : error.status || 500;
   res.status(status).set("Cache-Control", "no-store").json({

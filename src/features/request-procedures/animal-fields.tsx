@@ -1,6 +1,7 @@
 import React from "react";
 import { CompactChoiceField, ToggleChoiceField, YesNoToggleField } from "../../components/ui";
 import type { AnyRecord } from "../../types";
+import { NeighborhoodField } from "../neighborhoods/neighborhood-field";
 
 const SEX_OPTIONS = ["Macho", "Fêmea"];
 const BREED_TYPE_OPTIONS = ["Indefinida", "Definida"];
@@ -11,6 +12,8 @@ interface AnimalFieldsProps {
   speciesNames: string[];
   sizeChoices: AnyRecord[];
   breedOptions: AnyRecord[];
+  // The neighborhoods the municipality registered; with none the neighborhood is typed.
+  neighborhoodNames?: string[];
   submitAttempted: boolean;
   // Staff also record the microchip of the animal.
   internal?: boolean;
@@ -19,7 +22,7 @@ interface AnimalFieldsProps {
 }
 
 // The data of one animal of the request, and its health: what is the same whoever asks and whatever is asked for it.
-export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, submitAttempted, internal = false, onChange, onSelectSpecies }: AnimalFieldsProps) {
+export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, neighborhoodNames = [], submitAttempted, internal = false, onChange, onSelectSpecies }: AnimalFieldsProps) {
   return (
     <>
       <div className="form-sub-card">
@@ -55,6 +58,7 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
             <input type="text" placeholder="Ex: 2 anos" value={animal.age || ""} onChange={(event) => onChange("age", event.target.value)} />
           </div>
         </div>
+        <NeighborhoodField label="Bairro do animal" placeholder="Bairro onde o animal vive" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
         {internal && (
           <div className="internal-microchip-row">
             <div className="access-field" data-label="Microchip">

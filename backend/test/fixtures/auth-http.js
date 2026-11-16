@@ -38,7 +38,7 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
   process.env.ADMIN_EMAIL = "staff@example.test";
   const storedConfigs = { ...(emailEnabled ? emailConfigs() : {}), ...configs };
   const users = new Map(initialUsers.map((user) => [user.id, structuredClone(user)]));
-  const challenges = new Map(); const limits = new Map(); const calls = []; const followUps = [];
+  const challenges = new Map(); const limits = new Map(); const calls = []; const followUps = []; const requestRows = []; const animalTutorUpdates = [];
   let tail = Promise.resolve();
   let externalCalls = 0;
   const messages = [];
@@ -105,6 +105,37 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
         const user = users.get(values[5]); Object.assign(user, { name: values[0], email: values[1], password: values[2], role: values[3], active: values[4], session_version: user.session_version + 1 });
         const { id, name, email, role, municipality_id, active } = user; return { rows: [{ id, name, email, role, municipality_id, active }] };
       }
+      if (sql.startsWith("SELECT id, tutor_id, cpf, tutor_name")) {
+        const row = requestRows.find((request) => request.id === values[0] && request.municipality_id === values[1]);
+        return { rows: row ? [structuredClone(row)] : [] };
+      }
+      if (sql.includes("FROM users u JOIN tutor_profiles p")) {
+        const user = [...users.values()].find((item) => item.role === "tutor" && (values.length === 1 ? item.id === values[0]
+          : item.municipality_id === values[0] && (item.id === values[1] || item.cpf === values[2])));
+        return { rows: user ? [{ id: user.id, name: user.name, active: user.active, cpf: user.cpf, email: user.profile_email, phone: user.profile_phone,
+          email_verified_at: user.email_verified_at, phone_verified_at: user.phone_verified_at, address: user.address, neighborhood: user.neighborhood,
+          city: user.city, state: user.state, cep: user.cep }] : [] };
+      }
+      if (sql.startsWith("SELECT address, neighborhood, city, state, cep FROM requests")) return { rows: [] };
+      if (sql.startsWith("UPDATE users SET name = $2")) { users.get(values[0]).name = values[1]; return { rows: [] }; }
+      if (sql.startsWith("UPDATE tutor_profiles SET email = $3, phone = $4")) {
+        const user = users.get(values[0]); assertMunicipality(user, values[1]);
+        Object.assign(user, { profile_email: values[2], profile_phone: values[3], address: values[4], neighborhood: values[5], city: values[6], state: values[7], cep: values[8] });
+        if (values[9]) user.email_verified_at = new Date(); if (values[10]) user.phone_verified_at = new Date(); user.profile_version += 1;
+        return { rows: [] };
+      }
+      if (sql.startsWith("UPDATE requests SET tutor_name")) {
+        for (const request of requestRows) if (request.municipality_id === values[0] && ((["NOVA", "AGENDADA"].includes(request.status)
+          && (request.tutor_id === values[1] || request.cpf === values[10])) || (values[11] && request.id === values[11]))) Object.assign(request, { tutor_name: values[2], tutor_email: values[3], phone: values[4], address: values[5], neighborhood: values[6], city: values[7], state: values[8], cep: values[9] });
+        return { rows: [] };
+      }
+      if (sql.startsWith("UPDATE animal_tutors")) { animalTutorUpdates.push(values); return { rows: [] }; }
+      if (sql.startsWith("UPDATE requests SET workflow_data") && sql.includes("cpf = $4")) {
+        const kind = sql.includes("{followUp,email}") ? "email" : "phone";
+        for (const request of requestRows) if (request.municipality_id === values[0] && (request.tutor_id === values[1] || request.cpf === values[3])
+          && ["NOVA", "AGENDADA"].includes(request.status) && request.workflow_data?.followUp?.enabled === true) request.workflow_data.followUp[kind] = values[2];
+        return { rows: [] };
+      }
       if (sql.startsWith("UPDATE tutor_profiles SET")) {
         const user = users.get(values[0]); const kind = sql.includes("SET email") ? "email" : "phone";
         assertMunicipality(user, values[1]); user[`profile_${kind}`] = values[2]; user[`${kind}_verified_at`] = new Date(); user.profile_version += 1;
@@ -146,7 +177,7 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
     });
     return { status: response.status, body: await response.json(), cacheControl: response.headers.get("cache-control") };
   }
-  return { request, users, challenges, limits, calls, followUps, messages, token: (user) => issueSession(users.get(user.id || user)).token,
+  return { request, users, challenges, limits, calls, followUps, requestRows, animalTutorUpdates, messages, token: (user) => issueSession(users.get(user.id || user)).token,
     challenge: (user, purpose, destination) => createChallenge({ query: pool.query }, { user: users.get(user.id || user), purpose, destination }) };
 }
 

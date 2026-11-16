@@ -121,6 +121,8 @@ export function AgendaView({
   currentUser,
   teams = { sectors: [], users: [] },
   municipalities = [],
+  neighborhoods = [],
+  refreshRequests,
 }: AnyRecord) {
   const [view, setView] = useState<ViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -139,6 +141,7 @@ export function AgendaView({
     previewRequest,
     openRequest,
     closePreview,
+    updatePreviewTutor,
     activeSectors,
     activeUsers,
     approveRequest,
@@ -350,6 +353,8 @@ export function AgendaView({
         <RequestPreviewModal
           request={previewRequest}
           readOnly={!canEditRequests(currentUser?.role)}
+          neighborhoods={neighborhoods}
+          onTutorSaved={(tutor) => { updatePreviewTutor(tutor); refreshRequests?.(); }}
           requestTypes={requestTypes}
           sectors={activeSectors}
           users={activeUsers}

@@ -72,19 +72,6 @@ test("contact confirmation updates only opted-in active requests owned by this m
   assert.equal(fixture.calls.slice(0, poolConfig).some(({ sql }) => sql === "COMMIT"), true);
 });
 
-test("assisted recovery excludes public/partner roles and rolls back when mandatory audit fails", async (t) => {
-  const tutor = authUser(); const partner = authUser({ role: "ong", email: "partner@example.test", cpf: null });
-  const analyst = authUser({ role: "analista", email: "staff@example.test", cpf: null });
-  const fixture = await authHttpFixture(t, [tutor, partner, analyst], { failAudit: true });
-  const path = `/auth/tutors/${tutor.id}/assisted-recovery`; const body = { municipalityId: MUNICIPALITY, identityConfirmed: true, reason: "Identidade presencial conferida" };
-  assert.equal((await fixture.request(path, { method: "POST", token: fixture.token(tutor), body })).status, 403);
-  assert.equal((await fixture.request(path, { method: "POST", token: fixture.token(partner), body })).status, 403);
-  const result = await fixture.request(path, { method: "POST", token: fixture.token(analyst), body });
-  assert.equal(result.status, 500); assert.equal(result.body.temporaryPassword, undefined);
-  assert.equal(fixture.users.get(tutor.id).password, tutor.password); assert.equal(fixture.users.get(tutor.id).session_version, 0);
-  assert.equal(fixture.calls.some(({ sql }) => sql === "ROLLBACK"), true);
-});
-
 test("existing staff identity cannot be reset by email collision without an explicit authorized ID", async (t) => {
   const admin = authUser({ role: "admin_municipal", email: "admin@example.test", cpf: null });
   const staff = authUser({ role: "analista", email: "staff@example.test", cpf: null });

@@ -58,6 +58,12 @@ export function useRequestActions({
     setPreviewRequest(null);
   }
 
+  // The tutor data saved in the attendance replaces the data of the request on screen, which is a copy taken when it was opened.
+  function updatePreviewTutor(tutor: AnyRecord) {
+    setPreviewRequest((current) => current ? normalizeRequest({ ...current, tutor: tutor.name, tutor_name: tutor.name, email: tutor.email, tutor_email: tutor.email,
+      phone: tutor.phone, address: tutor.address, neighborhood: tutor.neighborhood, city: tutor.city, state: tutor.state, cep: tutor.cep }) : current);
+  }
+
   async function approveRequest(request: AnyRecord, precedingResults: NotificationResult[] = []) {
     const patch = { status: "AGENDADA" };
     try {
@@ -211,6 +217,7 @@ export function useRequestActions({
     previewRequest,
     openRequest,
     closePreview,
+    updatePreviewTutor,
     activeSectors,
     activeUsers,
     approveRequest,

@@ -33,11 +33,12 @@ export async function savePassword(database, userId, hash, mustChange = false) {
   return rows[0];
 }
 
-export async function strictAuthAudit(database, { actorId, userId, municipalityId, action, changes = {} }) {
+// The entity audited is the user, unless the action is about something else (e.g. the data registered with a request).
+export async function strictAuthAudit(database, { actorId, userId, municipalityId, action, changes = {}, entityType = "user", entityId = userId }) {
   await database.query(
     `INSERT INTO audit_logs (user_id, municipality_id, action, entity_type, entity_id, changes)
-     VALUES ($1, $2, $3, 'user', $4, $5::jsonb)`,
-    [actorId || userId, municipalityId || null, action, userId, JSON.stringify(changes)],
+     VALUES ($1, $2, $3, $6, $4, $5::jsonb)`,
+    [actorId || userId, municipalityId || null, action, entityId, JSON.stringify(changes), entityType],
   );
 }
 

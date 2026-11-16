@@ -73,6 +73,7 @@ import {
   hiddenWorkflowTags,
   initialAiSettings,
   initialBreeds,
+  initialNeighborhoods,
   initialDocumentTypes,
   initialIdentificationTypes,
   initialMunicipalities,
@@ -176,6 +177,9 @@ import {
 } from "./features/request-procedures/request-procedures";
 import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, resolveRequestTypes } from "../shared/request-types-contract.js";
 import { BreedsConfig } from "./features/breeds/breeds-config";
+import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
+import { NeighborhoodField } from "./features/neighborhoods/neighborhood-field";
+import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
 import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./features/request-steps/request-steps";
@@ -201,7 +205,7 @@ import { RegistrationContactFields, registrationContactIssues } from "./features
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
 import { EnrollmentNotice } from "./features/tutor-access/enrollment-notice";
-import { AssistedRecovery } from "./features/tutor-access/assisted-recovery";
+import { TutorDataTab } from "./features/tutor-data/tutor-data-tab";
 
 import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./features/tutor-access/submission-envelope";
 import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
@@ -251,6 +255,7 @@ const environmentConfigTabs: ConfigTabItem[] = [
   { id: "sizes", label: "Portes" },
   { id: "species", label: "Espécies" },
   { id: "breeds", label: "Raças" },
+  { id: "neighborhoods", label: "Bairros" },
   { id: "documents", label: "Documentos Solicitados" },
 ];
 
@@ -359,7 +364,7 @@ export default function App() {
   return <SessionBoundary session={{ ...session, accept, logout }}
     renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact setActive={() => {}} />}
       renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} publicFlow selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
-        requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} identificationTypes={input.context?.identificationTypes || input.options[CONFIG_KEYS.identificationTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
+        requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} identificationTypes={input.context?.identificationTypes || input.options[CONFIG_KEYS.identificationTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
     />}
     renderWorkspace={(user) => <ApplicationWorkspace key={user?.id || "public"} currentUser={user} setCurrentUser={accept} onProcedureIntent={setProcedureIntent} />} />;
 }
@@ -376,6 +381,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [sizeOptions, setSizeOptions] = useState([]);
   const [identificationTypes, setIdentificationTypes] = useState([]);
   const [breeds, setBreeds] = useState([]);
+  const [neighborhoods, setNeighborhoods] = useState([]);
   const [municipalities, setMunicipalities] = useState(initialMunicipalities);
   const [aiSettings, setAiSettings] = useState(initialAiSettings);
   const [scheduleDays, setScheduleDays] = useState([]);
@@ -506,6 +512,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           setSizeOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.sizes], municipality)));
           setIdentificationTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.identificationTypes], municipality)));
           setBreeds(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.breeds], municipality)));
+          setNeighborhoods(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.neighborhoods], municipality)));
           setTeams({
             sectors: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.sectors, municipality))),
             users: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.users, municipality))),
@@ -540,6 +547,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
       [CONFIG_KEYS.sizes, setSizeOptions],
       [CONFIG_KEYS.identificationTypes, setIdentificationTypes],
       [CONFIG_KEYS.breeds, setBreeds],
+      [CONFIG_KEYS.neighborhoods, setNeighborhoods],
       [CONFIG_KEYS.teams, setTeams],
       [CONFIG_KEYS.permissionGroups, setPermissionGroups],
       [CONFIG_KEYS.scheduleRules, (rules) => setScheduleRules((Array.isArray(rules) ? rules : []).map((rule) => {
@@ -564,6 +572,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.identificationTypes]) api.setConfig(CONFIG_KEYS.identificationTypes, identificationTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, identificationTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.breeds]) api.setConfig(CONFIG_KEYS.breeds, breeds).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, breeds]);
+  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.neighborhoods]) api.setConfig(CONFIG_KEYS.neighborhoods, neighborhoods).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, neighborhoods]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
@@ -590,6 +599,11 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     });
     return () => { cancelled = true; };
   }, [aiConfigMunicipalityId, currentUser?.id, currentUser?.role, selectedMunicipalityId]);
+
+  // The tutor data saved in an attendance also changes the requests in progress, so the list is read again.
+  const refreshRequests = useCallback(() => {
+    api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(console.error);
+  }, []);
 
   useEffect(() => {
     if (!currentUser) return;
@@ -764,6 +778,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           sizeOptions={sizeOptions}
           identificationTypes={identificationTypes}
           breeds={breeds}
+          neighborhoods={neighborhoods}
           aiSettings={aiSettings}
           onRequestCreated={registerCreatedRequest}
         />
@@ -801,6 +816,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const scopedSizeOptions = filterByMunicipalityScope(sizeOptions, scopedMunicipalityId);
   const scopedIdentificationTypes = filterByMunicipalityScope(identificationTypes, scopedMunicipalityId);
   const scopedBreeds = filterByMunicipalityScope(breeds, scopedMunicipalityId);
+  const scopedNeighborhoods = filterByMunicipalityScope(neighborhoods, scopedMunicipalityId);
   const scopedScheduleRules = filterByMunicipalityScope(scheduleRules, scopedMunicipalityId);
   const effectiveScopedScheduleDays = mergeScheduleDaysWithRules(scopedScheduleDays, scopedScheduleRules);
   const scopedPermissionGroups = filterByMunicipalityScope(permissionGroups, scopedMunicipalityId);
@@ -1081,6 +1097,9 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           setIdentificationTypes={setIdentificationTypes}
           breeds={scopedBreeds}
           setBreeds={setBreeds}
+          neighborhoods={scopedNeighborhoods}
+          setNeighborhoods={setNeighborhoods}
+          refreshRequests={refreshRequests}
           municipalities={scopedMunicipalities}
           setMunicipalities={setMunicipalities}
           aiSettings={aiSettings}
@@ -1718,7 +1737,7 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
   const [authEntryError, setAuthEntryError] = useState("");
   const [activePublicService, setActivePublicService] = useState<string | null>(null);
@@ -1734,6 +1753,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
   const [publicServiceSizeOptions, setPublicServiceSizeOptions] = useState(sizeOptions);
   const [publicServiceIdentificationTypes, setPublicServiceIdentificationTypes] = useState(identificationTypes);
   const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
+  const [publicServiceNeighborhoods, setPublicServiceNeighborhoods] = useState(neighborhoods);
   const adoptionSectionRef = useRef(null);
   const [enrollment, setEnrollment] = useState<EnrollmentCredential | null>(null);
   const publicMunicipalityRef = useRef(selectedMunicipalityId);
@@ -1748,7 +1768,8 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
     setPublicServiceSizeOptions(sizeOptions);
     setPublicServiceIdentificationTypes(identificationTypes);
     setPublicServiceBreeds(breeds);
-  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, identificationTypes, breeds]);
+    setPublicServiceNeighborhoods(neighborhoods);
+  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, identificationTypes, breeds, neighborhoods]);
 
   useEffect(() => {
     if (!selectedMunicipalityId) return;
@@ -1762,6 +1783,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
     api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSizeOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.identificationTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceIdentificationTypes(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.breeds, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceBreeds(value); }).catch(() => {});
+    api.getConfig(CONFIG_KEYS.neighborhoods, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceNeighborhoods(value); }).catch(() => {});
   }, [selectedMunicipalityId]);
 
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
@@ -1937,6 +1959,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
                 sizeOptions={publicServiceSizeOptions}
                 identificationTypes={publicServiceIdentificationTypes}
                 breeds={publicServiceBreeds}
+                neighborhoods={publicServiceNeighborhoods}
                 initialType={procedurePrefill?.requestType || ""}
                 initialSchedule={procedurePrefill?.schedule || ""}
               />
@@ -2650,6 +2673,7 @@ function NewRequest({
   documentTypes = initialDocumentTypes,
   identificationTypes = initialIdentificationTypes,
   breeds = initialBreeds,
+  neighborhoods = initialNeighborhoods,
   initialSchedule = "",
   initialType = "",
   initialMunicipalityId = "",
@@ -2762,6 +2786,7 @@ function NewRequest({
     .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
   const hasConfiguredTypes = configuredRequestTypes.length > 0;
   const breedContext = { requestTypes: configuredRequestTypes, breeds, speciesOptions };
+  const neighborhoodList = neighborhoodNames(neighborhoods);
 
   // A procedure asked for from outside (the animal's own screen) starts as the procedure of the first animal.
   useEffect(() => {
@@ -2898,6 +2923,7 @@ function NewRequest({
       if (!animal.sex) issues.push(`Selecione o sexo${label}.`);
       if (!animal.size) issues.push(`Selecione o porte${label}.`);
       if (!animal.breedType) issues.push(`Informe se a raça é definida ou indefinida${label}.`);
+      if (!animal.neighborhood) issues.push(`Informe o bairro${label}.`);
     });
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Anexe ou reaproveite os documentos obrigatórios. Arquivos pendentes serão conferidos pela equipe.");
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
@@ -2931,6 +2957,7 @@ function NewRequest({
           !animal.sex,
           !animal.size,
           !animal.breedType,
+          !animal.neighborhood,
         ])
         .filter(Boolean);
     }
@@ -3001,7 +3028,7 @@ function NewRequest({
         ...current,
         cep: maskedCep,
         address: data.logradouro || current.address,
-        neighborhood: data.bairro || current.neighborhood,
+        neighborhood: neighborhoodList.length ? findNeighborhoodName(neighborhoodList, data.bairro) || current.neighborhood : data.bairro || current.neighborhood,
         city: data.localidade || current.city,
         state: data.uf || current.state,
       }));
@@ -3409,9 +3436,7 @@ function NewRequest({
                     <input type="text" placeholder="Rua, complemento" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
                   </div>
                   <div className="address-city-grid">
-                    <div className="access-field" data-label="Bairro">
-                      <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
-                    </div>
+                    <NeighborhoodField value={requestData.neighborhood} names={neighborhoodList} onChange={(value) => updateRequestField("neighborhood", value)} />
                     <div className="access-field" data-label="Cidade">
                       <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
                     </div>
@@ -3461,9 +3486,7 @@ function NewRequest({
                     <input type="text" placeholder="Endereço (Rua, complemento)" value={requestData.address} onChange={(e) => updateRequestField("address", e.target.value)} />
                   </div>
                   <div className="address-city-grid">
-                    <div className="access-field" data-label="Bairro">
-                      <input type="text" placeholder="Bairro" value={requestData.neighborhood} onChange={(e) => updateRequestField("neighborhood", e.target.value)} />
-                    </div>
+                    <NeighborhoodField value={requestData.neighborhood} names={neighborhoodList} onChange={(value) => updateRequestField("neighborhood", value)} />
                     <div className="access-field" data-label="Cidade">
                       <input type="text" placeholder="Cidade" value={requestData.city} onChange={(e) => updateRequestField("city", e.target.value)} />
                     </div>
@@ -3506,6 +3529,7 @@ function NewRequest({
                     speciesNames={activeSpecies}
                     sizeChoices={sizeChoiceOptions}
                     breedOptions={breedOptionsFor(animal, breedContext)}
+                    neighborhoodNames={neighborhoodList}
                     submitAttempted={submitAttempted}
                     internal={internalSimple}
                     onChange={(field, value) => updateAnimal(index, field, value)}
@@ -3847,6 +3871,8 @@ function AdminDashboard({
   sizeOptions = initialSizes,
   identificationTypes = initialIdentificationTypes,
   breeds = initialBreeds,
+  neighborhoods = initialNeighborhoods,
+  refreshRequests,
   aiSettings = initialAiSettings,
   teams = initialTeams,
   municipalities = [],
@@ -3858,7 +3884,6 @@ function AdminDashboard({
   const { filters: requestFilters, actions: requestFilterActions } = useRequestFilters();
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
-  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
@@ -3871,6 +3896,7 @@ function AdminDashboard({
     previewRequest,
     openRequest: openRequestPreview,
     closePreview: closeRequestPreview,
+    updatePreviewTutor,
     activeSectors,
     activeUsers,
     approveRequest,
@@ -3945,7 +3971,6 @@ function AdminDashboard({
               <Plus size={18} />
               Criar Solicitação
             </button>
-            {canEditRequests(currentUser?.role) && <button className="ghost-button" type="button" onClick={() => setRecoveryOpen(true)}>Recuperar acesso de tutor</button>}
           </div>
 
           <RequestFiltersToolbar
@@ -3964,7 +3989,6 @@ function AdminDashboard({
         onClearDimension={requestFilterActions.clearDimension}
         onClearAll={requestFilterActions.clearAll}
       />
-      {recoveryOpen && canEditRequests(currentUser?.role) && <AssistedRecovery key={selectedMunicipalityId} municipalityId={selectedMunicipalityId || currentUser?.municipalityId || ""} municipalities={municipalities} onClose={() => setRecoveryOpen(false)} />}
       <div className="triage-card-grid">
         {activeRequests.length === 0 && (
           <EmptyState
@@ -4059,6 +4083,8 @@ function AdminDashboard({
         <RequestPreviewModal
           request={previewRequest}
           readOnly={!canEditRequests(currentUser?.role)}
+          neighborhoods={neighborhoods}
+          onTutorSaved={(tutor) => { updatePreviewTutor(tutor); refreshRequests?.(); }}
           requestTypes={requestTypes}
           sectors={activeSectors}
           users={activeUsers}
@@ -4107,6 +4133,7 @@ function AdminDashboard({
               speciesOptions={speciesOptions}
               sizeOptions={sizeOptions}
               breeds={breeds}
+              neighborhoods={neighborhoods}
             />
           </div>
         </div>
@@ -4123,7 +4150,7 @@ function isAnimalPhotoDocument(d: AnyRecord = {}) {
 // One row of the attachments table of a request: the request itself, the photo, a required document (sent or not) or an extra one.
 type AttachmentRow = AnyRecord & { id: string; document?: AnyRecord };
 
-export function RequestPreviewModal({ request, readOnly = true, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
+export function RequestPreviewModal({ request, readOnly = true, neighborhoods = [], onTutorSaved, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -4136,7 +4163,7 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
   const [complaintResolutionNote, setComplaintResolutionNote] = useState("");
   const [uploadingEvidence, setUploadingEvidence] = useState(false);
   const [docDecisions, setDocDecisions] = useState<AnyRecord>({});
-  const [modalTab, setModalTab] = useState<"procedimento" | "anexos">(
+  const [modalTab, setModalTab] = useState<"procedimento" | "anexos" | "tutor">(
     normalizedRequest.status === "AGENDADA" ? "procedimento" : "anexos",
   );
   const [rescheduleReason, setRescheduleReason] = useState("");
@@ -4806,6 +4833,13 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
               >
                 <Paperclip size={13} /> Anexos
               </button>
+              <button
+                type="button"
+                className={`prm-tab${modalTab === "tutor" ? " prm-tab--active" : ""}`}
+                onClick={() => setModalTab("tutor")}
+              >
+                <User size={13} /> Dados do tutor
+              </button>
             </div>
           )}
 
@@ -4866,6 +4900,15 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
                 </div>
               </div>
             </div>
+          )}
+          {!isRescheduleMode && modalTab === "tutor" && (
+            <TutorDataTab
+              requestId={normalizedRequest.id}
+              municipalityId={normalizedRequest.municipalityId}
+              neighborhoodNames={neighborhoodNames(neighborhoods)}
+              readOnly={readOnly}
+              onSaved={onTutorSaved}
+            />
           )}
           {!isRescheduleMode && modalTab === "anexos" && (
             <div className="prm-section prm-section--documents">
@@ -6160,6 +6203,8 @@ function ConfigView({
   setIdentificationTypes,
   breeds = initialBreeds,
   setBreeds,
+  neighborhoods = initialNeighborhoods,
+  setNeighborhoods,
   municipalities = initialMunicipalities,
   setMunicipalities,
   scheduleDays = [],
@@ -7786,6 +7831,10 @@ function ConfigView({
 
       {configArea === "environment" && configTab === "breeds" && (
         <BreedsConfig items={breeds} setItems={setBreeds} municipalityScopeId={configMunicipalityScopeId} speciesOptions={speciesOptions} />
+      )}
+
+      {configArea === "environment" && configTab === "neighborhoods" && (
+        <NeighborhoodsConfig items={neighborhoods} setItems={setNeighborhoods} municipalityScopeId={configMunicipalityScopeId} />
       )}
 
       {configArea === "sectors" && (

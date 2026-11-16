@@ -3,7 +3,7 @@ import { AnimalStatus, MicrochipStatus } from "../../../../shared/animal-contrac
 import { authError } from "../auth/auth-security.js";
 
 export const ANIMAL_FIELDS = ["name", "species", "sex", "size", "breedType", "breedDescription", "coat", "birthDate", "age", "weight",
-  "dewormed", "vaccinated", "illnessHistory", "food"];
+  "dewormed", "vaccinated", "illnessHistory", "food", "neighborhood"];
 export const validUuid = (value) => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 export const normalizeChip = (value) => String(value || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
 

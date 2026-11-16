@@ -5,7 +5,7 @@ import { getBreedOptions, findSpeciesIdByName } from "../breeds/breeds";
 // What one animal of a request asks for: the procedures (request types of the municipality) chosen for it.
 export function blankAnimal(): AnyRecord {
   return {
-    name: "", species: "", sex: "", breedType: "", breedDescription: "", size: "", weight: "", age: "", birthDate: "", coat: "",
+    name: "", species: "", sex: "", breedType: "", breedDescription: "", size: "", weight: "", age: "", birthDate: "", coat: "", neighborhood: "",
     hasChip: "", microchip: "", dewormed: "", vaccinated: "", illnessHistory: "", food: "", requestTypeIds: [],
   };
 }
@@ -35,12 +35,12 @@ export function withProceduresAt(animals: AnyRecord[], index: number, ids: strin
   return animals.map((animal, position) => (position === index ? withProcedures(animal, ids, context) : animal));
 }
 
-// A new animal like the one before it: same species, size, breed and procedures; the rest (name, sex, age...) is left blank.
+// A new animal like the one before it: same species, size, breed, neighborhood and procedures; the rest (name, sex, age...) is left blank.
 export function duplicateAnimal(animals: AnyRecord[], fromIndex: number): AnyRecord[] {
   const source = animals[fromIndex];
   if (!source) return animals;
-  const { species, size, breedType, breedDescription } = source;
-  return [...animals, { ...blankAnimal(), species, size, breedType, breedDescription, requestTypeIds: animalRequestTypeIds(source) }];
+  const { species, size, breedType, breedDescription, neighborhood } = source;
+  return [...animals, { ...blankAnimal(), species, size, breedType, breedDescription, neighborhood: neighborhood || "", requestTypeIds: animalRequestTypeIds(source) }];
 }
 
 // Gives every animal the procedures of the one at `sourceIndex`.

@@ -195,20 +195,21 @@ const procedureSettings = (extra = {}) => ({
   ],
   ...extra,
 });
+const bairro = { neighborhood: "Centro" };
 const procedureInput = (animals, extra = {}) => ({ body: { animals }, settings: procedureSettings(), workflow: { identificationTypeId: "owned", followUp: { enabled: false } }, ...extra });
 
 test("with procedures per animal the request type is derived from them, whole, and the animals come back normalized", () => {
-  const animals = [{ name: "Rex", requestTypeIds: ["microchip", "castration"] }, { name: "Mia", requestTypeIds: ["castration", "castration"] }];
+  const animals = [{ name: "Rex", ...bairro, requestTypeIds: ["microchip", "castration"] }, { name: "Mia", ...bairro, requestTypeIds: ["castration", "castration"] }];
   const result = prepare(procedureInput(animals, { body: { animals, cpf } }));
   assert.equal(result.requestType, "Microchipagem, Castração");
-  assert.deepEqual(result.animals, [{ name: "Rex", requestTypeIds: ["microchip", "castration"] }, { name: "Mia", requestTypeIds: ["castration"] }]);
+  assert.deepEqual(result.animals, [{ name: "Rex", ...bairro, requestTypeIds: ["microchip", "castration"] }, { name: "Mia", ...bairro, requestTypeIds: ["castration"] }]);
   assert.deepEqual(result.workflow.requestTypeIds, ["microchip", "castration"]);
   assert.deepEqual(result.workflow.requestTypeNames, ["Microchipagem", "Castração"]);
   assert.equal(result.workflow.requestTypeId, undefined);
 });
 
 test("the single type, the type text and the derived workflow keys a client sends are ignored when procedures are present", () => {
-  const animals = [{ requestTypeIds: ["microchip"] }];
+  const animals = [{ ...bairro, requestTypeIds: ["microchip"] }];
   const result = prepare({ ...procedureInput(animals, { body: { animals, cpf, requestTypeId: "castration", type: "Castração", request_type: "Castração" } }),
     workflow: { identificationTypeId: "owned", followUp: { enabled: false }, requestTypeIds: ["castration"], requestTypeNames: ["Forjado"], requestTypeId: "castration" } });
   assert.equal(result.requestType, "Microchipagem");
@@ -231,11 +232,11 @@ test("the tutor step is dispensed when any procedure or the identification type 
   const stray = { id: "stray", active: true, stepTutor: false };
   const settings = procedureSettings({ identificationTypes: [{ id: "owned", active: true }, stray] });
   const run = (animals, identificationTypeId, body = {}) => prepare({ body: { animals, ...body }, settings, workflow: { identificationTypeId, followUp: { enabled: false } } });
-  const noTutor = [{ requestTypeIds: ["no-tutor"] }, { requestTypeIds: ["no-tutor-too"] }];
-  const needsTutor = [{ requestTypeIds: ["castration"] }, { requestTypeIds: ["microchip"] }];
+  const noTutor = [{ ...bairro, requestTypeIds: ["no-tutor"] }, { ...bairro, requestTypeIds: ["no-tutor-too"] }];
+  const needsTutor = [{ ...bairro, requestTypeIds: ["castration"] }, { ...bairro, requestTypeIds: ["microchip"] }];
   assert.deepEqual([run(noTutor, "owned").tutorRequired, run(noTutor, "owned").cpf], [false, null]);
   assert.equal(run([...noTutor, ...needsTutor], "owned").tutorRequired, false, "one procedure without a tutor step is enough");
-  assert.equal(run([{ requestTypeIds: ["castration", "no-tutor"] }], "owned").tutorRequired, false);
+  assert.equal(run([{ ...bairro, requestTypeIds: ["castration", "no-tutor"] }], "owned").tutorRequired, false);
   assert.equal(run(needsTutor, "stray").tutorRequired, false, "the identification type alone may dispense it");
   assert.throws(() => run(needsTutor, "owned"), /CPF/);
   assert.equal(run(needsTutor, "owned", { cpf }).tutorRequired, true);
@@ -245,16 +246,16 @@ test("a request with procedures refuses unknown, switched-off or missing ones fo
   const staff = { role: "analista" };
   for (const user of [undefined, staff]) {
     const input = (animals) => procedureInput(animals, { user, body: { animals, cpf } });
-    assert.throws(() => prepare(input([{ requestTypeIds: ["unknown"] }])), /solicitação/);
-    assert.throws(() => prepare(input([{ requestTypeIds: ["vaccine"] }])), /solicitação/);
-    assert.throws(() => prepare(input([{ requestTypeIds: ["castration"] }, { name: "Sem procedimento", requestTypeIds: [] }])), /ao menos um procedimento/);
-    assert.equal(prepare(input([{ requestTypeIds: ["castration"] }])).requestType, "Castração");
+    assert.throws(() => prepare(input([{ ...bairro, requestTypeIds: ["unknown"] }])), /solicitação/);
+    assert.throws(() => prepare(input([{ ...bairro, requestTypeIds: ["vaccine"] }])), /solicitação/);
+    assert.throws(() => prepare(input([{ ...bairro, requestTypeIds: ["castration"] }, { ...bairro, name: "Sem procedimento", requestTypeIds: [] }])), /ao menos um procedimento/);
+    assert.equal(prepare(input([{ ...bairro, requestTypeIds: ["castration"] }])).requestType, "Castração");
   }
 });
 
 test("staff also get the derived type, and still need a CPF unless the identification type has no tutor step", () => {
   const staff = { role: "analista" };
-  const animals = [{ requestTypeIds: ["microchip"] }, { requestTypeIds: ["castration"] }];
+  const animals = [{ ...bairro, requestTypeIds: ["microchip"] }, { ...bairro, requestTypeIds: ["castration"] }];
   assert.throws(() => prepare(procedureInput(animals, { user: staff })), /CPF/);
   const withCpf = prepare(procedureInput(animals, { user: staff, body: { animals, cpf } }));
   assert.deepEqual([withCpf.internal, withCpf.requestType, withCpf.tutorRequired], [true, "Microchipagem, Castração", true]);

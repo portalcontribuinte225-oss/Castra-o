@@ -88,6 +88,7 @@ export const initialDocumentTypes: AnyRecord[] = [];
 export const initialRequestTypes: AnyRecord[] = [];
 export const initialIdentificationTypes: AnyRecord[] = [];
 export const initialBreeds: AnyRecord[] = [];
+export const initialNeighborhoods: AnyRecord[] = [];
 export const initialSpecies: AnyRecord[] = [];
 export const initialSizes: AnyRecord[] = [];
 export const initialMunicipalities: AnyRecord[] = [];
@@ -138,6 +139,7 @@ export const CONFIG_KEYS = {
   species: "castragestao:species",
   sizes: "castragestao:sizes",
   breeds: "castragestao:breeds",
+  neighborhoods: "castragestao:neighborhoods",
   teams: "castragestao:teams",
   scheduleRules: "castragestao:schedule-rules",
   permissionGroups: "permission_groups",

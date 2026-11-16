@@ -75,13 +75,13 @@ describe("withProcedures", () => {
 });
 
 describe("duplicateAnimal", () => {
-  it("adds an animal like the previous one, with species, size, breed and procedures, and the rest blank", () => {
-    const animals = [dog({ name: "Bidu", sex: "Macho", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", coat: "Preta", age: "2 anos",
+  it("adds an animal like the previous one, with species, size, breed, neighborhood and procedures, and the rest blank", () => {
+    const animals = [dog({ name: "Bidu", sex: "Macho", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", coat: "Preta", age: "2 anos", neighborhood: "Centro",
       weight: "5", requestTypeIds: ["castration", "microchip"], dewormed: "Sim", microchip: "123" })];
     const next = duplicateAnimal(animals, 0);
     expect(next).toHaveLength(2);
     expect(next[0]).toBe(animals[0]);
-    expect(next[1]).toMatchObject({ species: "Canino", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", requestTypeIds: ["castration", "microchip"] });
+    expect(next[1]).toMatchObject({ species: "Canino", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", neighborhood: "Centro", requestTypeIds: ["castration", "microchip"] });
     expect(next[1]).toMatchObject({ name: "", sex: "", coat: "", age: "", weight: "", dewormed: "", microchip: "", hasChip: "" });
     next[1].requestTypeIds.push("vaccine");
     expect(animals[0].requestTypeIds).toEqual(["castration", "microchip"]);

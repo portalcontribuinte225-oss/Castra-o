@@ -8,6 +8,7 @@ import { prepareWhatsappCredentials, publicWhatsappConfig } from "../services/wh
 import { testProviderKey } from "./ai.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
 import { BREEDS_CONFIG_KEY } from "../services/breed-defaults.js";
+import { NEIGHBORHOODS_CONFIG_KEY, buildDefaultNeighborhoods, normalizeNeighborhoodName } from "../services/neighborhood-defaults.js";
 import { normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../../shared/document-reuse-contract.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
@@ -24,6 +25,7 @@ const RESERVATION_CONFIG_KEYS = new Set([
 const DEFAULT_CONFIG_VALUE_BUILDERS = {
   [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes,
   [BREEDS_CONFIG_KEY]: () => [],
+  [NEIGHBORHOODS_CONFIG_KEY]: buildDefaultNeighborhoods,
 };
 
 // Keys de configuração que expõem dados sensíveis (usuários, permissões)
@@ -56,6 +58,7 @@ const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "castragestao:species",
   "castragestao:sizes",
   BREEDS_CONFIG_KEY,
+  NEIGHBORHOODS_CONFIG_KEY,
   "castragestao:teams",
   "castragestao:schedule-rules",
   "permission_groups",
@@ -109,6 +112,22 @@ function validateTeams(value) {
   }
   for (const user of value.users) {
     if (!user?.id) return "Cada usuário do time deve ter id";
+  }
+  return null;
+}
+
+// The neighborhoods a municipality registers: a list of named items, with no repeated name.
+function validateNeighborhoods(value) {
+  if (!Array.isArray(value)) return "Os bairros devem ser uma lista.";
+  if (value.length > 2000) return "Limite de 2000 bairros.";
+  const names = new Set();
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return "Bairro inválido.";
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!name || name.length > 120) return "Informe o nome do bairro com até 120 caracteres.";
+    const key = normalizeNeighborhoodName(name);
+    if (names.has(key)) return `O bairro "${name}" está repetido.`;
+    names.add(key);
   }
   return null;
 }
@@ -224,6 +243,10 @@ router.put("/:key", auth, async (req, res) => {
   // Valida estrutura para chaves críticas de permissão
   if (key === "permission_groups") {
     const validationError = validatePermissionGroups(req.body);
+    if (validationError) return res.status(400).json({ error: validationError });
+  }
+  if (key === NEIGHBORHOODS_CONFIG_KEY) {
+    const validationError = validateNeighborhoods(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
   }
   if (key === "castragestao:teams") {

@@ -2,11 +2,12 @@ import { pool } from "../db/index.js";
 import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
 import { REQUEST_TYPES_CONFIG_KEY } from "../services/request-type-defaults.js";
+import { NEIGHBORHOODS_CONFIG_KEY } from "../services/neighborhood-defaults.js";
 
 // This adapter extends the existing pg/config storage: no Drizzle runtime exists in this application.
 // All lookups are parameterized and scoped to an active municipality, never a platform fallback.
 export async function loadRequestSettings(municipalityId, database = pool) {
-  const keys = [REQUEST_TYPES_CONFIG_KEY, IDENTIFICATION_TYPES_CONFIG_KEY, "whatsapp", SMS_CONFIG_KEY, "castragestao:document-types"];
+  const keys = [REQUEST_TYPES_CONFIG_KEY, IDENTIFICATION_TYPES_CONFIG_KEY, "whatsapp", SMS_CONFIG_KEY, "castragestao:document-types", NEIGHBORHOODS_CONFIG_KEY];
   const { rows } = await database.query(
     `SELECT m.id AS municipality_id, c.key, c.value
      FROM municipalities m LEFT JOIN config c ON c.municipality_id = m.id AND c.key = ANY($2::text[])
@@ -22,6 +23,7 @@ export async function loadRequestSettings(municipalityId, database = pool) {
     // The follow-up form asks for a phone as soon as the municipality can reach one, by WhatsApp or by SMS.
     phoneEnabled: values.whatsapp?.active === true || values[SMS_CONFIG_KEY]?.active === true,
     documentTypes: Array.isArray(values["castragestao:document-types"]) ? values["castragestao:document-types"] : [],
+    neighborhoods: Array.isArray(values[NEIGHBORHOODS_CONFIG_KEY]) ? values[NEIGHBORHOODS_CONFIG_KEY] : [],
   };
 }
 

@@ -188,6 +188,16 @@ describe("AnimalFields", () => {
     expect(renderToStaticMarkup(<AnimalFields {...props} animal={{ ...props.animal, breedType: "Indefinida" }} />)).not.toContain("Descreva a raça");
   });
 
+  it("asks for the neighborhood of the animal: a select of the registered ones, or text while there are none", () => {
+    expect(renderToStaticMarkup(<AnimalFields {...props} />)).toContain("Bairro onde o animal vive");
+    const withNames = renderToStaticMarkup(<AnimalFields {...props} neighborhoodNames={["Centro", "Pinheirinho"]} />);
+    expect(withNames).toContain("Selecione o bairro");
+    expect(withNames).toContain("Pinheirinho");
+    expect(withNames).not.toContain("Bairro onde o animal vive");
+    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted />)).toContain("is-invalid");
+    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={{ ...props.animal, neighborhood: "Centro" }} />)).not.toContain("is-invalid");
+  });
+
   it("adds the microchip only for staff", () => {
     const html = renderToStaticMarkup(<AnimalFields {...props} internal />);
     expect(html).toContain("Microchipado");

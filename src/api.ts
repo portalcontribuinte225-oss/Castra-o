@@ -87,8 +87,8 @@ export const api = {
   getTutorProfile: () => request("GET", "/auth/tutor/profile"),
   requestContactChallenge: (body) => request("POST", "/auth/tutor/contact-challenges", body),
   confirmContactChallenge: (challengeId: string, code: string) => request("POST", `/auth/tutor/contact-challenges/${encodeURIComponent(challengeId)}/confirm`, { code }),
-  searchTutors: (cpf: string, municipalityId: string) => request("GET", `/auth/tutors?cpf=${encodeURIComponent(cpf)}&municipalityId=${encodeURIComponent(municipalityId)}`),
-  recoverTutorAccess: (id: string, body) => request("POST", `/auth/tutors/${encodeURIComponent(id)}/assisted-recovery`, body),
+  getRequestTutor: (requestId: string, municipalityId = "") => request("GET", `/auth/request-tutor/${encodeURIComponent(requestId)}${municipalityId ? `?municipalityId=${encodeURIComponent(municipalityId)}` : ""}`),
+  updateRequestTutor: (requestId: string, body: Record<string, string>, municipalityId = "") => request("PUT", `/auth/request-tutor/${encodeURIComponent(requestId)}`, municipalityId ? { ...body, municipalityId } : body),
   upsertAuthUser: (body) => request("PUT", "/auth/users", body),
   logout() {
     sessionMutationVersion += 1;

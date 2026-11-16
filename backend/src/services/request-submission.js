@@ -1,6 +1,7 @@
 import { configsAllowStep, normalizeFollowUp } from "../../../shared/notification-contract.js";
 import { isInternalUser } from "../tenant.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
+import { prepareAnimalNeighborhoods } from "./request-neighborhoods.js";
 import { DERIVED_WORKFLOW_KEYS, activeInMunicipality, prepareRequestProcedures, withDerivedProcedures } from "./request-procedures.js";
 
 function invalid(message) {
@@ -18,6 +19,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   const hasCpfInput = suppliedCpf !== undefined && suppliedCpf !== null && String(suppliedCpf).trim() !== "";
   // The procedures of each animal, when the request carries them; their derived fields replace whatever the client sent.
   const procedures = isComplaint ? null : prepareRequestProcedures({ animals: body.animals, municipalityId, settings });
+  // With procedures per animal (the form of the public and the internal request) each new animal names the neighborhood where it
+  // lives; the normalized animals replace the ones the client sent. A request made the old way has no animal form to ask it in.
+  const located = procedures ? prepareAnimalNeighborhoods({ animals: procedures.animals, municipalityId, settings }) : null;
   const nextWorkflow = withDerivedProcedures(workflow, procedures?.fields);
   delete nextWorkflow.notificationDispatches;
   delete nextWorkflow.notificationResults;
@@ -72,7 +76,7 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   }
   return {
     cpf: cleanCpf || null, workflow: nextWorkflow, requestType: procedures ? procedures.fields.requestType : requestType,
-    animals: procedures?.animals, internal, tutorRequired,
+    animals: located || undefined, internal, tutorRequired,
   };
 }
 

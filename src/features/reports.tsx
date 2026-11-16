@@ -10,6 +10,15 @@ import {
   requestResultLabel,
 } from "../domain";
 import { EmptyState } from "../components/ui";
+import {
+  NO_NEIGHBORHOOD_FILTER,
+  NO_NEIGHBORHOOD_LABEL,
+  animalNeighborhoodsOf,
+  matchesNeighborhoodFilter,
+  neighborhoodFilterOptions,
+  neighborhoodsLabel,
+  tutorNeighborhoodOf,
+} from "./neighborhoods/neighborhood-report";
 import { escapeHtml } from "../utils";
 import { normalizeSearchKey, normalizeText } from "../utils";
 import {
@@ -77,11 +86,12 @@ export function ReportsView({
   requestTypes = initialRequestTypes,
   teams = initialTeams,
   scheduleDays = [],
+  neighborhoods = [],
   globalSearch = "",
   onConsultAnimal,
   onGenerateProntuario,
 }: AnyRecord) {
-  const emptyFilters = { start: "", end: "", type: "", status: "", fee: "", agendaKind: "" };
+  const emptyFilters = { start: "", end: "", type: "", status: "", fee: "", agendaKind: "", tutorNeighborhood: "", animalNeighborhood: "" };
   const [filters, setFilters] = useState(emptyFilters);
   const [appliedFilters, setAppliedFilters] = useState<AnyRecord | null>(null);
   const [prmLoading, setPrmLoading] = useState(false);
@@ -102,11 +112,15 @@ export function ReportsView({
         if (appliedFilters.fee === "charged" && !hasFee) return false;
         if (appliedFilters.fee === "free" && hasFee) return false;
         if (appliedFilters.agendaKind && getRequestAgendaKind(request, scheduleDays) !== appliedFilters.agendaKind) return false;
+        if (!matchesNeighborhoodFilter([tutorNeighborhoodOf(request)].filter(Boolean), appliedFilters.tutorNeighborhood)) return false;
+        if (!matchesNeighborhoodFilter(animalNeighborhoodsOf(request), appliedFilters.animalNeighborhood)) return false;
         if (appliedFilters.search && !matchesSearch(request, appliedFilters.search)) return false;
         return true;
       })
     : [];
 
+  const tutorNeighborhoodOptions = neighborhoodFilterOptions(normalizedReportRequests.map((request) => [tutorNeighborhoodOf(request)].filter(Boolean)), neighborhoods);
+  const animalNeighborhoodOptions = neighborhoodFilterOptions(normalizedReportRequests.map(animalNeighborhoodsOf), neighborhoods);
   const typeOptions = countByMany(requests, (r) => getRequestTypeNames(r, requestTypes)).map((i) => i.label);
   const userOptions = Array.from(
     new Set([...activeUsers.map((u) => u.name), ...requests.map(getRequestUserName)])
@@ -215,6 +229,22 @@ export function ReportsView({
                 {agendaKindOptions.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
               </select>
             </label>
+            <label className="field reports-filter-field">
+              <span>Bairro do tutor</span>
+              <select value={filters.tutorNeighborhood} onChange={(e) => patchFilter("tutorNeighborhood", e.target.value)}>
+                <option value="">Todos</option>
+                <option value={NO_NEIGHBORHOOD_FILTER}>{NO_NEIGHBORHOOD_LABEL}</option>
+                {tutorNeighborhoodOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </label>
+            <label className="field reports-filter-field">
+              <span>Bairro do animal</span>
+              <select value={filters.animalNeighborhood} onChange={(e) => patchFilter("animalNeighborhood", e.target.value)}>
+                <option value="">Todos</option>
+                <option value={NO_NEIGHBORHOOD_FILTER}>{NO_NEIGHBORHOOD_LABEL}</option>
+                {animalNeighborhoodOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+              </select>
+            </label>
 
             <div className="page-actions reports-filter-actions">
               <button
@@ -290,6 +320,8 @@ export function ReportsView({
                 <th>Protocolo</th>
                 <th>Tutor</th>
                 <th>Microchip</th>
+                <th>Bairro do tutor</th>
+                <th>Bairro do animal</th>
                 <th>Tipo</th>
                 <th>Status</th>
                 <th>Resultado</th>
@@ -303,6 +335,8 @@ export function ReportsView({
                   <td>{request.protocol || request.id}</td>
                   <td>{request.tutor || request.tutor_name || "Não informado"}</td>
                   <td>{getRequestMicrochip(request) || "-"}</td>
+                  <td>{tutorNeighborhoodOf(request) || NO_NEIGHBORHOOD_LABEL}</td>
+                  <td>{neighborhoodsLabel(animalNeighborhoodsOf(request))}</td>
                   <td>{getRequestTypeNames(request, requestTypes).join(", ")}</td>
                   <td>{getOperationalStatusLabel(request)}</td>
                   <td>{requestResultLabel(request)}</td>
@@ -346,6 +380,11 @@ function getRequestMicrochip(request: AnyRecord = {}) {
   );
 }
 
+function neighborhoodFilterLabel(value = "") {
+  if (!value) return "Todos";
+  return value === NO_NEIGHBORHOOD_FILTER ? NO_NEIGHBORHOOD_LABEL : value;
+}
+
 function generateReportsPdf(requests = [], filters: AnyRecord = {}, series: AnyRecord = {}, requestTypes = []) {
   const normalizedRequests = requests.map(normalizeRequest);
   const rows = normalizedRequests
@@ -355,6 +394,8 @@ function generateReportsPdf(requests = [], filters: AnyRecord = {}, series: AnyR
       <td>${escapeHtml(r.protocol || r.id || "")}</td>
       <td>${escapeHtml(r.tutor || r.tutor_name || "Não informado")}</td>
       <td>${escapeHtml(getRequestMicrochip(r) || "-")}</td>
+      <td>${escapeHtml(tutorNeighborhoodOf(r) || NO_NEIGHBORHOOD_LABEL)}</td>
+      <td>${escapeHtml(neighborhoodsLabel(animalNeighborhoodsOf(r)))}</td>
       <td>${escapeHtml(getRequestTypeNames(r, requestTypes).join(", "))}</td>
       <td>${escapeHtml(getOperationalStatusLabel(r))}</td>
       <td>${escapeHtml(requestResultLabel(r))}</td>
@@ -376,6 +417,8 @@ function generateReportsPdf(requests = [], filters: AnyRecord = {}, series: AnyR
     ["Status", filters.status ? operationalStatusOptions.find((s) => s.id === filters.status)?.label || filters.status : "Todos"],
     ["Taxa", filters.fee === "charged" ? "Com taxa" : filters.fee === "free" ? "Gratuitas" : "Todas"],
     ["Agenda", filters.agendaKind ? agendaKindOptions.find((k) => k.id === filters.agendaKind)?.label || filters.agendaKind : "Todas"],
+    ["Bairro do tutor", neighborhoodFilterLabel(filters.tutorNeighborhood)],
+    ["Bairro do animal", neighborhoodFilterLabel(filters.animalNeighborhood)],
   ]
     .map(([l, v]) => `<tr><td>${escapeHtml(l)}</td><td>${escapeHtml(v)}</td></tr>`)
     .join("");
@@ -413,8 +456,8 @@ function generateReportsPdf(requests = [], filters: AnyRecord = {}, series: AnyR
       <div><p class="st">Taxas</p><table><thead><tr><th>Descrição</th><th>Qtd.</th></tr></thead><tbody>${buildRows(series.feeSeries)}</tbody></table></div>
     </section>
     <div><p class="st">Filtros aplicados</p><table><tbody>${filterRows}</tbody></table></div>
-    <table><thead><tr><th>Protocolo</th><th>Tutor</th><th>Microchip</th><th>Tipo</th><th>Status</th><th>Resultado</th><th>Usuário</th><th>Taxa</th></tr></thead>
-    <tbody>${rows || '<tr><td colspan="8">Nenhum registro encontrado</td></tr>'}</tbody></table>
+    <table><thead><tr><th>Protocolo</th><th>Tutor</th><th>Microchip</th><th>Bairro do tutor</th><th>Bairro do animal</th><th>Tipo</th><th>Status</th><th>Resultado</th><th>Usuário</th><th>Taxa</th></tr></thead>
+    <tbody>${rows || '<tr><td colspan="10">Nenhum registro encontrado</td></tr>'}</tbody></table>
   </main></body></html>`;
 
   const iframe = document.createElement("iframe");
