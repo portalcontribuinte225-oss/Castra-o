@@ -59,7 +59,7 @@ describe("template display helpers", () => {
     expect(lockReason(row())).toBe("");
     expect(lockReason(row({ canActivate: false, status: "PENDING" }))).toBe("Liga quando a Meta aprovar o template.");
     expect(lockReason(row({ canActivate: false, label: "", reason: "O nome não indica um aviso do sistema." }))).toBe("Template padrão da Meta, não usado pelo sistema.");
-    expect(lockReason(row({ canActivate: false, label: "", reason: "O corpo tem 2 variável(is); o esperado é 4." }))).toBe("O corpo tem 2 variável(is); o esperado é 4.");
+    expect(lockReason(row({ canActivate: false, label: "", reason: "O corpo tem 2 variável(is); o esperado é 5." }))).toBe("O corpo tem 2 variável(is); o esperado é 5.");
     expect(lockReason(row({ active: true, canActivate: false }))).toBe("");
   });
 
@@ -105,9 +105,9 @@ describe("templates table", () => {
 
   it("keeps real template problems in red while a template that is simply not a system notice is neutral", () => {
     const html = renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(
-      row({ name: "castracao_confirmacao_agendamento", label: "", uses: [], reason: "O corpo tem 2 variável(is); o esperado é 4.", canActivate: false }),
+      row({ name: "castracao_confirmacao_agendamento", label: "", uses: [], reason: "O corpo tem 2 variável(is); o esperado é 5.", canActivate: false }),
     )} />);
-    expect(html).toContain('<span class="whatsapp-outside">Fora do padrão: O corpo tem 2 variável(is); o esperado é 4.</span>');
+    expect(html).toContain('<span class="whatsapp-outside">Fora do padrão: O corpo tem 2 variável(is); o esperado é 5.</span>');
     expect(html).not.toContain("whatsapp-muted");
   });
 

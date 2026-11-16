@@ -39,11 +39,11 @@ const page = (data, after = "") => ({ ok: true, status: 200, json: async () => (
 
 test("a template with a numbered body, text header, footer and fixed buttons is described by its structure", () => {
   const described = describeGraphTemplate(graph("castracao_confirmacao_agendamento", [
-    { type: "HEADER", format: "TEXT", text: "Castração" }, body("Olá {{1}}, {{2}} às {{3}} em {{4}}."), { type: "FOOTER", text: "Prefeitura" },
+    { type: "HEADER", format: "TEXT", text: "Castração" }, body("Olá {{1}}, {{2}} às {{3}} em {{4}}. Protocolo {{5}}."), { type: "FOOTER", text: "Prefeitura" },
     { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Ok" }, { type: "URL", text: "Site", url: "https://example.com" }, { type: "PHONE_NUMBER", text: "Ligar", phone_number: "+5548000000000" }] },
   ], { parameter_format: "POSITIONAL" }));
   assert.deepEqual(described, facts({
-    name: "castracao_confirmacao_agendamento", bodyVariables: 4, header: "TEXT", buttons: ["QUICK_REPLY", "URL", "PHONE_NUMBER"],
+    name: "castracao_confirmacao_agendamento", bodyVariables: 5, header: "TEXT", buttons: ["QUICK_REPLY", "URL", "PHONE_NUMBER"],
   }));
   assert.deepEqual(recognizeWhatsappTemplate(described).uses, ["schedule_confirmed"]);
   assert.equal(describeGraphTemplate(graph("castracao_x", [body("Texto fixo")])).bodyVariables, 0);

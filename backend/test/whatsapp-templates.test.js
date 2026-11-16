@@ -20,7 +20,7 @@ const clientFetch = globalThis.fetch;
 
 const entry = (name, overrides = {}) => ({
   name, language: "pt_BR", status: "APPROVED", category: "UTILITY", parameterFormat: "POSITIONAL", hasBody: true,
-  bodyVariables: 4, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false, ...overrides,
+  bodyVariables: 5, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false, ...overrides,
 });
 const confirmation = (overrides) => entry("castracao_confirmacao_agendamento", overrides);
 const cancellation = (overrides) => entry("castracao_cancelamento", { bodyVariables: 3, ...overrides });
@@ -147,7 +147,7 @@ test("the template list shows status, recognized use, order of variables and wha
   assert.equal(rows.castracao_confirmacao_agendamento.active, true);
   assert.equal(rows.castracao_confirmacao_agendamento.canActivate, true);
   assert.equal(rows.castracao_confirmacao_agendamento.label, "Agendamento confirmado");
-  assert.deepEqual(rows.castracao_confirmacao_agendamento.variables, ["Nome do tutor", "Data do agendamento", "Horário do agendamento", "Local do atendimento"]);
+  assert.deepEqual(rows.castracao_confirmacao_agendamento.variables, ["Nome do tutor", "Data do agendamento", "Horário do agendamento", "Local do atendimento", "Protocolo"]);
   assert.equal(rows.castracao_cancelamento.active, false);
   assert.equal(rows.castracao_cancelamento.canActivate, true);
   assert.equal(rows.castracao_cancelamento_v2.canActivate, false);
@@ -170,7 +170,7 @@ test("an active template that disappeared from Meta or lost its structure stays 
   const changed = rows.find((row) => row.name === "castracao_confirmacao_agendamento");
   assert.equal(changed.active, true);
   assert.equal(changed.canActivate, false);
-  assert.match(changed.reason, /esperado é 4/);
+  assert.match(changed.reason, /esperado é 5/);
   const removed = rows.find((row) => row.name === "castracao_cancelamento");
   assert.deepEqual({ status: removed.status, active: removed.active, canActivate: removed.canActivate, label: removed.label }, { status: "NOT_FOUND", active: true, canActivate: false, label: "Agendamento cancelado" });
 });

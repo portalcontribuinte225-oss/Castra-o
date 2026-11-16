@@ -42,7 +42,7 @@ export const WhatsappUseKind = Object.freeze({ NOTICE: "notice", ACCESS: "access
 export const WhatsappAccessLayout = Object.freeze({ CODE: "code", CONTACT: "contact", PASSWORD: "password" });
 
 const field = WhatsappTemplateField;
-const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME];
+const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.PROTOCOL];
 
 function notice(key, label, namePart, fields) {
   return Object.freeze({

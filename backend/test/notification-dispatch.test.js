@@ -110,8 +110,8 @@ test("an e-mail use turned on without its template is reported, while the other 
 
 test("confirmation, reschedule and cancellation send the parameters their Meta templates expect", async () => {
   const expected = [
-    [NotificationEvent.SCHEDULE_CONFIRMED, "castracao_confirmacao_agendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal"]],
-    [NotificationEvent.SCHEDULE_CHANGED, "castracao_reagendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal"]],
+    [NotificationEvent.SCHEDULE_CONFIRMED, "castracao_confirmacao_agendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
+    [NotificationEvent.SCHEDULE_CHANGED, "castracao_reagendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
     [NotificationEvent.SCHEDULE_CANCELLED, "castracao_cancelamento", ["Maria", "20/11/2026", "09:00"]],
   ];
   for (const [event, templateName, parameters] of expected) {

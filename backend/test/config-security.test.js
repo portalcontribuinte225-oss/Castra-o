@@ -266,7 +266,7 @@ test("WhatsApp test requires valid phone and does not expose provider error data
   store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: true, accessToken: "private-token", phoneNumberId: "12345" });
   store.set(`whatsapp_active_templates:${MUNICIPALITY_ID}`, { active: { schedule_confirmed: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } } });
   store.set(`whatsapp_catalog:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [{ name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "APPROVED", category: "UTILITY",
-    parameterFormat: "POSITIONAL", hasBody: true, bodyVariables: 4, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false }] });
+    parameterFormat: "POSITIONAL", hasBody: true, bodyVariables: 5, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false }] });
   globalThis.fetch = async () => ({ ok: false, status: 400, statusText: "refused", json: async () => ({ error: { message: "private-provider-details", code: 400 } }) });
   const response = await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { phone: "48999991234" } });
   assert.equal(response.status, 200);
