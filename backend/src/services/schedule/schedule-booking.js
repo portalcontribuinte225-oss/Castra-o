@@ -1,6 +1,7 @@
 import { buildScheduleOccurrences, allocateScheduleAvailability, scheduleDate, displayScheduleDate } from "../../../../shared/schedule-contract.js";
 import { configsAllowStep } from "../../../../shared/notification-contract.js";
 import { RequestStatus, isProcedureRequest } from "../../../../shared/request-contract.js";
+import { resolveRequestTypes } from "../../../../shared/request-types-contract.js";
 import { loadScheduleAvailability } from "../../repositories/schedule-availability.js";
 import { isInternalUser } from "../../tenant.js";
 
@@ -25,11 +26,11 @@ export async function reserveRequestSchedule(client, { body, municipalityId, set
   const type = body.request_type ?? body.requestType ?? body.type;
   if (body.status === RequestStatus.CANCELLED) return body;
   const workflow = { ...(body.workflow_data || body.workflowData || {}) };
-  const requestType = settings.requestTypes.find((item) => item.id === body.requestTypeId || item.name === type || item.id === type);
+  const requestTypes = resolveRequestTypes({ animals: body.animals, workflow, requestTypeId: body.requestTypeId, requestType: type }, settings.requestTypes);
   const identification = settings.identificationTypes.find((item) => item.id === workflow.identificationTypeId);
   // Staff may register an unscheduled visit; public omission never grants that privilege.
   const required = internal ? Boolean(body.schedule_date || body.preferredSchedule || body.appointment)
-    : configsAllowStep([requestType, identification], "stepAgenda");
+    : configsAllowStep([...requestTypes, identification], "stepAgenda");
   if (!required || !isProcedureRequest(type)) {
     for (const key of ["scheduleOccurrenceKey", "scheduleSlotTime", "scheduleTime"]) delete workflow[key];
     return { ...body, schedule_date: null, preferredSchedule: "", appointment: "", scheduleLocationName: "", schedule_location_name: "",

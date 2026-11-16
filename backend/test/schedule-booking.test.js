@@ -94,3 +94,29 @@ test("internal unscheduled registration is allowed while public missing agenda i
   await assert.rejects(reserveRequestSchedule(client,{body:input,municipalityId:MUNICIPALITY,settings,user:{role:"tutor"},now}),{status:400});
   assert.equal(bookingChanged({workflow_data:{scheduleTime:"08:00"}},{workflow_data:{scheduleTime:"09:00"}}),true);
 });
+
+test("the agenda step is dispensed when any procedure of the request has no agenda step, and kept when they all keep it", async () => {
+  const types = { requestTypes: [{ id: "keeps", name: "Mantém", stepAgenda: true }, { id: "also-keeps", name: "Também mantém" }, { id: "dispenses", name: "Dispensa", stepAgenda: false }],
+    identificationTypes: [{ id: "owned", stepAgenda: true }] };
+  const request = (...idLists) => ({ ...body(), requestTypeId: undefined, type: "", animals: idLists.map((requestTypeIds) => ({ requestTypeIds })) });
+  const noLookup = { query() { throw new Error("No booking read expected"); } };
+  const dispensed = await reserveRequestSchedule(noLookup, { body: request(["keeps"], ["dispenses"]), municipalityId: MUNICIPALITY, settings: types, now });
+  assert.equal(dispensed.schedule_date, null);
+  assert.equal(dispensed.workflow_data.scheduleOccurrenceKey, undefined);
+  const within = await reserveRequestSchedule(noLookup, { body: request(["keeps", "dispenses"]), municipalityId: MUNICIPALITY, settings: types, now });
+  assert.equal(within.schedule_date, null, "one animal's procedure without an agenda step is enough");
+  const client = { query: async (sql) => {
+    if (sql.includes("FROM schedule_days")) return { rows: [{ ...day, slots: [{ time: "08:00", vacancies: 3 }] }] };
+    if (sql.includes("FROM config") || sql.includes("FROM requests")) return { rows: [] };
+    throw new Error("Unexpected test query");
+  } };
+  const kept = await reserveRequestSchedule(client, { body: request(["keeps"], ["also-keeps"]), municipalityId: MUNICIPALITY, settings: types, now });
+  assert.equal(kept.workflow_data.scheduleOccurrenceKey, "day:day-a");
+  assert.equal(kept.schedule_location_name, "Local A");
+});
+
+test("changing the procedures of a booked request counts as a booking change", () => {
+  const before = { request_type: "Castração", animals: [{}], workflow_data: {} };
+  assert.equal(bookingChanged(before, { ...before, request_type: "Castração, Microchipagem" }), true);
+  assert.equal(bookingChanged(before, { ...before }), false);
+});

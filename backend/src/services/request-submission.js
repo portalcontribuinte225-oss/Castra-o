@@ -1,14 +1,10 @@
 import { configsAllowStep, normalizeFollowUp } from "../../../shared/notification-contract.js";
 import { isInternalUser } from "../tenant.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
+import { DERIVED_WORKFLOW_KEYS, activeInMunicipality, prepareRequestProcedures, withDerivedProcedures } from "./request-procedures.js";
 
 function invalid(message) {
   throw Object.assign(new Error(message), { status: 400 });
-}
-
-function activeInMunicipality(item, municipalityId) {
-  return item && typeof item === "object" && !Array.isArray(item)
-    && item.active !== false && (!item.municipalityId || item.municipalityId === municipalityId);
 }
 
 // Only trusted configuration may dispense identity; origin/skipTutor sent by the client cannot.
@@ -20,7 +16,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   const suppliedCpf = body.cpf ?? body.tutor_cpf;
   const cleanCpf = normalizeCpf(suppliedCpf);
   const hasCpfInput = suppliedCpf !== undefined && suppliedCpf !== null && String(suppliedCpf).trim() !== "";
-  const nextWorkflow = { ...workflow };
+  // The procedures of each animal, when the request carries them; their derived fields replace whatever the client sent.
+  const procedures = isComplaint ? null : prepareRequestProcedures({ animals: body.animals, municipalityId, settings });
+  const nextWorkflow = withDerivedProcedures(workflow, procedures?.fields);
   delete nextWorkflow.notificationDispatches;
   delete nextWorkflow.notificationResults;
 
@@ -38,20 +36,25 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
     return selected;
   }
 
-  let tutorRequired = true;
-  if (publicProcedure) {
+  // A request made the old way has one type for the whole request, found by id or by name.
+  function selectSingleRequestType() {
     const requestTypeId = body.requestTypeId;
     const candidates = settings.requestTypes.filter((item) => activeInMunicipality(item, municipalityId));
     const matches = candidates.filter((item) => requestTypeId ? item.id === requestTypeId
       : item.id === requestType || item.name === requestType);
-    const selectedRequestType = matches.length === 1 ? matches[0] : null;
-    if ((requestTypeId || settings.requestTypes.length) && !selectedRequestType) invalid("Tipo de solicitação inválido para o município.");
+    const selected = matches.length === 1 ? matches[0] : null;
+    if ((requestTypeId || settings.requestTypes.length) && !selected) invalid("Tipo de solicitação inválido para o município.");
+    return selected;
+  }
 
+  let tutorRequired = true;
+  if (publicProcedure) {
+    const selectedTypes = procedures ? procedures.types : [selectSingleRequestType()].filter(Boolean);
     if (Array.isArray(body.animals) && body.animals.some((animal) => !animal || typeof animal !== "object" || Array.isArray(animal))) {
       invalid("Dados do animal inválidos.");
     }
     const selectedIdentification = selectIdentification();
-    tutorRequired = configsAllowStep([selectedRequestType, selectedIdentification], "stepTutor");
+    tutorRequired = configsAllowStep([...selectedTypes, selectedIdentification], "stepTutor");
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   } else if (workflow.followUp !== undefined) {
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
@@ -67,13 +70,18 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
     if (typeof name !== "string" || !name.trim()) invalid("Nome do denunciante é obrigatório.");
     if (!isValidPhone(body.phone)) invalid("Informe um telefone válido em Contato.");
   }
-  return { cpf: cleanCpf || null, workflow: nextWorkflow, requestType, internal, tutorRequired };
+  return {
+    cpf: cleanCpf || null, workflow: nextWorkflow, requestType: procedures ? procedures.fields.requestType : requestType,
+    animals: procedures?.animals, internal, tutorRequired,
+  };
 }
 
-// Consent and delivery metadata are not editable through the generic operational PATCH.
+// Consent, delivery metadata and the derived procedures are not editable through the generic operational PATCH.
+const PROTECTED_WORKFLOW_KEYS = Object.freeze(["followUp", "notificationDispatches", "notificationResults", ...DERIVED_WORKFLOW_KEYS]);
+
 export function mergeProtectedWorkflow(current, patch) {
   const next = { ...current, ...patch };
-  for (const key of ["followUp", "notificationDispatches", "notificationResults"]) {
+  for (const key of PROTECTED_WORKFLOW_KEYS) {
     if (Object.hasOwn(current, key)) next[key] = current[key];
     else delete next[key];
   }

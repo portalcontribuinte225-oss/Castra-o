@@ -4,6 +4,7 @@ import { AnimalStatus } from "../../../../shared/animal-contract.js";
 import { authError } from "../auth/auth-security.js";
 import { findOwnedAnimal, insertCanonicalAnimal, recordAnimalRequest, saveRequestAnimalIds, trustedTutorSnapshot } from "../../repositories/registered-animals.js";
 import { animalView, requireLiveAnimal, registrationGap } from "./animal-data.js";
+import { animalRequestTypeIds } from "../../../../shared/request-types-contract.js";
 
 export function isProcedureRequest(body) {
   return isProcedureKind(body.request_type || body.requestType || body.requestTypeId || body.type);
@@ -62,7 +63,9 @@ export async function registerRequestAnimals(client, { body, request, user, tuto
       animal = await insertCanonicalAnimal(client, { data: { ...data, identificationTypeId: data.identificationTypeId || request.workflow_data?.identificationTypeId },
         request, index, tutorId, municipalityId });
     }
-    snapshots.push(animalView(animal, municipalityId));
+    // The request keeps what was asked for this animal next to the animal itself.
+    const requestTypeIds = animalRequestTypeIds(data);
+    snapshots.push({ ...animalView(animal, municipalityId), ...(requestTypeIds.length ? { requestTypeIds } : {}) });
     await recordAnimalRequest(client, { animalId: animal.id, request, municipalityId, index, actorId: user?.id });
   }
   await saveRequestAnimalIds(client, request, snapshots);

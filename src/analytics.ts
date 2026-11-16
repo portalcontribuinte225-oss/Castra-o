@@ -1,5 +1,5 @@
 import type { AnyRecord } from "./types";
-import { initialTeams, normalizeRequest, requestHasTag, requestTypeLabel } from "./domain";
+import { initialTeams, normalizeRequest, requestHasTag, requestTypeLabel, storedRequestTypeNames } from "./domain";
 
 export function sumValues(items: AnyRecord[] = []) {
   return items.reduce((total, item) => total + Number(item.value || 0), 0);
@@ -14,10 +14,26 @@ export function countBy(items: AnyRecord[] = [], getKey: (item: AnyRecord) => st
   return Array.from(totals, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
 }
 
+// Like countBy, for items that have several keys: each item counts once under every one of its keys.
+export function countByMany(items: AnyRecord[] = [], getKeys: (item: AnyRecord) => string[]) {
+  const totals = new Map<string, number>();
+  items.forEach((item) => {
+    const keys = getKeys(item);
+    (keys.length ? keys : ["Não informado"]).forEach((key) => totals.set(key, (totals.get(key) || 0) + 1));
+  });
+  return Array.from(totals, ([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+}
+
 export function getRequestTypeName(request: AnyRecord = {}, requestTypes: AnyRecord[] = []) {
   const byId = requestTypes.find((type) => type.id && type.id === request.requestTypeId);
   const rawType = request.type || request.request_type || byId?.name || request.requestTypeId || "";
   return rawType ? requestTypeLabel({ type: rawType }) : "Não informado";
+}
+
+// The procedures of a request, each by its own name, for the reports that count and filter by procedure.
+export function getRequestTypeNames(request: AnyRecord = {}, requestTypes: AnyRecord[] = []) {
+  const names = storedRequestTypeNames(request);
+  return names.length ? names : [getRequestTypeName(request, requestTypes)];
 }
 
 export function getRequestUserName(request: AnyRecord = {}) {

@@ -3,7 +3,7 @@ import { DocumentReviewStatus, MAX_REQUEST_DOCUMENTS } from "../../../../shared/
 import { isInternalUser } from "../../tenant.js";
 import { readDocumentSource } from "../../repositories/document-sources.js";
 import { assertMaterializedRequestSize, decodeDocumentContent, documentError } from "./document-content.js";
-import { PHOTO_DEFINITION, canonicalDocumentDefinition, requestDocumentDefinitions, resolveDocumentRequestType } from "./document-policy.js";
+import { PHOTO_DEFINITION, canonicalDocumentDefinition, requestDocumentDefinitions, resolveDocumentRequestTypes } from "./document-policy.js";
 import { signDocumentReceipt } from "./document-provenance.js";
 import { describeStoredDocument, isReusableForAnimal } from "./stored-document.js";
 import { checkOriginalDocument } from "./document-catalog.js";
@@ -68,9 +68,9 @@ export async function prepareRequestDocuments(client, { body, user, tutorId, mun
   }
   const identificationId = body.workflow_data?.identificationTypeId || body.workflowData?.identificationTypeId;
   const identification = settings.identificationTypes?.find((item) => item.id === identificationId);
-  const requestType = resolveDocumentRequestType(settings, body);
+  const requestTypes = resolveDocumentRequestTypes(settings, body);
   const publicProcedure = !isInternalUser(user) && isProcedureRequest(body.request_type ?? body.requestType ?? body.requestTypeId ?? body.type);
-  if (publicProcedure && configsAllowStep([requestType, identification], "stepDocuments")) {
+  if (publicProcedure && configsAllowStep([...requestTypes, identification], "stepDocuments")) {
     if (body.declarationAccepted !== true) throw documentError("Leia e aceite a declaração deste novo pedido.");
     for (const definition of definitions.filter((item) => item.required && item.active)) {
       if (!seen.has(definition.id)) throw documentError(`Anexe o documento obrigatório: ${definition.name || "Documento"}.`);

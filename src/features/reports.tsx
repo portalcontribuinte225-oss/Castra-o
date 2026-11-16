@@ -15,7 +15,8 @@ import { normalizeSearchKey, normalizeText } from "../utils";
 import {
   countBy,
   getRequestDate,
-  getRequestTypeName,
+  countByMany,
+  getRequestTypeNames,
   getRequestUserName,
   isInPeriod,
   sumValues,
@@ -92,11 +93,11 @@ export function ReportsView({
   const filteredRequests = appliedFilters
     ? normalizedReportRequests.filter((request) => {
         const date = getRequestDate(request);
-        const typeName = getRequestTypeName(request, requestTypes);
+        const typeNames = getRequestTypeNames(request, requestTypes);
         const feeValue = request.fee || request.billingAmount || "";
         const hasFee = feeValue && feeValue !== "Gratuito";
         if (!isInPeriod(date, appliedFilters.start, appliedFilters.end)) return false;
-        if (appliedFilters.type && typeName !== appliedFilters.type) return false;
+        if (appliedFilters.type && !typeNames.includes(appliedFilters.type)) return false;
         if (appliedFilters.status && getOperationalStatusId(request) !== appliedFilters.status) return false;
         if (appliedFilters.fee === "charged" && !hasFee) return false;
         if (appliedFilters.fee === "free" && hasFee) return false;
@@ -106,14 +107,14 @@ export function ReportsView({
       })
     : [];
 
-  const typeOptions = countBy(requests, (r) => getRequestTypeName(r, requestTypes)).map((i) => i.label);
+  const typeOptions = countByMany(requests, (r) => getRequestTypeNames(r, requestTypes)).map((i) => i.label);
   const userOptions = Array.from(
     new Set([...activeUsers.map((u) => u.name), ...requests.map(getRequestUserName)])
   ).filter(Boolean);
 
   const statusSeries = countBy(filteredRequests, getOperationalStatusLabel);
   const resultSeries = countBy(filteredRequests, requestResultLabel);
-  const typeSeries = countBy(filteredRequests, (r) => getRequestTypeName(r, requestTypes));
+  const typeSeries = countByMany(filteredRequests, (r) => getRequestTypeNames(r, requestTypes));
   const userSeries = topItems(countBy(filteredRequests, getRequestUserName));
   const feeSeries = countBy(filteredRequests, (r) => {
     const v = r.fee || r.billingAmount || "";
@@ -302,7 +303,7 @@ export function ReportsView({
                   <td>{request.protocol || request.id}</td>
                   <td>{request.tutor || request.tutor_name || "Não informado"}</td>
                   <td>{getRequestMicrochip(request) || "-"}</td>
-                  <td>{getRequestTypeName(request, requestTypes)}</td>
+                  <td>{getRequestTypeNames(request, requestTypes).join(", ")}</td>
                   <td>{getOperationalStatusLabel(request)}</td>
                   <td>{requestResultLabel(request)}</td>
                   <td>{getRequestUserName(request)}</td>
@@ -354,7 +355,7 @@ function generateReportsPdf(requests = [], filters: AnyRecord = {}, series: AnyR
       <td>${escapeHtml(r.protocol || r.id || "")}</td>
       <td>${escapeHtml(r.tutor || r.tutor_name || "Não informado")}</td>
       <td>${escapeHtml(getRequestMicrochip(r) || "-")}</td>
-      <td>${escapeHtml(getRequestTypeName(r, requestTypes))}</td>
+      <td>${escapeHtml(getRequestTypeNames(r, requestTypes).join(", "))}</td>
       <td>${escapeHtml(getOperationalStatusLabel(r))}</td>
       <td>${escapeHtml(requestResultLabel(r))}</td>
       <td>${escapeHtml(getRequestUserName(r))}</td>

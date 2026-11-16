@@ -59,7 +59,7 @@ export async function readReusableDocument(client, { userId, municipalityId, ani
   const source = await readDocumentSource(client, { userId, municipalityId, sourceRequestId, attachmentId });
   const document = source.document;
   const configured = (settings?.documentTypes || []).find((definition) => definition.id === document.documentId)
-    || requestDocumentDefinitions(settings, source.request_type).find((definition) => definition.id === document.documentId);
+    || requestDocumentDefinitions(settings, source).find((definition) => definition.id === document.documentId);
   const definition = document.documentId === PHOTO_DEFINITION.id ? PHOTO_DEFINITION : canonicalDocumentDefinition(configured || {});
   const description = describeStoredDocument(source, definition);
   if (description.attachmentId !== attachmentId || description.hash !== hash

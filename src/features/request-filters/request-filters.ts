@@ -1,5 +1,5 @@
 import type { AnyRecord } from "../../types";
-import { isRequestOnScheduleDate, requestTypeLabel } from "../../domain";
+import { isRequestOnScheduleDate, requestTypeLabels } from "../../domain";
 import { RequestStage, getRequestStage, requestStageOptions, requestStageOrder } from "./request-stage";
 
 export const ACCESS_REQUEST_SOURCE = "access_request";
@@ -67,7 +67,8 @@ export const initialRequestFilters: RequestListFilters = {
 interface ItemFacets {
   isAccessRequest: boolean;
   stage: RequestStage;
-  typeKey: string;
+  // One key per procedure of the request: a request with two procedures shows up under each of them.
+  typeKeys: string[];
   assigneeKey: string;
   isToday: boolean;
 }
@@ -88,7 +89,7 @@ function describeItem(item: AnyRecord, today: string): ItemFacets {
   return {
     isAccessRequest,
     stage: getRequestStage(item),
-    typeKey: isAccessRequest ? "" : requestTypeLabel(item),
+    typeKeys: isAccessRequest ? [] : requestTypeLabels(item),
     assigneeKey: item.assignedUserId || UNASSIGNED_ASSIGNEE_KEY,
     isToday: !isAccessRequest && isRequestOnScheduleDate(item, today),
   };
@@ -101,7 +102,7 @@ function matchesStages(facets: ItemFacets, stages: RequestStage[]): boolean {
 }
 
 function matchesTypes(facets: ItemFacets, types: string[]): boolean {
-  return types.length === 0 || (!facets.isAccessRequest && types.includes(facets.typeKey));
+  return types.length === 0 || (!facets.isAccessRequest && facets.typeKeys.some((key) => types.includes(key)));
 }
 
 function matchesAssignees(facets: ItemFacets, assignees: string[]): boolean {
@@ -151,7 +152,7 @@ export function buildRequestFacetCounts(
   const assignees: Record<string, number> = {};
   facetsList.forEach((facets) => {
     if (facets.isAccessRequest) return;
-    if (matchesFilters(facets, filters, { types: true })) types[facets.typeKey] = (types[facets.typeKey] || 0) + 1;
+    if (matchesFilters(facets, filters, { types: true })) facets.typeKeys.forEach((key) => { types[key] = (types[key] || 0) + 1; });
     if (matchesFilters(facets, filters, { assignees: true })) {
       assignees[facets.assigneeKey] = (assignees[facets.assigneeKey] || 0) + 1;
     }
@@ -189,7 +190,7 @@ function disambiguateDuplicateLabels(
 export function buildTypeOptions(items: AnyRecord[], selected: string[] = []): RequestFilterOption[] {
   const labels = new Set<string>(selected);
   items.forEach((item) => {
-    if (!isAccessRequestItem(item)) labels.add(requestTypeLabel(item));
+    if (!isAccessRequestItem(item)) requestTypeLabels(item).forEach((label) => labels.add(label));
   });
   return [...labels].sort(compareLabels).map((label) => ({ value: label, label }));
 }

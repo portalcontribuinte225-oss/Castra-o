@@ -10,6 +10,7 @@ import {
   requestHasTag,
   requestResultLabel,
   requestTypeLabel,
+  requestTypeLabels,
 } from "../domain";
 import { RequestPreviewModal, ToastContainer } from "../App";
 import { canEditRequests, useRequestActions } from "./request-actions";
@@ -154,9 +155,7 @@ export function AgendaView({
   const filtered = useMemo(() => {
     let list = normalized;
     if (filterType) {
-      list = list.filter((r) =>
-        (r.type || r.requestTypeId || "").toLowerCase().includes(filterType.toLowerCase())
-      );
+      list = list.filter((r) => requestTypeLabels(r).includes(filterType));
     }
     if (filterStatus === "cancelada") list = list.filter((r) => r.status === "CANCELADA");
     else if (filterStatus === "agendada") list = list.filter((r) => r.status === "AGENDADA");
@@ -235,10 +234,7 @@ export function AgendaView({
 
   const allTypes = useMemo(() => {
     const types = new Set<string>();
-    for (const r of normalized) {
-      const t = r.type || r.requestTypeId || "";
-      if (t) types.add(t);
-    }
+    for (const r of normalized) requestTypeLabels(r).forEach((label) => types.add(label));
     return Array.from(types);
   }, [normalized]);
 
@@ -264,7 +260,7 @@ export function AgendaView({
           <select className="ag-select ag-select--borderless" value={filterType} onChange={(e) => setFilterType(e.target.value)} aria-label="Tipo de atendimento">
             <option value="">Todos os tipos</option>
             {allTypes.map((t) => (
-              <option key={t} value={t}>{requestTypeLabel({ type: t })}</option>
+              <option key={t} value={t}>{t}</option>
             ))}
           </select>
 

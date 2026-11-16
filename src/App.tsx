@@ -95,6 +95,7 @@ import {
   requestHasTag,
   requestResultLabel,
   requestResultTag,
+  animalProcedureLabels,
   requestTypeDomainLabels,
   requestTypeLabel,
   RequestType,
@@ -123,9 +124,6 @@ import {
   ModalHeader,
   PanelHeader,
   StatusBadge,
-  ToggleChoiceField,
-  YesNoField,
-  YesNoToggleField,
 } from "./components/ui";
 import {
   dataUrlToUint8Array,
@@ -159,9 +157,25 @@ import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-f
 import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
 import { useRequestFilterResults, useRequestFilters } from "./features/request-filters/use-request-filters";
-import { BreedPicker } from "./features/breeds/breed-picker";
+import { BreedChecklist } from "./features/breeds/breed-checklist";
+import { AnimalAccordionCard } from "./features/request-procedures/animal-accordion-card";
+import { AnimalFields } from "./features/request-procedures/animal-fields";
+import { RequestIdentificationCard } from "./features/request-procedures/request-identification-card";
+import { RequestProcedureList } from "./features/request-procedures/request-procedure-list";
+import {
+  animalHeader,
+  applyProceduresToAll,
+  blankAnimal,
+  breedOptionsFor,
+  duplicateAnimal,
+  mergeProcedureDocuments,
+  needsProcedure,
+  procedureNames,
+  procedureSignature,
+  withProceduresAt,
+} from "./features/request-procedures/request-procedures";
+import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, resolveRequestTypes } from "../shared/request-types-contract.js";
 import { BreedsConfig } from "./features/breeds/breeds-config";
-import { findSpeciesIdByName, getBreedOptions } from "./features/breeds/breeds";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
 import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./features/request-steps/request-steps";
@@ -2597,8 +2611,8 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }: A
 function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {}) {
   const performed = request.performedProcedures || request.workflow_data?.performedProcedures || request.workflowData?.performedProcedures || "";
   const procedureStatus = request.status === "REALIZADA"
-    ? performed || animal.procedure || requestTypeLabel(request)
-    : animal.procedure || requestTypeLabel(request);
+    ? performed || animal.procedure || animalProcedureLabels(animal, request).join(", ") || requestTypeLabel(request)
+    : animal.procedure || animalProcedureLabels(animal, request).join(", ") || requestTypeLabel(request);
   return [
     { label: "Espécie", value: displayText(animal.species || "Não informado") },
     { label: "Sexo", value: displayText(animal.sex || "Não informado") },
@@ -2640,7 +2654,7 @@ function NewRequest({
   initialType = "",
   initialMunicipalityId = "",
 }: AnyRecord) {
-  const activeSpecies = Array.from(new Set(
+  const activeSpecies = Array.from(new Set<string>(
     speciesOptions
       .filter((item) => item.active !== false)
       .map((item) => item.name)
@@ -2674,7 +2688,6 @@ function NewRequest({
     isFarmer: Boolean(currentUser.isFarmer || currentUser.is_farmer),
     latitude: "",
     longitude: "",
-    type: initialType,
     identificationTypeId: registeredContext?.animal.identificationTypeId || "",
     phone: currentUser.phone || "",
     notes: "",
@@ -2683,24 +2696,7 @@ function NewRequest({
     scheduleOccurrenceKey: "",
   });
   const [animals, setAnimals] = useState<AnyRecord[]>([
-    registeredContext ? animalForRequest(registeredContext.animal) : {
-      name: "",
-      species: "",
-      sex: "",
-      breedType: "",
-      breedDescription: "",
-      size: "",
-      weight: "",
-      age: "",
-      birthDate: "",
-      coat: "",
-      hasChip: "",
-      microchip: "",
-      dewormed: "",
-      vaccinated: "",
-      illnessHistory: "",
-      food: "",
-    },
+    registeredContext ? { ...animalForRequest(registeredContext.animal), requestTypeIds: [] } : blankAnimal(),
   ]);
   const [expandedAnimal, setExpandedAnimal] = useState(0);
   const [accepted, setAccepted] = useState(false);
@@ -2729,7 +2725,8 @@ function NewRequest({
 
   useEffect(() => {
     if (!registeredContext) return;
-    setAnimals([animalForRequest(registeredContext.animal)]);
+    // The procedure chosen for the animal outlives the refresh of its context that the choice itself triggers.
+    setAnimals((current) => [{ ...animalForRequest(registeredContext.animal), requestTypeIds: animalRequestTypeIds(current[0]) }]);
     setRequestData((current) => ({ ...current, tutor: registeredContext.tutor.name || registeredContext.tutor.tutor || "", cpf: registeredContext.tutor.cpf, address: registeredContext.tutor.address || "", neighborhood: registeredContext.tutor.neighborhood || "", city: registeredContext.tutor.city || "", state: registeredContext.tutor.state || "", cep: registeredContext.tutor.cep || "", identificationTypeId: registeredContext.animal.identificationTypeId || "" }));
   }, [registeredContext]);
 
@@ -2760,25 +2757,32 @@ function NewRequest({
     }
   }, [initialMunicipalityId]);
 
-  useEffect(() => {
-    if (initialType) {
-      setRequestData((current) => ({ ...current, type: initialType }));
-    }
-  }, [initialType]);
-
   const configuredRequestTypes = requestTypes
     .filter((type) => type.name.trim() && type.active !== false)
     .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
-  const selectedRequestType = configuredRequestTypes.find((type) => type.name === requestData.type) || null;
+  const hasConfiguredTypes = configuredRequestTypes.length > 0;
+  const breedContext = { requestTypes: configuredRequestTypes, breeds, speciesOptions };
+
+  // A procedure asked for from outside (the animal's own screen) starts as the procedure of the first animal.
+  useEffect(() => {
+    const type = initialType ? configuredRequestTypes.find((item) => item.name === initialType) : null;
+    if (type?.id) setAnimals((current) => (animalRequestTypeIds(current[0]).length ? current : withProceduresAt(current, 0, [type.id], breedContext)));
+  }, [initialType, hasConfiguredTypes]);
+
+  // The request types the animals ask for, together: they decide the steps, the tutor and the documents of the request.
+  const selectedRequestTypes = resolveRequestTypes({ animals }, configuredRequestTypes);
+  const procedureFields = deriveRequestTypeFields(selectedRequestTypes);
+  // Without request types configured there is nothing to choose, so the animals go without procedures, as before.
+  const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
   const activeIdentificationTypes = publicFlow || internalSimple ? getActiveIdentificationTypes(identificationTypes) : [];
   const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
-  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: internalSimple ? [selectedIdentificationType] : [selectedRequestType, selectedIdentificationType] });
+  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: internalSimple ? [selectedIdentificationType] : [...selectedRequestTypes, selectedIdentificationType] });
   const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
-  const requiresTutorIdentity = internalSimple ? hasStep(RequestStep.TUTOR) : currentUser.role === "tutor" || configsAllowStep([selectedRequestType, selectedIdentificationType], "stepTutor");
-  const selectedTypeDocuments = (selectedRequestType?.documents || [])
+  const requiresTutorIdentity = internalSimple ? hasStep(RequestStep.TUTOR) : currentUser.role === "tutor" || configsAllowStep([...selectedRequestTypes, selectedIdentificationType], "stepTutor");
+  const selectedTypeDocuments = mergeProcedureDocuments(selectedRequestTypes.map((type) => (type.documents || [])
     .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
-    .filter((document) => document.active !== false);
+    .filter((document) => document.active !== false)));
   const acceptableUploadStatuses = [DocumentReviewStatus.APPROVED, DocumentReviewStatus.ATTACHED];
   const requiredDocsApproved = selectedTypeDocuments
     .filter((document) => document.required)
@@ -2796,46 +2800,32 @@ function NewRequest({
     return Boolean(getAvailableScheduleSlot(selectedDay, Math.max(animals.length, 1)));
   }
 
-  function addAnimal() {
-    setAnimals((current) => {
-      const next = [
-        ...current,
-        {
-          name: "",
-          species: "",
-          sex: "",
-          breedType: "",
-          breedDescription: "",
-          size: "",
-          weight: "",
-          age: "",
-          birthDate: "",
-          coat: "",
-          hasChip: "",
-          microchip: "",
-          dewormed: "",
-          vaccinated: "",
-          illnessHistory: "",
-          food: "",
-        },
-      ];
-      setExpandedAnimal(next.length - 1);
-      return next;
-    });
+  // Every change to the animals that can change the procedures of the whole request goes through here: what was attached for the old
+  // requirements is dropped, as it was when the single request type changed.
+  function commitAnimals(next: AnyRecord[], expand?: number) {
+    if (procedureSignature(next) !== procedureSignature(animals)) {
+      documentUploadGeneration.current += 1;
+      setAnimalPhotoLoading(false);
+      setReusedDocuments({}); setDocumentUploads({}); setAccepted(false);
+    }
+    setAnimals(next);
+    if (expand !== undefined) setExpandedAnimal(expand);
   }
 
-  function detectSizeFromWeight(weight) {
-    const w = parseFloat(String(weight).replace(",", "."));
-    if (isNaN(w) || w <= 0) return "";
-    const match = activeSizes.find((s) => {
-      const start = parseFloat(s.weightStart ?? "");
-      const end = parseFloat(s.weightEnd ?? "");
-      if (!isNaN(start) && !isNaN(end)) return w >= start && w <= end;
-      if (!isNaN(start)) return w >= start;
-      if (!isNaN(end)) return w <= end;
-      return false;
-    });
-    return match?.name || "";
+  function addAnimal() {
+    commitAnimals([...animals, blankAnimal()], animals.length);
+  }
+
+  function duplicatePreviousAnimal() {
+    commitAnimals(duplicateAnimal(animals, animals.length - 1), animals.length);
+  }
+
+  function applyFirstProceduresToAll() {
+    commitAnimals(applyProceduresToAll(animals, 0, breedContext));
+  }
+
+  function changeProcedures(index: number, ids: string[]) {
+    commitAnimals(withProceduresAt(animals, index, ids, breedContext));
   }
 
   function updateAnimal(index, field, value) {
@@ -2844,7 +2834,7 @@ function NewRequest({
     );
   }
 
-  // Changing the species or the request type changes the breed options, so the chosen breed is cleared.
+  // Changing the species changes the breed options, so the chosen breed is cleared.
   function selectSpecies(index, value) {
     setAnimals((current) =>
       current.map((animal, animalIndex) => (
@@ -2853,18 +2843,16 @@ function NewRequest({
     );
   }
 
-  function selectRequestType(name) {
-    if (requestData.type === name) return;
-    updateRequestField("type", name);
-    documentUploadGeneration.current += 1;
-    setAnimalPhotoLoading(false);
-    setReusedDocuments({}); setDocumentUploads({}); setAccepted(false);
-    if (registered) onRequestTypeChange?.(configuredRequestTypes.find((type) => type.name === name)?.id || "");
-    else setAnimals((current) => current.map((animal) => ({ ...animal, breedDescription: "" })));
+  // The animal of an existing registration asks for one procedure: choosing it asks for the requirements of that procedure again.
+  function selectRegisteredProcedure(name) {
+    const type = configuredRequestTypes.find((item) => item.name === name);
+    if (!type?.id || animalRequestTypeIds(animals[0])[0] === type.id) return;
+    commitAnimals(withProceduresAt(animals, 0, [type.id], breedContext));
+    onRequestTypeChange?.(type.id);
   }
 
   function removeAnimal(indexToRemove) {
-    setAnimals((current) => current.filter((_, index) => index !== indexToRemove));
+    commitAnimals(animals.filter((_, index) => index !== indexToRemove));
   }
 
   function updateRequestField(field, value) {
@@ -2898,13 +2886,14 @@ function NewRequest({
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
     if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !requestData.schedule) issues.push("Escolha uma data disponível.");
     else if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
-    if (configuredRequestTypes.length > 0 && !requestData.type) issues.push("Selecione o tipo de solicitação.");
     filledAnimals.forEach((animal, index) => {
       if (registered) {
+        if (needsProcedure(animal, hasConfiguredTypes)) issues.push("Selecione o tipo de solicitação.");
         if (!animal.species || !animal.sex || !animal.size || !animal.breedType) issues.push("O cadastro do animal está incompleto. Procure o atendimento para conferência.");
         return;
       }
       const label = filledAnimals.length > 1 ? ` do animal ${index + 1}` : " do animal";
+      if (needsProcedure(animal, hasConfiguredTypes)) issues.push(`Escolha ao menos um procedimento${label}.`);
       if (!animal.species) issues.push(`Selecione a espécie${label}.`);
       if (!animal.sex) issues.push(`Selecione o sexo${label}.`);
       if (!animal.size) issues.push(`Selecione o porte${label}.`);
@@ -2936,8 +2925,8 @@ function NewRequest({
     if (step === RequestStep.ANIMAL) {
       if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) return [true];
       return animals
-        .flatMap((animal, index) => [
-          index === 0 && configuredRequestTypes.length > 0 && !requestData.type,
+        .flatMap((animal) => [
+          needsProcedure(animal, hasConfiguredTypes),
           !animal.species,
           !animal.sex,
           !animal.size,
@@ -2963,7 +2952,6 @@ function NewRequest({
     const checks = {
       tutor: requiresTutorIdentity && Boolean(validateTutorName(requestData.tutor)),
       cpf: (requiresTutorIdentity || Boolean(requestData.cpf)) && !isValidCpf(requestData.cpf),
-      type: configuredRequestTypes.length > 0 && !requestData.type,
       species: !firstAnimal.species,
       sex: !firstAnimal.sex,
       size: !firstAnimal.size,
@@ -3146,7 +3134,7 @@ function NewRequest({
   }
 
   function openDeclarationPdf() {
-    const html = buildDeclarationPdfHtml(requestData, animals);
+    const html = buildDeclarationPdfHtml(requestData, animals.map((animal) => ({ ...animal, procedures: procedureNames(animal, configuredRequestTypes).join(", ") })));
     printHtmlViaIframe(html);
   }
 
@@ -3167,9 +3155,8 @@ function NewRequest({
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
-      type: requestData.type || "Cadastro animal",
-      requestTypeId: selectedRequestType?.id || "",
-      fee: selectedRequestType?.fee || "",
+      type: procedureFields.requestType || "Cadastro animal",
+      fee: combineRequestFees(selectedRequestTypes),
       phone: requestData.phone || "",
       cpf: requestData.cpf || "",
       email: requestData.email || "",
@@ -3195,11 +3182,11 @@ function NewRequest({
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
         ...(selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {}),
       },
-      animals: animals.map((animal, index) => ({
+      animals: payloadAnimals(animals.map((animal) => ({
         ...animal,
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
-      })),
+      }))),
       documents: Object.values(documentUploads).filter((upload) => upload?.documentId === "animal_photo"),
       signedAt: "",
       tags: [],
@@ -3241,9 +3228,9 @@ function NewRequest({
         [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
-      type: requestData.type || "Cadastro animal",
-      requestTypeId: selectedRequestType?.id || "",
-      fee: selectedRequestType?.fee || "",
+      type: procedureFields.requestType || "Cadastro animal",
+      requestTypeId: registeredContext ? selectedRequestTypes[0]?.id || "" : "",
+      fee: combineRequestFees(selectedRequestTypes),
       phone: requestData.phone || "",
       cpf: requestData.cpf || "",
       email: requestData.email || "",
@@ -3271,12 +3258,12 @@ function NewRequest({
         followUp: buildFollowUpPayload(followUp, followUpPolicy.phoneEnabled),
       },
       animalId: registeredContext?.animal.id || "",
-      animals: registeredContext ? [{ id: registeredContext.animal.id }] : animals.map((animal, index) => ({
+      animals: registeredContext ? [{ id: registeredContext.animal.id }] : payloadAnimals(animals.map((animal) => ({
         ...animal,
         ...identificationPayload,
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
-      })),
+      }))),
       ...documentSubmission,
       declarationAccepted: accepted,
       signedAt: new Date().toISOString(),
@@ -3358,8 +3345,6 @@ function NewRequest({
     publicFlow ? "nr-shell--public" : "",
   ].filter(Boolean).join(" ");
   const externalLikeRegistration = publicFlow || internalSimple;
-  const HealthField = externalLikeRegistration ? YesNoToggleField : YesNoField;
-  const FoodField = externalLikeRegistration ? ToggleChoiceField : CompactChoiceField;
 
   return (
       <div className={requestShellClassName}>
@@ -3492,176 +3477,56 @@ function NewRequest({
           </FormSection>}
 
           {formStep === RequestStep.ANIMAL && <FormSection title="Dados do animal">
-            {registeredContext ? <><RegisteredRequestSelection context={registeredContext} selectedType={requestData.type} onSelectType={selectRequestType} />{contextLoading && <p role="status">Atualizando os requisitos do procedimento...</p>}</> : <>
+            {registeredContext ? <><RegisteredRequestSelection context={registeredContext} selectedType={selectedRequestTypes[0]?.name || ""} onSelectType={selectRegisteredProcedure} />{contextLoading && <p role="status">Atualizando os requisitos do procedimento...</p>}</> : <>
+            <RequestIdentificationCard types={activeIdentificationTypes} selectedId={selectedIdentificationType?.id} onChange={(id) => updateRequestField("identificationTypeId", id)} />
             {animals.map((animal, index) => {
-              const isOpen = animals.length === 1 || expandedAnimal === index;
-              const summary = [animal.species, animal.sex].filter(Boolean).join(" · ") || "Preencha os dados";
-              const showTypeSelector = externalLikeRegistration && index === 0 && configuredRequestTypes.length > 0;
-              const showIdentificationPicker = index === 0 && activeIdentificationTypes.length > 1;
-              const breedOptions = getBreedOptions(breeds, {
-                breedIds: selectedRequestType?.breedIds,
-                speciesId: findSpeciesIdByName(speciesOptions, animal.species),
-              });
+              const header = animalHeader(animal, index);
               return (
-                <div className={`animal-form${isOpen ? " is-open" : " is-collapsed"}`} key={`animal-${index}`}>
+                <AnimalAccordionCard
+                  key={`animal-${index}`}
+                  index={index}
+                  title={header.title}
+                  detail={header.detail}
+                  open={animals.length === 1 || expandedAnimal === index}
+                  collapsible={animals.length > 1}
+                  onToggle={() => setExpandedAnimal(expandedAnimal === index ? -1 : index)}
+                >
+                  {hasConfiguredTypes && (
+                    <div className="form-sub-card">
+                      <RequestProcedureList
+                        types={configuredRequestTypes}
+                        selectedIds={animalRequestTypeIds(animal)}
+                        onChange={(ids) => changeProcedures(index, ids)}
+                        invalid={submitAttempted && needsProcedure(animal, hasConfiguredTypes)}
+                      />
+                    </div>
+                  )}
+                  <AnimalFields
+                    animal={animal}
+                    speciesNames={activeSpecies}
+                    sizeChoices={sizeChoiceOptions}
+                    breedOptions={breedOptionsFor(animal, breedContext)}
+                    submitAttempted={submitAttempted}
+                    internal={internalSimple}
+                    onChange={(field, value) => updateAnimal(index, field, value)}
+                    onSelectSpecies={(value) => selectSpecies(index, value)}
+                  />
+                  {internalSimple && inlineAnimalPhotoUpload}
                   {animals.length > 1 && (
-                    <button
-                      type="button"
-                      className="animal-form-header animal-accordion-toggle animal-form-header--card"
-                      onClick={() => setExpandedAnimal(isOpen ? -1 : index)}
-                    >
-                      <div className="animal-title-badge">{index + 1}</div>
-                      <div className="animal-accordion-title">
-                        <strong>Animal {index + 1}</strong>
-                        <span className="animal-accordion-summary">{summary}</span>
-                      </div>
-                      <ChevronRight size={17} className={`animal-accordion-chevron${isOpen ? " is-open" : ""}`} />
+                    <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
+                      Remover animal {index + 1}
                     </button>
                   )}
-
-                  {isOpen && <>
-                    <div className="form-sub-card">
-                      <span className="form-sub-card-title">{showTypeSelector || showIdentificationPicker ? "Tipo e identificação" : "Identificação do animal"}</span>
-
-                      {showIdentificationPicker && (
-                        <div className="animal-choice-grid species-row">
-                          <CompactChoiceField label="Tipo de identificação" value={selectedIdentificationType?.id} options={activeIdentificationTypes.map((type) => ({ value: type.id, label: type.name }))} onChange={(id) => updateRequestField("identificationTypeId", id)} />
-                        </div>
-                      )}
-
-                      {showTypeSelector && (
-                        <div className={`anm-type-picker${showInvalid("type") ? " is-invalid" : ""}`}>
-                          <span className="anm-type-label">Tipo de solicitação<span className="required-asterisk">*</span></span>
-                          <div className="anm-type-cards">
-                            {configuredRequestTypes.map((type) => (
-                              <button
-                                key={type.id || type.name}
-                                type="button"
-                                className={`anm-type-card${requestData.type === type.name ? " is-selected" : ""}`}
-                                onClick={() => selectRequestType(type.name)}
-                              >
-                                {type.name}
-                              </button>
-                            ))}
-                          </div>
-                          {showInvalid("type") && <small className="field-error-message">Campo obrigatório</small>}
-                        </div>
-                      )}
-
-                      <div className="animal-choice-grid three-col">
-                        <CompactChoiceField label="Espécie" value={animal.species} options={activeSpecies} onChange={(value) => selectSpecies(index, value)} invalid={submitAttempted && !animal.species} required />
-                        <CompactChoiceField label="Sexo" value={animal.sex} options={["Macho", "Fêmea"]} onChange={(value) => updateAnimal(index, "sex", value)} invalid={submitAttempted && !animal.sex} required />
-                        <CompactChoiceField label="Raça" value={animal.breedType} options={["Indefinida", "Definida"]} onChange={(value) => updateAnimal(index, "breedType", value)} invalid={submitAttempted && !animal.breedType} required />
-                      </div>
-                      {animal.breedType === "Definida" && (breedOptions.length > 0 ? (
-                        <div className="access-field" data-label="Raça">
-                          <select aria-label="Raça" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)}>
-                            <option value="">Selecione a raça</option>
-                            {breedOptions.map((breed) => (
-                              <option key={breed.id} value={breed.name}>{breed.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                      ) : (
-                        <div className="access-field" data-label="Raça">
-                          <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(e) => updateAnimal(index, "breedDescription", e.target.value)} />
-                        </div>
-                      ))}
-                      {externalLikeRegistration ? (
-                        <>
-                          <CompactChoiceField label="Porte" value={animal.size} options={sizeChoiceOptions} onChange={(value) => updateAnimal(index, "size", value)} invalid={submitAttempted && !animal.size} required />
-                          <div className="animal-choice-grid name-coat-age-row">
-                            <div className="access-field" data-label="Nome">
-                              <input type="text" placeholder="Ex: Bidu" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
-                            </div>
-                            <div className="access-field" data-label="Pelagem">
-                              <input type="text" placeholder="Cor" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
-                            </div>
-                            <div className="access-field" data-label="Idade">
-                              <input type="text" placeholder="Ex: 2 anos" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="two-column-fields">
-                            <div className="access-field" data-label="Nome">
-                              <input type="text" placeholder="Nome do animal" value={animal.name} onChange={(e) => updateAnimal(index, "name", e.target.value)} />
-                            </div>
-                            <div className="access-field" data-label="Pelagem">
-                              <input type="text" placeholder="Cor da pelagem" value={animal.coat} onChange={(e) => updateAnimal(index, "coat", e.target.value)} />
-                            </div>
-                          </div>
-                          <div className="two-column-fields">
-                            <div className="access-field" data-label="Idade">
-                              <input type="text" placeholder="Idade aprox. (ex: 2 anos)" value={animal.age || ""} onChange={(e) => updateAnimal(index, "age", e.target.value)} />
-                            </div>
-                            <div className={`access-field${submitAttempted && !animal.size ? " is-invalid" : ""}`} data-label="Peso">
-                              <input type="number" min="0" step="0.1" placeholder="Peso (kg)" value={animal.weight || ""} onChange={(event) => { const w = event.target.value; updateAnimal(index, "weight", w); updateAnimal(index, "size", detectSizeFromWeight(w)); }} />
-                            </div>
-                          </div>
-                        </>
-                      )}
-                      {internalSimple && (
-                        <div className="internal-microchip-row">
-                          <div className="access-field" data-label="Microchip">
-                            <input
-                              type="text"
-                              placeholder={animal.hasChip === "Sim" ? "Código do microchip" : "Microchip não informado"}
-                              value={animal.microchip}
-                              onChange={(event) => updateAnimal(index, "microchip", event.target.value)}
-                              readOnly={animal.hasChip !== "Sim"}
-                            />
-                          </div>
-                          <label className="doc-accept-check internal-chip-check">
-                            <input
-                              type="checkbox"
-                              checked={animal.hasChip === "Sim"}
-                              onChange={(event) => {
-                                updateAnimal(index, "hasChip", event.target.checked ? "Sim" : "Nao");
-                                if (!event.target.checked) updateAnimal(index, "microchip", "");
-                              }}
-                            />
-                            <span className="doc-check-box" />
-                            <span>Microchipado</span>
-                          </label>
-                        </div>
-                      )}
-                    </div>
-                    <div className="form-sub-card">
-                      <span className="form-sub-card-title">Saúde e cuidados</span>
-                      <div className="health-grid">
-                        <HealthField label={externalLikeRegistration ? "Vermifugado" : "Vermifugado?"} value={animal.dewormed} onChange={(value) => updateAnimal(index, "dewormed", value)} />
-                        <HealthField label={externalLikeRegistration ? "Vacinas em dia" : "Vacinas em dia?"} value={animal.vaccinated} onChange={(value) => updateAnimal(index, "vaccinated", value)} />
-                        <HealthField label={externalLikeRegistration ? "Histórico de doenças" : "Histórico de doenças?"} value={animal.illnessHistory} onChange={(value) => updateAnimal(index, "illnessHistory", value)} />
-                        <FoodField label={externalLikeRegistration ? "Alimentação exclusiva com ração" : "Alimentação"} value={animal.food} options={["Ração", "Diversos"]} onChange={(value) => updateAnimal(index, "food", value)} />
-                      </div>
-                    </div>
-                    {internalSimple && inlineAnimalPhotoUpload}
-                    {!externalLikeRegistration && animals.length > 1 && (
-                      <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
-                        Remover animal {index + 1}
-                      </button>
-                    )}
-                  </>}
-                </div>
+                </AnimalAccordionCard>
               );
             })}
-            <div className={externalLikeRegistration ? "anm-actions-row" : undefined}>
-              {externalLikeRegistration && animals.length > 1 && (
-                <button
-                  className="animal-remove-inline"
-                  type="button"
-                  onClick={() => {
-                    const idx = expandedAnimal >= 0 ? expandedAnimal : animals.length - 1;
-                    removeAnimal(idx);
-                    setExpandedAnimal(Math.max(0, idx - 1));
-                  }}
-                >
-                  Remover animal
+            {animals.length > 1 && hasConfiguredTypes && (
+              <div className="anm-actions-row">
+                <button className="ghost-button" type="button" onClick={applyFirstProceduresToAll} disabled={animalRequestTypeIds(animals[0]).length === 0}>
+                  Aplicar os procedimentos do Animal 1 a todos
                 </button>
-              )}
-            </div>
+              </div>
+            )}
             </>}
           </FormSection>}
 
@@ -3719,7 +3584,7 @@ function NewRequest({
 
                 <div className="documents-main-column">
                   <div className="documents-list-card">
-                    {!selectedRequestType && (
+                    {selectedRequestTypes.length === 0 && (
                       <div className="doc-empty-note">
                         <BadgeCheck size={16} />
                         <span>Nenhum documento obrigatório para este cadastro.</span>
@@ -3775,9 +3640,14 @@ function NewRequest({
               </button>
             )}
             {formStep === RequestStep.ANIMAL && !registered && (
-              <button className="anm-add-btn" type="button" onClick={addAnimal}>
-                Adicionar animal
-              </button>
+              <>
+                <button className="anm-add-btn" type="button" onClick={addAnimal}>
+                  Adicionar animal
+                </button>
+                <button className="anm-add-btn" type="button" onClick={duplicatePreviousAnimal}>
+                  Duplicar o anterior
+                </button>
+              </>
             )}
             {currentStepIndex < formSteps.length - 1 ? (
               <button
@@ -3844,11 +3714,11 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     ["UF", requestData.state],
     ["CadÚnico", requestData.cadUnicoNotApplicable ? "Não se aplica" : requestData.cadUnico],
     ["Agricultor", yesNo(requestData.isFarmer)],
-    ["Tipo de solicitação", requestData.type],
     ["Data da agenda", requestData.schedule],
     ["Observações", requestData.notes],
   ];
   const animalFieldLabels = [
+    ["Procedimentos", "procedures"],
     ["Nome", "name"],
     ["Espécie", "species"],
     ["Sexo", "sex"],
@@ -4250,6 +4120,9 @@ function isAnimalPhotoDocument(d: AnyRecord = {}) {
   return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
 }
 
+// One row of the attachments table of a request: the request itself, the photo, a required document (sent or not) or an extra one.
+type AttachmentRow = AnyRecord & { id: string; document?: AnyRecord };
+
 export function RequestPreviewModal({ request, readOnly = true, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
@@ -4301,12 +4174,15 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
   const assumeDisabledTitle = "Assumir este processo";
 
   const uploadedDocs = getUserUploadedProcessDocuments(request.documents);
-  const requestTypeConfig = requestTypes.find(
-    (t) => (t.id && t.id === request.requestTypeId) || t.name === request.type,
-  );
-  const requiredDocTypes = (requestTypeConfig?.documents || [])
+  const requestTypeConfigs = resolveRequestTypes({
+    animals: normalizedRequest.animals,
+    workflow: normalizedRequest.workflowData || normalizedRequest.workflow_data,
+    requestTypeId: request.requestTypeId,
+    requestType: request.type,
+  }, requestTypes);
+  const requiredDocTypes = mergeProcedureDocuments(requestTypeConfigs.map((type) => (type.documents || [])
     .map(normalizeDocumentType)
-    .filter((dt) => dt.active !== false && wasDocumentConfiguredForRequest(dt, normalizedRequest));
+    .filter((dt) => dt.active !== false && wasDocumentConfiguredForRequest(dt, normalizedRequest))));
 
   const normalizedRequestTypeValue = normalizeRequestType(normalizedRequest.request_type || normalizedRequest.type);
   const requestDocumentKindByType: AnyRecord = {
@@ -4378,7 +4254,7 @@ export function RequestPreviewModal({ request, readOnly = true, onClose, onAppro
       document: d,
     }));
 
-  const anexos = [requerimento, ...(animalPhotoRow ? [animalPhotoRow] : []), ...requiredRows, ...extraDocs];
+  const anexos: AttachmentRow[] = [requerimento, ...(animalPhotoRow ? [animalPhotoRow] : []), ...requiredRows, ...extraDocs];
 
   const rejectionReasons = [
     "Documentação incompleta",
@@ -8869,7 +8745,7 @@ function ConfigView({
                 })
               }
             />
-            <BreedPicker
+            <BreedChecklist
               breeds={breeds}
               species={speciesOptions}
               municipalityId={newRequestType.municipalityId || configMunicipalityScopeId}
@@ -10446,7 +10322,7 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
       [
         { label: "NOME", value: animal.name || "-" },
         { label: "ESPÉCIE", value: animal.species || "-" },
-        { label: "PROCEDIMENTO", value: animal.procedureType || animal.procedure || requestTypeLabel(req) || "-" },
+        { label: "PROCEDIMENTO", value: animal.procedureType || animal.procedure || animalProcedureLabels(animal, req).join(", ") || requestTypeLabel(req) || "-" },
         { label: "SEXO", value: animal.sex || "-" },
       ],
       [

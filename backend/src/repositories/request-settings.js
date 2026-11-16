@@ -1,8 +1,7 @@
 import { pool } from "../db/index.js";
 import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
-
-const REQUEST_TYPES_CONFIG_KEY = "castragestao:request-types";
+import { REQUEST_TYPES_CONFIG_KEY } from "../services/request-type-defaults.js";
 
 // This adapter extends the existing pg/config storage: no Drizzle runtime exists in this application.
 // All lookups are parameterized and scoped to an active municipality, never a platform fallback.

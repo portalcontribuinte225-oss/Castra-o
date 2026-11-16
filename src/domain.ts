@@ -2,6 +2,7 @@ import type { AnyRecord } from "./types";
 import { maskCpf, maskName } from "./utils";
 import { normalizeDocumentReusePolicy } from "../shared/document-reuse-contract.js";
 import { RequestKind, RequestStatus } from "../shared/request-contract.js";
+import { animalRequestTypeIds } from "../shared/request-types-contract.js";
 
 export const statuses = [
   RequestStatus.NEW,
@@ -394,6 +395,27 @@ export function requestTypeLabel(request: AnyRecord = {}) {
   };
   const type = request.type || request.request_type || request.requestTypeId || "";
   return labels[type] || displayText(type) || "Castração";
+}
+
+// The procedures a request was made with, each by its own name as stored when it was made; empty for a request made with a single type.
+export function storedRequestTypeNames(request: AnyRecord = {}): string[] {
+  const workflow = request.workflowData || request.workflow_data || {};
+  const names: string[] = Array.isArray(workflow.requestTypeNames) ? workflow.requestTypeNames.filter((name) => typeof name === "string" && name.trim()) : [];
+  return [...new Set(names.map((name) => requestTypeLabel({ type: name })))];
+}
+
+// The procedures asked for one animal of a request, by name: the animal keeps their ids, the request the names that go with them.
+export function animalProcedureLabels(animal: AnyRecord = {}, request: AnyRecord = {}): string[] {
+  const workflow = request.workflowData || request.workflow_data || {};
+  const ids: string[] = Array.isArray(workflow.requestTypeIds) ? workflow.requestTypeIds : [];
+  const names: string[] = Array.isArray(workflow.requestTypeNames) ? workflow.requestTypeNames : [];
+  return animalRequestTypeIds(animal).map((id) => names[ids.indexOf(id)]).filter((name) => typeof name === "string" && name.trim()).map((name) => requestTypeLabel({ type: name }));
+}
+
+// Each procedure of a request by its own name; a request made with a single type has just that one.
+export function requestTypeLabels(request: AnyRecord = {}): string[] {
+  const names = storedRequestTypeNames(request);
+  return names.length ? names : [requestTypeLabel(request)];
 }
 
 export function normalizeRequest(request: AnyRecord = {}): AnyRecord {

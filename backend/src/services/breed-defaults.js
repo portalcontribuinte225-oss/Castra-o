@@ -1,5 +1,4 @@
 export const BREEDS_CONFIG_KEY = "castragestao:breeds";
-export const REQUEST_TYPES_CONFIG_KEY = "castragestao:request-types";
 export const SPECIES_CONFIG_KEY = "castragestao:species";
 
 // The species every municipality starts with (see municipalityDefaults); the default breeds point to these ids.

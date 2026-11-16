@@ -6,6 +6,7 @@ import { isGlobalUser, isInternalUser, requireMunicipality } from "../tenant.js"
 import { DeliveryStatus } from "../../../shared/notification-contract.js";
 import { loadRequestSettings, loadDocumentReviewSettings } from "../repositories/request-settings.js";
 import { prepareRequestSubmission, mergeProtectedWorkflow } from "../services/request-submission.js";
+import { updateRequestProcedures } from "../services/request-procedures.js";
 import { notifyRequestChanges } from "../services/request-change-notifications.js";
 import { enrollTutorForRequest } from "../services/auth/tutor-enrollment.js";
 import { deliverAuthMessage } from "../services/auth/auth-message-delivery.js";
@@ -119,17 +120,20 @@ router.post("/", optionalAuth, async (req, res) => {
     await lockMunicipalSchedule(client, municipalityId);
     const settings = await loadRequestSettings(municipalityId, client);
     body = await prepareRegisteredRequest(client, { body, user: req.user, municipalityId, settings });
-    const { cpf, workflow: submittedWorkflow, requestType, internal, tutorRequired } = prepareRequestSubmission({
+    const { cpf, workflow: submittedWorkflow, requestType, animals: procedureAnimals, internal, tutorRequired } = prepareRequestSubmission({
       body, user: req.user, municipalityId,
       workflow: parseJsonObject(body.workflow_data || body.workflowData), settings,
     });
-    body = { ...body, request_type: requestType };
+    // With procedures per animal the request type is derived from them; the single type the client may also send is dropped.
+    body = { ...body, request_type: requestType, ...(procedureAnimals ? { animals: procedureAnimals, requestTypeId: "" } : {}) };
     await validateRequestAnimalLink(client, { body, user: req.user, municipalityId });
     body = await reserveRequestSchedule(client, { body: { ...body, status: RequestStatus.NEW, workflow_data: submittedWorkflow }, municipalityId, settings, user: req.user });
     const workflow = body.workflow_data;
-    const selectedType = settings.requestTypes.find((item) => item.id === body.requestTypeId || item.name === requestType || item.id === requestType);
-    if (selectedType) workflow.requestTypeId = selectedType.id;
-    else delete workflow.requestTypeId;
+    if (!procedureAnimals) {
+      const selectedType = settings.requestTypes.find((item) => item.id === body.requestTypeId || item.name === requestType || item.id === requestType);
+      if (selectedType) workflow.requestTypeId = selectedType.id;
+      else delete workflow.requestTypeId;
+    }
     const { tutorId, enrollment } = await enrollTutorForRequest(client, {
       body: { ...body, cpf }, workflow, municipalityId, user: req.user, ip: req.ip,
       tutorRequired: tutorRequired && !internal && requestType !== "DENUNCIA",
@@ -389,7 +393,20 @@ router.patch("/:id", auth, async (req, res) => {
       await validateRequestAnimalLink(client, { body: nextRequest, user: req.user, municipalityId: existingRows[0].municipality_id });
     }
     const settings = await loadRequestSettings(existingRows[0].municipality_id, client);
-    if (nextRequest.request_type !== existingRows[0].request_type) {
+    const procedureUpdate = Object.hasOwn(normalizedPatch, "animals") ? updateRequestProcedures({
+      previousAnimals: existingRows[0].animals, nextAnimals: nextRequest.animals, workflow: nextWorkflow,
+      municipalityId: existingRows[0].municipality_id, settings,
+    }) : null;
+    if (procedureUpdate) {
+      nextWorkflow = procedureUpdate.workflow;
+      nextRequest = { ...nextRequest, animals: procedureUpdate.animals, request_type: procedureUpdate.requestType, workflow_data: nextWorkflow };
+      for (const [key, value] of [["animals", procedureUpdate.animals], ["request_type", procedureUpdate.requestType]]) {
+        const position = dedupedEntries.findIndex(([entry]) => entry === key);
+        if (position >= 0) dedupedEntries[position] = [key, value];
+        else dedupedEntries.push([key, value]);
+      }
+    }
+    if (!procedureUpdate && nextRequest.request_type !== existingRows[0].request_type) {
       const nextType = settings.requestTypes.find((item) => item.name === nextRequest.request_type || item.id === nextRequest.request_type);
       if (nextType) nextWorkflow.requestTypeId = nextType.id;
       else delete nextWorkflow.requestTypeId;
@@ -421,7 +438,7 @@ router.patch("/:id", auth, async (req, res) => {
       return [key, value];
     });
 
-    if ((Object.keys(workflowPatch).length || bookingChanged(existingRows[0], nextRequest)) && !dedupedEntries.some(([key]) => key === "workflow_data")) {
+    if ((Object.keys(workflowPatch).length || procedureUpdate || bookingChanged(existingRows[0], nextRequest)) && !dedupedEntries.some(([key]) => key === "workflow_data")) {
       preparedEntries.push(["workflow_data", JSON.stringify(nextWorkflow)]);
     }
 

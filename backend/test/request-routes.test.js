@@ -36,7 +36,8 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
   const createdUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
-    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true, stepAgenda: agenda, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] }]],
+    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true, stepAgenda: agenda, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] },
+      { id: "microchip", name: "Microchipagem", active: true, stepTutor: true, stepAgenda: agenda, documents: [] }]],
     ["castragestao:document-types", requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : []],
     ["castragestao:identification-types", [
       { id: "with_tutor", name: "Com tutor", active: true, stepTutor: true },
@@ -428,4 +429,48 @@ test("public requestType alias cannot omit the configured mandatory document", a
   assert.match(result.body.error, /documento obrigatório/i);
   assert.equal(stats.calls.some(({ sql }) => sql === "COMMIT"), false);
   assert.equal(stats.calls.some(({ sql }) => sql === "ROLLBACK"), true);
+});
+
+const dog = { species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida" };
+
+test("public POST with procedures per animal stores the derived type, the animals and the procedures, ignoring the single type sent", async (t) => {
+  const { request, row } = await fixture(t);
+  const animals = [{ ...dog, requestTypeIds: ["microchip", "castration"] }, { ...dog, requestTypeIds: ["microchip", "microchip"] }];
+  const response = await request({ body: procedureBody({ animals, type: "Castração", requestTypeId: "castration" }) });
+  assert.equal(response.status, 201);
+  assert.equal(row().request_type, "Microchipagem, Castração");
+  assert.deepEqual(row().animals.map(({ requestTypeIds }) => requestTypeIds), [["microchip", "castration"], ["microchip"]]);
+  assert.deepEqual(row().workflow_data.requestTypeIds, ["microchip", "castration"]);
+  assert.deepEqual(row().workflow_data.requestTypeNames, ["Microchipagem", "Castração"]);
+  assert.equal(Object.hasOwn(row().workflow_data, "requestTypeId"), false);
+});
+
+test("public POST refuses an unknown procedure, one switched off and an animal left without any, and saves nothing", async (t) => {
+  const { request, row } = await fixture(t);
+  for (const animals of [[{ ...dog, requestTypeIds: ["unknown"] }], [{ ...dog, requestTypeIds: ["castration"] }, { ...dog, requestTypeIds: [] }],
+    [{ ...dog, requestTypeIds: ["castration"] }, { ...dog }], [{ ...dog, requestTypeIds: "castration" }]]) {
+    const response = await request({ body: procedureBody({ animals }) });
+    assert.equal(response.status, 400, JSON.stringify(animals));
+    assert.equal(row(), null);
+  }
+});
+
+test("a PATCH that changes the procedures of the animals derives the request type again, and one that forges them does not", async (t) => {
+  const existing = { ...pendingRequest(), request_type: "Castração", animals: [{ ...dog, requestTypeIds: ["castration"] }],
+    workflow_data: { followUp: { enabled: false, email: "", phone: "" }, requestTypeIds: ["castration"], requestTypeNames: ["Castração"] } };
+  const { request, row } = await fixture(t, { existing });
+  const path = `/requests/${REQUEST_ID}`;
+  const forged = await request({ method: "PATCH", path, user: ADMIN, body: { notes: "x", workflow_data: { requestTypeIds: ["microchip"], requestTypeNames: ["Forjado"] } } });
+  assert.equal(forged.status, 200);
+  assert.deepEqual(row().workflow_data.requestTypeIds, ["castration"]);
+  assert.equal(row().request_type, "Castração");
+  const changed = await request({ method: "PATCH", path, user: ADMIN, body: { animals: [{ ...dog, requestTypeIds: ["castration", "microchip"] }] } });
+  assert.equal(changed.status, 200);
+  assert.equal(row().request_type, "Castração, Microchipagem");
+  assert.deepEqual(row().animals[0].requestTypeIds, ["castration", "microchip"]);
+  assert.deepEqual(row().workflow_data.requestTypeIds, ["castration", "microchip"]);
+  assert.deepEqual(row().workflow_data.requestTypeNames, ["Castração", "Microchipagem"]);
+  const refused = await request({ method: "PATCH", path, user: ADMIN, body: { animals: [{ ...dog, requestTypeIds: ["unknown"] }] } });
+  assert.equal(refused.status, 400);
+  assert.equal(row().request_type, "Castração, Microchipagem");
 });

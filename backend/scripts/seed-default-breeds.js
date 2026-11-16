@@ -6,7 +6,8 @@
 // A municipality that already has breeds is left alone. In the others it adds the default breeds and links them to the
 // request types that link none. It runs against the database in DATABASE_URL, so check the target it prints first.
 import { pool } from "../src/db/index.js";
-import { BREEDS_CONFIG_KEY, REQUEST_TYPES_CONFIG_KEY, SPECIES_CONFIG_KEY, planBreedSeed } from "../src/services/breed-defaults.js";
+import { BREEDS_CONFIG_KEY, SPECIES_CONFIG_KEY, planBreedSeed } from "../src/services/breed-defaults.js";
+import { REQUEST_TYPES_CONFIG_KEY } from "../src/services/request-type-defaults.js";
 import { describeTarget, readValue, writeValue } from "./config-store.js";
 
 const apply = process.argv.includes("--apply");

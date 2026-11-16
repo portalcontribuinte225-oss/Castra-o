@@ -1,6 +1,7 @@
 import { DEFAULT_MINIMUM_CONFIDENCE } from "./routes/ai.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "./services/identification-type-defaults.js";
 import { BREEDS_CONFIG_KEY, buildDefaultBreeds } from "./services/breed-defaults.js";
+import { REQUEST_TYPES_CONFIG_KEY, buildDefaultRequestTypes } from "./services/request-type-defaults.js";
 
 export const DEFAULT_MUNICIPALITY_SECTOR_ID = "setor_gestao_municipal";
 export const DEFAULT_MUNICIPALITY_SECTOR_NAME = "Gestão Municipal";
@@ -106,52 +107,7 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
         },
       },
     ],
-    "castragestao:request-types": [
-      {
-        id: "ninhada",
-        name: "Ninhada",
-        fee: "Gratuito",
-        charged: false,
-        billingDescription: "",
-        billingAmount: "",
-        billingDueDate: "",
-        active: true,
-        overrideDailyLimit: false,
-        breedIds: [...breedIds],
-        documents: [
-          {
-            id: "comprovante_residencia",
-            name: "Comprovante de Residência",
-            required: false,
-            active: true,
-            accept: ["image/jpeg", "image/png", "application/pdf"],
-            maxSizeMb: 5,
-          },
-        ],
-      },
-      {
-        id: "animal_rua",
-        name: "Animal de Rua",
-        fee: "Gratuito",
-        charged: false,
-        billingDescription: "",
-        billingAmount: "",
-        billingDueDate: "",
-        active: true,
-        overrideDailyLimit: false,
-        breedIds: [...breedIds],
-        documents: [
-          {
-            id: "comprovante_residencia",
-            name: "Comprovante de Residência",
-            required: false,
-            active: true,
-            accept: ["image/jpeg", "image/png", "application/pdf"],
-            maxSizeMb: 5,
-          },
-        ],
-      },
-    ],
+    [REQUEST_TYPES_CONFIG_KEY]: buildDefaultRequestTypes(breedIds),
     [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes(),
     "castragestao:species": [
       { id: "canino", name: "Canino", active: true },

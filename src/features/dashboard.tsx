@@ -25,7 +25,7 @@ import {
   requestTypeLabel,
 } from "../domain";
 import { escapeHtml, normalizeText } from "../utils";
-import { countBy, getRequestClosedByName, getRequestTypeName, getRequestUserName, parseAnyDate, topItems } from "../analytics";
+import { countBy, countByMany, getRequestClosedByName, getRequestTypeNames, getRequestUserName, parseAnyDate, topItems } from "../analytics";
 
 type PeriodKey = "30" | "90" | "365" | "all";
 type DashboardTab = "gestao" | "operacao" | "processos" | "produtividade" | "territorio" | "estatisticas";
@@ -158,7 +158,7 @@ export function DashboardView({
     const byMonth = buildMonthlySeries(filteredRequests);
     const byStatus = PROCESS_STAGES.map((stage) => ({ label: stage.label, value: countStage(filteredRequests, stage.id) })).filter((item) => item.value > 0);
     const bottlenecks = topItems(byStatus.filter((item) => !["Realizadas", "Arquivadas"].includes(item.label)).sort((a, b) => b.value - a.value), 5);
-    const byType = topItems(countBy(filteredRequests, (request) => getRequestTypeName(request, requestTypes)), 6);
+    const byType = topItems(countByMany(filteredRequests, (request) => getRequestTypeNames(request, requestTypes)), 6);
     return { byResponsible, bySector, byCloser, byMonth, byStatus, bottlenecks, byType };
   }, [filteredRequests, teams, currentUser, requestTypes]);
 

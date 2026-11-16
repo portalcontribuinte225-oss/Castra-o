@@ -379,3 +379,29 @@ describe("getEmptyListMessage / isRequestFiltersEmpty / formatRequestCount", () 
     expect(formatRequestCount(45)).toBe("45 solicitações");
   });
 });
+
+describe("requests with several procedures", () => {
+  const multi = request({
+    id: "multi",
+    type: "Castração, Microchipagem",
+    workflow_data: { requestTypeIds: ["castration", "microchip"], requestTypeNames: ["Castração", "Microchipagem"] },
+  });
+  const single = request({ id: "single", type: "Microchipagem" });
+  const list = [multi, single, request({ id: "old", type: "ninhada" })];
+  const run = (selected: string[]) => filterRequestItems(list, filters({ types: selected }), context).map((item) => item.id);
+
+  it("offers each procedure as its own option, never the joined text", () => {
+    expect(buildTypeOptions(list).map((option) => option.label)).toEqual(["Castração", "Microchipagem", "Ninhada"]);
+  });
+
+  it("shows a request under every one of its procedures", () => {
+    expect(run(["Castração"])).toEqual(["multi"]);
+    expect(run(["Microchipagem"])).toEqual(["multi", "single"]);
+    expect(run(["Castração", "Ninhada"])).toEqual(["multi", "old"]);
+    expect(run(["Castração, Microchipagem"])).toEqual([]);
+  });
+
+  it("counts a request once under each of its procedures", () => {
+    expect(buildRequestFacetCounts(list, initialRequestFilters, context).types).toEqual({ Castração: 1, Microchipagem: 2, Ninhada: 1 });
+  });
+});

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { DocumentReuseScope, normalizeDocumentReusePolicy } from "../../../../shared/document-reuse-contract.js";
+import { resolveRequestTypes } from "../../../../shared/request-types-contract.js";
 
 export function canonicalDocumentDefinition(document = {}) {
   return { ...document, ...normalizeDocumentReusePolicy(document), required: document.required !== false,
@@ -7,19 +8,29 @@ export function canonicalDocumentDefinition(document = {}) {
     maxSizeMb: Number(document.maxSizeMb) > 0 ? Number(document.maxSizeMb) : 5 };
 }
 
-export function resolveDocumentRequestType(settings, input) {
+// The request types a document check refers to: the procedures of a request (or its single old type), or the id/name of one type.
+export function resolveDocumentRequestTypes(settings, input) {
   const types = Array.isArray(settings?.requestTypes) ? settings.requestTypes : [];
-  if (typeof input === "string") return types.find((item) => item.id === input || item.name === input);
-  const requestType = input?.request_type ?? input?.requestType ?? input?.requestTypeId ?? input?.type;
-  return types.find((item) => input?.requestTypeId ? item.id === input.requestTypeId : item.id === requestType || item.name === requestType);
+  if (typeof input === "string") return resolveRequestTypes({ requestType: input }, types);
+  return resolveRequestTypes({
+    animals: input?.animals, workflow: input?.workflow_data ?? input?.workflowData, requestTypeId: input?.requestTypeId,
+    requestType: input?.request_type ?? input?.requestType ?? input?.type,
+  }, types);
 }
 
+// The documents of a request are the sum of the documents of all its procedures, each once; one is required if any procedure requires it.
 export function requestDocumentDefinitions(settings, input) {
-  const type = resolveDocumentRequestType(settings, input);
-  return (Array.isArray(type?.documents) ? type.documents : []).map((reference) => {
-    const configured = (settings.documentTypes || []).find((item) => item.id === reference.id);
-    return canonicalDocumentDefinition({ ...reference, ...(configured || {}) });
-  }).filter((document) => document.active && typeof document.id === "string");
+  const definitions = new Map();
+  for (const type of resolveDocumentRequestTypes(settings, input)) {
+    for (const reference of Array.isArray(type.documents) ? type.documents : []) {
+      const configured = (settings.documentTypes || []).find((item) => item.id === reference.id);
+      const definition = canonicalDocumentDefinition({ ...reference, ...(configured || {}) });
+      if (!definition.active || typeof definition.id !== "string") continue;
+      const known = definitions.get(definition.id);
+      definitions.set(definition.id, known ? { ...known, required: known.required || definition.required } : definition);
+    }
+  }
+  return [...definitions.values()];
 }
 
 function stableValue(value) {
