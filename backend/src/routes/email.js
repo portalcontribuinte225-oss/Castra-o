@@ -1,14 +1,16 @@
 import { Router } from "express";
-import { auth, requireMaster, requireMunicipalAdmin } from "../middleware/auth.js";
+import { auth, requireConfigItem, requireMaster } from "../middleware/auth.js";
 import { isUuid } from "../repositories/request-tracking.js";
 import { auditCtx } from "../services/audit.js";
 import { saveEmailAccount } from "../services/email-account.js";
 import { getEmailSettings } from "../services/email-settings.js";
 import { saveEmailTemplateIds, setEmailUseActive } from "../services/email-templates.js";
 import { isMasterUser, pickMunicipalityId } from "../tenant.js";
+import { IntegrationConfigItem } from "../../../shared/config-permission-contract.js";
 
 const router = Router();
 router.use(auth);
+const requireEmailItem = requireConfigItem(IntegrationConfigItem.EMAIL);
 
 // Unexpected failures never echo provider or database messages to the client.
 function sendFailure(res, error, fallback) {
@@ -27,12 +29,12 @@ function municipalityOf(req, { required }) {
   return municipalityId;
 }
 
-// The master sees the account and the template ids; everyone else only the municipal view.
+// The master sees the account and the template ids; everyone else with the permission only the municipal view.
 async function respondWithSettings(req, res, municipalityId) {
   res.set("Cache-Control", "no-store").json(await getEmailSettings({ municipalityId, master: isMasterUser(req.user) }));
 }
 
-router.get("/settings", requireMunicipalAdmin, async (req, res) => {
+router.get("/settings", requireEmailItem, async (req, res) => {
   try {
     await respondWithSettings(req, res, municipalityOf(req, { required: !isMasterUser(req.user) }));
   } catch (error) {
@@ -60,7 +62,7 @@ router.put("/templates", requireMaster, async (req, res) => {
   }
 });
 
-router.put("/templates/active", requireMunicipalAdmin, async (req, res) => {
+router.put("/templates/active", requireEmailItem, async (req, res) => {
   try {
     const municipalityId = municipalityOf(req, { required: true });
     await setEmailUseActive({ municipalityId, use: req.body?.use, active: req.body?.active, audit: auditCtx(req) });

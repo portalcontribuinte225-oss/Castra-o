@@ -9,6 +9,7 @@ import { AuthPurpose } from "../../shared/auth-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
+import { isPermissionRead, permissionConfigs, permissionGroup } from "./fixtures/permission-groups.js";
 
 const clientFetch = globalThis.fetch;
 const ADMIN = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY };
@@ -65,7 +66,7 @@ test("saving the platform account and testing it deny public, tutor, operator an
     assert.equal((await request(`/sms/settings?municipalityId=${MUNICIPALITY}`, { user })).status, expected);
     assert.equal((await request(`/sms/uses/active?municipalityId=${MUNICIPALITY}`, { user, method: "PUT", body: { use: AuthPurpose.PASSWORD_RESET, active: false } })).status, expected);
   }
-  assert.equal(db.calls.length, 0); assert.equal(remoteCalls.length, 0);
+  assert.equal(db.calls.filter((call) => !isPermissionRead(call)).length, 0); assert.equal(remoteCalls.length, 0);
 });
 
 test("SMS is no longer read or written through the generic configuration route", async (t) => {
@@ -217,4 +218,52 @@ test("when the provider answers with something that is not this message, the tes
   assert.equal(refused.status, 200);
   assert.deepEqual(refused.body, { status: "failed", reason: "Não foi possível confirmar o aceite da mensagem.", detail: "externalId: enviado com 36 caracteres, devolvido com 3 caracteres" });
   assert.doesNotMatch(JSON.stringify(refused.body), /99999|private-production|Test Town/);
+});
+
+const ANALYST = { ...ADMIN, id: "44444444-4444-4444-8444-444444444444", role: "analista" };
+const smsGroup = (items = ["sms_settings"], member = ANALYST, extra = {}) => permissionConfigs(MUNICIPALITY, {
+  users: [{ id: member.id, permissionGroupId: "g" }], groups: [permissionGroup("g", items, extra)],
+});
+const give = (db, configs) => {
+  for (const key of [`castragestao:teams:${MUNICIPALITY}`, `permission_groups:${MUNICIPALITY}`]) db.configs.delete(key);
+  for (const [key, value] of Object.entries(configs)) db.configs.set(key, value);
+};
+
+test("a staff user with the SMS permission reads the settings and switches the messages, never the platform's account, and the group decides over the role", async (t) => {
+  const { request, saveAccount, db } = await fixture(t);
+  const confirmed = NotificationEvent.SCHEDULE_CONFIRMED;
+  await saveAccount();
+  assert.equal((await request("/sms/settings", { user: ANALYST })).status, 403, "no group, no permission");
+  give(db, smsGroup());
+  const read = await request("/sms/settings", { user: ANALYST });
+  assert.equal(read.status, 200);
+  assert.deepEqual([read.body.active, read.body.hasToken, read.body.tokenPreview, read.body.municipalityName], [true, false, "", "Test Town"]);
+  const on = await request("/sms/uses/active", { method: "PUT", user: ANALYST, body: { use: confirmed, active: true } });
+  assert.equal(on.status, 200);
+  assert.equal(db.configs.get(`${SMS_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`).active[confirmed], true);
+  for (const [method, path, body] of [["PUT", "/sms/account", { active: false }], ["POST", "/sms/test-connection", { token: TOKEN }], ["POST", "/sms/test-message", { phone: "48999991234" }]]) {
+    assert.equal((await request(path, { method, body, user: ANALYST })).status, 403, path);
+  }
+  give(db, smsGroup(["email_settings"]));
+  assert.equal((await request("/sms/settings", { user: ANALYST })).status, 403, "a group without the SMS item");
+  assert.equal((await request("/sms/uses/active", { method: "PUT", user: ANALYST, body: { use: confirmed, active: false } })).status, 403);
+  give(db, smsGroup(["email_settings"], ADMIN));
+  assert.equal((await request("/sms/settings", { user: ADMIN })).status, 403, "the manager is judged by their group too");
+  give(db, smsGroup(["sms_settings"], ANALYST, { active: false }));
+  assert.equal((await request("/sms/settings", { user: ANALYST })).status, 403, "an inactive group is no group");
+  assert.equal((await request("/sms/settings", { user: ADMIN })).status, 200, "the manager with no group passes by the role");
+});
+
+test("a service switched off for the municipality refuses to turn a message on and closes the channel to tutors, while turning it off stays allowed", async (t) => {
+  const { request, saveAccount, db } = await fixture(t);
+  const confirmed = NotificationEvent.SCHEDULE_CONFIRMED;
+  await saveAccount(); db.setContract(MUNICIPALITY, { plan: 10 });
+  const availability = async () => (await request(`/sms/availability?municipalityId=${MUNICIPALITY}`, { user: null })).body.active;
+  assert.equal(await availability(), true);
+  assert.equal((await request("/sms/uses/active", { method: "PUT", body: { use: confirmed, active: true } })).status, 200);
+  db.setContract(MUNICIPALITY, { plan: 10, enabled: false });
+  assert.equal(await availability(), false);
+  const refused = await request("/sms/uses/active", { method: "PUT", body: { use: AuthPurpose.PASSWORD_RESET, active: true } });
+  assert.equal(refused.status, 400); assert.match(refused.body.error, /serviço de SMS está desativado/);
+  assert.equal((await request("/sms/uses/active", { method: "PUT", body: { use: confirmed, active: false } })).status, 200);
 });

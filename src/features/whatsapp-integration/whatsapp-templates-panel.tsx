@@ -20,7 +20,7 @@ export function WhatsappTemplatesPanel({ municipalityId, readOnly, canSync, temp
         <WhatsappVariablesList />
       </div>
       {!municipalityId && <p>Selecione um município para ver os templates.</p>}
-      {readOnly && <p>Apenas administradores podem ligar ou desligar templates.</p>}
+      {readOnly && <p>Você não tem permissão para ligar ou desligar templates.</p>}
       {templates.loading && <p role="status">Carregando templates...</p>}
       {templates.error && (
         <div role="alert">

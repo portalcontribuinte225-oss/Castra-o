@@ -1,4 +1,4 @@
-import { DeliveryCode } from "../../../shared/notification-contract.js";
+import { DeliveryCode, NotificationChannel } from "../../../shared/notification-contract.js";
 import {
   EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY, isEmailUseActive, normalizeEmailActiveUses, normalizeEmailTemplateIds,
   validateEmailTemplateIds,
@@ -8,6 +8,7 @@ import { readConfigValue, updateConfigValue } from "../repositories/config-value
 import { loadMunicipalityIdentity } from "../repositories/municipality-identity.js";
 import { AUDIT_ACTIONS } from "./audit.js";
 import { isEmailAccountConfigured, loadEmailAccount } from "./email-account.js";
+import { isServiceEnabled } from "./message-quota.js";
 
 function badRequest(message, status = 400) {
   return Object.assign(new Error(message), { status });
@@ -52,7 +53,8 @@ export async function saveEmailTemplateIds({ patch, audit, database } = {}) {
   });
 }
 
-// Turning a use on needs the master to have set the account and the template; turning it off is always allowed.
+// Turning a use on needs the master to have set the account and the template, and the service to be on for the municipality;
+// turning it off is always allowed.
 export async function setEmailUseActive({ municipalityId, use, active, audit, database } = {}) {
   if (!municipalityId) throw badRequest("Município não identificado.");
   if (!getEmailUse(use) || typeof active !== "boolean") throw badRequest("Informe a mensagem e se ela deve ficar ativa.");
@@ -60,6 +62,7 @@ export async function setEmailUseActive({ municipalityId, use, active, audit, da
   if (active) {
     const [account, ids] = await Promise.all([loadEmailAccount(database), loadEmailTemplateIds(database)]);
     if (!isEmailAccountConfigured(account) || !ids[use]) throw badRequest("Só é possível ligar mensagens com a conta de envio e o template configurados.");
+    if (!await isServiceEnabled(NotificationChannel.EMAIL, municipalityId, { database })) throw badRequest("O serviço de e-mail está desativado para este município.");
   }
   await updateConfigValue(EMAIL_ACTIVE_USES_CONFIG_KEY, municipalityId, (current) => ({ active: { ...normalizeEmailActiveUses(current), [use]: active } }), {
     database,

@@ -117,6 +117,9 @@ export const CONFIG_KEYS = {
 };
 
 export const CONFIG_KEYS_LIST = Object.values(CONFIG_KEYS);
+
+// Where the global administration's municipality filter is kept in the browser; it is cleared when the session ends.
+export const GLOBAL_MUNICIPALITY_FILTER_KEY = "castragestao:globalMunicipalityFilterId";
 export const initialTeams = { sectors: [], users: [] };
 export const initialScheduleRules: AnyRecord[] = [];
 

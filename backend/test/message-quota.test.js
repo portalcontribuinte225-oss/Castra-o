@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { NotificationChannel } from "../../shared/notification-contract.js";
-import { MESSAGE_QUOTA_KEYS, isContractInForce, messageQuotaDates, messageQuotaKey, normalizeMessageQuotaInput } from "../../shared/message-quota-contract.js";
-import { checkAndConsumeQuota, evaluateMessageQuota, getQuotaStatus, isQuotaAvailable, resetQuotaUsage, saveQuota } from "../src/services/message-quota.js";
+import { MESSAGE_QUOTA_KEYS, hasServiceSwitch, isContractInForce, isServiceAvailable, isServiceOn, messageQuotaDates, messageQuotaKey, normalizeMessageQuotaInput } from "../../shared/message-quota-contract.js";
+import { checkAndConsumeQuota, evaluateMessageQuota, getQuotaStatus, isQuotaAvailable, isServiceEnabled, resetQuotaUsage, saveQuota, setServiceEnabled } from "../src/services/message-quota.js";
 import { quotaDatabase, QUOTA_TEST_MUNICIPALITY as MUNICIPALITY, QUOTA_TEST_OTHER as OTHER } from "./fixtures/message-quota-db.js";
 
 const { WHATSAPP, SMS, EMAIL } = NotificationChannel;
@@ -134,8 +134,8 @@ test("the status tells the plan, the month's usage, what is left and whether the
     [`sms_quota:${MUNICIPALITY}`]: { plan: 10, currentPeriodStart: "2026-10", currentPeriodUsed: 10, contractEnd: "2026-11-12" },
     [`email_quota:${MUNICIPALITY}`]: { currentPeriodUsed: 3 },
   } });
-  assert.deepEqual(await getQuotaStatus(WHATSAPP, MUNICIPALITY, { database, now: date }), { plan: 100, used: 30, remaining: 70, contractStart: "2026-01-01", contractEnd: "2026-12-31", active: true });
-  assert.deepEqual(await getQuotaStatus(SMS, MUNICIPALITY, { database, now: date }), { plan: 10, used: 0, remaining: 10, contractStart: null, contractEnd: "2026-11-12", active: false });
+  assert.deepEqual(await getQuotaStatus(WHATSAPP, MUNICIPALITY, { database, now: date }), { plan: 100, used: 30, remaining: 70, contractStart: "2026-01-01", contractEnd: "2026-12-31", active: true, enabled: true });
+  assert.deepEqual(await getQuotaStatus(SMS, MUNICIPALITY, { database, now: date }), { plan: 10, used: 0, remaining: 10, contractStart: null, contractEnd: "2026-11-12", active: false, enabled: true });
   assert.equal(await getQuotaStatus(EMAIL, MUNICIPALITY, { database, now: date }), null, "no plan, no contract");
   assert.equal(await getQuotaStatus(WHATSAPP, OTHER, { database, now: date }), null);
 });
@@ -167,4 +167,67 @@ test("resetting starts the month over and keeps the contract; it creates nothing
   assert.equal(await resetQuotaUsage({ channel: SMS, municipalityId: MUNICIPALITY, database }), null);
   assert.equal(database.store.has(`sms_quota:${MUNICIPALITY}`), false);
   await assert.rejects(resetQuotaUsage({ channel: "fax", municipalityId: MUNICIPALITY, database }), { status: 400 });
+});
+
+test("only SMS and e-mail have a service switch, and absent means on", () => {
+  assert.deepEqual(CHANNELS.map(hasServiceSwitch), [false, true, true]);
+  assert.equal(isServiceOn(undefined), true);
+  assert.equal(isServiceOn({ plan: 1 }), true);
+  assert.equal(isServiceOn({ plan: 1, enabled: true }), true);
+  assert.equal(isServiceOn({ plan: 1, enabled: false }), false);
+  assert.equal(isServiceAvailable({ plan: 5 }, "2026-11-13"), true);
+  assert.equal(isServiceAvailable({ plan: 5, enabled: false }, "2026-11-13"), false, "the contract is in force but the service is off");
+  assert.equal(isServiceAvailable({ plan: 5, contractEnd: "2026-11-12" }, "2026-11-13"), false);
+  assert.equal(isServiceAvailable({ enabled: true }, "2026-11-13"), false, "on, but with no contract");
+  assert.equal(isServiceAvailable(null, "2026-11-13"), false);
+});
+
+test("a service switched off refuses every send and the balance stays untouched, whatever the contract", async () => {
+  for (const channel of [SMS, EMAIL]) {
+    const key = `${messageQuotaKey(channel)}:${MUNICIPALITY}`;
+    const database = quotaDatabase({ configs: { [key]: { plan: 10, enabled: false } } });
+    const refused = await checkAndConsumeQuota(channel, MUNICIPALITY, { database, now: date });
+    assert.equal(refused.allowed, false); assert.match(refused.reason, /desativado/);
+    assert.equal(await isQuotaAvailable(channel, MUNICIPALITY, { database, now: date }), false);
+    assert.equal(await isServiceEnabled(channel, MUNICIPALITY, { database }), false);
+    assert.deepEqual(database.store.get(key), { plan: 10, enabled: false });
+    database.store.set(key, { plan: 10, enabled: true });
+    assert.equal((await checkAndConsumeQuota(channel, MUNICIPALITY, { database, now: date })).allowed, true);
+    database.store.set(key, { plan: 10 });
+    assert.equal((await checkAndConsumeQuota(channel, MUNICIPALITY, { database, now: date })).allowed, true, "a contract with no switch is on");
+  }
+  const none = quotaDatabase();
+  assert.equal(await isServiceEnabled(SMS, MUNICIPALITY, { database: none }), true, "a municipality with no contract counts as on");
+  assert.equal(await isServiceEnabled("fax", MUNICIPALITY, { database: none }), false);
+  assert.equal(await isServiceEnabled(SMS, null, { database: none }), false);
+});
+
+test("the service switch needs a contract and a lone boolean, exists for SMS and e-mail only, keeps the rest and is audited", async () => {
+  const key = `sms_quota:${OTHER}`;
+  const database = quotaDatabase({ configs: { [key]: { plan: 50, currentPeriodStart: "2026-11", currentPeriodUsed: 7 } } });
+  const audit = { userId: "44444444-4444-4444-8444-444444444444", municipalityId: null };
+  const off = await setServiceEnabled({ channel: SMS, municipalityId: OTHER, input: { enabled: false }, audit, database });
+  assert.deepEqual(database.store.get(key), { plan: 50, currentPeriodStart: "2026-11", currentPeriodUsed: 7, enabled: false });
+  assert.equal(off.enabled, false); assert.equal(off.plan, 50);
+  assert.deepEqual(database.audits.map(({ userId, municipalityId, action, entityId, changes }) => [userId, municipalityId, action, entityId, changes]),
+    [[audit.userId, OTHER, "CONFIG_UPDATE", "sms_quota", { key: "sms_quota", municipalityId: OTHER, enabled: false }]]);
+  const before = structuredClone([...database.store]);
+  for (const [channel, input] of [[WHATSAPP, { enabled: false }], [SMS, {}], [SMS, { enabled: "false" }], [SMS, { enabled: 0 }], [SMS, { enabled: true, plan: 1 }], [SMS, null], [SMS, []], [SMS, undefined], ["fax", { enabled: false }]]) {
+    await assert.rejects(setServiceEnabled({ channel, municipalityId: OTHER, input, database }), { status: 400 }, JSON.stringify([channel, input]));
+  }
+  await assert.rejects(setServiceEnabled({ channel: EMAIL, municipalityId: OTHER, input: { enabled: false }, database }), { status: 400, message: /Cadastre o contrato/ });
+  assert.equal(database.store.has(`email_quota:${OTHER}`), false, "no contract is created by the switch");
+  assert.deepEqual([...database.store], before);
+});
+
+test("saving the contract and resetting the month keep the service switch", async () => {
+  const key = `email_quota:${MUNICIPALITY}`;
+  const database = quotaDatabase({ configs: { [key]: { plan: 10, currentPeriodStart: "2026-11", currentPeriodUsed: 4, enabled: false } } });
+  await saveQuota({ channel: EMAIL, municipalityId: MUNICIPALITY, input: { plan: 20 }, database });
+  assert.deepEqual(database.store.get(key), { plan: 20, contractStart: "", contractEnd: "", currentPeriodStart: "2026-11", currentPeriodUsed: 4, enabled: false });
+  await resetQuotaUsage({ channel: EMAIL, municipalityId: MUNICIPALITY, database });
+  assert.deepEqual(database.store.get(key), { plan: 20, contractStart: "", contractEnd: "", currentPeriodStart: "", currentPeriodUsed: 0, enabled: false });
+  const fresh = quotaDatabase();
+  await saveQuota({ channel: SMS, municipalityId: MUNICIPALITY, input: { plan: 5 }, database: fresh });
+  assert.equal(Object.hasOwn(fresh.store.get(`sms_quota:${MUNICIPALITY}`), "enabled"), false, "a new contract carries no switch");
 });

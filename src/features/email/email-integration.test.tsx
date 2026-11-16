@@ -35,8 +35,8 @@ const accountState = (overrides = {}) => ({
 
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
-  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true },
-  confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop,
+  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
+  confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop,
 };
 const tab = (props: Partial<React.ComponentProps<typeof EmailIntegrationTab>> = {}) => renderToStaticMarkup(
   <EmailIntegrationTab municipalityId="municipality-a" master canManage canEditContract {...props} />,
@@ -64,6 +64,18 @@ describe("e-mail contract", () => {
     const editor = tab();
     for (const shown of ["Contrato e cota", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(editor).toContain(shown);
     expect(editor.indexOf("Templates")).toBeLessThan(editor.indexOf("Contrato e cota"));
+  });
+
+  it("offers the service switch to who edits the contract, and locks the messages with the reason while the service is off", () => {
+    expect(tab()).toContain("Serviço ativo para este município");
+    expect(tab({ master: false, canEditContract: false })).not.toContain("Serviço ativo para este município");
+    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: { ...contractState.live, enabled: false } });
+    const off = tab({ master: false, canEditContract: false });
+    expect(off).toContain("Inativo");
+    expect(off.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(emailUses.length);
+    expect(off.match(/aria-label="O serviço de e-mail está desativado para este município\."/g)).toHaveLength(emailUses.length);
+    expect(off).not.toContain('aria-checked="true"');
+    expect(tab()).toContain("Serviço desativado para este município");
   });
 
   it("reads the contract of the e-mail channel for the municipality, and for none while the viewer cannot manage", () => {

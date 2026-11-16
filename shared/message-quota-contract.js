@@ -34,6 +34,19 @@ export function isContractInForce(quota, today = messageQuotaDates().today) {
   return true;
 }
 
+// SMS and e-mail run on the platform's account, so the platform's administrator also switches the service on or off for each
+// municipality (WhatsApp has its own switch in the municipality's credentials). The switch lives in the contract; absent means on.
+export const SERVICE_SWITCH_CHANNELS = Object.freeze([NotificationChannel.SMS, NotificationChannel.EMAIL]);
+
+export const hasServiceSwitch = (channel) => SERVICE_SWITCH_CHANNELS.includes(channel);
+
+export const isServiceOn = (quota) => quota?.enabled !== false;
+
+// The service is on and the contract is in force today: what lets a channel reach the municipality's tutors.
+export function isServiceAvailable(quota, today = messageQuotaDates().today) {
+  return isServiceOn(quota) && isContractInForce(quota, today);
+}
+
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const CONTRACT_FIELDS = ["plan", "contractStart", "contractEnd"];
 

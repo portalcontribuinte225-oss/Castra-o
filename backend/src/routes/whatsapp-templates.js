@@ -1,13 +1,15 @@
 import { Router } from "express";
-import { auth, requireMunicipalAdmin } from "../middleware/auth.js";
+import { auth, requireConfigItem, requireMaster } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
 import { auditCtx } from "../services/audit.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../services/whatsapp.js";
 import { syncWhatsappCatalog } from "../services/whatsapp-catalog.js";
 import { listWhatsappTemplates, setWhatsappTemplateActive } from "../services/whatsapp-active-templates.js";
+import { IntegrationConfigItem } from "../../../shared/config-permission-contract.js";
 
 const router = Router();
-router.use(auth, requireMunicipalAdmin);
+router.use(auth);
+const requireWhatsappItem = requireConfigItem(IntegrationConfigItem.WHATSAPP);
 
 // Unexpected failures never echo provider or database messages to the client.
 function sendFailure(res, error, fallback) {
@@ -20,7 +22,7 @@ function municipalityOf(req, res) {
   return municipalityId;
 }
 
-router.get("/templates", async (req, res) => {
+router.get("/templates", requireWhatsappItem, async (req, res) => {
   const municipalityId = municipalityOf(req, res);
   if (!municipalityId) return;
   try {
@@ -30,7 +32,7 @@ router.get("/templates", async (req, res) => {
   }
 });
 
-router.post("/templates/sync", async (req, res) => {
+router.post("/templates/sync", requireMaster, async (req, res) => {
   const municipalityId = municipalityOf(req, res);
   if (!municipalityId) return;
   try {
@@ -42,7 +44,7 @@ router.post("/templates/sync", async (req, res) => {
   }
 });
 
-router.put("/templates/active", async (req, res) => {
+router.put("/templates/active", requireWhatsappItem, async (req, res) => {
   const municipalityId = municipalityOf(req, res);
   if (!municipalityId) return;
   try {

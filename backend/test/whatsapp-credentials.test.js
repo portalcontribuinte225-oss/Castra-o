@@ -11,6 +11,8 @@ import { registerTestSession, resolveTestSession } from "./fixtures/session-user
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const ADMIN = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
 const STAFF = { id: "44444444-4444-4444-8444-444444444444", role: "analista", municipalityId: MUNICIPALITY_ID };
+const MASTER = { id: "66666666-6666-4666-8666-666666666666", role: "master" };
+const WHATSAPP_PATH = `/config/whatsapp?municipalityId=${MUNICIPALITY_ID}`;
 const TUTOR = { id: "55555555-5555-4555-8555-555555555555", role: "tutor", municipalityId: MUNICIPALITY_ID };
 const ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
 const clientFetch = globalThis.fetch;
@@ -149,49 +151,60 @@ test("the public WhatsApp configuration exposes only the active flag, while staf
   assert.equal(JSON.stringify(staff.body).includes("secret"), false);
 });
 
-test("administrators save credentials with an encrypted token and the response never returns it", async (t) => {
+test("the master saves the credentials of a municipality with an encrypted token and the response never returns it", async (t) => {
   const { request, store } = await fixture(t);
-  const saved = await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { active: true, phoneNumberId: "123456789", wabaId: "987654321", accessToken: "private-token", confirmationTemplate: "old", templateVariables: ["x"] } });
+  const saved = await request(WHATSAPP_PATH, { user: MASTER, method: "PUT", body: { active: true, phoneNumberId: "123456789", wabaId: "987654321", accessToken: "private-token", confirmationTemplate: "old", templateVariables: ["x"] } });
   assert.equal(saved.status, 200);
   assert.deepEqual(saved.body.value, { active: true, provider: "cloud_api", phoneNumberId: "123456789", wabaId: "987654321", hasAccessToken: true, tokenPreview: "private-" });
   const stored = store.get(`whatsapp:${MUNICIPALITY_ID}`);
   assert.match(stored.accessToken, /^enc:v1:/);
   assert.equal(JSON.stringify(stored).includes("private-token"), false);
   assert.equal(Object.hasOwn(stored, "confirmationTemplate"), false);
-  assert.equal((await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { phoneNumberId: "12 34 56" } })).status, 400);
-  const removed = await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { clearAccessToken: true } });
+  assert.equal((await request(WHATSAPP_PATH, { user: MASTER, method: "PUT", body: { phoneNumberId: "12 34 56" } })).status, 400);
+  const removed = await request(WHATSAPP_PATH, { user: MASTER, method: "PUT", body: { clearAccessToken: true } });
   assert.equal(removed.status, 200);
   assert.deepEqual(removed.body.value, { active: false, provider: "cloud_api", phoneNumberId: "123456789", wabaId: "987654321", hasAccessToken: false, tokenPreview: "" });
   assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).accessToken, "");
   delete process.env.CONFIG_ENCRYPTION_KEY;
-  const unavailable = await request("/config/whatsapp", { user: ADMIN, method: "PUT", body: { accessToken: "another-token" } });
+  const unavailable = await request(WHATSAPP_PATH, { user: MASTER, method: "PUT", body: { accessToken: "another-token" } });
   assert.equal(unavailable.status, 503);
   assert.equal(JSON.stringify(unavailable.body).includes("another-token"), false);
+});
+
+test("the municipal manager, the operators and the support cannot write the WhatsApp connection or test it, and nothing is stored", async (t) => {
+  const { request, store } = await fixture(t);
+  store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: false, phoneNumberId: "123456" });
+  for (const user of [ADMIN, STAFF, { id: "77777777-7777-4777-8777-777777777777", role: "suporte" }]) {
+    assert.equal((await request(WHATSAPP_PATH, { user, method: "PUT", body: { active: true, accessToken: "x" } })).status, 403, user.role);
+    assert.equal((await request("/whatsapp/test", { user, method: "POST", body: { phone: "48999991234", municipalityId: MUNICIPALITY_ID } })).status, 403, user.role);
+  }
+  assert.deepEqual(store.get(`whatsapp:${MUNICIPALITY_ID}`), { active: false, phoneNumberId: "123456" });
+  assert.equal((await request(WHATSAPP_PATH, { user: null, method: "PUT", body: { active: true } })).status, 401);
 });
 
 test("the connection test sends the active confirmation template, refuses unusable ones and never exposes provider data", async (t) => {
   const { request, store } = await fixture(t);
   store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: true, phoneNumberId: "123456", accessToken: "private-token" });
-  const phone = { phone: "48999991234" };
+  const phone = { phone: "48999991234", municipalityId: MUNICIPALITY_ID };
   const sent = [];
   globalThis.fetch = async (url, options) => { sent.push({ url, body: JSON.parse(options.body) }); return { ok: true }; };
-  const none = await request("/whatsapp/test", { user: ADMIN, method: "POST", body: phone });
+  const none = await request("/whatsapp/test", { user: MASTER, method: "POST", body: phone });
   assert.equal(none.body.status, "skipped");
   assert.match(none.body.reason, /Ative o template/);
   assert.equal(sent.length, 0);
   store.set(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:${MUNICIPALITY_ID}`, activeConfirmation);
   store.set(`${WHATSAPP_CATALOG_CONFIG_KEY}:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [confirmation()] });
-  const ok = await request("/whatsapp/test", { user: ADMIN, method: "POST", body: phone });
+  const ok = await request("/whatsapp/test", { user: MASTER, method: "POST", body: phone });
   assert.equal(ok.body.status, "sent");
   assert.equal(sent[0].body.template.name, "castracao_confirmacao_agendamento");
   assert.deepEqual(sent[0].body.template.components[0].parameters.map(({ text }) => text), ["Teste", "20/11/2026", "09:00", "Unidade Veterinária Municipal", "123/2026"]);
   store.set(`${WHATSAPP_CATALOG_CONFIG_KEY}:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [confirmation({ status: "PAUSED" })] });
-  const blocked = await request("/whatsapp/test", { user: ADMIN, method: "POST", body: phone });
+  const blocked = await request("/whatsapp/test", { user: MASTER, method: "POST", body: phone });
   assert.equal(blocked.body.status, "skipped");
   assert.equal(sent.length, 1);
   store.set(`${WHATSAPP_CATALOG_CONFIG_KEY}:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [confirmation()] });
   globalThis.fetch = async () => ({ ok: false, status: 400, json: async () => ({ error: { code: 132015, message: "private-provider-details" } }) });
-  const paused = await request("/whatsapp/test", { user: ADMIN, method: "POST", body: phone });
+  const paused = await request("/whatsapp/test", { user: MASTER, method: "POST", body: phone });
   assert.equal(paused.body.status, "failed");
   assert.equal(JSON.stringify(paused.body).includes("private-provider-details"), false);
   assert.equal(store.get(`${WHATSAPP_CATALOG_CONFIG_KEY}:${MUNICIPALITY_ID}`).templates[0].status, "PAUSED");

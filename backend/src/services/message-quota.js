@@ -1,5 +1,5 @@
 import { pool } from "../db/index.js";
-import { MESSAGE_CHANNEL_LABELS, isContractInForce, isMessageChannel, messageQuotaDates, messageQuotaKey, normalizeMessageQuotaInput } from "../../../shared/message-quota-contract.js";
+import { MESSAGE_CHANNEL_LABELS, hasServiceSwitch, isContractInForce, isMessageChannel, isServiceOn, messageQuotaDates, messageQuotaKey, normalizeMessageQuotaInput } from "../../../shared/message-quota-contract.js";
 import { readConfigValue, updateConfigValue } from "../repositories/config-values.js";
 import { AUDIT_ACTIONS } from "./audit.js";
 
@@ -17,6 +17,7 @@ function keyOf(channel) {
 
 export function evaluateMessageQuota(channel, quota, now = new Date()) {
   const label = MESSAGE_CHANNEL_LABELS[channel];
+  if (!isServiceOn(quota)) return { allowed: false, reason: `Serviço de ${label} desativado para o município.` };
   const plan = Number(quota?.plan);
   if (!Number.isSafeInteger(plan) || plan <= 0) return { allowed: false, reason: `Cota de ${label} não configurada para o município.` };
   const { today, period } = messageQuotaDates(now);
@@ -61,20 +62,44 @@ export async function getQuotaStatus(channel, municipalityId, { database = pool,
     contractStart: quota.contractStart || null,
     contractEnd: quota.contractEnd || null,
     active: isContractInForce(quota, today),
+    enabled: isServiceOn(quota),
   };
 }
 
-// Saves the limit and the dates of the contract; the usage already counted this month stays.
+// Whether the platform's administrator left the service on for the municipality (a municipality with no contract yet counts as on).
+export async function isServiceEnabled(channel, municipalityId, { database = pool } = {}) {
+  if (!municipalityId || !isMessageChannel(channel)) return false;
+  return isServiceOn(asObject(await readConfigValue(messageQuotaKey(channel), municipalityId, database)));
+}
+
+// Saves the limit and the dates of the contract; the usage already counted this month and the service switch stay.
 export async function saveQuota({ channel, municipalityId, input, audit, database = pool }) {
   const key = keyOf(channel);
   const { value, error } = normalizeMessageQuotaInput(input);
   if (error) throw invalid(error);
   await updateConfigValue(key, municipalityId, (current) => {
     const stored = asObject(current) || {};
-    return { ...value, currentPeriodStart: stored.currentPeriodStart || "", currentPeriodUsed: stored.currentPeriodUsed || 0 };
+    return { ...value, currentPeriodStart: stored.currentPeriodStart || "", currentPeriodUsed: stored.currentPeriodUsed || 0, ...(stored.enabled === undefined ? {} : { enabled: stored.enabled }) };
   }, {
     database,
     audit: audit && { ...audit, action: AUDIT_ACTIONS.CONFIG_UPDATE, entityType: "config", entityId: key, changes: { key, municipalityId, ...value } },
+  });
+  return getQuotaStatus(channel, municipalityId, { database });
+}
+
+// Switches the service of SMS or e-mail on or off for the municipality. It needs a contract to hang on.
+export async function setServiceEnabled({ channel, municipalityId, input, audit, database = pool }) {
+  const key = keyOf(channel);
+  if (!hasServiceSwitch(channel) || !input || typeof input !== "object" || Array.isArray(input) || Object.keys(input).some((name) => name !== "enabled")
+    || typeof input.enabled !== "boolean") throw invalid("Informe se o serviço deve ficar ativo.");
+  const { enabled } = input;
+  await updateConfigValue(key, municipalityId, (current) => {
+    const stored = asObject(current);
+    if (!stored?.plan) throw invalid("Cadastre o contrato antes de ligar ou desligar o serviço.");
+    return { ...stored, enabled };
+  }, {
+    database,
+    audit: audit && { ...audit, action: AUDIT_ACTIONS.CONFIG_UPDATE, entityType: "config", entityId: key, changes: { key, municipalityId, enabled } },
   });
   return getQuotaStatus(channel, municipalityId, { database });
 }

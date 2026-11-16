@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
-import { isGlobalUser, isMunicipalAdmin, isInternalUser, pickMunicipalityId } from "../tenant.js";
+import { isGlobalUser, isMasterUser, isMunicipalAdmin, isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
 import { prepareWhatsappCredentials, publicWhatsappConfig } from "../services/whatsapp-credentials.js";
@@ -61,6 +61,9 @@ const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
 ]);
 
 const MUNICIPAL_ONLY_CONFIG_KEYS = new Set(MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS);
+
+// Integration credentials stay in each municipality's row, but only the platform's administrator writes them.
+const MASTER_WRITE_CONFIG_KEYS = new Set(["whatsapp"]);
 
 // ── Validadores de estrutura para chaves críticas ─────────────────────────
 
@@ -208,6 +211,9 @@ router.put("/:key", auth, async (req, res) => {
   // Restricted-write keys: public read, but only municipal or global admins can save.
   if (MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS.has(key) && !isGlobalUser(req.user) && !isMunicipalAdmin(req.user)) {
     return res.status(403).json({ error: "Configuração restrita à administração municipal." });
+  }
+  if (MASTER_WRITE_CONFIG_KEYS.has(key) && !isMasterUser(req.user)) {
+    return res.status(403).json({ error: "Configuração restrita ao administrador da plataforma." });
   }
 
   const municipalityId = pickMunicipalityId(req);

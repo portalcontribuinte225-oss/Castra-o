@@ -184,6 +184,9 @@ test("the phone is asked as soon as WhatsApp is active or SMS can reach the muni
   assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true } }), false, "the channel is on but the municipality has no SMS contract");
   assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, contractEnd: "2020-01-01" } }), false, "the contract ended");
   assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: false }, sms_quota: { plan: 10 } }), false, "the contract alone does not turn the channel on");
+  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, enabled: false } }), false, "the service is switched off for the municipality");
+  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, enabled: true } }), true);
+  assert.equal(await phoneEnabled({ whatsapp: { active: true }, [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, enabled: false } }), true, "WhatsApp still reaches the phone");
   assert.equal(await phoneEnabled({ whatsapp: { active: true }, [SMS_CONFIG_KEY]: { active: false } }), true);
   assert.equal(await phoneEnabled({ whatsapp: { active: false }, [SMS_CONFIG_KEY]: { active: false } }), false);
   assert.equal(await phoneEnabled({ whatsapp: { active: "true" }, [SMS_CONFIG_KEY]: { hasToken: true } }), false);

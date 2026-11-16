@@ -1,5 +1,6 @@
-import { GLOBAL_ROLES, MUNICIPALITY_ADMIN_ROLE, normalizeRole, isGlobalUser, isInternalUser, isMasterUser } from "../tenant.js";
+import { GLOBAL_ROLES, normalizeRole, isGlobalUser, isInternalUser, isMasterUser } from "../tenant.js";
 import { verifySession, publicAuthUser } from "../services/auth/auth-session.js";
+import { userHasConfigItem } from "../services/config-permission.js";
 
 /** Middleware de autenticação obrigatória via JWT Bearer */
 async function authenticate(req, res, next, allowRestricted) {
@@ -57,16 +58,19 @@ export function requireMaster(req, res, next) {
 }
 
 /**
- * Middleware que restringe acesso a administradores municipais (ou globais).
- * Use em rotas de configuração municipal que não devem ser acessadas por analistas.
+ * Middleware factory que exige um item de configuração no grupo de permissões do usuário
+ * (sem grupo ativo, vale o papel de gestor; a administração global sempre passa).
  */
-export function requireMunicipalAdmin(req, res, next) {
-  if (!req.user) return res.status(401).json({ error: "Autenticação necessária." });
-  const role = normalizeRole(req.user.role);
-  if (role !== MUNICIPALITY_ADMIN_ROLE && !GLOBAL_ROLES.has(role)) {
-    return res.status(403).json({ error: "Acesso restrito ao administrador municipal." });
-  }
-  next();
+export function requireConfigItem(item) {
+  return async (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: "Autenticação necessária." });
+    try {
+      if (!(await userHasConfigItem(req.user, item))) return res.status(403).json({ error: "Sem permissão para esta configuração." });
+    } catch {
+      return res.status(503).json({ error: "Não foi possível verificar a permissão." });
+    }
+    next();
+  };
 }
 
 /**

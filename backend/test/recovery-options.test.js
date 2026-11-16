@@ -74,6 +74,8 @@ test("SMS is offered in recovery only while the channel is usable, the municipal
   assert.deepEqual(await channels(), [], "the municipality turned the recovery message off");
   database.configs.set(uses, { active: { [AuthPurpose.PASSWORD_RESET]: true } });
   assert.deepEqual(await channels(), [NotificationChannel.SMS]);
+  database.setContract(SMS_TEST_MUNICIPALITY, { plan: 1, enabled: false });
+  assert.deepEqual(await channels(), [], "the service is switched off for the municipality");
   database.setContract(SMS_TEST_MUNICIPALITY, { plan: 1, contractEnd: "2020-01-01" });
   assert.deepEqual(await channels(), [], "the contract ended");
   database.setContract(SMS_TEST_MUNICIPALITY, { plan: 1 });

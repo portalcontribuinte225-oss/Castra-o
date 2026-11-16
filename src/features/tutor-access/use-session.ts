@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api, ApiError, SESSION_INVALID_EVENT } from "../../api";
+import { GLOBAL_MUNICIPALITY_FILTER_KEY } from "../../domain";
 import type { SessionUser } from "./auth-types";
+
+// What the browser keeps of a session besides the token: the old cached user and the global administration's municipality choice.
+export function forgetBrowserSession() {
+  api.logout();
+  localStorage.removeItem("castragestao:user");
+  localStorage.removeItem(GLOBAL_MUNICIPALITY_FILTER_KEY);
+}
 
 export function useSession() {
   const [user, setUser] = useState<SessionUser | null>(null);
@@ -10,8 +18,7 @@ export function useSession() {
   const generation = useRef(0);
   const logout = useCallback(() => {
     generation.current += 1;
-    api.logout();
-    localStorage.removeItem("castragestao:user");
+    forgetBrowserSession();
     setUser(null);
     setReady(true);
     setError("");

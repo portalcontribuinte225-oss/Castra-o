@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { auth, requireGlobal, requireRole } from "../middleware/auth.js";
+import { auth, requireConfigItem, requireMaster } from "../middleware/auth.js";
 import { assertActiveMunicipality } from "../repositories/municipality-identity.js";
 import { isUuid } from "../repositories/request-tracking.js";
 import { auditCtx } from "../services/audit.js";
-import { getQuotaStatus, resetQuotaUsage, saveQuota } from "../services/message-quota.js";
+import { getQuotaStatus, resetQuotaUsage, saveQuota, setServiceEnabled } from "../services/message-quota.js";
+import { CHANNEL_CONFIG_ITEMS } from "../../../shared/config-permission-contract.js";
 import { isMessageChannel } from "../../../shared/message-quota-contract.js";
 import { pickMunicipalityId } from "../tenant.js";
 
@@ -19,9 +20,15 @@ function channelOf(req) {
   return req.params.channel;
 }
 
-// A staff member reads the contract of their own municipality; a global user chooses which one. Only the global administration
-// changes it, and only for an active municipality.
-router.get("/:channel", requireRole("admin_municipal", "analista", "servidor_publico"), async (req, res) => {
+// Reading the counter takes the permission of the channel's tab, which also decides who switches its messages.
+function requireChannelItem(req, res, next) {
+  if (!isMessageChannel(req.params.channel)) return res.status(400).json({ error: "Canal de mensagens inválido." });
+  return requireConfigItem(CHANNEL_CONFIG_ITEMS[req.params.channel])(req, res, next);
+}
+
+// A staff member with the channel's permission reads the contract of their own municipality; a global user chooses which one. Only the
+// platform's administrator (the master) changes it, and only for an active municipality.
+router.get("/:channel", requireChannelItem, async (req, res) => {
   try {
     const channel = channelOf(req);
     const municipalityId = pickMunicipalityId(req);
@@ -32,7 +39,7 @@ router.get("/:channel", requireRole("admin_municipal", "analista", "servidor_pub
   }
 });
 
-router.put("/:channel", requireGlobal, async (req, res) => {
+router.put("/:channel", requireMaster, async (req, res) => {
   try {
     const channel = channelOf(req);
     const municipalityId = pickMunicipalityId(req);
@@ -43,7 +50,19 @@ router.put("/:channel", requireGlobal, async (req, res) => {
   }
 });
 
-router.post("/:channel/reset", requireGlobal, async (req, res) => {
+// The service of SMS or e-mail for one municipality, on or off.
+router.put("/:channel/enabled", requireMaster, async (req, res) => {
+  try {
+    const channel = channelOf(req);
+    const municipalityId = pickMunicipalityId(req);
+    await assertActiveMunicipality(municipalityId);
+    res.set("Cache-Control", "no-store").json(await setServiceEnabled({ channel, municipalityId, input: req.body, audit: auditCtx(req) }));
+  } catch (error) {
+    sendFailure(res, error);
+  }
+});
+
+router.post("/:channel/reset", requireMaster, async (req, res) => {
   try {
     const channel = channelOf(req);
     const municipalityId = pickMunicipalityId(req);

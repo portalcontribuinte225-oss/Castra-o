@@ -33,11 +33,11 @@ const credentialsState = {
 };
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
-  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true },
-  confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop,
+  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
+  confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop,
 };
 const tab = (props: Partial<React.ComponentProps<typeof WhatsappIntegrationTab>> = {}) => renderToStaticMarkup(
-  <WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} canEditContract {...props} />,
+  <WhatsappIntegrationTab municipalityId="municipality-a" master readOnly={false} canEditContract {...props} />,
 );
 
 beforeEach(() => {
@@ -168,7 +168,7 @@ describe("templates panel", () => {
   });
 
   it("tells read-only users that only administrators can change templates", () => {
-    expect(panel({}, { readOnly: true })).toContain("Apenas administradores");
+    expect(panel({}, { readOnly: true })).toContain("Você não tem permissão para ligar ou desligar templates.");
   });
 });
 
@@ -261,6 +261,16 @@ describe("integration tab", () => {
     expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("whatsapp", "municipality-a");
   });
 
+  it("keeps the connection for the master: whoever only has the permission sees the status and the templates, not the credentials, the test or the contract form", () => {
+    const html = tab({ master: false, canEditContract: false });
+    for (const hidden of ["Credenciais", "Token de acesso", "ID do número remetente", "Teste de envio", "Enviar teste", "Remover token", "Contrato e cota"]) expect(html).not.toContain(hidden);
+    expect(html).toContain("é configurada pela administração da plataforma");
+    expect(html).toContain("whatsapp-statusbar"); expect(html).toContain("12/500"); expect(html).toContain("Templates da Meta");
+    expect(html.indexOf("whatsapp-statusbar")).toBeLessThan(html.indexOf("Templates da Meta"));
+    expect(tab()).not.toContain("é configurada pela administração da plataforma");
+    expect(tab()).not.toContain("Serviço ativo para este município");
+  });
+
   it("asks for a municipality before anything else and hides the status bar", () => {
     const html = tab({ municipalityId: "" });
     expect(html).not.toContain("whatsapp-statusbar");
@@ -273,6 +283,9 @@ describe("integration tab", () => {
     expect(vi.mocked(useWhatsappTemplates)).toHaveBeenLastCalledWith("municipality-a", true);
     vi.mocked(useWhatsappCredentials).mockReturnValue({ ...credentialsState, canSync: false });
     tab();
+    expect(vi.mocked(useWhatsappTemplates)).toHaveBeenLastCalledWith("municipality-a", false);
+    vi.mocked(useWhatsappCredentials).mockReturnValue(credentialsState);
+    tab({ master: false });
     expect(vi.mocked(useWhatsappTemplates)).toHaveBeenLastCalledWith("municipality-a", false);
   });
 });

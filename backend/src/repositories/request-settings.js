@@ -1,6 +1,6 @@
 import { pool } from "../db/index.js";
 import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
-import { MESSAGE_QUOTA_KEYS, isContractInForce } from "../../../shared/message-quota-contract.js";
+import { MESSAGE_QUOTA_KEYS, isServiceAvailable } from "../../../shared/message-quota-contract.js";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
 import { REQUEST_TYPES_CONFIG_KEY } from "../services/request-type-defaults.js";
@@ -24,8 +24,8 @@ export async function loadRequestSettings(municipalityId, database = pool) {
     requestTypes: Array.isArray(values[REQUEST_TYPES_CONFIG_KEY]) ? values[REQUEST_TYPES_CONFIG_KEY] : [],
     identificationTypes: Array.isArray(values[IDENTIFICATION_TYPES_CONFIG_KEY])
       ? values[IDENTIFICATION_TYPES_CONFIG_KEY] : buildDefaultIdentificationTypes(),
-    // The follow-up form asks for a phone as soon as the municipality can reach one, by WhatsApp or by SMS (the channel on and a contract in force).
-    phoneEnabled: values.whatsapp?.active === true || (values[SMS_CONFIG_KEY]?.active === true && isContractInForce(values[SMS_QUOTA_KEY])),
+    // The follow-up form asks for a phone as soon as the municipality can reach one, by WhatsApp or by SMS (the channel on, the municipality's service on and its contract in force).
+    phoneEnabled: values.whatsapp?.active === true || (values[SMS_CONFIG_KEY]?.active === true && isServiceAvailable(values[SMS_QUOTA_KEY])),
     documentTypes: Array.isArray(values["castragestao:document-types"]) ? values["castragestao:document-types"] : [],
     neighborhoods: Array.isArray(values[NEIGHBORHOODS_CONFIG_KEY]) ? values[NEIGHBORHOODS_CONFIG_KEY] : [],
   };

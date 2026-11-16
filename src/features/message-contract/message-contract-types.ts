@@ -7,6 +7,8 @@ export interface MessageQuotaStatus {
   contractEnd: string | null;
   // Whether today is inside the dates of the contract (the balance of the month is another matter).
   active: boolean;
+  // Whether the platform's administrator left the service on for the municipality (SMS and e-mail; a contract with no switch is on).
+  enabled: boolean;
 }
 
 // What a save carries: the monthly limit and the dates, which stay empty when the contract has none.

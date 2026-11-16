@@ -57,12 +57,13 @@ export async function getSmsIntegrationSettings({ municipalityId = null, master 
   return settingsView({ record: await loadSmsAccount(database), municipalityId, master, database });
 }
 
-// What a visitor reads, as for WhatsApp: only whether SMS can reach the tutors of the municipality (the channel is on and the
-// municipality has a contract), so the follow-up form knows it may ask for a phone.
+// What a visitor reads, as for WhatsApp: only whether SMS can reach the tutors of the municipality (the channel is on, the municipality
+// has a contract in force and its service is on), so the follow-up form knows it may ask for a phone.
 export async function getPublicSmsConfig(municipalityId, { database = pool } = {}) {
   await assertActiveMunicipality(municipalityId, database);
   const record = await loadSmsAccount(database);
-  return { active: record?.active === true && (await getQuotaStatus(NotificationChannel.SMS, municipalityId, { database }))?.active === true };
+  const status = await getQuotaStatus(NotificationChannel.SMS, municipalityId, { database });
+  return { active: record?.active === true && status?.active === true && status.enabled === true };
 }
 
 async function limitValidation(actor, database) {

@@ -201,16 +201,16 @@ async function routeFixture(t, municipalityId, user, initial = {}) {
   return { call, database, queries, municipalityId };
 }
 
-test("the sync endpoint uses the municipal credentials, returns the template list and ignores forged municipalities", async (t) => {
+test("the sync endpoint is the master's: it uses the credentials of the chosen municipality and returns the template list", async (t) => {
   const municipalityId = "99999999-9999-4999-8999-999999999999";
-  const admin = { id: "66666666-6666-4666-8666-666666666666", role: "admin_municipal", municipalityId };
+  const admin = { id: "66666666-6666-4666-8666-666666666666", role: "master" };
   const { call, database, queries } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", accessToken: "legacy-private-token" } });
   const sentTo = [];
   globalThis.fetch = async (url, options) => {
     sentTo.push({ url: String(url), auth: options.headers.Authorization });
     return page([graph("castracao_cancelamento", [body("{{1}} {{2}} {{3}}")]), graph("lembrete_atendimento", [body("Oi")])]);
   };
-  const synced = await call("POST", "/whatsapp/templates/sync", { municipalityId: "11111111-1111-4111-8111-111111111111" });
+  const synced = await call("POST", "/whatsapp/templates/sync", { municipalityId });
   assert.equal(synced.status, 200);
   assert.deepEqual(synced.body.templates.map(({ name, canActivate, label }) => ({ name, canActivate, label })), [
     { name: "castracao_cancelamento", canActivate: true, label: "Não comparecimento" },
@@ -220,16 +220,17 @@ test("the sync endpoint uses the municipal credentials, returns the template lis
   assert.equal(sentTo[0].url.includes("/987654321/message_templates"), true);
   assert.equal(database.store.has(`${WHATSAPP_CATALOG_CONFIG_KEY}:${municipalityId}`), true);
   assert.equal(queries.every((values) => !values.includes("11111111-1111-4111-8111-111111111111")), true);
-  assert.deepEqual((await call("GET", "/whatsapp/templates")).body, synced.body);
-  assert.equal((await call("POST", "/whatsapp/templates/sync")).status, 429);
+  assert.deepEqual((await call("GET", `/whatsapp/templates?municipalityId=${municipalityId}`)).body, synced.body);
+  assert.equal((await call("POST", "/whatsapp/templates/sync", { municipalityId })).status, 429);
+  assert.equal((await call("POST", "/whatsapp/templates/sync")).status, 400, "the master must choose a municipality");
 });
 
 test("the sync endpoint answers with a safe message when the provider rejects the request", async (t) => {
   const municipalityId = "88888888-8888-4888-8888-888888888888";
-  const admin = { id: "77777777-7777-4777-8777-777777777777", role: "admin_municipal", municipalityId };
+  const admin = { id: "77777777-7777-4777-8777-777777777777", role: "master" };
   const { call, database } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", accessToken: "plain-private-token" } });
   globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "plain-private-token expired" } }) });
-  const result = await call("POST", "/whatsapp/templates/sync");
+  const result = await call("POST", "/whatsapp/templates/sync", { municipalityId });
   assert.equal(result.status, 502);
   assert.equal(result.body.code, DeliveryCode.INVALID_CREDENTIALS);
   assert.equal(JSON.stringify(result.body).includes("plain-private-token"), false);

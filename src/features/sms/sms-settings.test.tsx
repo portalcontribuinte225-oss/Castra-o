@@ -24,8 +24,8 @@ const channelOn: SmsConfig = { ...stored, active: true };
 const municipal: SmsConfig = { ...buildDefaultSmsConfig(), active: true, municipalityName: "Test Town" };
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: vi.fn(), saveStatus: "",
-  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true },
-  confirmingEnd: false, setConfirmingEnd: vi.fn(), save: vi.fn(), endContractToday: vi.fn(), resetUsed: vi.fn(),
+  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
+  confirmingEnd: false, setConfirmingEnd: vi.fn(), save: vi.fn(), endContractToday: vi.fn(), resetUsed: vi.fn(), setEnabled: vi.fn(),
 };
 
 // A stand-in server that keeps what was stored, so a sequence of changes answers like the real one.
@@ -425,10 +425,25 @@ describe("SMS settings interface", () => {
     expect(viewer.indexOf("whatsapp-statusbar")).toBeLessThan(viewer.indexOf("Credenciais"));
     const editor = screen({}, { canEditContract: true });
     expect(editor).toContain("Contrato e cota"); expect(editor).toContain("Salvar cota");
+    expect(editor).toContain("Serviço ativo para este município"); expect(viewer).not.toContain("Serviço ativo para este município");
     expect(editor.indexOf("Mensagens")).toBeLessThan(editor.indexOf("Contrato e cota"));
     expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "municipality-a");
     screen({}, { canManage: false });
     expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "");
+  });
+
+  it("locks the messages and marks the channel inactive while the service is switched off for the municipality, telling why", () => {
+    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: { ...contractState.live, enabled: false } });
+    const off = screen({ config: channelOn });
+    expect(off).toContain("Inativo"); expect(off).not.toContain("whatsapp-dot--on");
+    expect(off.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(smsUses.length);
+    expect(off.match(/aria-label="O serviço de SMS está desativado para este município\."/g)).toHaveLength(smsUses.length);
+    expect(off).not.toContain('aria-checked="true"');
+    const platformOff = screen({ config: { ...channelOn, active: false } });
+    expect(platformOff).toContain("O SMS precisa estar ativo na plataforma para ligar as mensagens.");
+    vi.mocked(useMessageContract).mockReturnValue(contractState);
+    expect(screen({ config: channelOn })).not.toContain("O serviço de SMS está desativado");
+    expect(screen({ config: channelOn })).toContain("Ativo");
   });
 
   it("shows loading, and an error with a way to try again but without the settings", () => {

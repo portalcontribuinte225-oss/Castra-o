@@ -122,3 +122,18 @@ test("turning the channel off keeps the switches, which apply again when it is a
   assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: CONFIRMED, database }), true);
   assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: COMPLETED, database }), false);
 });
+
+test("a message cannot be turned on while the service is switched off for the municipality, and turning it off stays allowed", async (t) => {
+  const { database } = await fixture(t);
+  database.setContract(MUNICIPALITY, { plan: 10, enabled: false });
+  await assert.rejects(setSmsUseActive({ municipalityId: MUNICIPALITY, use: CONFIRMED, active: true, database }), { status: 400, message: /serviço de SMS está desativado/ });
+  assert.equal(database.configs.has(keyOf(MUNICIPALITY)), false);
+  await setSmsUseActive({ municipalityId: MUNICIPALITY, use: RESET, active: false, database });
+  assert.deepEqual(database.configs.get(keyOf(MUNICIPALITY)), { active: { [RESET]: false } });
+  database.setContract(MUNICIPALITY, { plan: 10, enabled: true });
+  await setSmsUseActive({ municipalityId: MUNICIPALITY, use: CONFIRMED, active: true, database });
+  assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: CONFIRMED, database }), true);
+  database.setContract(OTHER, { plan: 10, enabled: false });
+  await setSmsUseActive({ municipalityId: MUNICIPALITY, use: COMPLETED, active: true, database });
+  assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: COMPLETED, database }), true, "the switch of another municipality does not matter");
+});

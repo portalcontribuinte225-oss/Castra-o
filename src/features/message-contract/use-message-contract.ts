@@ -73,6 +73,18 @@ export function useMessageContract(channel: string, municipalityId: string) {
     await persist({ plan: Number(settings.plan), contractStart: settings.contractStart, contractEnd: localToday() }, "Contrato encerrado hoje.");
   }
 
+  // The service of SMS or e-mail for the municipality, on or off; only the platform's administrator may.
+  async function setEnabled(enabled: boolean) {
+    if (!municipalityId) return;
+    setSaveStatus("Salvando...");
+    try {
+      setLive(await api.setMessageService(channel, municipalityId, enabled));
+      setSaveStatus(enabled ? "Serviço ativado." : "Serviço desativado.");
+    } catch (error) {
+      setSaveStatus(`Não foi possível alterar o serviço: ${messageOf(error)}`);
+    }
+  }
+
   async function resetUsed() {
     if (!municipalityId) return;
     try {
@@ -83,7 +95,7 @@ export function useMessageContract(channel: string, municipalityId: string) {
     }
   }
 
-  return { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed };
+  return { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed, setEnabled };
 }
 
 export type MessageContract = ReturnType<typeof useMessageContract>;

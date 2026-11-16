@@ -16,8 +16,8 @@ const brasaoText: Record<string, string> = {
   [EmailBrasaoStatus.NO_PUBLIC_URL]: "o endereço público do sistema ainda não foi configurado pelo master ⚠",
 };
 
-// E-mail tab: the master sets the platform account and the template ids; each municipality turns its messages on or off, and the global
-// administration sets the contract of messages the municipality has.
+// E-mail tab: the master sets the platform account, the template ids, the municipality's contract and whether its service is on; whoever has the
+// e-mail permission turns the municipality's messages on or off.
 export function EmailIntegrationTab({ municipalityId, master, canManage, canEditContract }: { municipalityId: string; master: boolean; canManage: boolean; canEditContract: boolean }) {
   const email = useEmailSettings(municipalityId, master, canManage);
   const account = useEmailAccount(email.settings?.account ?? null, municipalityId, email.apply);
@@ -26,10 +26,11 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
   if (!municipalityId && !master) return <p>Selecione um município para configurar o e-mail.</p>;
   const { settings } = email;
   const identity = settings?.identity;
+  const serviceOn = contract.live?.enabled !== false;
   return (
     <div className="config-panel wide">
       <PanelHeader title="E-mail" />
-      {municipalityId && settings && <MessageContractStatus active={settings.configured} live={contract.live} />}
+      {municipalityId && settings && <MessageContractStatus active={settings.configured && serviceOn} live={contract.live} />}
       <div className="whatsapp-integration">
         {master && settings && <EmailCredentials account={settings.account} state={account} />}
         <section className="whatsapp-section">
@@ -51,6 +52,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
               rows={settings.uses}
               master={master}
               municipal={settings.municipal}
+              serviceOn={serviceOn}
               drafts={email.drafts}
               busy={email.saving}
               onEditId={email.editId}
@@ -59,7 +61,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
           )}
           {master && settings && <button type="button" className="primary-action" disabled={!email.dirty || email.saving} onClick={email.saveTemplates}>{email.saving ? "Salvando..." : "Salvar templates"}</button>}
         </section>
-        {canEditContract && settings && <MessageContractForm municipalityId={municipalityId} contract={contract} />}
+        {canEditContract && settings && <MessageContractForm municipalityId={municipalityId} contract={contract} serviceSwitch />}
       </div>
     </div>
   );

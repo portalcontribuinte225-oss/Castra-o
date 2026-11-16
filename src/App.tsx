@@ -57,6 +57,7 @@ import type { AnyRecord } from "./types";
 import {
   CONFIG_KEYS,
   CONFIG_KEYS_LIST,
+  GLOBAL_MUNICIPALITY_FILTER_KEY,
   accessRequesterTypes,
   aiProviderOptions,
   countRequestAnimals,
@@ -199,7 +200,8 @@ import { AuthEntryOrigin, authEntryKey, createAuthEntryContext } from "./feature
 import type { AuthEntryContext } from "./features/tutor-access/auth-entry-context";
 import { SmsSettings } from "./features/sms/sms-settings";
 import { EmailIntegrationTab } from "./features/email/email-integration-tab";
-import { EMAIL_SETTINGS_PERMISSION } from "../shared/email-contract.js";
+import { IntegrationConfigItem } from "../shared/config-permission-contract.js";
+import { canUseIntegration, integrationTabItems } from "./features/integrations/integration-access";
 import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedule } from "./features/animal-services/animal-history";
 import type { AnimalRecord } from "./features/animal-services/animal-service-types";
 import { RequestTracking } from "./features/request-tracking/request-tracking";
@@ -285,9 +287,9 @@ const permissionConfigItems: ConfigTabItem[] = [
   { id: "users", label: "Criar Usuários" },
   { id: "sectors", label: "Criar Setores" },
   { id: "permissions", label: "Permissões" },
-  { id: "whatsapp_settings", label: "Aba WhatsApp" },
-  { id: EMAIL_SETTINGS_PERMISSION, label: "Aba E-mail" },
-  { id: "sms_settings", label: "Aba SMS" },
+  { id: IntegrationConfigItem.WHATSAPP, label: "Aba WhatsApp" },
+  { id: IntegrationConfigItem.EMAIL, label: "Aba E-mail" },
+  { id: IntegrationConfigItem.SMS, label: "Aba SMS" },
   { id: "ai_settings", label: "Configurar IA" },
 ];
 
@@ -298,9 +300,8 @@ function filterVisibleConfigTabs(tabs: ConfigTabItem[] = [], currentUser: AnyRec
       if (canUsePermissions) return Boolean(currentPermissionGroup?.allowedConfigItems?.includes("ai_settings"));
       return canManageAiSettings(currentUser?.role);
     }
-    if (tab.id === "whatsapp" && canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("whatsapp_settings")) return false;
-    if (tab.id === "email" && (!canManageAiSettings(currentUser?.role) || (canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))) return false;
-    if (tab.id === "sms" && (!canManageAiSettings(currentUser?.role) || (canUsePermissions && !currentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))) return false;
+    const integrationItem = integrationTabItems[tab.id];
+    if (integrationItem && !canUseIntegration(canUsePermissions, currentPermissionGroup, integrationItem, canManageAiSettings(currentUser?.role))) return false;
     return true;
   });
 }
@@ -394,7 +395,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(localStorage.getItem("castragestao:municipalityId") || "");
-  const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem("castragestao:globalMunicipalityFilterId") || "");
+  const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem(GLOBAL_MUNICIPALITY_FILTER_KEY) || "");
   const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [configMenuOpen, setConfigMenuOpen] = useState(false);
@@ -485,7 +486,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     if (!globalMunicipalityFilterId) return;
     if (municipalities.some((municipality) => municipality.id === globalMunicipalityFilterId)) return;
     setGlobalMunicipalityFilterId("");
-    localStorage.removeItem("castragestao:globalMunicipalityFilterId");
+    localStorage.removeItem(GLOBAL_MUNICIPALITY_FILTER_KEY);
   }, [municipalities, globalMunicipalityFilterId]);
 
   useEffect(() => {
@@ -717,9 +718,9 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   function handleGlobalMunicipalityFilter(id) {
     setGlobalMunicipalityFilterId(id);
     if (id) {
-      localStorage.setItem("castragestao:globalMunicipalityFilterId", id);
+      localStorage.setItem(GLOBAL_MUNICIPALITY_FILTER_KEY, id);
     } else {
-      localStorage.removeItem("castragestao:globalMunicipalityFilterId");
+      localStorage.removeItem(GLOBAL_MUNICIPALITY_FILTER_KEY);
     }
     setSelectedId(null);
   }
@@ -7555,9 +7556,9 @@ function ConfigView({
         );
       })()}
 
-      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))} canEditContract={isGlobalRole(currentUser?.role)} />}
+      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.EMAIL, canManageAiSettings(currentUser?.role))} canEditContract={isMasterRole(currentUser?.role)} />}
 
-      {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canEditContract={isGlobalRole(currentUser?.role)} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))} />}
+      {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canEditContract={isMasterRole(currentUser?.role)} canManage={canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.SMS, canManageAiSettings(currentUser?.role))} />}
 
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
         <div className="config-panel wide">
@@ -8158,7 +8159,7 @@ function ConfigView({
       )}
 
       {configArea === "integrations" && configTab === "whatsapp" && (
-        <WhatsappIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} canEditContract={isGlobalRole(currentUser?.role)} />
+        <WhatsappIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.WHATSAPP, canManageAiSettings(currentUser?.role))} master={isMasterRole(currentUser?.role)} canEditContract={isMasterRole(currentUser?.role)} />
       )}
 
       {configArea === "environment" && configTab === "documents" && (

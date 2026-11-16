@@ -10,6 +10,7 @@ import { registerTestSession, resolveTestSession } from "./fixtures/session-user
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
 const ADMIN = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
+const MASTER = { id: "66666666-6666-4666-8666-666666666666", role: "master" };
 const ALLOWED_LOCKS = [`schedule:${MUNICIPALITY_ID}`];
 const TEST_SECRET = "notification-route-tests-only";
 const clientFetch = globalThis.fetch;
@@ -176,32 +177,41 @@ test("the WhatsApp quota is no longer served or reset through the configuration 
   assert.equal(calls.length, 0);
 });
 
-test("WhatsApp tests require an administrator", async (t) => {
+test("WhatsApp tests are the master's: the manager, the operators and the support are refused before any database access", async (t) => {
   const { request, calls } = await fixture(t);
-  for (const role of ["tutor", "analista", "servidor_publico"]) {
+  for (const role of ["tutor", "analista", "servidor_publico", "admin_municipal", "suporte"]) {
     assert.equal((await request("/whatsapp/test", { method: "POST", user: { ...ADMIN, role }, body: { municipalityId: OTHER_MUNICIPALITY_ID, phone: "48999991234" } })).status, 403);
   }
   assert.equal(calls.length, 0);
 });
 
-test("municipal WhatsApp tests ignore forged municipality identifiers", async (t) => {
+test("the WhatsApp connection is written by the master only, who chooses the municipality, and the manager cannot write it", async (t) => {
   const { request, calls, store } = await fixture(t);
   store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: false });
-  const response = await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { municipalityId: OTHER_MUNICIPALITY_ID, phone: "48999991234" } });
-  assert.equal(response.status, 200);
-  assert.equal(response.body.status, "skipped");
-  assert.equal(calls.filter(({ values }) => values.length).every(({ values }) => values[1] === MUNICIPALITY_ID), true);
+  store.set(`whatsapp:${OTHER_MUNICIPALITY_ID}`, { active: false });
+  const refused = await request("/config/whatsapp", { method: "PUT", user: ADMIN, body: { active: true } });
+  assert.equal(refused.status, 403);
+  assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).active, false);
+  assert.equal(calls.some(({ sql }) => sql.includes("INSERT INTO config")), false);
+  const written = await request(`/config/whatsapp?municipalityId=${OTHER_MUNICIPALITY_ID}`, { method: "PUT", user: MASTER, body: { active: true } });
+  assert.equal(written.status, 200);
+  assert.equal(written.body.municipality_id, OTHER_MUNICIPALITY_ID);
+  assert.equal(store.get(`whatsapp:${OTHER_MUNICIPALITY_ID}`).active, true);
+  assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).active, false);
+  const tested = await request("/whatsapp/test", { method: "POST", user: MASTER, body: { municipalityId: MUNICIPALITY_ID, phone: "48999991234" } });
+  assert.equal(tested.status, 200);
+  assert.equal(tested.body.status, "skipped");
 });
 
 test("WhatsApp test requires valid phone and does not expose provider error data", async (t) => {
   const { request, store } = await fixture(t);
-  assert.equal((await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { phone: "123" } })).status, 400);
+  assert.equal((await request("/whatsapp/test", { method: "POST", user: MASTER, body: { phone: "123", municipalityId: MUNICIPALITY_ID } })).status, 400);
   store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: true, accessToken: "private-token", phoneNumberId: "12345" });
   store.set(`whatsapp_active_templates:${MUNICIPALITY_ID}`, { active: { schedule_confirmed: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } } });
   store.set(`whatsapp_catalog:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [{ name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "APPROVED", category: "UTILITY",
     parameterFormat: "POSITIONAL", hasBody: true, bodyVariables: 5, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false }] });
   globalThis.fetch = async () => ({ ok: false, status: 400, statusText: "refused", json: async () => ({ error: { message: "private-provider-details", code: 400 } }) });
-  const response = await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { phone: "48999991234" } });
+  const response = await request("/whatsapp/test", { method: "POST", user: MASTER, body: { phone: "48999991234", municipalityId: MUNICIPALITY_ID } });
   assert.equal(response.status, 200);
   assert.equal(response.body.status, "failed");
   assert.equal(response.body.providerResponse, undefined);

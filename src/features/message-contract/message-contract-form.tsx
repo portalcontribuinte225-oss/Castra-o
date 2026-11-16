@@ -1,16 +1,20 @@
 import React from "react";
-import { Field } from "../../components/ui";
+import { ConfigActiveToggle, Field } from "../../components/ui";
 import type { MessageContract } from "./use-message-contract";
 
-// The contract of one channel as the global administration edits it: the monthly limit and the dates, ending it today or starting the month over.
-export function MessageContractForm({ municipalityId, contract }: { municipalityId: string; contract: MessageContract }) {
-  const { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed } = contract;
+// The contract of one channel as the platform's administrator edits it: the monthly limit and the dates, ending it today or starting the month
+// over. SMS and e-mail also carry the switch of the service for the municipality, which needs a contract to hang on.
+export function MessageContractForm({ municipalityId, contract, serviceSwitch }: { municipalityId: string; contract: MessageContract; serviceSwitch: boolean }) {
+  const { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed, setEnabled } = contract;
   const patch = (changes: Record<string, string>) => setSettings((current) => ({ ...current, ...changes }));
-  const saved = saveStatus.includes("sucesso") || saveStatus.includes("zerada") || saveStatus.includes("encerrado");
+  const saved = saveStatus.includes("sucesso") || saveStatus.includes("zerada") || saveStatus.includes("encerrado") || saveStatus.includes("ativado");
   return (
     <section className="whatsapp-section">
       <div className="whatsapp-section-header">
         <span className="whatsapp-section-label">Contrato e cota</span>
+        {serviceSwitch && live?.plan ? (
+          <ConfigActiveToggle checked={live.enabled !== false} onChange={setEnabled} onText="Serviço ativo para este município" offText="Serviço desativado para este município" />
+        ) : null}
       </div>
       <div className="whatsapp-fields-row">
         <Field label="Limite mensal" value={settings.plan} placeholder="Ex: 500" onChange={(value) => patch({ plan: value })} />

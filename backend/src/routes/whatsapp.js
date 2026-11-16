@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { auth, requireMunicipalAdmin } from "../middleware/auth.js";
+import { auth, requireMaster } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
 import { isValidPhone } from "../utils.js";
 import { DeliveryCode, NotificationEvent } from "../../../shared/notification-contract.js";
@@ -11,7 +11,7 @@ import { buildBodyComponents, previewRequest } from "../services/notifications/w
 
 const router = Router();
 
-router.post("/test", auth, requireMunicipalAdmin, async (req, res) => {
+router.post("/test", auth, requireMaster, async (req, res) => {
   const { phone } = req.body || {};
   if (typeof phone !== "string" || !isValidPhone(phone)) {
     return res.status(400).json({ error: "Informe um telefone válido com DDD." });

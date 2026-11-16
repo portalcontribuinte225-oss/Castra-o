@@ -1,19 +1,21 @@
 import { Router } from "express";
-import { auth, requireMaster, requireMunicipalAdmin } from "../middleware/auth.js";
+import { auth, requireConfigItem, requireMaster } from "../middleware/auth.js";
 import { isMasterUser, pickMunicipalityId } from "../tenant.js";
 import { auditCtx } from "../services/audit.js";
 import { getPublicSmsConfig, getSmsIntegrationSettings, saveSmsAccount, sendSmsTestMessage, testSmsConnection } from "../services/sms-integration-settings.js";
 import { setSmsUseActive } from "../services/sms-uses.js";
+import { IntegrationConfigItem } from "../../../shared/config-permission-contract.js";
 
 const router = Router();
+const requireSmsItem = requireConfigItem(IntegrationConfigItem.SMS);
 // What the follow-up form of a visitor reads: only whether SMS can reach the tutors of the municipality.
 router.get("/availability", async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store").json(await getPublicSmsConfig(req.query?.municipalityId));
   } catch (error) { next(error); }
 });
-// The master reads the platform's account (and, with a municipality, its messages); the municipal administration reads the messages.
-router.get("/settings", auth, requireMunicipalAdmin, async (req, res, next) => {
+// The master reads the platform's account (and, with a municipality, its messages); whoever has the SMS permission reads the messages.
+router.get("/settings", auth, requireSmsItem, async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store").json(await getSmsIntegrationSettings({ municipalityId: pickMunicipalityId(req), master: isMasterUser(req.user) }));
   } catch (error) { next(error); }
@@ -39,7 +41,7 @@ router.post("/test-message", auth, requireMaster, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 // Turns one SMS message on or off for the municipality of the operation, and answers with the whole screen.
-router.put("/uses/active", auth, requireMunicipalAdmin, async (req, res, next) => {
+router.put("/uses/active", auth, requireSmsItem, async (req, res, next) => {
   try {
     const municipalityId = pickMunicipalityId(req);
     await setSmsUseActive({ municipalityId, use: req.body?.use, active: req.body?.active, audit: auditCtx(req) });

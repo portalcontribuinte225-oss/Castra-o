@@ -11,11 +11,13 @@ import {
 } from "../../shared/whatsapp-templates-contract.js";
 import { buildTemplateRows, resolveActiveTemplate, setWhatsappTemplateActive } from "../src/services/whatsapp-active-templates.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
+import { permissionConfigs, permissionGroup } from "./fixtures/permission-groups.js";
 
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
 const ADMIN = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
 const STAFF = { id: "44444444-4444-4444-8444-444444444444", role: "analista", municipalityId: MUNICIPALITY_ID };
+const PERMITTED = { id: "88888888-8888-4888-8888-888888888888", role: "analista", municipalityId: MUNICIPALITY_ID };
 const clientFetch = globalThis.fetch;
 
 const entry = (name, overrides = {}) => ({
@@ -239,14 +241,22 @@ async function routeFixture(t, initial = {}) {
   return { request, database };
 }
 
-test("template endpoints require a municipal administrator", async (t) => {
-  const { request, database } = await routeFixture(t);
+test("template endpoints need a session and the WhatsApp permission, and syncing with Meta is the master's", async (t) => {
+  const { request, database } = await routeFixture(t, {
+    ...withCatalog(MUNICIPALITY_ID, [confirmation()]),
+    ...permissionConfigs(MUNICIPALITY_ID, { users: [{ id: PERMITTED.id, permissionGroupId: "g" }], groups: [permissionGroup("g", ["whatsapp_settings"])] }),
+  });
   for (const [method, path] of [["GET", "/whatsapp/templates"], ["POST", "/whatsapp/templates/sync"], ["PUT", "/whatsapp/templates/active"]]) {
     const body = method === "GET" ? undefined : {};
     assert.equal((await request(path, { method, body })).status, 401);
-    assert.equal((await request(path, { method, user: STAFF, body })).status, 403);
+    assert.equal((await request(path, { method, user: STAFF, body })).status, 403, `no group: ${method} ${path}`);
   }
-  assert.equal(database.calls.length, 0);
+  assert.equal((await request("/whatsapp/templates", { user: PERMITTED })).status, 200);
+  assert.equal((await request("/whatsapp/templates/active", { method: "PUT", user: PERMITTED, body: { name: "castracao_confirmacao_agendamento", language: "pt_BR", active: true } })).status, 200);
+  for (const user of [PERMITTED, ADMIN, { ...ADMIN, role: "suporte", municipalityId: undefined }]) {
+    assert.equal((await request("/whatsapp/templates/sync", { method: "POST", user, body: { municipalityId: MUNICIPALITY_ID } })).status, 403, `sync is the master's: ${user.role}`);
+  }
+  assert.equal(database.calls.some(({ values }) => values[0] === "whatsapp_catalog" && values[1] === OTHER_MUNICIPALITY_ID), false);
 });
 
 test("the list endpoint returns the municipal catalog with its states and ignores a forged municipality", async (t) => {

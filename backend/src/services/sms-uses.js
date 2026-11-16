@@ -3,6 +3,8 @@ import { getSmsUse, smsUses } from "../../../shared/sms-uses-contract.js";
 import { readConfigValue, updateConfigValue } from "../repositories/config-values.js";
 import { assertActiveMunicipality } from "../repositories/municipality-identity.js";
 import { loadSmsAccount } from "../repositories/sms-settings.js";
+import { NotificationChannel } from "../../../shared/notification-contract.js";
+import { isServiceEnabled } from "./message-quota.js";
 import { AUDIT_ACTIONS } from "./audit.js";
 
 function badRequest(message) {
@@ -29,6 +31,7 @@ export async function setSmsUseActive({ municipalityId, use, active, audit, data
   if (!getSmsUse(use) || typeof active !== "boolean") throw badRequest("Informe a mensagem e se ela deve ficar ativa.");
   await assertActiveMunicipality(municipalityId, database);
   if (active && (await loadSmsAccount(database))?.active !== true) throw badRequest("O SMS ainda não está ativo na plataforma.");
+  if (active && !(await isServiceEnabled(NotificationChannel.SMS, municipalityId, { database }))) throw badRequest("O serviço de SMS está desativado para este município.");
   await updateConfigValue(SMS_ACTIVE_USES_CONFIG_KEY, municipalityId, (current) => ({ active: { ...normalizeSmsActiveUses(current), [use]: active } }), {
     database,
     audit: audit && { ...audit, action: AUDIT_ACTIONS.SMS_USE_UPDATE, entityType: "config", entityId: SMS_ACTIVE_USES_CONFIG_KEY, changes: { use, active } },

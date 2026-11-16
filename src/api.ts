@@ -166,6 +166,7 @@ export const api = {
   getMessageQuota: (channel: string, municipalityId: string): Promise<MessageQuotaStatus | null> => request("GET", `/message-quota/${channel}?municipalityId=${encodeURIComponent(municipalityId)}`),
   saveMessageQuota: (channel: string, municipalityId: string, body: MessageQuotaInput): Promise<MessageQuotaStatus | null> => request("PUT", `/message-quota/${channel}?municipalityId=${encodeURIComponent(municipalityId)}`, body),
   resetMessageQuota: (channel: string, municipalityId: string): Promise<MessageQuotaStatus | null> => request("POST", `/message-quota/${channel}/reset?municipalityId=${encodeURIComponent(municipalityId)}`),
+  setMessageService: (channel: string, municipalityId: string, enabled: boolean): Promise<MessageQuotaStatus | null> => request("PUT", `/message-quota/${channel}/enabled?municipalityId=${encodeURIComponent(municipalityId)}`, { enabled }),
   sendWhatsappTest: (municipalityId: string, phone: string) => request("POST", "/whatsapp/test", { municipalityId, phone }),
   getWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("GET", `/whatsapp/templates?municipalityId=${encodeURIComponent(municipalityId)}`),
   syncWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("POST", "/whatsapp/templates/sync", { municipalityId }),

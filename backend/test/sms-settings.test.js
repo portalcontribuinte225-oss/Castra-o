@@ -271,3 +271,21 @@ test("test messages are limited to five in ten minutes for each administrator", 
   await assert.rejects(sendSmsTestMessage({ ...input, phone: "abc" }, deps), { status: 400 });
   assert.equal(f.database.calls.filter(({ sql }) => sql.includes("INSERT INTO auth_rate_limits")).length, limits, "a refused number does not use up a test");
 });
+
+test("a service switched off for the municipality closes the channel to it: not offered, not sent, not shown to a visitor, while the others go on", async (t) => {
+  const f = fixture(t); const sent = [];
+  const deps = { database: f.database, sendMessage: async (input) => { sent.push(input); return { status: DeliveryStatus.SENT }; } };
+  const reset = { municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET, phone: "48999991234", data: { code: "123456", minutes: "10" } };
+  await f.save({ token: TOKEN, active: true });
+  f.database.setContract(MUNICIPALITY, { plan: 10, enabled: false }); f.database.setContract(OTHER, { plan: 10 });
+  assert.deepEqual(await getPublicSmsConfig(MUNICIPALITY, { database: f.database }), { active: false });
+  assert.equal((await isSmsUseAvailable({ municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET, database: f.database })).available, false);
+  const refused = await sendSmsUse(reset, deps);
+  assert.deepEqual([refused.status, refused.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE, 0]);
+  assert.deepEqual(f.database.contractOf(MUNICIPALITY), { plan: 10, enabled: false }, "a refusal spends nothing");
+  assert.deepEqual(await getPublicSmsConfig(OTHER, { database: f.database }), { active: true });
+  assert.equal((await sendSmsUse({ ...reset, municipalityId: OTHER }, deps)).status, DeliveryStatus.SENT);
+  f.database.setContract(MUNICIPALITY, { plan: 10, enabled: true });
+  assert.deepEqual(await getPublicSmsConfig(MUNICIPALITY, { database: f.database }), { active: true });
+  assert.equal((await sendSmsUse(reset, deps)).status, DeliveryStatus.SENT);
+});

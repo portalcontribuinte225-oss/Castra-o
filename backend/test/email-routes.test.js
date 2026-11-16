@@ -4,11 +4,12 @@ import { readFileSync } from "node:fs";
 import express from "express";
 import emailRoutes from "../src/routes/email.js";
 import { pool } from "../src/db/index.js";
-import { EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY } from "../../shared/email-contract.js";
+import { EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_SETTINGS_PERMISSION, EMAIL_TEMPLATES_CONFIG_KEY } from "../../shared/email-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { fakeEmailDatabase, useTestEncryptionKey } from "./fixtures/email-config-db.js";
+import { isPermissionRead, permissionConfigs, permissionGroup } from "./fixtures/permission-groups.js";
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
@@ -72,7 +73,7 @@ test("every route needs a session and rejects tutors and operational users", asy
     assert.equal((await request(path, { method, body })).status, 401, `${method} ${path}`);
     for (const user of [TUTOR, ANALYST]) assert.equal((await request(path, { method, user, body })).status, 403, `${user.role} ${method} ${path}`);
   }
-  assert.equal(database.calls.length, 0);
+  assert.equal(database.calls.filter((call) => !isPermissionRead(call)).length, 0, "only the permission is read before the refusal");
 });
 
 test("a municipal administrator reads only the municipal view: no account, no ids, no variables, and a forged municipality is ignored", async (t) => {
@@ -208,4 +209,51 @@ test("a database failure answers a generic message, never its detail", async (t)
 test("the e-mail keys stay off the generic configuration route", () => {
   const source = readFileSync(new URL("../src/routes/config.js", import.meta.url), "utf8");
   for (const key of [EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY, EMAIL_ACTIVE_USES_CONFIG_KEY]) assert.equal(source.includes(`"${key}"`), false, key);
+});
+
+// A group of the municipality that gives its items to one team user.
+const emailGroup = (items = [EMAIL_SETTINGS_PERMISSION], member = ANALYST, extra = {}) => permissionConfigs(MUNICIPALITY, {
+  users: [{ id: member.id, permissionGroupId: "g" }], groups: [permissionGroup("g", items, extra)],
+});
+
+test("a staff user with the e-mail permission reads the municipal view and switches the messages, and never reaches the platform's routes", async (t) => {
+  const { request, database } = await fixture(t, { ...ready(), ...emailGroup() });
+  const read = await request("/email/settings", { user: ANALYST });
+  assert.equal(read.status, 200); assert.equal(read.body.account, null); assert.equal(read.body.municipal, true);
+  const on = await request("/email/templates/active", { method: "PUT", user: ANALYST, body: { use: CONFIRMED, active: true } });
+  assert.equal(on.status, 200);
+  assert.equal(database.store.get(`${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`).active[CONFIRMED], true);
+  for (const [method, path] of [["PUT", "/email/account"], ["PUT", "/email/templates"]]) assert.equal((await request(path, { method, user: ANALYST, body: {} })).status, 403, path);
+});
+
+test("the group decides: the item must be in it, the group must be active and of the user's municipality, and the manager with no group still passes", async (t) => {
+  const { request, database } = await fixture(t, ready());
+  const give = (configs) => {
+    for (const key of [`castragestao:teams:${MUNICIPALITY}`, `permission_groups:${MUNICIPALITY}`]) database.store.delete(key);
+    for (const [key, value] of Object.entries(configs)) database.store.set(key, value);
+  };
+  const reads = async (user) => (await request("/email/settings", { user })).status;
+  assert.equal(await reads(ANALYST), 403, "no group, no permission");
+  assert.equal(await reads(ADMIN), 200, "the manager with no group passes by the role");
+  give(emailGroup(["sms_settings"]));
+  assert.equal(await reads(ANALYST), 403, "a group without the e-mail item");
+  give(emailGroup([EMAIL_SETTINGS_PERMISSION], ANALYST, { active: false }));
+  assert.equal(await reads(ANALYST), 403, "an inactive group is no group");
+  give(permissionConfigs(OTHER, { users: [{ id: ANALYST.id, permissionGroupId: "g" }], groups: [permissionGroup("g", [EMAIL_SETTINGS_PERMISSION])] }));
+  assert.equal(await reads(ANALYST), 403, "a group of another municipality");
+  give(emailGroup(["sms_settings"], ADMIN));
+  assert.equal(await reads(ADMIN), 403, "the manager is judged by their group too");
+  give(emailGroup());
+  assert.equal(await reads(ANALYST), 200);
+  assert.equal(await reads(TUTOR), 403);
+  assert.equal(await reads(OTHER_ADMIN), 200, "another municipality's manager has no group there and passes by the role");
+  give({ ...permissionConfigs(MUNICIPALITY, { users: [{ id: "another-id", email: "STAFF@example.test", permissionGroupId: "g" }], groups: [permissionGroup("g", [EMAIL_SETTINGS_PERMISSION])] }) });
+  assert.equal(await reads(ANALYST), 200, "the team user is also found by e-mail");
+});
+
+test("a service switched off for the municipality refuses to turn a message on, while turning it off stays allowed", async (t) => {
+  const { request } = await fixture(t, { ...ready(), [`email_quota:${MUNICIPALITY}`]: { plan: 10, enabled: false } });
+  const on = await request("/email/templates/active", { method: "PUT", user: ADMIN, body: { use: CONFIRMED, active: true } });
+  assert.equal(on.status, 400); assert.match(on.body.error, /desativado/);
+  assert.equal((await request("/email/templates/active", { method: "PUT", user: ADMIN, body: { use: CONFIRMED, active: false } })).status, 200);
 });
