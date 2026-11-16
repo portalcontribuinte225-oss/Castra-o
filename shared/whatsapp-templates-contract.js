@@ -60,7 +60,7 @@ function access(key, label, groupLabel, namePart, layout, variables, nameSuffix 
 export const whatsappUses = Object.freeze([
   notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "confirmacao_agendamento", scheduleFields),
   notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "reagendamento", scheduleFields),
-  notice(NotificationEvent.SCHEDULE_CANCELLED, "Agendamento cancelado", "cancelamento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
+  notice(NotificationEvent.NO_SHOW, "Não comparecimento", "cancelamento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
   notice(NotificationEvent.DOCUMENTS_REVIEWED, "Documentos conferidos", "documentos_conferidos", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   notice(NotificationEvent.COMPLETED, "Atendimento concluído", "atendimento_concluido", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   access(AuthPurpose.PASSWORD_RESET, "Recuperação de senha", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),

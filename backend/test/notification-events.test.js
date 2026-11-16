@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { selectNotificationEvents } from "../src/services/notifications/notification-events.js";
-import { NotificationEvent } from "../../shared/notification-contract.js";
+import { NO_SHOW_CANCEL_REASON, NotificationEvent } from "../../shared/notification-contract.js";
 
 test("confirmation and completion only notify on transitions", () => {
   assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, { status: "AGENDADA" }), [NotificationEvent.SCHEDULE_CONFIRMED]);
@@ -10,8 +10,12 @@ test("confirmation and completion only notify on transitions", () => {
   assert.deepEqual(selectNotificationEvents({ status: "REALIZADA" }, { status: "REALIZADA", notes: "updated" }), []);
 });
 
-test("cancelling a scheduled request notifies once, but cancelling an unscheduled one does not", () => {
-  assert.deepEqual(selectNotificationEvents({ status: "AGENDADA" }, { status: "CANCELADA" }), [NotificationEvent.SCHEDULE_CANCELLED]);
+test("only a no-show of a scheduled request notifies; any other cancellation, or one of an unscheduled request, does not", () => {
+  const noShow = { status: "CANCELADA", workflow_data: { cancelReason: NO_SHOW_CANCEL_REASON } };
+  assert.deepEqual(selectNotificationEvents({ status: "AGENDADA" }, noShow), [NotificationEvent.NO_SHOW]);
+  assert.deepEqual(selectNotificationEvents({ status: "AGENDADA" }, { status: "CANCELADA", workflow_data: { cancelReason: "Cancelado" } }), []);
+  assert.deepEqual(selectNotificationEvents({ status: "AGENDADA" }, { status: "CANCELADA" }), []);
+  assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, noShow), []);
   assert.deepEqual(selectNotificationEvents({ status: "CANCELADA" }, { status: "CANCELADA", notes: "updated" }), []);
   assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, { status: "CANCELADA" }), []);
   assert.deepEqual(selectNotificationEvents({ status: "REALIZADA" }, { status: "CANCELADA" }), []);

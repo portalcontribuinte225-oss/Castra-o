@@ -76,7 +76,7 @@ describe("templates table", () => {
   it("lists each template with status, recognized use and a switch, and locks what cannot be turned on", () => {
     const html = renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(
       row({ active: true }),
-      row({ name: "castracao_cancelamento", label: "Agendamento cancelado", status: "PENDING", canActivate: false, variables: ["Nome do tutor", "Data do agendamento", "Horário do agendamento"] }),
+      row({ name: "castracao_cancelamento", label: "Não comparecimento", status: "PENDING", canActivate: false, variables: ["Nome do tutor", "Data do agendamento", "Horário do agendamento"] }),
       row({ name: "lembrete_atendimento", label: "", uses: [], variables: [], reason: "O nome não indica um aviso do sistema.", canActivate: false }),
       row({ name: "castracao_reagendamento", label: "Agendamento alterado", status: "NOT_FOUND", active: true, canActivate: false }),
     )} />);
@@ -84,7 +84,7 @@ describe("templates table", () => {
     expect(html).toContain("Aprovado");
     expect(html).toContain("Em análise");
     expect(html).toContain("Não encontrado");
-    expect(html).toContain("Agendamento cancelado");
+    expect(html).toContain("Não comparecimento");
     expect(html).toContain('<span class="whatsapp-muted">Template padrão da Meta, não usado pelo sistema.</span>');
     expect(html).not.toContain("Fora do padrão");
     expect(html).toContain("Última sincronização");

@@ -4,6 +4,7 @@ import { mergeTags, normalizeRequest } from "../domain";
 import { getNotificationNotice } from "./notifications/notification-results";
 import type { NotificationResult } from "./notifications/notification-results";
 import { normalizeText } from "../utils";
+import { NO_SHOW_CANCEL_REASON } from "../../shared/notification-contract.js";
 
 export function canEditRequests(role = ""): boolean {
   return ["master", "suporte", "admin_municipal", "analista", "servidor_publico"].includes(normalizeText(role));
@@ -69,7 +70,7 @@ export function useRequestActions({
   }
 
   async function archiveWithTag(request: AnyRecord, tag: string, note?: string) {
-    const cancelReason = tag === "NAO_COMPARECEU" ? "Não compareceu" : tag === "CANCELADA" ? "Cancelado" : "";
+    const cancelReason = tag === "NAO_COMPARECEU" ? NO_SHOW_CANCEL_REASON : tag === "CANCELADA" ? "Cancelado" : "";
     const patch = cancelReason
       ? { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason } }
       : { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: tag } };

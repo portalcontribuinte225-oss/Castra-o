@@ -38,8 +38,11 @@ test("every use carries the recipient and the municipality identity, and only ag
       assert.ok(use.variables.includes(name), `${use.key} must carry ${name}`);
     }
   }
-  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.SCHEDULE_CANCELLED];
+  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.NO_SHOW];
   for (const use of emailUses) assert.equal(use.variables.includes("schedule_date"), schedule.includes(use.key), use.key);
+  assert.ok(getEmailUse(NotificationEvent.DOCUMENTS_REVIEWED).variables.includes("documents_result"));
+  assert.ok(getEmailUse(AuthPurpose.CONTACT_CHANGED).variables.includes("changed_fields"));
+  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 5), ["Agendamento confirmado", "Agendamento reagendado", "Não comparecimento", "Documentos analisados", "Atendimento concluído"]);
   assert.ok(getEmailUse(RESET).variables.includes("codigo_recuperacao"));
   assert.ok(getEmailUse(AuthPurpose.INITIAL_PASSWORD).variables.includes("temporary_password"));
 });

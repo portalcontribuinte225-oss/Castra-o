@@ -3,7 +3,7 @@ import { NotificationEvent } from "../../../../shared/notification-contract.js";
 export const notificationEventLabels = Object.freeze({
   [NotificationEvent.SCHEDULE_CONFIRMED]: "Agendamento confirmado",
   [NotificationEvent.SCHEDULE_CHANGED]: "Agendamento alterado",
-  [NotificationEvent.SCHEDULE_CANCELLED]: "Agendamento cancelado",
+  [NotificationEvent.NO_SHOW]: "Não comparecimento",
   [NotificationEvent.DOCUMENTS_REVIEWED]: "Documentos conferidos",
   [NotificationEvent.COMPLETED]: "Atendimento concluído",
 });
@@ -18,7 +18,7 @@ export function buildNotificationMessage(event, request) {
   const date = formatScheduleDate(request.schedule_date || "");
   const time = workflow.scheduleSlotTime || workflow.scheduleTime || "";
   const location = [request.schedule_location_name, request.schedule_address].filter(Boolean).join(" — ");
-  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.SCHEDULE_CANCELLED].includes(event);
+  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.NO_SHOW].includes(event);
   const documents = Array.isArray(request.documents) ? request.documents : [];
   const approved = documents.filter((document) => document?.status === "approved").length;
   const rejected = documents.filter((document) => document?.status === "rejected").length;

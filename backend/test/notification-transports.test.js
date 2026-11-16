@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createEmailSender, sendNotificationEmail } from "../src/services/email.js";
 import { sendWhatsappTemplateComponents } from "../src/services/whatsapp.js";
 import { buildBodyComponents } from "../src/services/notifications/whatsapp-template-parameters.js";
-import { DeliveryStatus, DeliveryCode, NotificationEvent } from "../../shared/notification-contract.js";
+import { DeliveryStatus, DeliveryCode, DocumentsOutcome, NotificationEvent } from "../../shared/notification-contract.js";
 
 const emailAccount = { serviceId: "test-service", publicKey: "test-public", privateKey: "test-private" };
 const loadAccount = async () => emailAccount;
@@ -32,7 +32,8 @@ test("agenda notification content contains readable date, slot and location", as
     assert.match(templateParams.message, /20\/11\/2026/);
     assert.match(templateParams.message, /09:15/);
     assert.match(templateParams.message, /Centro/);
-    assert.match(templateParams.message, /Rua A/);
+    assert.match(templateParams.message, /na Centro\. Protocolo: 1\/2026\./);
+    assert.equal(templateParams.schedule_address, "Rua A", "the address still reaches the template as its own variable");
     return { status: DeliveryStatus.SENT };
   });
 });
@@ -91,11 +92,35 @@ test("document notifications report aggregate status without exposing documents"
       { status: "attached", dataUrl: "private-content" },
     ] },
   }, async ({ templateParams }) => {
-    assert.match(templateParams.message, /Aprovados: 1/);
-    assert.match(templateParams.message, /Precisam de correção: 1/);
+    assert.match(templateParams.message, /não puderam ser aprovados/);
+    assert.equal(templateParams.documents_result, DocumentsOutcome.REJECTED);
     assert.doesNotMatch(templateParams.message, /private|sensitive|personal/);
     return { status: DeliveryStatus.SENT };
   });
+  await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event: NotificationEvent.DOCUMENTS_REVIEWED,
+    request: { protocol: "1/2026", documents: [{ status: "approved" }, { status: "attached" }] },
+  }, async ({ templateParams }) => {
+    assert.match(templateParams.message, /Boas notícias! Seus documentos foram analisados e aprovados/);
+    assert.equal(templateParams.documents_result, DocumentsOutcome.APPROVED);
+    return { status: DeliveryStatus.SENT };
+  });
+});
+
+test("every notice carries its full text, the new subject and, for the no-show, the date of the missed visit", async () => {
+  const request = { protocol: "1/2026", schedule_date: "2026-11-20", schedule_location_name: "Centro", workflow_data: { scheduleTime: "09:15" } };
+  const expected = {
+    [NotificationEvent.SCHEDULE_CONFIRMED]: ["Agendamento confirmado", "Seu agendamento para castração foi confirmado! Esperamos você no dia 20/11/2026, às 09:15, na Centro. Protocolo: 1/2026."],
+    [NotificationEvent.NO_SHOW]: ["Não comparecimento", "Identificamos que você não compareceu ao agendamento de castração do dia 20/11/2026. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
+    [NotificationEvent.COMPLETED]: ["Atendimento concluído", "Seu atendimento de castração foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: 1/2026."],
+  };
+  for (const [event, [subject, message]] of Object.entries(expected)) {
+    await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event, request }, async ({ templateParams }) => {
+      assert.equal(templateParams.subject, subject);
+      assert.equal(templateParams.message, message);
+      assert.equal("documents_result" in templateParams, false, "only the documents notice carries the outcome");
+      return { status: DeliveryStatus.SENT };
+    });
+  }
 });
 
 test("WhatsApp parameters come only from mapped fields and never from CPF, contacts or arbitrary request data", async () => {

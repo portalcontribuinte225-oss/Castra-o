@@ -1,6 +1,6 @@
 import React from "react";
 import { Lock } from "lucide-react";
-import { smsExample } from "../../../shared/sms-messages-contract.js";
+import { smsExamples } from "../../../shared/sms-messages-contract.js";
 import type { SmsUseRow } from "./sms-types";
 
 interface Props {
@@ -31,7 +31,7 @@ export function SmsUsesTable({ rows, municipalityName, channelActive, busy, onTo
             return (
               <tr key={row.key}>
                 <td>{row.label}</td>
-                <td>{smsExample(row.key, municipalityName || undefined)}</td>
+                <td>{smsExamples(row.key, municipalityName || undefined).map((text) => <p key={text}>{text}</p>)}</td>
                 <td className="whatsapp-switch-cell">
                   <button
                     type="button"

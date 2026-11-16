@@ -1,10 +1,21 @@
 export const NotificationEvent = Object.freeze({
   SCHEDULE_CONFIRMED: "schedule_confirmed",
   SCHEDULE_CHANGED: "schedule_changed",
-  SCHEDULE_CANCELLED: "schedule_cancelled",
+  NO_SHOW: "no_show",
   DOCUMENTS_REVIEWED: "documents_reviewed",
   COMPLETED: "completed",
 });
+
+// The reason the staff screen stores when the tutor did not come to a scheduled visit; it is what tells a no-show from any other cancellation.
+export const NO_SHOW_CANCEL_REASON = "Não compareceu";
+
+// What the analysis of the documents ended in: rejected as soon as one document was rejected, approved otherwise.
+export const DocumentsOutcome = Object.freeze({ APPROVED: "approved", REJECTED: "rejected" });
+
+export function documentsOutcome(documents) {
+  const rejected = (Array.isArray(documents) ? documents : []).some((document) => document?.status === "rejected");
+  return rejected ? DocumentsOutcome.REJECTED : DocumentsOutcome.APPROVED;
+}
 
 export const NotificationChannel = Object.freeze({ EMAIL: "email", WHATSAPP: "whatsapp", SMS: "sms" });
 export const DeliveryStatus = Object.freeze({ SENT: "sent", FAILED: "failed", SKIPPED: "skipped" });

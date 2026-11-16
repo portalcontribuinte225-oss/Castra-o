@@ -67,12 +67,12 @@ export async function confirmContactChallenge(req, res) {
     const kind = purpose === AuthPurpose.VERIFY_EMAIL ? "email" : "phone";
     await saveVerifiedContact(client, { userId: user.id, municipalityId: user.municipality_id, kind, value: challenge.destination });
     await strictAuthAudit(client, { actorId: user.id, userId: user.id, municipalityId: user.municipality_id, action: AUDIT_ACTIONS.TUTOR_CONTACT_CHANGE, changes: { kind } });
-    return { user, profile: await getTutorProfile(user.id, user.municipality_id, client) };
+    return { user, kind, profile: await getTutorProfile(user.id, user.municipality_id, client) };
   });
   if (!result) throw authError(400, "Código inválido ou expirado.");
   try {
     await deliverAuthMessage({ purpose: AuthPurpose.CONTACT_CHANGED, user: result.user, municipalityId: result.user.municipality_id,
-      email: result.user.profile_email, phone: result.user.profile_phone,
+      email: result.user.profile_email, phone: result.user.profile_phone, changedFields: [result.kind === "email" ? "e-mail" : "telefone"],
       emailVerified: Boolean(result.user.email_verified_at), phoneVerified: Boolean(result.user.phone_verified_at) });
   } catch { /* Contact was already committed; notification failure cannot undo verification. */ }
   res.json({ profile: publicTutorProfile(result.profile) });

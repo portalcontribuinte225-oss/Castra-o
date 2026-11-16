@@ -34,11 +34,18 @@ function isRecoveryExpired(input) {
   return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
 }
 
+// The data that changed, as the notice names it ("e-mail", "telefone"); the contact the tutor just confirmed.
+function changedFieldsText(input) {
+  return (Array.isArray(input.changedFields) ? input.changedFields : []).join(", ") || "contato";
+}
+
 function emailParameters(input) {
   const common = { [EmailVariable.TO_NAME]: input.user?.name || "Tutor", [EmailVariable.PURPOSE]: input.purpose };
   if (input.purpose === AuthPurpose.INITIAL_PASSWORD) return { ...common, [EmailVariable.TEMPORARY_PASSWORD]: input.temporaryPassword };
   if (input.purpose === AuthPurpose.CONTACT_CHANGED) {
-    return { ...common, [EmailVariable.MESSAGE]: "O contato de acesso da sua conta foi alterado. Se não reconhece a alteração, procure o atendimento do município." };
+    const changed = changedFieldsText(input);
+    return { ...common, [EmailVariable.CHANGED_FIELDS]: changed,
+      [EmailVariable.MESSAGE]: `Seus dados cadastrais foram atualizados. Informações alteradas: ${changed}. Se você não reconhece essa alteração, entre em contato com nossa equipe.` };
   }
   return { ...common, [EmailVariable.CODE]: input.code, [EmailVariable.RECOVERY_CODE]: input.code, [EmailVariable.VALIDITY]: "10 minutos", [EmailVariable.VALIDITY_MINUTES]: "10" };
 }
@@ -88,10 +95,11 @@ async function tryEmail(input, dependencies, { platform = false } = {}) {
 }
 
 // What an SMS of this use needs besides the municipality name: the code, and how long it lasts (the rest of its challenge,
-// or the usual validity when the use has no challenge of its own).
+// or the usual validity when the use has no challenge of its own); the changed data for the contact notice.
 function smsData(input) {
   const remaining = input.expiresAt ? new Date(input.expiresAt).getTime() - Date.now() : AUTH_CHALLENGE_SECONDS * 1000;
-  return { code: input.code, minutes: String(Math.max(1, Math.ceil(remaining / 60000))) };
+  return { code: input.code, minutes: String(Math.max(1, Math.ceil(remaining / 60000))),
+    ...(input.purpose === AuthPurpose.CONTACT_CHANGED ? { fields: changedFieldsText(input) } : {}) };
 }
 
 // Answers `null` when the municipality does not use SMS for this message, so it leaves no result.

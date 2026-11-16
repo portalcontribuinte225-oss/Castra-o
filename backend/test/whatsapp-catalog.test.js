@@ -213,7 +213,7 @@ test("the sync endpoint uses the municipal credentials, returns the template lis
   const synced = await call("POST", "/whatsapp/templates/sync", { municipalityId: "11111111-1111-4111-8111-111111111111" });
   assert.equal(synced.status, 200);
   assert.deepEqual(synced.body.templates.map(({ name, canActivate, label }) => ({ name, canActivate, label })), [
-    { name: "castracao_cancelamento", canActivate: true, label: "Agendamento cancelado" },
+    { name: "castracao_cancelamento", canActivate: true, label: "Não comparecimento" },
     { name: "lembrete_atendimento", canActivate: false, label: "" },
   ]);
   assert.equal(sentTo[0].auth, "Bearer legacy-private-token");

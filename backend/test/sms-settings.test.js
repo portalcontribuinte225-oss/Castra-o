@@ -140,7 +140,7 @@ test("sending a message builds the fixed text for the municipality, through its 
   assert.deepEqual([unsaved.status, unsaved.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED, 0]);
   await f.save({ token: TOKEN, active: true });
   assert.equal((await sendSmsUse(reset, deps)).status, DeliveryStatus.SENT);
-  assert.deepEqual(sent[0], { token: TOKEN, phone: "48999991234", text: "Test Town: seu codigo e 123456. Valido por 10 minutos. Nao compartilhe.",
+  assert.deepEqual(sent[0], { token: TOKEN, phone: "48999991234", text: "Test Town: recebemos um pedido para redefinir sua senha. Codigo: 123456. Valido por 10 minutos. Nao compartilhe.",
     messageId: ACTOR.id, expiresAt: "2026-11-13T12:10:00Z" });
   const notice = { municipalityId: MUNICIPALITY, use: NotificationEvent.SCHEDULE_CONFIRMED, phone: "48999991234",
     data: { protocol: "123/2026", date: "20/11/2026", time: "09:00", location: "Unidade Veterinária Municipal" } };
@@ -148,7 +148,7 @@ test("sending a message builds the fixed text for the municipality, through its 
   assert.deepEqual([off.status, off.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED, 1]);
   f.database.configs.set(`${SMS_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true } });
   assert.equal((await sendSmsUse(notice, deps)).status, DeliveryStatus.SENT);
-  assert.equal(sent[1].text, "Test Town: castracao agendada em 20/11/2026 as 09:00, Unidade Veterinaria Municipal. Protocolo 123/2026.");
+  assert.equal(sent[1].text, "Test Town: castracao confirmada! Esperamos voce em 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
   assert.match(sent[1].messageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(sent[1].expiresAt, undefined);
   await f.save({ active: false });

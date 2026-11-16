@@ -140,11 +140,15 @@ test("the initial password never goes by SMS, and a changed contact is told by t
   const changed = fixture(); const changedSms = smsSent(changed); changed.dependencies.loadWhatsappConfig = async () => ({ active: false });
   const results = await deliverAuthMessage({ ...changed.input, purpose: AuthPurpose.CONTACT_CHANGED, code: undefined, channel: undefined }, changed.dependencies);
   assert.equal(changedSms.length, 1); assert.equal(changedSms[0].use, AuthPurpose.CONTACT_CHANGED);
+  assert.equal(changedSms[0].data.fields, "contato", "without the changed data the notice says contact");
   assert.deepEqual(results.map(({ channel }) => channel), [NotificationChannel.WHATSAPP, NotificationChannel.SMS]);
   assert.equal(changed.calls.some(([type]) => type === "email"), false);
   const reserve = fixture(); reserve.dependencies.loadWhatsappConfig = async () => ({ active: false });
-  const viaEmail = await deliverAuthMessage({ ...reserve.input, purpose: AuthPurpose.CONTACT_CHANGED, code: undefined, channel: undefined }, reserve.dependencies);
+  const viaEmail = await deliverAuthMessage({ ...reserve.input, purpose: AuthPurpose.CONTACT_CHANGED, code: undefined, channel: undefined, changedFields: ["telefone"] }, reserve.dependencies);
   assert.deepEqual(viaEmail.map(({ channel }) => channel), [NotificationChannel.WHATSAPP, NotificationChannel.EMAIL]);
+  const params = reserve.calls.find(([type]) => type === "email")[1].templateParams;
+  assert.equal(params.changed_fields, "telefone");
+  assert.equal(params.message, "Seus dados cadastrais foram atualizados. Informações alteradas: telefone. Se você não reconhece essa alteração, entre em contato com nossa equipe.");
 });
 
 test("initial password may use supplied unverified contact but only its own template", async () => {

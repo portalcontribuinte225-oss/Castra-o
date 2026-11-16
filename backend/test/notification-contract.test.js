@@ -36,8 +36,9 @@ test("the old channel option and its configuration no longer exist in the contra
   }
 });
 
-test("the cancellation event exists next to the other agenda events", () => {
-  assert.equal(NotificationEvent.SCHEDULE_CANCELLED, "schedule_cancelled");
+test("the no-show event exists next to the other agenda events, and the old cancellation is gone", () => {
+  assert.equal(NotificationEvent.NO_SHOW, "no_show");
+  assert.equal("SCHEDULE_CANCELLED" in NotificationEvent, false);
   assert.equal(Object.values(NotificationEvent).length, 5);
 });
 

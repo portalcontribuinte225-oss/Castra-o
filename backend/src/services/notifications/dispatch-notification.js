@@ -1,4 +1,4 @@
-import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode } from "../../../../shared/notification-contract.js";
+import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, documentsOutcome } from "../../../../shared/notification-contract.js";
 import { getWhatsappUse, WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
@@ -94,20 +94,21 @@ async function tryEmail({ event, request, followUp }, dependencies) {
   return sanitizedTransportResult(event, channel, transport);
 }
 
-// Only the request fields the schedule and the protocol need; the same safe whitelist the other channels use.
-function smsNoticeData(request) {
+// Only the request fields the schedule, the protocol and the result of the documents need; the same safe whitelist the other channels use.
+function smsNoticeData(event, request) {
   const field = (name) => resolveWhatsappField(name, request);
   return {
     protocol: request.protocol,
     date: field(WhatsappTemplateField.SCHEDULE_DATE),
     time: field(WhatsappTemplateField.SCHEDULE_TIME),
     location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
+    ...(event === NotificationEvent.DOCUMENTS_REVIEWED ? { outcome: documentsOutcome(request.documents) } : {}),
   };
 }
 
 async function trySms({ event, request, followUp }, dependencies) {
   if (!followUp.phone) return null;
-  const sent = await dependencies.sendSms({ municipalityId: request.municipality_id, use: event, phone: followUp.phone, data: smsNoticeData(request) });
+  const sent = await dependencies.sendSms({ municipalityId: request.municipality_id, use: event, phone: followUp.phone, data: smsNoticeData(event, request) });
   if (sent?.status === DeliveryStatus.SKIPPED && sent.code === DeliveryCode.CHANNEL_DISABLED) return null;
   return sanitizedTransportResult(event, NotificationChannel.SMS, sent);
 }

@@ -1,6 +1,6 @@
 import { DeliveryStatus, DeliveryCode } from "../../../shared/notification-contract.js";
 import { EmailVariable, getEmailUse } from "../../../shared/email-uses-contract.js";
-import { buildNotificationMessage } from "./notifications/notification-message.js";
+import { buildEmailNotice } from "./notifications/email-notice-text.js";
 import { resolveWhatsappField } from "./notifications/whatsapp-template-parameters.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
 import { getEmailRuntimeConfig, isEmailAccountConfigured } from "./email-account.js";
@@ -70,7 +70,7 @@ export const sendEmailTemplate = createEmailSender();
 
 // The agenda notices also carry date, time and place as separate variables, taken from the same safe whitelist WhatsApp uses.
 export async function sendNotificationEmail({ toEmail, toName, event, request, templateId, identityParams = {} }, sender = sendEmailTemplate) {
-  const content = buildNotificationMessage(event, request);
+  const { subject, message, ...outcome } = buildEmailNotice(event, request);
   const requestFields = Object.fromEntries((getEmailUse(event)?.requestFields || []).map((name) => [name, resolveWhatsappField(name, request)]));
   return sender({
     toEmail,
@@ -79,8 +79,9 @@ export async function sendNotificationEmail({ toEmail, toName, event, request, t
       [EmailVariable.TO_NAME]: toName || "Solicitante",
       [EmailVariable.EVENT]: event,
       [EmailVariable.PROTOCOL]: request.protocol || "",
-      [EmailVariable.SUBJECT]: content.subject,
-      [EmailVariable.MESSAGE]: content.message,
+      [EmailVariable.SUBJECT]: subject,
+      [EmailVariable.MESSAGE]: message,
+      ...outcome,
       ...requestFields,
       ...identityParams,
     },

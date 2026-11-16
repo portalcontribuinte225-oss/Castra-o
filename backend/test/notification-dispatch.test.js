@@ -13,7 +13,7 @@ function fixture() {
   const active = {
     [NotificationEvent.SCHEDULE_CONFIRMED]: "castracao_confirmacao_agendamento",
     [NotificationEvent.SCHEDULE_CHANGED]: "castracao_reagendamento",
-    [NotificationEvent.SCHEDULE_CANCELLED]: "castracao_cancelamento",
+    [NotificationEvent.NO_SHOW]: "castracao_cancelamento",
   };
   const dependencies = {
     loadWhatsappConfig: async (municipalityId) => { calls.push(["config", municipalityId]); return { active: true, accessToken: "token", phoneNumberId: "number" }; },
@@ -112,7 +112,7 @@ test("confirmation, reschedule and cancellation send the parameters their Meta t
   const expected = [
     [NotificationEvent.SCHEDULE_CONFIRMED, "castracao_confirmacao_agendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
     [NotificationEvent.SCHEDULE_CHANGED, "castracao_reagendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
-    [NotificationEvent.SCHEDULE_CANCELLED, "castracao_cancelamento", ["Maria", "20/11/2026", "09:00"]],
+    [NotificationEvent.NO_SHOW, "castracao_cancelamento", ["Maria", "20/11/2026", "09:00"]],
   ];
   for (const [event, templateName, parameters] of expected) {
     const f = fixture();
@@ -250,7 +250,7 @@ test("legacy reschedule uses the reschedule template, not the confirmation one",
 test("legacy requests preserve WhatsApp-only agenda behavior, never e-mail nor SMS", async () => {
   const f = fixture();
   f.request.workflow_data = {};
-  for (const event of [NotificationEvent.COMPLETED, NotificationEvent.DOCUMENTS_REVIEWED, NotificationEvent.SCHEDULE_CANCELLED]) {
+  for (const event of [NotificationEvent.COMPLETED, NotificationEvent.DOCUMENTS_REVIEWED, NotificationEvent.NO_SHOW]) {
     assert.deepEqual(await dispatchNotification({ event, request: f.request, legacy: true }, f.dependencies), []);
   }
   f.dependencies.sendWhatsapp = async () => ({ status: DeliveryStatus.FAILED });

@@ -12,14 +12,14 @@ function smsUse(key, kind, label, defaultActive = false) {
 // secret that already shows on screen. Only password recovery starts on, as it already worked once the channel was active.
 export const smsUses = Object.freeze([
   smsUse(NotificationEvent.SCHEDULE_CONFIRMED, SmsUseKind.NOTICE, "Agendamento confirmado"),
-  smsUse(NotificationEvent.SCHEDULE_CHANGED, SmsUseKind.NOTICE, "Agendamento alterado"),
-  smsUse(NotificationEvent.SCHEDULE_CANCELLED, SmsUseKind.NOTICE, "Agendamento cancelado"),
-  smsUse(NotificationEvent.DOCUMENTS_REVIEWED, SmsUseKind.NOTICE, "Documentos conferidos"),
+  smsUse(NotificationEvent.SCHEDULE_CHANGED, SmsUseKind.NOTICE, "Agendamento reagendado"),
+  smsUse(NotificationEvent.NO_SHOW, SmsUseKind.NOTICE, "Não comparecimento"),
+  smsUse(NotificationEvent.DOCUMENTS_REVIEWED, SmsUseKind.NOTICE, "Documentos analisados"),
   smsUse(NotificationEvent.COMPLETED, SmsUseKind.NOTICE, "Atendimento concluído"),
   smsUse(AuthPurpose.PASSWORD_RESET, SmsUseKind.ACCESS, "Recuperação de senha", true),
   smsUse(AuthPurpose.VERIFY_PHONE, SmsUseKind.ACCESS, "Confirmação de telefone"),
   smsUse(AuthPurpose.REQUEST_TRACKING, SmsUseKind.ACCESS, "Acompanhamento de solicitação"),
-  smsUse(AuthPurpose.CONTACT_CHANGED, SmsUseKind.ACCESS, "Contato alterado"),
+  smsUse(AuthPurpose.CONTACT_CHANGED, SmsUseKind.ACCESS, "Dados do solicitante alterados"),
 ]);
 
 export function getSmsUse(key) {

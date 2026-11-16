@@ -215,10 +215,10 @@ describe("SMS settings interface", () => {
     const html = screen();
     expect(html.match(/<tr>/g)).toHaveLength(smsUses.length + 1);
     for (const use of smsUses) expect(html).toContain(use.label);
-    expect(html).toContain("Test Town: seu codigo e 123456. Valido por 10 minutos. Nao compartilhe.");
-    expect(html).toContain("Test Town: atendimento concluido. Protocolo 123/2026.");
+    expect(html).toContain("Test Town: recebemos um pedido para redefinir sua senha. Codigo: 123456. Valido por 10 minutos. Nao compartilhe.");
+    expect(html).toContain("Test Town: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
     expect(html).toContain("<th>Exemplo do texto</th>");
-    expect(screen({ config: { ...stored, municipalityName: "" } })).toContain("Municipio: seu codigo e 123456.");
+    expect(screen({ config: { ...stored, municipalityName: "" } })).toContain("Municipio: recebemos um pedido para redefinir sua senha.");
   });
 
   it("locks every switch while the channel is inactive, and unlocks them with the stored state once it is active", () => {
