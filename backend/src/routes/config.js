@@ -7,6 +7,7 @@ import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.j
 import { prepareWhatsappCredentials, publicWhatsappConfig } from "../services/whatsapp-credentials.js";
 import { testProviderKey } from "./ai.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
+import { BREEDS_CONFIG_KEY } from "../services/breed-defaults.js";
 import { normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../../shared/document-reuse-contract.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
@@ -18,7 +19,6 @@ const RESERVATION_CONFIG_KEYS = new Set([
   "castragestao:schedule-rules", "castragestao:request-types", "castragestao:document-types", IDENTIFICATION_TYPES_CONFIG_KEY,
 ]);
 
-const BREEDS_CONFIG_KEY = "castragestao:breeds";
 
 // Keys that fall back to factory defaults when the municipality has no row yet.
 const DEFAULT_CONFIG_VALUE_BUILDERS = {

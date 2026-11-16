@@ -1,5 +1,6 @@
 import { DEFAULT_MINIMUM_CONFIDENCE } from "./routes/ai.js";
 import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "./services/identification-type-defaults.js";
+import { BREEDS_CONFIG_KEY, buildDefaultBreeds } from "./services/breed-defaults.js";
 
 export const DEFAULT_MUNICIPALITY_SECTOR_ID = "setor_gestao_municipal";
 export const DEFAULT_MUNICIPALITY_SECTOR_NAME = "Gestão Municipal";
@@ -83,6 +84,9 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
   const credenciatedGroup = buildCredenciatedPermissionGroup();
   const defaultTeamUser = buildDefaultTeamUser(defaultUser, municipalityId);
   const currentYear = new Date().getFullYear();
+  const breeds = buildDefaultBreeds();
+  // The form shows only the breeds a request type links, so the default request types link all the default breeds.
+  const breedIds = breeds.map(({ id }) => id);
 
   return {
     "castragestao:document-types": [
@@ -113,6 +117,7 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
         billingDueDate: "",
         active: true,
         overrideDailyLimit: false,
+        breedIds: [...breedIds],
         documents: [
           {
             id: "comprovante_residencia",
@@ -134,6 +139,7 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
         billingDueDate: "",
         active: true,
         overrideDailyLimit: false,
+        breedIds: [...breedIds],
         documents: [
           {
             id: "comprovante_residencia",
@@ -151,6 +157,7 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
       { id: "canino", name: "Canino", active: true },
       { id: "felino", name: "Felino", active: true },
     ],
+    [BREEDS_CONFIG_KEY]: breeds,
     "castragestao:sizes": [
       { id: "pequeno", name: "Pequeno", weightStart: "0", weightEnd: "5", weightUnit: "kg", description: "0-5 kg", active: true },
       { id: "medio", name: "Médio", weightStart: "5", weightEnd: "12", weightUnit: "kg", description: "5-12 kg", active: true },
@@ -189,6 +196,10 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
   };
 }
 
+// Breeds are only ever written when the municipality has none: creating a municipality again with the same slug must not
+// replace the breeds its administration has already edited.
+const INSERT_ONLY_KEYS = new Set([BREEDS_CONFIG_KEY]);
+
 export async function upsertMunicipalityDefaultConfigs(client, municipality = {}, defaultUser = {}) {
   const configs = buildMunicipalityDefaultConfigs(municipality, defaultUser);
   for (const [key, value] of Object.entries(configs)) {
@@ -196,7 +207,7 @@ export async function upsertMunicipalityDefaultConfigs(client, municipality = {}
       `INSERT INTO config (key, municipality_id, value, updated_at)
        VALUES ($1, $2, $3, NOW())
        ON CONFLICT (key, (COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid)))
-       DO UPDATE SET value=$3, updated_at=NOW()`,
+       DO ${INSERT_ONLY_KEYS.has(key) ? "NOTHING" : "UPDATE SET value=$3, updated_at=NOW()"}`,
       [key, municipality.id, JSON.stringify(value)],
     );
   }
