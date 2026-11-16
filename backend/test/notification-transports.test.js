@@ -5,11 +5,12 @@ import { sendWhatsappTemplateComponents } from "../src/services/whatsapp.js";
 import { buildBodyComponents } from "../src/services/notifications/whatsapp-template-parameters.js";
 import { DeliveryStatus, DeliveryCode, NotificationEvent } from "../../shared/notification-contract.js";
 
-const emailEnv = { EMAILJS_SERVICE_ID: "test-service", EMAILJS_PUBLIC_KEY: "test-public", EMAILJS_PRIVATE_KEY: "test-private" };
+const emailAccount = { serviceId: "test-service", publicKey: "test-public", privateKey: "test-private" };
+const loadAccount = async () => emailAccount;
 const emailInput = { toEmail: "citizen@example.com", templateId: "notice-template", templateParams: { protocol: "1/2026" } };
 
 test("EmailJS uses an explicit notification template and sanitizes content", async () => {
-  const sender = createEmailSender({ env: emailEnv, fetchImpl: async (_url, options) => {
+  const sender = createEmailSender({ loadAccount, fetchImpl: async (_url, options) => {
     const body = JSON.parse(options.body);
     assert.equal(body.template_id, "notice-template");
     assert.equal(body.template_params.protocol, "1/2026");
@@ -40,7 +41,7 @@ test("EmailJS gate reserves at most one next slot with a bounded wait", async ()
   let timestamp = 1000;
   let sent = 0;
   const delays = [];
-  const sender = createEmailSender({ env: emailEnv, now: () => timestamp,
+  const sender = createEmailSender({ loadAccount, now: () => timestamp,
     wait: async (delay) => { delays.push(delay); timestamp += delay; },
     fetchImpl: async () => { sent += 1; return { ok: true }; },
   });
@@ -55,15 +56,15 @@ test("EmailJS gate reserves at most one next slot with a bounded wait", async ()
 });
 
 test("missing email credentials/template never call a provider", async () => {
-  const sender = createEmailSender({ env: {}, fetchImpl: async () => { assert.fail("provider must not be contacted"); } });
+  const sender = createEmailSender({ loadAccount: async () => ({}), fetchImpl: async () => { assert.fail("provider must not be contacted"); } });
   assert.equal((await sender(emailInput)).status, DeliveryStatus.SKIPPED);
-  const configured = createEmailSender({ env: emailEnv, fetchImpl: async () => { assert.fail("provider must not be contacted"); } });
+  const configured = createEmailSender({ loadAccount, fetchImpl: async () => { assert.fail("provider must not be contacted"); } });
   assert.equal((await configured({ ...emailInput, templateId: "" })).status, DeliveryStatus.SKIPPED);
 });
 
 test("email errors and rate limits never return raw provider bodies", async () => {
   for (const fetchImpl of [async () => ({ ok: false, status: 429, text: async () => "secret" }), async () => ({ ok: false, status: 500, text: async () => "secret" }), async () => { throw new Error("secret"); }]) {
-    const sender = createEmailSender({ env: emailEnv, fetchImpl });
+    const sender = createEmailSender({ loadAccount, fetchImpl });
     const result = await sender(emailInput);
     assert.equal(result.status, DeliveryStatus.FAILED);
     assert.equal(JSON.stringify(result).includes("secret"), false);
@@ -77,7 +78,7 @@ test("transport failures keep finite diagnostic codes", async () => {
     [async () => { throw new DOMException("private", "TimeoutError"); }, DeliveryCode.TIMEOUT],
     [async () => { throw new Error("private"); }, DeliveryCode.TRANSPORT_FAILED],
   ]) {
-    const sender = createEmailSender({ env: emailEnv, fetchImpl });
+    const sender = createEmailSender({ loadAccount, fetchImpl });
     assert.equal((await sender(emailInput)).code, expected);
   }
 });
@@ -138,4 +139,49 @@ test("WhatsApp maps provider template errors to a safe code and reports the temp
   });
   assert.equal(other.code, DeliveryCode.PROVIDER_REJECTED);
   assert.equal(other.templateStatus, undefined);
+});
+
+test("EmailJS sends with the stored account and adds the private key only when there is one", async () => {
+  const bodies = [];
+  const fetchImpl = async (_url, options) => { bodies.push(JSON.parse(options.body)); return { ok: true }; };
+  await createEmailSender({ loadAccount, fetchImpl })(emailInput);
+  await createEmailSender({ loadAccount: async () => ({ ...emailAccount, privateKey: "" }), fetchImpl })(emailInput);
+  assert.deepEqual([bodies[0].service_id, bodies[0].user_id, bodies[0].accessToken], ["test-service", "test-public", "test-private"]);
+  assert.equal(Object.hasOwn(bodies[1], "accessToken"), false);
+});
+
+test("an account that cannot be read or is incomplete never reaches the provider", async () => {
+  const fetchImpl = async () => assert.fail("provider must not be contacted");
+  const unreadable = createEmailSender({ loadAccount: async () => { throw new Error("secret storage detail"); }, fetchImpl });
+  const result = await unreadable(emailInput);
+  assert.equal(result.status, DeliveryStatus.SKIPPED);
+  assert.equal(result.code, DeliveryCode.NOT_CONFIGURED);
+  assert.equal(JSON.stringify(result).includes("secret"), false);
+  for (const incomplete of [{ publicKey: "test-public" }, { serviceId: "test-service" }]) {
+    assert.equal((await createEmailSender({ loadAccount: async () => incomplete, fetchImpl })(emailInput)).code, DeliveryCode.NOT_CONFIGURED);
+  }
+});
+
+test("agenda notices carry date, time and place as separate variables next to the municipality identity", async () => {
+  const request = { protocol: "1/2026", tutor_name: "Maria", schedule_date: "2026-11-20", schedule_location_name: "Centro", schedule_address: "Rua A",
+    workflow_data: { scheduleSlotTime: "09:15" } };
+  const identityParams = { municipality_name: "Test Town", municipality_brasao_url: "https://system.example.test/brasao" };
+  await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event: NotificationEvent.SCHEDULE_CONFIRMED, request, identityParams },
+    async ({ templateParams }) => {
+      assert.equal(templateParams.schedule_date, "20/11/2026");
+      assert.equal(templateParams.schedule_time, "09:15");
+      assert.equal(templateParams.schedule_location_name, "Centro");
+      assert.equal(templateParams.schedule_address, "Rua A");
+      assert.equal(templateParams.municipality_name, "Test Town");
+      assert.equal(templateParams.municipality_brasao_url, "https://system.example.test/brasao");
+      assert.equal(templateParams.protocol, "1/2026");
+      assert.equal(templateParams.event, NotificationEvent.SCHEDULE_CONFIRMED);
+      return { status: DeliveryStatus.SENT };
+    });
+  await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event: NotificationEvent.COMPLETED, request },
+    async ({ templateParams }) => {
+      assert.equal(Object.hasOwn(templateParams, "schedule_date"), false);
+      assert.equal(templateParams.to_name, "Solicitante");
+      return { status: DeliveryStatus.SENT };
+    });
 });

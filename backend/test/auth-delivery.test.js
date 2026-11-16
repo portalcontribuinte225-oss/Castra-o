@@ -2,29 +2,29 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { deliverAuthMessage } from "../src/services/auth/auth-message-delivery.js";
 import { createEmailSender } from "../src/services/email.js";
-import { AuthPurpose, buildDefaultAuthDeliveryConfig } from "../../shared/auth-contract.js";
+import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DeliveryStatus, DeliveryCode, NotificationChannel } from "../../shared/notification-contract.js";
 
 function fixture() {
   const calls = [];
-  const config = buildDefaultAuthDeliveryConfig();
-  for (const purpose of Object.values(AuthPurpose)) {
-    config.emailTemplates[purpose] = `email_${purpose}`;
-  }
+  const emailTemplates = Object.fromEntries(Object.values(AuthPurpose).map((purpose) => [purpose, `email_${purpose}`]));
   const input = { purpose: AuthPurpose.PASSWORD_RESET, municipalityId: "municipality-a", user: { name: "Tutor" },
     email: "tutor@example.test", phone: "48999999999", emailVerified: true, phoneVerified: true, code: "012345",
     channel: NotificationChannel.WHATSAPP, expiresAt: new Date(Date.now() + 600000) };
   const dependencies = {
-    loadConfig: async (id) => { calls.push(["config", id]); return config; },
     loadWhatsappConfig: async (id) => { calls.push(["whatsappConfig", id]); return { active: true, accessToken: "private", phoneNumberId: "number" }; },
     resolveTemplate: async (id, purpose) => { calls.push(["template", id, purpose]); return { ok: true, template: { name: `whatsapp_${purpose}`, language: "pt_BR" } }; },
     markTemplateStatus: async (...args) => { calls.push(["mark", ...args]); },
     consumeQuota: async (id) => { calls.push(["quota", id]); return { allowed: true }; },
     sendWhatsapp: async (...args) => { calls.push(["whatsapp", ...args]); return { status: DeliveryStatus.SENT }; },
+    resolveEmailTemplate: async ({ municipalityId, use }) => {
+      calls.push(["emailTemplate", municipalityId, use]);
+      return emailTemplates[use] ? { ok: true, templateId: emailTemplates[use] } : { ok: false, code: DeliveryCode.NOT_CONFIGURED };
+    },
+    loadEmailIdentity: async (municipalityId) => { calls.push(["identity", municipalityId]); return { municipality_name: "Test Town" }; },
     sendEmail: async (value) => { calls.push(["email", value]); return { status: DeliveryStatus.SENT }; },
-    env: { EMAILJS_TEMPLATE_ID: "existing_reset_only" },
   };
-  return { input, config, calls, dependencies };
+  return { input, emailTemplates, calls, dependencies };
 }
 
 test("auth recovery sends only selected WhatsApp and keeps codes outside returned results", async () => {
@@ -96,21 +96,35 @@ test("initial password may use supplied unverified contact but only its own temp
   assert.equal(JSON.stringify(results).includes(temporaryPassword), false);
 });
 
-test("missing welcome template never borrows the reset template", async () => {
+test("a missing welcome template never borrows the reset template", async () => {
   const f = fixture();
-  f.config.emailTemplates[AuthPurpose.INITIAL_PASSWORD] = "";
+  f.emailTemplates[AuthPurpose.INITIAL_PASSWORD] = "";
   const results = await deliverAuthMessage({ ...f.input, phone: "", purpose: AuthPurpose.INITIAL_PASSWORD, temporaryPassword: "new-generated-password" }, f.dependencies);
   assert.equal(results[0].code, DeliveryCode.NOT_CONFIGURED);
   assert.equal(f.calls.some(([type]) => type === "email"), false);
 });
 
-test("reset e-mail can reuse only the explicit existing reset template", async () => {
+test("a municipal e-mail use that is switched off is skipped with the channel-disabled code and nothing is sent", async () => {
   const f = fixture();
-  f.config.emailTemplates[AuthPurpose.PASSWORD_RESET] = "";
+  f.dependencies.resolveEmailTemplate = async () => ({ ok: false, code: DeliveryCode.CHANNEL_DISABLED });
+  const results = await deliverAuthMessage({ ...f.input, channel: NotificationChannel.EMAIL, phone: "" }, f.dependencies);
+  assert.equal(results.length, 1);
+  assert.equal(results[0].channel, NotificationChannel.EMAIL);
+  assert.equal(results[0].code, DeliveryCode.CHANNEL_DISABLED);
+  assert.equal(f.calls.some(([type]) => type === "email" || type === "identity"), false);
+});
+
+test("the reset e-mail carries the municipality identity and keeps the variable names templates already use", async () => {
+  const f = fixture();
   await deliverAuthMessage({ ...f.input, channel: NotificationChannel.EMAIL, phone: "" }, f.dependencies);
   const sent = f.calls.find(([type]) => type === "email")[1];
-  assert.equal(sent.templateId, "existing_reset_only");
-  assert.equal(sent.templateParams.codigo_recuperacao, "012345");
+  assert.equal(sent.templateId, "email_password_reset");
+  assert.deepEqual(f.calls.find(([type]) => type === "emailTemplate"), ["emailTemplate", "municipality-a", AuthPurpose.PASSWORD_RESET]);
+  assert.deepEqual(f.calls.find(([type]) => type === "identity"), ["identity", "municipality-a"]);
+  const { templateParams } = sent;
+  assert.deepEqual([templateParams.code, templateParams.codigo_recuperacao, templateParams.validade, templateParams.validity_minutes],
+    ["012345", "012345", "10 minutos", "10"]);
+  assert.deepEqual([templateParams.to_name, templateParams.purpose, templateParams.municipality_name], ["Tutor", AuthPurpose.PASSWORD_RESET, "Test Town"]);
 });
 
 test("auth recovery failure preserves safe codes and never falls back to email", async () => {
@@ -123,15 +137,25 @@ test("auth recovery failure preserves safe codes and never falls back to email",
   assert.doesNotMatch(JSON.stringify(results), /private|secret|012345|tutor@example/);
 });
 
-test("trusted global staff reset uses only existing environment e-mail template without a municipality", async () => {
+test("trusted global staff reset uses the platform template, with no switch and no municipality identity", async () => {
   for (const role of ["master", "suporte"]) {
     const f = fixture();
     const results = await deliverAuthMessage({ ...f.input, channel: NotificationChannel.EMAIL, municipalityId: null, user: { name: "Staff", role } }, f.dependencies);
     assert.equal(results[0].status, DeliveryStatus.SENT);
     assert.equal(results[0].channel, NotificationChannel.EMAIL);
-    assert.deepEqual(f.calls.map(([type]) => type), ["email"]);
-    assert.equal(f.calls[0][1].templateId, "existing_reset_only");
+    assert.deepEqual(f.calls.map(([type]) => type), ["emailTemplate", "identity", "email"]);
+    assert.deepEqual(f.calls[0], ["emailTemplate", null, AuthPurpose.PASSWORD_RESET]);
+    assert.deepEqual(f.calls[1], ["identity", null]);
+    assert.equal(f.calls[2][1].templateId, "email_password_reset");
   }
+});
+
+test("staff reset has no platform template when the master has not set one", async () => {
+  const f = fixture();
+  f.emailTemplates[AuthPurpose.PASSWORD_RESET] = "";
+  const results = await deliverAuthMessage({ ...f.input, channel: NotificationChannel.EMAIL, municipalityId: null, user: { name: "Staff", role: "master" } }, f.dependencies);
+  assert.equal(results[0].code, DeliveryCode.NOT_CONFIGURED);
+  assert.equal(f.calls.some(([type]) => type === "email"), false);
 });
 
 test("absent municipality cannot select global fallback for tutors or other purposes", async () => {
@@ -151,16 +175,16 @@ test("selected SMS invokes only its adapter with the challenge binding and never
   assert.doesNotMatch(JSON.stringify(result), /012345|48999999999|tutor@example/);
 });
 
-test("recovery expiration during config or quota reads prevents starting email and WhatsApp transports", async (t) => {
+test("recovery expiration during template or quota reads prevents starting email and WhatsApp transports", async (t) => {
   const originalNow = Date.now;
   let current = originalNow();
   Date.now = () => current;
   t.after(() => { Date.now = originalNow; });
-  for (const delayed of ["email-config", "whatsapp-config", "whatsapp-quota"]) {
+  for (const delayed of ["email-template", "whatsapp-config", "whatsapp-quota"]) {
     const f = fixture();
     f.input.expiresAt = new Date(current + 100);
-    f.input.channel = delayed === "email-config" ? NotificationChannel.EMAIL : NotificationChannel.WHATSAPP;
-    if (delayed === "email-config") f.dependencies.loadConfig = async () => { current += 101; return f.config; };
+    f.input.channel = delayed === "email-template" ? NotificationChannel.EMAIL : NotificationChannel.WHATSAPP;
+    if (delayed === "email-template") f.dependencies.resolveEmailTemplate = async () => { current += 101; return { ok: true, templateId: "template" }; };
     if (delayed === "whatsapp-config") f.dependencies.loadWhatsappConfig = async () => {
       current += 101; return { active: true, accessToken: "test", phoneNumberId: "test" };
     };
@@ -174,7 +198,7 @@ test("recovery expiration during config or quota reads prevents starting email a
 test("email admission delay cannot release a recovery code that expired while waiting", async () => {
   let current = Date.now();
   let sends = 0;
-  const sender = createEmailSender({ env: { EMAILJS_SERVICE_ID: "test", EMAILJS_PUBLIC_KEY: "test" },
+  const sender = createEmailSender({ loadAccount: async () => ({ serviceId: "test", publicKey: "test" }),
     now: () => current, wait: async (delay) => { current += delay; }, fetchImpl: async () => { sends += 1; return { ok: true }; } });
   const input = { toEmail: "test@example.test", templateId: "test", templateParams: { code: "123456" } };
   assert.equal((await sender(input)).status, DeliveryStatus.SENT);
@@ -211,7 +235,7 @@ test("request tracking needs a six digit code, a destination and a configured te
   assert.deepEqual(await deliverAuthMessage({ ...base, code: "123456", email: "" }, f.dependencies), []);
   assert.equal(f.calls.some(([type]) => type === "email" || type === "whatsapp"), false);
 
-  f.config.emailTemplates[AuthPurpose.REQUEST_TRACKING] = "";
+  f.emailTemplates[AuthPurpose.REQUEST_TRACKING] = "";
   const [missing] = await deliverAuthMessage({ ...base, code: "123456" }, f.dependencies);
   assert.equal(missing.code, DeliveryCode.NOT_CONFIGURED);
   assert.equal(f.calls.some(([type]) => type === "email"), false);

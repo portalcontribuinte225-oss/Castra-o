@@ -5,6 +5,7 @@ import authRouter from "../../src/routes/auth.js";
 import { auth } from "../../src/middleware/auth.js";
 import { pool } from "../../src/db/index.js";
 import { issueSession } from "../../src/services/auth/auth-session.js";
+import { AuthPurpose } from "../../../shared/auth-contract.js";
 import { createChallenge } from "../../src/repositories/auth-challenges.js";
 
 export const AUTH_TEST_MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
@@ -12,6 +13,15 @@ export const AUTH_TEST_OTHER_MUNICIPALITY = "22222222-2222-4222-8222-22222222222
 export const AUTH_TEST_PASSWORD = "current password for tests";
 const hash = await bcrypt.hash(AUTH_TEST_PASSWORD, 4);
 const clientFetch = globalThis.fetch;
+
+// A configured platform e-mail account and one template per use, so the e-mail path of the auth routes can run end to end.
+function emailConfigs() {
+  const templates = Object.fromEntries(Object.values(AuthPurpose).map((purpose) => [purpose, `test-${purpose}`]));
+  return {
+    "email_account:null": { serviceId: "test-service", publicKey: "test-public", privateKey: "", privateKeyPreview: "", publicUrl: "" },
+    "email_templates:null": { templates },
+  };
+}
 
 export function authUser(overrides = {}) {
   return { id: randomUUID(), name: "Test Tutor", role: "tutor", email: null, password: hash, active: true,
@@ -22,13 +32,11 @@ export function authUser(overrides = {}) {
 
 export async function authHttpFixture(t, initialUsers = [authUser()], { failAudit = false, emailEnabled = false, configs = {} } = {}) {
   const original = { query: pool.query, connect: pool.connect, fetch: globalThis.fetch };
-  const environment = ["JWT_SECRET", "EMAILJS_SERVICE_ID", "EMAILJS_PUBLIC_KEY", "EMAILJS_TEMPLATE_ID", "ADMIN_EMAIL"];
+  const environment = ["JWT_SECRET", "ADMIN_EMAIL"];
   const originalEnvironment = Object.fromEntries(environment.map((key) => [key, process.env[key]]));
   process.env.JWT_SECRET = "auth-http-tests-only";
-  process.env.EMAILJS_SERVICE_ID = emailEnabled ? "test-service" : "";
-  process.env.EMAILJS_PUBLIC_KEY = emailEnabled ? "test-public" : "";
-  process.env.EMAILJS_TEMPLATE_ID = emailEnabled ? "test-reset" : "";
   process.env.ADMIN_EMAIL = "staff@example.test";
+  const storedConfigs = { ...(emailEnabled ? emailConfigs() : {}), ...configs };
   const users = new Map(initialUsers.map((user) => [user.id, structuredClone(user)]));
   const challenges = new Map(); const limits = new Map(); const calls = []; const followUps = [];
   let tail = Promise.resolve();
@@ -109,7 +117,8 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
         return { rows: [] };
       }
       if (sql.includes("INSERT INTO audit_logs")) { if (failAudit) throw new Error("Simulated required audit failure"); return { rows: [] }; }
-      if (sql.startsWith("SELECT value FROM config")) return { rows: configs[`${values[0]}:${values[1]}`] ? [{ value: configs[`${values[0]}:${values[1]}`] }] : [] };
+      if (sql.startsWith("SELECT value FROM config")) return { rows: storedConfigs[`${values[0]}:${values[1]}`] ? [{ value: storedConfigs[`${values[0]}:${values[1]}`] }] : [] };
+      if (sql.includes("FROM municipalities WHERE id = $1")) return { rows: [{ id: values[0], name: "Test City", department_name: "Test Department", contact: "", email: "", address: "", updated_at: new Date(0), has_brasao: false }] };
       throw new Error(`Unhandled auth fixture SQL: ${sql}`);
     } };
   }

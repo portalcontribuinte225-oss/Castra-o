@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../db/index.js";
-import { auth, optionalAuth, requireMunicipalAdmin } from "../middleware/auth.js";
+import { auth, optionalAuth } from "../middleware/auth.js";
 import { isGlobalUser, isMunicipalAdmin, isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
@@ -13,23 +13,13 @@ import {
   normalizeNotificationConfig,
   validateNotificationConfig,
 } from "../../../shared/notification-contract.js";
-import { AUTH_DELIVERY_CONFIG_KEY, buildDefaultAuthDeliveryConfig, normalizeAuthDeliveryConfig, validateAuthDeliveryConfig } from "../../../shared/auth-contract.js";
 import { normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../../shared/document-reuse-contract.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
 import { getSmsIntegrationSettings, saveSmsIntegrationSettings } from "../services/sms-integration-settings.js";
-import { getEmailIntegrationStatus } from "../services/email.js";
 import { EMAIL_SETTINGS_PERMISSION } from "../../../shared/email-contract.js";
-import { isChannelConfigKey, lockChannelConfig, mergeChannelConfig } from "../repositories/channel-config.js";
 
 const router = Router();
-router.get("/email/status", auth, requireMunicipalAdmin, (req, res) => {
-  const municipalityId = pickMunicipalityId(req);
-  if (typeof municipalityId !== "string" || !/^[0-9a-f-]{36}$/i.test(municipalityId)) {
-    return res.status(400).set("Cache-Control", "no-store").json({ error: "Selecione um município para consultar a integração de e-mail." });
-  }
-  res.set("Cache-Control", "no-store").json(getEmailIntegrationStatus());
-});
 const RESERVATION_CONFIG_KEYS = new Set([
   "castragestao:schedule-rules", "castragestao:request-types", "castragestao:document-types", IDENTIFICATION_TYPES_CONFIG_KEY,
 ]);
@@ -41,7 +31,6 @@ const DEFAULT_CONFIG_VALUE_BUILDERS = {
   [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes,
   [BREEDS_CONFIG_KEY]: () => [],
   [NOTIFICATIONS_CONFIG_KEY]: buildDefaultNotificationConfig,
-  [AUTH_DELIVERY_CONFIG_KEY]: buildDefaultAuthDeliveryConfig,
 };
 
 // Keys de configuração que expõem dados sensíveis (usuários, permissões)
@@ -50,7 +39,6 @@ const SENSITIVE_CONFIG_KEYS = new Set([
   "castragestao:teams",
   "permission_groups",
   "whatsapp_quota",
-  AUTH_DELIVERY_CONFIG_KEY,
   SMS_CONFIG_KEY,
 ]);
 
@@ -80,7 +68,6 @@ const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "castragestao:teams",
   "castragestao:schedule-rules",
   "permission_groups",
-  AUTH_DELIVERY_CONFIG_KEY,
   SMS_CONFIG_KEY,
 ]);
 
@@ -233,10 +220,6 @@ router.put("/:key", auth, async (req, res) => {
     const validationError = validateNotificationConfig(req.body);
     if (validationError) return res.status(400).json({ error: validationError });
   }
-  if (key === AUTH_DELIVERY_CONFIG_KEY) {
-    const validationError = validateAuthDeliveryConfig(req.body);
-    if (validationError) return res.status(400).json({ error: validationError });
-  }
   const documentPolicyError = validateDocumentPolicies(key, req.body);
   if (documentPolicyError) return res.status(400).json({ error: documentPolicyError });
 
@@ -264,12 +247,11 @@ router.put("/:key", auth, async (req, res) => {
   const client = await pool.connect();
   let writeTransaction = false;
   try {
-    if (key === "whatsapp_quota" || RESERVATION_CONFIG_KEYS.has(key) || isChannelConfigKey(key)) {
+    if (key === "whatsapp_quota" || RESERVATION_CONFIG_KEYS.has(key)) {
       await client.query("BEGIN");
       writeTransaction = true;
     }
     if (RESERVATION_CONFIG_KEYS.has(key)) await lockMunicipalSchedule(client, municipalityId);
-    if (isChannelConfigKey(key)) await lockChannelConfig(client, key, municipalityId);
     const value = await prepareConfigValue(key, req.body, municipalityId, client);
 
     // A IA só pode ficar ativa com uma chave testada e aceita pelo provedor.
@@ -332,7 +314,6 @@ router.put("/:key", auth, async (req, res) => {
 
 function publicConfigValue(key, value = {}, viewer = null) {
   if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
-  if (key === AUTH_DELIVERY_CONFIG_KEY) return normalizeAuthDeliveryConfig(value);
   if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (key === "whatsapp") return publicWhatsappConfig(value, Boolean(viewer) && isInternalUser(viewer));
   if (!["ai", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
@@ -343,7 +324,7 @@ function publicConfigValue(key, value = {}, viewer = null) {
 
 async function prepareConfigValue(key, value = {}, municipalityId = null, client) {
   if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
-  if (isChannelConfigKey(key)) return mergeChannelConfig(client, key, municipalityId, value);
+  if (key === NOTIFICATIONS_CONFIG_KEY) return normalizeNotificationConfig(value);
   if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
   const query = municipalityId
     ? { text: "SELECT value FROM config WHERE key=$1 AND municipality_id=$2", values: [key, municipalityId] }

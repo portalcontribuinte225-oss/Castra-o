@@ -1,20 +1,24 @@
 import { DeliveryStatus, DeliveryCode } from "../../../shared/notification-contract.js";
+import { EmailVariable, getEmailUse } from "../../../shared/email-uses-contract.js";
 import { buildNotificationMessage } from "./notifications/notification-message.js";
+import { resolveWhatsappField } from "./notifications/whatsapp-template-parameters.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
-
-export function getEmailIntegrationStatus(env = process.env) {
-  return { serviceConfigured: Boolean(env.EMAILJS_SERVICE_ID), publicKeyConfigured: Boolean(env.EMAILJS_PUBLIC_KEY),
-    privateKeyConfigured: Boolean(env.EMAILJS_PRIVATE_KEY), recoveryTemplateConfigured: Boolean(env.EMAILJS_TEMPLATE_ID) };
-}
+import { getEmailRuntimeConfig, isEmailAccountConfigured } from "./email-account.js";
 
 // A bounded admission gate covers both reset and notification messages using the same EmailJS account.
-export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(...args), env = process.env, now = Date.now, timeoutMs = 5000,
+export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(...args), loadAccount = () => getEmailRuntimeConfig(), now = Date.now, timeoutMs = 5000,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
   let lastStartedAt = -Infinity;
   let nextSlotReserved = false;
   return async function sendEmailTemplate({ toEmail, templateId, templateParams, expiresAt }) {
-    if (!env.EMAILJS_SERVICE_ID || !env.EMAILJS_PUBLIC_KEY || !templateId) {
+    let account;
+    try {
+      account = await loadAccount();
+    } catch {
+      return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED);
+    }
+    if (!isEmailAccountConfigured(account) || !templateId) {
       return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED);
     }
     if (!toEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(toEmail)) {
@@ -39,12 +43,12 @@ export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(..
     }
     lastStartedAt = now();
     const body = {
-      service_id: env.EMAILJS_SERVICE_ID,
+      service_id: account.serviceId,
       template_id: templateId,
-      user_id: env.EMAILJS_PUBLIC_KEY,
-      template_params: { ...templateParams, to_email: toEmail },
+      user_id: account.publicKey,
+      template_params: { ...templateParams, [EmailVariable.TO_EMAIL]: toEmail },
     };
-    if (env.EMAILJS_PRIVATE_KEY) body.accessToken = env.EMAILJS_PRIVATE_KEY;
+    if (account.privateKey) body.accessToken = account.privateKey;
     try {
       const response = await fetchImpl("https://api.emailjs.com/api/v1.0/email/send", {
         method: "POST",
@@ -64,11 +68,21 @@ export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(..
 
 export const sendEmailTemplate = createEmailSender();
 
-export async function sendNotificationEmail({ toEmail, toName, event, request, templateId }, sender = sendEmailTemplate) {
+// The agenda notices also carry date, time and place as separate variables, taken from the same safe whitelist WhatsApp uses.
+export async function sendNotificationEmail({ toEmail, toName, event, request, templateId, identityParams = {} }, sender = sendEmailTemplate) {
   const content = buildNotificationMessage(event, request);
+  const requestFields = Object.fromEntries((getEmailUse(event)?.requestFields || []).map((name) => [name, resolveWhatsappField(name, request)]));
   return sender({
     toEmail,
     templateId,
-    templateParams: { to_name: toName || "Solicitante", event, protocol: request.protocol || "", subject: content.subject, message: content.message },
+    templateParams: {
+      [EmailVariable.TO_NAME]: toName || "Solicitante",
+      [EmailVariable.EVENT]: event,
+      [EmailVariable.PROTOCOL]: request.protocol || "",
+      [EmailVariable.SUBJECT]: content.subject,
+      [EmailVariable.MESSAGE]: content.message,
+      ...requestFields,
+      ...identityParams,
+    },
   });
 }

@@ -5,6 +5,7 @@ import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./feature
 import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAnimalRequest } from "./features/animal-services/animal-service-types";
 import type { TrackedRequest, TrackingSession, TrackingStartBody } from "./features/request-tracking/tracking-types";
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
+import type { EmailAccountInput, EmailSettings } from "./features/email/email-integration-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 let sessionMutationVersion = 0;
@@ -137,7 +138,10 @@ export const api = {
   deleteScheduleDay: (id) => request("DELETE", `/schedule/${id}`),
 
   getConfig: (key, municipalityId = "") => request("GET", municipalityId ? `/config/${key}?municipalityId=${encodeURIComponent(municipalityId)}` : `/config/${key}`),
-  getEmailIntegrationStatus: (municipalityId: string) => request("GET", `/config/email/status?municipalityId=${encodeURIComponent(municipalityId)}`),
+  getEmailSettings: (municipalityId = ""): Promise<EmailSettings> => request("GET", municipalityId ? `/email/settings?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/settings"),
+  saveEmailAccount: (body: EmailAccountInput, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/account?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/account", body),
+  saveEmailTemplates: (templates: Record<string, string>, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/templates?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/templates", { templates }),
+  setEmailUseActive: (municipalityId: string, use: string, active: boolean): Promise<EmailSettings> => request("PUT", `/email/templates/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   testSmsConnection: (body: { municipalityId: string; token?: string }) => request("POST", "/sms/test-connection", body),
   setConfig: (key, value, municipalityId = "") => request(
     "PUT",

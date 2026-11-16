@@ -5,16 +5,12 @@ import configRoutes from "../src/routes/config.js";
 import whatsappRoutes from "../src/routes/whatsapp.js";
 import { pool } from "../src/db/index.js";
 import { NOTIFICATIONS_CONFIG_KEY, buildDefaultNotificationConfig } from "../../shared/notification-contract.js";
-import { AUTH_DELIVERY_CONFIG_KEY, buildDefaultAuthDeliveryConfig } from "../../shared/auth-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
 const ADMIN = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
-const ALLOWED_LOCKS = [
-  `schedule:${MUNICIPALITY_ID}`,
-  ...[NOTIFICATIONS_CONFIG_KEY, AUTH_DELIVERY_CONFIG_KEY].flatMap((key) => [MUNICIPALITY_ID, OTHER_MUNICIPALITY_ID].map((id) => `channel-config:${key}:${id}`)),
-];
+const ALLOWED_LOCKS = [`schedule:${MUNICIPALITY_ID}`];
 const TEST_SECRET = "notification-route-tests-only";
 const clientFetch = globalThis.fetch;
 
@@ -126,42 +122,31 @@ test("request type document policy is validated and normalized without removing 
 test("tutors cannot read internal config or write any known or unknown key", async (t) => {
   const { request, calls } = await fixture(t);
   const user = { ...ADMIN, role: "tutor" };
-  for (const key of ["castragestao:teams", "permission_groups", "whatsapp_quota", AUTH_DELIVERY_CONFIG_KEY]) {
+  for (const key of ["castragestao:teams", "permission_groups", "whatsapp_quota"]) {
     assert.equal((await request(`/config/${key}`, { user })).status, 403);
   }
-  for (const key of ["castragestao:teams", "permission_groups", "castragestao:species", "new_unregistered_key", AUTH_DELIVERY_CONFIG_KEY]) {
+  for (const key of ["castragestao:teams", "permission_groups", "castragestao:species", "new_unregistered_key"]) {
     assert.equal((await request(`/config/${key}`, { user, method: "PUT", body: {} })).status, 403);
   }
   assert.equal(calls.length, 0);
 });
 
-test("auth delivery configuration is municipal, internal-readable and admin-writable", async (t) => {
-  const { request, store } = await fixture(t);
-  assert.equal((await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}?municipalityId=${MUNICIPALITY_ID}`)).status, 401);
-  assert.equal((await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}`, { user: { ...ADMIN, role: "analista" }, method: "PUT", body: {} })).status, 403);
-  const settings = buildDefaultAuthDeliveryConfig();
-  settings.emailTemplates.initial_password = "welcome";
-  const saved = await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: ADMIN, method: "PUT", body: { ...settings, accessToken: "never-stored" } });
-  assert.equal(saved.status, 200);
-  assert.equal(saved.body.value.emailTemplates.initial_password, "welcome");
-  assert.equal(JSON.stringify(saved.body).includes("never-stored"), false);
-  assert.equal(store.has(`${AUTH_DELIVERY_CONFIG_KEY}:${OTHER_MUNICIPALITY_ID}`), false);
-  const invalid = await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}`, { user: ADMIN, method: "PUT", body: { emailTemplates: { arbitrary: "wrong" } } });
-  assert.equal(invalid.status, 400);
+test("the retired auth delivery key is no longer served or writable", async (t) => {
+  const { request, calls } = await fixture(t);
+  assert.equal((await request(`/config/castragestao:auth-delivery?municipalityId=${MUNICIPALITY_ID}`)).status, 404);
+  assert.equal((await request("/config/castragestao:auth-delivery", { user: ADMIN, method: "PUT", body: { emailTemplates: {} } })).status, 403);
+  assert.equal(calls.length, 0);
 });
 
 test("public notification configuration whitelists fields even for older malformed stored values", async (t) => {
   const { request, store } = await fixture(t);
   store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, {
-    emailEnabled: false, smsEnabled: true, emailTemplateId: "template_notifications", accessToken: "must-not-be-public",
+    emailEnabled: false, smsEnabled: true, multiChannel: true, emailTemplateId: "retired_template", accessToken: "must-not-be-public",
     whatsappTemplates: { completed: "legacy-name", accessToken: "must-not-be-public" },
   });
   const response = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}?municipalityId=${MUNICIPALITY_ID}`);
   assert.equal(response.status, 200);
-  assert.equal(response.body.emailEnabled, true);
-  assert.equal(response.body.smsEnabled, false);
-  assert.equal(response.body.emailTemplateId, "template_notifications");
-  assert.equal(Object.hasOwn(response.body, "whatsappTemplates"), false);
+  assert.deepEqual(response.body, { emailEnabled: true, smsEnabled: false, multiChannel: true });
   assert.equal(JSON.stringify(response.body).includes("must-not-be-public"), false);
 });
 
@@ -181,11 +166,11 @@ test("municipal administrators cannot redirect config writes to another municipa
   const { request, calls, store } = await fixture(t);
   const response = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}?municipalityId=${OTHER_MUNICIPALITY_ID}`, {
     method: "PUT", user: ADMIN,
-    body: { ...buildDefaultNotificationConfig(), emailTemplateId: "template_own", municipalityId: OTHER_MUNICIPALITY_ID, accessToken: "discard-me" },
+    body: { ...buildDefaultNotificationConfig(), multiChannel: true, municipalityId: OTHER_MUNICIPALITY_ID, accessToken: "discard-me" },
   });
   assert.equal(response.status, 200);
   assert.equal(response.body.municipality_id, MUNICIPALITY_ID);
-  assert.equal(response.body.value.emailTemplateId, "template_own");
+  assert.equal(response.body.value.multiChannel, true);
   assert.equal(response.body.value.accessToken, undefined);
   assert.equal(store.has(`${NOTIFICATIONS_CONFIG_KEY}:${OTHER_MUNICIPALITY_ID}`), false);
   assert.equal(calls.find(({ sql }) => sql.includes("INSERT INTO config")).values[1], MUNICIPALITY_ID);
@@ -204,11 +189,11 @@ test("global administrators must select a municipality for restricted configurat
   assert.equal(response.body.municipality_id, OTHER_MUNICIPALITY_ID);
 });
 
-test("notification configuration rejects disabled email, enabled SMS and malformed templates", async (t) => {
+test("notification configuration rejects disabled email, enabled SMS and a non-boolean channel choice", async (t) => {
   const { request, calls } = await fixture(t);
   for (const body of [
     { emailEnabled: false }, { emailEnabled: "true" }, { smsEnabled: true },
-    { emailTemplateId: {} }, { emailTemplateId: "x".repeat(201) },
+    { multiChannel: "yes" }, { multiChannel: 1 }, { multiChannel: {} },
   ]) {
     assert.equal((await request(`/config/${NOTIFICATIONS_CONFIG_KEY}`, { method: "PUT", user: ADMIN, body })).status, 400);
   }
@@ -322,56 +307,14 @@ test("WhatsApp test requires valid phone and does not expose provider error data
   assert.equal(JSON.stringify(response.body).includes("private-token"), false);
 });
 
-test("channel configuration saves merge into the stored value under a transaction lock", async (t) => {
+test("notification configuration is saved normalized in a single write, with no merge and no lock", async (t) => {
   const { request, store, calls } = await fixture(t);
-  store.set(`${AUTH_DELIVERY_CONFIG_KEY}:${MUNICIPALITY_ID}`, {
-    emailTemplates: { password_reset: "reset_email" }, whatsappTemplates: { initial_password: "legacy_whatsapp" },
+  store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, { multiChannel: true, emailTemplateId: "retired_template" });
+  const saved = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}`, {
+    user: ADMIN, method: "PUT", body: { multiChannel: false, emailTemplateId: "never-stored", whatsappTemplates: { completed: "legacy" } },
   });
-  const auth = await request(`/config/${AUTH_DELIVERY_CONFIG_KEY}`, {
-    user: ADMIN, method: "PUT", body: { emailTemplates: { initial_password: "welcome_email" } },
-  });
-  assert.equal(auth.status, 200);
-  assert.equal(auth.body.value.emailTemplates.initial_password, "welcome_email");
-  assert.equal(auth.body.value.emailTemplates.password_reset, "reset_email");
-  assert.equal(Object.hasOwn(auth.body.value, "whatsappTemplates"), false);
-
-  store.set(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`, { emailTemplateId: "notify_email" });
-  const notifications = await request(`/config/${NOTIFICATIONS_CONFIG_KEY}`, {
-    user: ADMIN, method: "PUT", body: {},
-  });
-  assert.equal(notifications.status, 200);
-  assert.deepEqual(notifications.body.value, { ...buildDefaultNotificationConfig(), emailTemplateId: "notify_email" });
-
-  const order = calls.map(({ sql }) => sql.match(/^(?:BEGIN|COMMIT)$|pg_advisory_xact_lock|FOR UPDATE|INSERT INTO config/)?.[0]).filter(Boolean);
-  const write = ["BEGIN", "pg_advisory_xact_lock", "FOR UPDATE", "INSERT INTO config", "COMMIT"];
-  assert.deepEqual(order, [...write, ...write]);
-});
-
-test("email integration status is admin-only, requires a municipality and exposes no credential values", async (t) => {
-  const { request, calls } = await fixture(t);
-  const secrets = { EMAILJS_SERVICE_ID: "service-secret-value", EMAILJS_PUBLIC_KEY: "public-secret-value", EMAILJS_PRIVATE_KEY: "private-secret-value" };
-  const previous = Object.fromEntries([...Object.keys(secrets), "EMAILJS_TEMPLATE_ID"].map((name) => [name, process.env[name]]));
-  Object.assign(process.env, secrets);
-  delete process.env.EMAILJS_TEMPLATE_ID;
-  t.after(() => {
-    for (const [name, value] of Object.entries(previous)) {
-      if (value === undefined) delete process.env[name];
-      else process.env[name] = value;
-    }
-  });
-  const path = `/config/email/status?municipalityId=${MUNICIPALITY_ID}`;
-  assert.equal((await request(path)).status, 401);
-  for (const role of ["tutor", "analista", "servidor_publico", "ong", "protetor"]) {
-    assert.equal((await request(path, { user: { ...ADMIN, role } })).status, 403, `${role} must not read e-mail status`);
-  }
-  assert.equal((await request("/config/email/status", { user: { role: "master" } })).status, 400);
-  assert.equal((await request("/config/email/status?municipalityId=invalid", { user: { role: "master" } })).status, 400);
-  for (const user of [ADMIN, { role: "master" }]) {
-    const response = await request(path, { user });
-    assert.equal(response.status, 200);
-    assert.equal(response.headers.get("cache-control"), "no-store");
-    assert.deepEqual(response.body, { serviceConfigured: true, publicKeyConfigured: true, privateKeyConfigured: true, recoveryTemplateConfigured: false });
-    for (const secret of Object.values(secrets)) assert.equal(JSON.stringify(response.body).includes(secret), false);
-  }
-  assert.equal(calls.length, 0);
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body.value, { ...buildDefaultNotificationConfig(), multiChannel: false });
+  assert.deepEqual(store.get(`${NOTIFICATIONS_CONFIG_KEY}:${MUNICIPALITY_ID}`), { ...buildDefaultNotificationConfig(), multiChannel: false });
+  assert.equal(calls.some(({ sql }) => sql === "BEGIN" || sql.includes("pg_advisory_xact_lock")), false);
 });

@@ -24,24 +24,25 @@ O runtime continua usando o entrypoint `pg` existente, com queries parametrizada
 
 ## Templates de autenticação
 
-Configuração municipal: `castragestao:auth-delivery`. Somente administradores autorizados podem gravá-la. Os mapas `emailTemplates` e `whatsappTemplates` usam estas finalidades:
+Os templates de e-mail são globais: o master salva a conta do EmailJS e o ID de cada template na aba E-mail (Configurações > Integrações). Cada município só liga ou desliga cada mensagem. A recuperação de senha por e-mail vem ligada por padrão; as demais finalidades vêm desligadas e só ligam quando o master já configurou o template. Não há fallback para variáveis de ambiente `EMAILJS_*`. As finalidades de e-mail são estas:
 
 | Finalidade | Uso |
 | --- | --- |
 | `initial_password` | A senha inicial de uma conta realmente criada naquela operação |
 | `password_reset` | Código de recuperação para o contato cadastral escolhido, inclusive ainda não confirmado |
 | `verify_email` | Código enviado exclusivamente ao e-mail novo |
-| `verify_phone` | Código enviado exclusivamente ao telefone novo |
+| `verify_phone` | Código enviado exclusivamente ao telefone novo (não tem template de e-mail) |
+| `request_tracking` | Código enviado ao contato do acompanhamento da solicitação |
 | `contact_changed` | Aviso de alteração ao contato anterior confirmado |
 
-E-mail usa as credenciais já configuradas do EmailJS e o mesmo controle de admissão do envio operacional. Parâmetros:
+E-mail usa a conta global do EmailJS e o mesmo controle de admissão do envio operacional. Parâmetros:
 
-- Comuns: `to_email`, `to_name`, `purpose`.
+- Comuns: `to_email`, `to_name`, `purpose` e a identidade do município (`municipality_name`, `municipality_brasao_url`, `department_name`, `municipality_contact`, `municipality_email`, `municipality_address`). O brasão sai por uma rota pública (`/api/public/municipalities/:id/brasao`) e depende do endereço público do sistema salvo pelo master.
 - Senha inicial: `temporary_password`.
 - Códigos: `code`, `codigo_recuperacao`, `validade` e `validity_minutes`.
 - Aviso de contato alterado: `message`.
 
-Na recuperação, o template de recuperação já configurado por `EMAILJS_TEMPLATE_ID` pode ser utilizado quando não houver substituição municipal. Demais finalidades exigem template próprio adequado. Não editar `.env` para esta configuração municipal.
+A recuperação de senha de equipe global (sem município) usa o template global de `password_reset`, sem interruptor. Sem a conta ou o template, o e-mail fica indisponível. Não editar `.env` para esta configuração.
 
 WhatsApp reutiliza ativação, credenciais e cota municipais. Templates devem estar aprovados para a finalidade e corresponder aos componentes esperados pelo adapter:
 

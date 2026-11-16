@@ -139,6 +139,7 @@ import {
   getDocumentPreviewSource,
   getUserUploadedProcessDocuments,
   isGlobalRole,
+  isMasterRole,
   isValidCpf,
   isValidPhone,
   maskCpf,
@@ -177,7 +178,7 @@ import { AuthEntry } from "./features/tutor-access/auth-entry";
 import { AuthEntryOrigin, authEntryKey, createAuthEntryContext } from "./features/tutor-access/auth-entry-context";
 import type { AuthEntryContext } from "./features/tutor-access/auth-entry-context";
 import { SmsSettings } from "./features/sms/sms-settings";
-import { EmailSettings } from "./features/email/email-settings";
+import { EmailIntegrationTab } from "./features/email/email-integration-tab";
 import { EMAIL_SETTINGS_PERMISSION } from "../shared/email-contract.js";
 import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedule } from "./features/animal-services/animal-history";
 import type { AnimalRecord } from "./features/animal-services/animal-service-types";
@@ -7730,7 +7731,7 @@ function ConfigView({
         );
       })()}
 
-      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))} />}
+      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))} />}
 
       {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))} />}
 

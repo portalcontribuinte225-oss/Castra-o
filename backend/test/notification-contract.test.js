@@ -28,12 +28,14 @@ test("phone is optional and is accepted only when the municipality enables it", 
 });
 
 test("notification settings keep e-mail on and SMS off and strip untrusted fields", () => {
-  const settings = normalizeNotificationConfig({ emailEnabled: false, smsEnabled: true, accessToken: "secret", emailTemplateId: " notice ", whatsappTemplates: { completed: "legacy" } });
-  assert.deepEqual(settings, { emailEnabled: true, smsEnabled: false, emailTemplateId: "notice" });
+  const settings = normalizeNotificationConfig({ emailEnabled: false, smsEnabled: true, accessToken: "secret", multiChannel: true, emailTemplateId: " retired ", whatsappTemplates: { completed: "legacy" } });
+  assert.deepEqual(settings, { emailEnabled: true, smsEnabled: false, multiChannel: true });
   assert.equal(JSON.stringify(settings).includes("secret"), false);
   assert.equal(JSON.stringify(settings).includes("legacy"), false);
   assert.deepEqual(normalizeNotificationConfig(null), buildDefaultNotificationConfig());
-  for (const invalid of [{ emailEnabled: false }, { smsEnabled: true }, { emailTemplateId: {} }]) {
+  assert.equal(buildDefaultNotificationConfig().multiChannel, false);
+  assert.equal(normalizeNotificationConfig({ multiChannel: "true" }).multiChannel, false);
+  for (const invalid of [{ emailEnabled: false }, { smsEnabled: true }, { multiChannel: "true" }, { multiChannel: 1 }]) {
     assert.ok(validateNotificationConfig(invalid));
   }
   assert.equal(validateNotificationConfig(settings), "");

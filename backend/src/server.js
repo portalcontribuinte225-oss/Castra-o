@@ -17,6 +17,8 @@ import auditRoutes from "./routes/audit.js";
 import whatsappRoutes from "./routes/whatsapp.js";
 import whatsappTemplateRoutes from "./routes/whatsapp-templates.js";
 import smsRoutes from "./routes/sms.js";
+import emailRoutes from "./routes/email.js";
+import municipalityBrasaoRoutes from "./routes/municipality-brasao.js";
 import requestTrackingRoutes from "./routes/request-tracking.js";
 
 const app = express();
@@ -41,6 +43,8 @@ app.use("/api/audit", auditRoutes);
 app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/whatsapp", whatsappTemplateRoutes);
 app.use("/api/sms", smsRoutes);
+app.use("/api/email", emailRoutes);
+app.use("/api/public/municipalities", municipalityBrasaoRoutes);
 app.use("/api/request-tracking", requestTrackingRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));

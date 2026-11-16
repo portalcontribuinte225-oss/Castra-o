@@ -20,8 +20,11 @@
  *   tutor       — Cidadão que submete solicitação pelo formulário público
  */
 
+// Dono da plataforma: o único papel que edita a conta e os templates globais de e-mail
+export const MASTER_ROLE = "master";
+
 // Conjunto de roles com acesso global (sem vínculo de município)
-export const GLOBAL_ROLES = new Set(["master", "suporte"]);
+export const GLOBAL_ROLES = new Set([MASTER_ROLE, "suporte"]);
 
 // Role padrão criado automaticamente ao criar um município
 export const MUNICIPALITY_ADMIN_ROLE = "admin_municipal";
@@ -61,6 +64,11 @@ export function normalizeRole(role = "") {
 /** Retorna true para usuários com acesso global (master / suporte) */
 export function isGlobalUser(user = {}) {
   return GLOBAL_ROLES.has(normalizeRole(user.role));
+}
+
+/** Retorna true somente para o master (o suporte é global, mas não é master) */
+export function isMasterUser(user = {}) {
+  return normalizeRole(user.role) === MASTER_ROLE;
 }
 
 /** Retorna true se o usuário é administrador municipal */

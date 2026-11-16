@@ -6,6 +6,8 @@ import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
 import { sendResolvedTemplate } from "../whatsapp-template-sender.js";
 import { checkAndConsumeQuota } from "../whatsappQuota.js";
 import { sendNotificationEmail } from "../email.js";
+import { loadEmailIdentityParams } from "../email-identity.js";
+import { resolveEmailTemplate } from "../email-templates.js";
 import { buildNotificationMessage } from "./notification-message.js";
 import { buildBodyComponents } from "./whatsapp-template-parameters.js";
 import { deliveryFailure, knownDeliveryCode } from "./delivery-result.js";
@@ -24,6 +26,14 @@ function sanitizedTransportResult(event, channel, value) {
     : "O provedor não aceitou a mensagem ou o prazo de envio foi excedido.");
 }
 
+// One channel failing, even by an exception, never keeps the other from being tried.
+async function attempt(event, channel, task) {
+  try {
+    return await task();
+  } catch {
+    return { event, channel, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) };
+  }
+}
 
 async function tryWhatsapp({ event, request, legacy, phone }, dependencies) {
   const channel = NotificationChannel.WHATSAPP;
@@ -50,6 +60,21 @@ async function tryWhatsapp({ event, request, legacy, phone }, dependencies) {
   return sanitizedTransportResult(event, channel, transport);
 }
 
+async function tryEmail({ event, request, followUp }, dependencies) {
+  const channel = NotificationChannel.EMAIL;
+  const resolved = await dependencies.resolveEmailTemplate({ municipalityId: request.municipality_id, use: event });
+  if (!resolved.ok) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, resolved.code) };
+  const transport = await dependencies.sendEmail({
+    toEmail: followUp.email,
+    toName: request.tutor_name,
+    event,
+    request,
+    templateId: resolved.templateId,
+    identityParams: await dependencies.loadEmailIdentity(request.municipality_id),
+  });
+  return sanitizedTransportResult(event, channel, transport);
+}
+
 export async function dispatchNotification({ event, request, config: inputConfig, legacy = false }, overrides = {}) {
   if (!Object.values(NotificationEvent).includes(event)) return [];
   const followUp = (request.workflow_data || request.workflowData || {}).followUp;
@@ -64,31 +89,16 @@ export async function dispatchNotification({ event, request, config: inputConfig
     consumeQuota: checkAndConsumeQuota,
     sendWhatsapp: sendWhatsappTemplateComponents,
     sendEmail: sendNotificationEmail,
+    resolveEmailTemplate,
+    loadEmailIdentity: loadEmailIdentityParams,
     ...overrides,
   };
-  const config = normalizeNotificationConfig(inputConfig);
-  const results = [];
-  try {
-    results.push(await tryWhatsapp({ event, request, legacy, phone: legacy ? request.phone : followUp.phone }, dependencies));
-  } catch {
-    results.push({ event, channel: NotificationChannel.WHATSAPP, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) });
-  }
-  if (results[0].status === DeliveryStatus.SENT || legacy) return results;
-  if (!config.emailTemplateId) {
-    results.push({ event, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) });
-    return results;
-  }
-  try {
-    const transport = await dependencies.sendEmail({
-      toEmail: followUp.email,
-      toName: request.tutor_name,
-      event,
-      request,
-      templateId: config.emailTemplateId,
-    });
-    results.push(sanitizedTransportResult(event, NotificationChannel.EMAIL, transport));
-  } catch {
-    results.push({ event, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) });
+  // Requests from before follow-up existed keep the WhatsApp-only agenda notices.
+  if (legacy) return [await attempt(event, NotificationChannel.WHATSAPP, () => tryWhatsapp({ event, request, legacy, phone: request.phone }, dependencies))];
+  // E-mail is the standard channel; the municipality chooses whether the same notice also goes by WhatsApp.
+  const results = [await attempt(event, NotificationChannel.EMAIL, () => tryEmail({ event, request, followUp }, dependencies))];
+  if (normalizeNotificationConfig(inputConfig).multiChannel) {
+    results.push(await attempt(event, NotificationChannel.WHATSAPP, () => tryWhatsapp({ event, request, legacy, phone: followUp.phone }, dependencies)));
   }
   return results;
 }

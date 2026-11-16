@@ -2,11 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { NOTIFICATIONS_CONFIG_KEY, normalizeNotificationConfig } from "../../../shared/notification-contract.js";
 
-// The tab saves only its own fields; the server merges them into the stored value.
-export function notificationChannelPatch(value: ReturnType<typeof normalizeNotificationConfig>) {
-  return { emailTemplateId: value.emailTemplateId };
-}
-
+// The municipality's choice for the automatic notices: whether the same notice also goes by WhatsApp. It saves as soon as it changes.
 export function useNotificationSettings(municipalityId: string) {
   const [attempt, setAttempt] = useState(0);
   const [value, setValue] = useState(() => normalizeNotificationConfig());
@@ -14,14 +10,12 @@ export function useNotificationSettings(municipalityId: string) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [success, setSuccess] = useState(false);
   const activeId = useRef(municipalityId);
   activeId.current = municipalityId;
   const retry = useCallback(() => setAttempt((current) => current + 1), []);
 
   useEffect(() => {
     let cancelled = false;
-    setSuccess(false);
     setError("");
     setValue(normalizeNotificationConfig());
     setLoadedId("");
@@ -37,21 +31,18 @@ export function useNotificationSettings(municipalityId: string) {
     return () => { cancelled = true; };
   }, [municipalityId, attempt]);
 
-  async function save() {
+  async function setMultiChannel(multiChannel: boolean) {
     if (saving || loading || !municipalityId || loadedId !== municipalityId) return;
     const savedId = municipalityId;
     setSaving(true);
     setError("");
-    setSuccess(false);
     try {
-      const saved = await api.setConfig(NOTIFICATIONS_CONFIG_KEY, notificationChannelPatch(normalizeNotificationConfig(value)), savedId);
-      if (activeId.current !== savedId) return;
-      setValue(normalizeNotificationConfig(saved?.value));
-      setSuccess(true);
+      const saved = await api.setConfig(NOTIFICATIONS_CONFIG_KEY, { multiChannel }, savedId);
+      if (activeId.current === savedId) setValue(normalizeNotificationConfig(saved?.value));
     } catch {
-      if (activeId.current === savedId) setError("Não foi possível salvar as notificações. Verifique sua permissão e tente novamente.");
+      if (activeId.current === savedId) setError("Não foi possível salvar a opção. Verifique sua permissão e tente novamente.");
     } finally { setSaving(false); }
   }
 
-  return { value, setValue, loading: loading || (Boolean(municipalityId) && loadedId !== municipalityId && !error), saving, error, success, ready: Boolean(municipalityId) && loadedId === municipalityId, retry, save };
+  return { value, loading: loading || (Boolean(municipalityId) && loadedId !== municipalityId && !error), saving, error, ready: Boolean(municipalityId) && loadedId === municipalityId, retry, setMultiChannel };
 }

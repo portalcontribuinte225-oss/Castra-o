@@ -25,20 +25,19 @@ export const DeliveryCode = Object.freeze({
 });
 export const NOTIFICATIONS_CONFIG_KEY = "castragestao:notifications";
 
+// `multiChannel` is the municipality's choice for the automatic notices: off sends them by e-mail only, on also by WhatsApp.
 export function buildDefaultNotificationConfig() {
   return {
     emailEnabled: true,
     smsEnabled: false,
-    emailTemplateId: "",
+    multiChannel: false,
   };
 }
 
 export function normalizeNotificationConfig(value = {}) {
-  const defaults = buildDefaultNotificationConfig();
-  const text = (input) => typeof input === "string" ? input.trim().slice(0, 200) : "";
   return {
-    ...defaults,
-    emailTemplateId: text(value?.emailTemplateId),
+    ...buildDefaultNotificationConfig(),
+    multiChannel: value?.multiChannel === true,
   };
 }
 
@@ -46,15 +45,8 @@ export function validateNotificationConfig(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "Configuração de notificações inválida.";
   if (value.emailEnabled !== undefined && value.emailEnabled !== true) return "E-mail deve permanecer habilitado.";
   if (value.smsEnabled !== undefined && value.smsEnabled !== false) return "SMS ainda não está disponível.";
-  if (value.emailTemplateId !== undefined && (typeof value.emailTemplateId !== "string" || value.emailTemplateId.length > 200)) {
-    return "Identificador do template de e-mail inválido.";
-  }
+  if (value.multiChannel !== undefined && typeof value.multiChannel !== "boolean") return "Informe se os avisos saem por mais de um canal.";
   return "";
-}
-
-export function mergeNotificationConfig(current, patch = {}) {
-  const previous = normalizeNotificationConfig(current);
-  return normalizeNotificationConfig({ ...previous, ...patch });
 }
 
 export function validateFollowUp(value, { whatsappEnabled = false } = {}) {

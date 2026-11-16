@@ -1,7 +1,9 @@
-import { pool } from "../../db/index.js";
-import { AuthPurpose, AUTH_DELIVERY_CONFIG_KEY, normalizeAuthDeliveryConfig } from "../../../../shared/auth-contract.js";
+import { AuthPurpose } from "../../../../shared/auth-contract.js";
 import { NotificationChannel, DeliveryStatus, DeliveryCode } from "../../../../shared/notification-contract.js";
+import { EmailVariable } from "../../../../shared/email-uses-contract.js";
 import { sendEmailTemplate } from "../email.js";
+import { loadEmailIdentityParams } from "../email-identity.js";
+import { resolveEmailTemplate } from "../email-templates.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
@@ -10,11 +12,6 @@ import { checkAndConsumeQuota } from "../whatsappQuota.js";
 import { deliveryFailure, knownDeliveryCode } from "../notifications/delivery-result.js";
 import { isGlobalUser } from "../../tenant.js";
 import { sendSmsRecoveryCode } from "../sms-integration-settings.js";
-
-export async function loadAuthDeliveryConfig(municipalityId, database = pool) {
-  const { rows } = await database.query("SELECT value FROM config WHERE key=$1 AND municipality_id=$2", [AUTH_DELIVERY_CONFIG_KEY, municipalityId]);
-  return normalizeAuthDeliveryConfig(rows[0]?.value);
-}
 
 function safeResult(purpose, channel, value) {
   if (value?.status === DeliveryStatus.SENT) return { purpose, channel, status: DeliveryStatus.SENT };
@@ -37,10 +34,12 @@ function isRecoveryExpired(input) {
 }
 
 function emailParameters(input) {
-  const common = { to_name: input.user?.name || "Tutor", purpose: input.purpose };
-  if (input.purpose === AuthPurpose.INITIAL_PASSWORD) return { ...common, temporary_password: input.temporaryPassword };
-  if (input.purpose === AuthPurpose.CONTACT_CHANGED) return { ...common, message: "O contato de acesso da sua conta foi alterado. Se não reconhece a alteração, procure o atendimento do município." };
-  return { ...common, code: input.code, codigo_recuperacao: input.code, validade: "10 minutos", validity_minutes: "10" };
+  const common = { [EmailVariable.TO_NAME]: input.user?.name || "Tutor", [EmailVariable.PURPOSE]: input.purpose };
+  if (input.purpose === AuthPurpose.INITIAL_PASSWORD) return { ...common, [EmailVariable.TEMPORARY_PASSWORD]: input.temporaryPassword };
+  if (input.purpose === AuthPurpose.CONTACT_CHANGED) {
+    return { ...common, [EmailVariable.MESSAGE]: "O contato de acesso da sua conta foi alterado. Se não reconhece a alteração, procure o atendimento do município." };
+  }
+  return { ...common, [EmailVariable.CODE]: input.code, [EmailVariable.RECOVERY_CODE]: input.code, [EmailVariable.VALIDITY]: "10 minutos", [EmailVariable.VALIDITY_MINUTES]: "10" };
 }
 
 function whatsappComponents(input) {
@@ -75,22 +74,25 @@ async function tryWhatsapp(input, dependencies) {
   return safeResult(input.purpose, channel, sent);
 }
 
-async function tryEmail(input, config, dependencies) {
-  const templateId = config.emailTemplates[input.purpose]
-    || (input.purpose === AuthPurpose.PASSWORD_RESET ? dependencies.env.EMAILJS_TEMPLATE_ID : "");
-  if (!templateId) return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.NOT_CONFIGURED);
+// `platform` is the staff recovery with no municipality: it uses the platform template and has no municipal switch.
+async function tryEmail(input, dependencies, { platform = false } = {}) {
+  const municipalityId = platform ? null : input.municipalityId;
+  const resolved = await dependencies.resolveEmailTemplate({ municipalityId, use: input.purpose });
+  if (!resolved.ok) return unavailable(input.purpose, NotificationChannel.EMAIL, resolved.code);
   if (isRecoveryExpired(input)) return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.PREPARATION_FAILED);
-  const sent = await dependencies.sendEmail({ toEmail: input.email, templateId, templateParams: emailParameters(input),
+  const identity = await dependencies.loadEmailIdentity(municipalityId);
+  const sent = await dependencies.sendEmail({ toEmail: input.email, templateId: resolved.templateId, templateParams: { ...emailParameters(input), ...identity },
     ...(input.purpose === AuthPurpose.PASSWORD_RESET ? { expiresAt: input.expiresAt } : {}) });
   return safeResult(input.purpose, NotificationChannel.EMAIL, sent);
 }
 
 // Destinations come from the auth use case, never request followUp or arbitrary fallback contacts.
 export async function deliverAuthMessage(input, overrides = {}) {
-  const dependencies = { loadConfig: loadAuthDeliveryConfig, loadWhatsappConfig: getMunicipalityWhatsappConfig,
+  const dependencies = { loadWhatsappConfig: getMunicipalityWhatsappConfig,
     consumeQuota: checkAndConsumeQuota, sendEmail: sendEmailTemplate, sendWhatsapp: sendWhatsappTemplateComponents,
     resolveTemplate: resolveActiveTemplate, markTemplateStatus: markCatalogTemplateStatus,
-    sendSms: sendSmsRecoveryCode, env: process.env, ...overrides };
+    resolveEmailTemplate, loadEmailIdentity: loadEmailIdentityParams,
+    sendSms: sendSmsRecoveryCode, ...overrides };
   const { purpose } = input;
   const globalStaffReset = purpose === AuthPurpose.PASSWORD_RESET && !input.municipalityId && isGlobalUser(input.user);
   if (!Object.values(AuthPurpose).includes(purpose) || (!input.municipalityId && !globalStaffReset)) return [];
@@ -108,10 +110,6 @@ export async function deliverAuthMessage(input, overrides = {}) {
   const phoneAllowed = !globalStaffReset && purpose !== AuthPurpose.VERIFY_EMAIL && Boolean(input.phone)
     && (initial || matched || purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
   if (!emailAllowed && !phoneAllowed) return [];
-  let config;
-  try { config = normalizeAuthDeliveryConfig(globalStaffReset ? undefined : await dependencies.loadConfig(input.municipalityId)); }
-  catch { return [{ purpose, channel: phoneAllowed ? NotificationChannel.WHATSAPP : NotificationChannel.EMAIL,
-    ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }]; }
   const results = [];
   if (phoneAllowed) {
     try { results.push(await tryWhatsapp(input, dependencies)); }
@@ -119,7 +117,7 @@ export async function deliverAuthMessage(input, overrides = {}) {
     if (results[0].status === DeliveryStatus.SENT) return results;
   }
   if (emailAllowed) {
-    try { results.push(await tryEmail(input, config, dependencies)); }
+    try { results.push(await tryEmail(input, dependencies)); }
     catch { results.push({ purpose, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }); }
   }
   return results;
@@ -137,8 +135,7 @@ async function deliverRecoveryChannel(input, dependencies, globalStaffReset) {
       return [{ ...safeResult(purpose, channel, result), ...(result?.status === DeliveryStatus.SENT
         ? { providerMessageId: result.providerMessageId, reference: result.reference } : {}) }];
     }
-    const config = normalizeAuthDeliveryConfig(globalStaffReset ? undefined : await dependencies.loadConfig(input.municipalityId));
-    if (channel === NotificationChannel.EMAIL) return [await tryEmail(input, config, dependencies)];
+    if (channel === NotificationChannel.EMAIL) return [await tryEmail(input, dependencies, { platform: globalStaffReset })];
     if (!globalStaffReset) return [await tryWhatsapp(input, dependencies)];
     return [unavailable(purpose, channel, DeliveryCode.CHANNEL_DISABLED)];
   } catch { return [{ purpose, channel, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }]; }

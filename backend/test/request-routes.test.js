@@ -357,10 +357,10 @@ test("concurrent identical PATCHes serialize snapshots and produce only one noti
   const { request, stats, row } = await fixture(t, { existing: pendingRequest({ enabled: true, email: "tutor@example.test", phone: "" }) });
   const responses = await Promise.all([1, 2].map(() => request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "AGENDADA" } })));
   assert.equal(responses.every(({ status }) => status === 200), true);
-  assert.deepEqual(responses.map(({ body }) => body.notificationResults.length).sort(), [0, 2]);
+  assert.deepEqual(responses.map(({ body }) => body.notificationResults.length).sort(), [0, 1]);
   assert.equal(stats.settingsReads, 1);
   assert.equal(stats.historyAppends, 1);
-  assert.equal(row().history.length, 2);
+  assert.equal(row().history.length, 1);
   assert.equal(stats.calls.filter(({ sql }) => sql.includes("FOR UPDATE")).length, 2);
   const firstNotificationRead = stats.calls.findIndex(({ source, sql }) => source === "pool" && sql.includes("FROM municipalities m"));
   assert.equal(stats.calls.slice(0, firstNotificationRead).some(({ sql }) => sql === "COMMIT"), true);

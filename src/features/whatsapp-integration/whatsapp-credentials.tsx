@@ -1,12 +1,9 @@
 import React from "react";
+import { SavedSecretField } from "../../components/saved-secret-field";
 import { ConfigActiveToggle, Field } from "../../components/ui";
 import type { useWhatsappCredentials } from "./use-whatsapp-credentials";
 
 type Credentials = ReturnType<typeof useWhatsappCredentials>;
-
-const MASK = "•";
-const PREVIEW_MASK_LENGTH = 24;
-const UNKNOWN_PREVIEW_MASK_LENGTH = 32;
 
 export function WhatsappCredentials({ municipalityId, credentials }: { municipalityId: string; credentials: Credentials }) {
   const {
@@ -17,9 +14,6 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
   // A saved token stays inside its field (start visible, rest masked); saving and removing never show together.
   const tokenSaved = Boolean(settings.hasAccessToken) && !settings.accessToken;
   const showSave = !tokenSaved || idsChanged;
-  const maskedToken = settings.tokenPreview
-    ? `${settings.tokenPreview}${MASK.repeat(PREVIEW_MASK_LENGTH)}`
-    : MASK.repeat(UNKNOWN_PREVIEW_MASK_LENGTH);
   return (
     <section className="whatsapp-section">
       <div className="whatsapp-section-header">
@@ -50,29 +44,24 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
           onChange={(value) => patch({ phoneNumberId: value })}
         />
       </div>
-      <div className="whatsapp-input-action-row">
-        <Field
-          label="Token de acesso"
-          type={tokenSaved ? "text" : "password"}
-          value={tokenSaved ? maskedToken : settings.accessToken || ""}
-          readOnly={tokenSaved}
-          autoComplete="new-password"
-          placeholder="Cole o token da Cloud API"
-          onChange={(value) => patch({ accessToken: value })}
-        />
-        {showSave ? (
-          <button className="primary-action" type="button" onClick={save} disabled={!municipalityId}>Salvar credenciais</button>
-        ) : confirmingRemoval ? (
-          <div className="whatsapp-input-actions">
-            <button className="primary-action danger-action" type="button" onClick={removeToken}>Confirmar</button>
-            <button className="ghost-button" type="button" onClick={() => setConfirmingRemoval(false)}>Cancelar</button>
-          </div>
-        ) : (
-          <button className="ghost-button danger-action" type="button" onClick={() => setConfirmingRemoval(true)} disabled={!municipalityId}>Remover token</button>
-        )}
-      </div>
-      {settings.accessToken && <p className="whatsapp-note">Começa com <code>{String(settings.accessToken).slice(0, 8)}</code>…</p>}
-      {confirmingRemoval && !showSave && <p className="whatsapp-note">Remover o token? O WhatsApp será desativado.</p>}
+      <SavedSecretField
+        label="Token de acesso"
+        placeholder="Cole o token da Cloud API"
+        saved={tokenSaved}
+        preview={settings.tokenPreview || ""}
+        value={settings.accessToken || ""}
+        onChange={(value) => patch({ accessToken: value })}
+        showSave={showSave}
+        saveLabel="Salvar credenciais"
+        onSave={save}
+        saveDisabled={!municipalityId}
+        removeLabel="Remover token"
+        removeNote="Remover o token? O WhatsApp será desativado."
+        confirming={confirmingRemoval}
+        onConfirmingChange={setConfirmingRemoval}
+        onRemove={removeToken}
+        removeDisabled={!municipalityId}
+      />
       {saveStatus && <span className={saveStatus.includes("sucesso") ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{saveStatus}</span>}
 
       <div className="whatsapp-section-heading"><span>Teste de envio</span></div>

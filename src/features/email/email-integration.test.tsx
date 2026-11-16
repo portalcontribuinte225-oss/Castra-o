@@ -1,0 +1,195 @@
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
+import { emailUses } from "../../../shared/email-uses-contract.js";
+import { MultiChannelSwitch } from "../notifications/multi-channel-switch";
+import { useNotificationSettings } from "../notifications/use-notification-settings";
+import { EmailIntegrationTab } from "./email-integration-tab";
+import type { EmailAccountView, EmailSettings, EmailUseRow } from "./email-integration-types";
+import { useEmailAccount } from "./use-email-account";
+import { useEmailSettings } from "./use-email-settings";
+
+vi.mock("./use-email-settings", () => ({ useEmailSettings: vi.fn() }));
+vi.mock("./use-email-account", () => ({ useEmailAccount: vi.fn() }));
+vi.mock("../notifications/use-notification-settings", () => ({ useNotificationSettings: vi.fn() }));
+
+const noop = vi.fn();
+const account: EmailAccountView = { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", hasPrivateKey: true, privateKeyPreview: "PRIVATE0" };
+// Three uses are configured (ids set by the master) and two of those are on; the other seven have no template yet.
+const rows = (master: boolean): EmailUseRow[] => emailUses.map((use, index) => ({
+  key: use.key, kind: use.kind, label: use.label, configured: index < 3, active: index < 2 || index === 9,
+  ...(master ? { variables: [...use.variables], templateId: index < 3 ? `tpl_${index}` : "" } : {}),
+}));
+const settingsOf = (overrides: Partial<EmailSettings> = {}, master = true): EmailSettings => ({
+  account: master ? account : null, configured: true, municipal: true, uses: rows(master),
+  identity: { name: "Test Town", departmentName: "Animal Department", brasao: EmailBrasaoStatus.READY }, ...overrides,
+});
+const emailState = (settings: EmailSettings | null, overrides = {}) => ({
+  settings, drafts: {}, dirty: false, loading: false, saving: false, error: "", notice: "", ready: Boolean(settings), retry: noop, apply: noop,
+  editId: noop, saveTemplates: noop, toggle: noop, ...overrides,
+});
+const accountState = (overrides = {}) => ({
+  form: { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", privateKey: "" }, edit: noop, status: "", statusOk: false,
+  saving: false, changed: false, fieldsChanged: false, confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, removeKey: noop, ...overrides,
+});
+const notificationState = (overrides = {}) => ({ value: { emailEnabled: true, smsEnabled: false, multiChannel: false }, loading: false, saving: false, error: "", ready: true, retry: noop, setMultiChannel: noop, ...overrides });
+
+const tab = (props: Partial<React.ComponentProps<typeof EmailIntegrationTab>> = {}) => renderToStaticMarkup(
+  <EmailIntegrationTab municipalityId="municipality-a" master canManage {...props} />,
+);
+const on = (html: string) => (html.match(/aria-checked="true"/g) || []).length;
+
+beforeEach(() => {
+  vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf()));
+  vi.mocked(useEmailAccount).mockReturnValue(accountState());
+  vi.mocked(useNotificationSettings).mockReturnValue(notificationState());
+});
+
+describe("e-mail tab for the master", () => {
+  it("shows the platform credentials and one table of ten messages without group titles", () => {
+    const html = tab();
+    for (const label of ["ID do serviço (Service ID)", "Chave pública (Public Key)", "Endereço público do sistema", "Chave privada (Private Key)", "Salvar templates", "Variáveis"]) expect(html).toContain(label);
+    expect(html).toContain("Allow EmailJS API for non-browser applications");
+    expect(html.match(/<tr>/g)).toHaveLength(11);
+    for (const use of emailUses) expect(html).toContain(use.label);
+    expect(html).not.toContain("Confirmação de telefone");
+    expect(html).not.toContain("Avisos da solicitação");
+    expect(html).toContain("<th>ID do template</th>");
+    expect(html).toContain('value="tpl_0"');
+    expect(html).toContain("{{municipality_brasao_url}}");
+  });
+
+  it("shows a saved private key by its start only, with removal, and the save button only when something changed", () => {
+    const saved = tab();
+    expect(saved).toContain(`value="PRIVATE0${"•".repeat(24)}"`);
+    expect(saved).toContain("Remover chave");
+    expect(saved).not.toContain("Salvar credenciais");
+    vi.mocked(useEmailAccount).mockReturnValue(accountState({ fieldsChanged: true, changed: true }));
+    const edited = tab();
+    expect(edited).toContain("Salvar credenciais");
+    expect(edited).not.toContain("Remover chave");
+    vi.mocked(useEmailAccount).mockReturnValue(accountState({ confirmingRemoval: true }));
+    const confirming = tab();
+    expect(confirming).toContain("Confirmar");
+    expect(confirming).toContain("Remover a chave privada?");
+  });
+
+  it("asks for the private key when none is saved, and shows what happened after a save", () => {
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ account: { ...account, hasPrivateKey: false, privateKeyPreview: "" } })));
+    vi.mocked(useEmailAccount).mockReturnValue(accountState({ status: "Credenciais salvas.", statusOk: true }));
+    const html = tab();
+    expect(html).toContain("Salvar credenciais");
+    expect(html).not.toContain("Remover chave");
+    expect(html).toContain('type="password"');
+    expect(html).toContain("whatsapp-inline-status ok");
+  });
+
+  it("keeps the ids editable without a municipality, but hides the switches and the channel option", () => {
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ municipal: false, identity: null })));
+    const html = tab({ municipalityId: "" });
+    expect(html).toContain("Salvar templates");
+    expect(html).toContain("Selecione um município para ligar ou desligar as mensagens.");
+    expect(html).not.toContain("<th>Ativo</th>");
+    expect(html).not.toContain('role="switch"');
+    expect(html).not.toContain("Enviar o mesmo aviso por mais de um canal");
+    expect(html).not.toContain("Identificação nos e-mails");
+  });
+
+  it("enables the template save only with unsaved ids and while nothing is being saved", () => {
+    const disabled = tab();
+    expect(disabled).toMatch(/<button[^>]*disabled=""[^>]*>Salvar templates<\/button>/);
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf(), { dirty: true }));
+    expect(tab()).not.toMatch(/<button[^>]*disabled=""[^>]*>Salvar templates<\/button>/);
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf(), { dirty: true, saving: true }));
+    expect(tab()).toContain("Salvando...");
+  });
+});
+
+describe("e-mail tab for a municipal viewer", () => {
+  beforeEach(() => {
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({}, false)));
+  });
+
+  it("shows neither credentials nor ids nor variables, only whether each message has a template", () => {
+    const html = tab({ master: false });
+    for (const hidden of ["Credenciais", "Service ID", "Private Key", "Salvar templates", "Variáveis", "tpl_0", "Cole o ID aqui"]) expect(html).not.toContain(hidden);
+    expect(html).toContain("<th>Template</th>");
+    expect(html.match(/Configurado/g)).toHaveLength(3);
+    expect(html.match(/Sem template/g)).toHaveLength(7);
+    expect(html).toContain("<th>Ativo</th>");
+  });
+
+  it("shows a switch per message, on only when it is both active and configured, and locks the unconfigured ones", () => {
+    const html = tab({ master: false });
+    expect(html.match(/role="switch"/g)).toHaveLength(10);
+    expect(on(html)).toBe(2);
+    expect(html.match(/aria-label="Liga quando o master configurar o template\."/g)).toHaveLength(7);
+    expect((html.match(/whatsapp-switch whatsapp-switch--on/g) || []).length).toBe(2);
+  });
+
+  it("says who the e-mails identify, and whether the brasão will appear", () => {
+    expect(tab({ master: false })).toContain("<strong>Test Town</strong> · Animal Department · Brasão: cadastrado");
+    for (const [brasao, text] of [[EmailBrasaoStatus.MISSING, "não cadastrado ⚠"], [EmailBrasaoStatus.NO_PUBLIC_URL, "endereço público do sistema ainda não foi configurado"]]) {
+      vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ identity: { name: "Test Town", departmentName: "", brasao } }, false)));
+      const html = tab({ master: false });
+      expect(html).toContain(text);
+      expect(html).not.toContain("Animal Department");
+    }
+  });
+
+  it("offers the channel option for the municipality", () => {
+    const html = tab({ master: false });
+    expect(html).toContain("Enviar o mesmo aviso por mais de um canal");
+    expect(html).toContain("só por e-mail");
+  });
+});
+
+describe("e-mail tab states", () => {
+  it("is restricted for who cannot manage, and asks a non-master for a municipality", () => {
+    expect(tab({ canManage: false })).toContain("restrita à administração");
+    expect(tab({ canManage: false })).not.toContain("Credenciais");
+    expect(tab({ municipalityId: "", master: false })).toContain("Selecione um município para configurar o e-mail.");
+  });
+
+  it("shows loading and an error with a way to try again, without the table", () => {
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(null, { loading: true }));
+    expect(tab()).toContain("Carregando a integração de e-mail...");
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(null, { error: "Não foi possível carregar a integração de e-mail." }));
+    const failed = tab();
+    expect(failed).toContain("Não foi possível carregar a integração de e-mail.");
+    expect(failed).toContain("Carregar novamente");
+    expect(failed).not.toContain("<table");
+    expect(failed).not.toContain("Credenciais");
+  });
+
+  it("shows the result of a save, and a failure of a switch without hiding the table", () => {
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf(), { notice: "Templates salvos. Valem para todos os municípios." }));
+    expect(tab()).toContain("Valem para todos os municípios.");
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({}, false), { error: "Só é possível ligar mensagens com a conta de envio e o template configurados." }));
+    const failed = tab({ master: false });
+    expect(failed).toContain("Só é possível ligar mensagens");
+    expect(failed).toContain("<table");
+    expect(failed).not.toContain("Carregar novamente");
+  });
+});
+
+describe("channel option", () => {
+  it("shows the saved choice and explains both positions", () => {
+    const off = renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />);
+    expect(off).toContain("Enviar o mesmo aviso por mais de um canal");
+    expect(off).toContain("Desligado: os avisos da solicitação saem só por e-mail.");
+    expect(off).not.toMatch(/<input[^>]*checked=""/);
+    vi.mocked(useNotificationSettings).mockReturnValue(notificationState({ value: { emailEnabled: true, smsEnabled: false, multiChannel: true } }));
+    expect(renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />)).toMatch(/<input[^>]*checked=""/);
+  });
+
+  it("shows loading and an error with a way to try again", () => {
+    vi.mocked(useNotificationSettings).mockReturnValue(notificationState({ loading: true, ready: false }));
+    expect(renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />)).toContain("Carregando a opção de canais...");
+    vi.mocked(useNotificationSettings).mockReturnValue(notificationState({ error: "Não foi possível salvar a opção.", ready: false }));
+    const failed = renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />);
+    expect(failed).toContain("Não foi possível salvar a opção.");
+    expect(failed).toContain("Carregar novamente");
+  });
+});

@@ -1,4 +1,4 @@
-import { GLOBAL_ROLES, MUNICIPALITY_ADMIN_ROLE, normalizeRole, isGlobalUser, isInternalUser } from "../tenant.js";
+import { GLOBAL_ROLES, MUNICIPALITY_ADMIN_ROLE, normalizeRole, isGlobalUser, isInternalUser, isMasterUser } from "../tenant.js";
 import { verifySession, publicAuthUser } from "../services/auth/auth-session.js";
 
 /** Middleware de autenticação obrigatória via JWT Bearer */
@@ -40,6 +40,18 @@ export function requireGlobal(req, res, next) {
   if (!req.user) return res.status(401).json({ error: "Autenticação necessária." });
   if (!isGlobalUser(req.user)) {
     return res.status(403).json({ error: "Acesso restrito à administração global da plataforma." });
+  }
+  next();
+}
+
+/**
+ * Middleware que restringe acesso ao master (o suporte, mesmo global, não passa).
+ * Use em configurações da plataforma que valem para todos os municípios.
+ */
+export function requireMaster(req, res, next) {
+  if (!req.user) return res.status(401).json({ error: "Autenticação necessária." });
+  if (!isMasterUser(req.user)) {
+    return res.status(403).json({ error: "Acesso restrito ao proprietário da plataforma." });
   }
   next();
 }

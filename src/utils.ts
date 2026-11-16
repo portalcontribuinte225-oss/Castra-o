@@ -12,6 +12,11 @@ export function isGlobalRole(role = "") {
   return ["master", "suporte"].includes(normalizeText(role));
 }
 
+// The platform owner: the only role that edits the e-mail account and templates shared by every municipality.
+export function isMasterRole(role = "") {
+  return normalizeText(role) === "master";
+}
+
 export function normalizeSearchKey(value = "") {
   return normalizeText(value).replace(/[^a-z0-9]/g, "");
 }

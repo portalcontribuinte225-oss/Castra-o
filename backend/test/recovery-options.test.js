@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
-import { AuthAudience, AuthPurpose, buildDefaultAuthDeliveryConfig } from "../../shared/auth-contract.js";
+import { AuthAudience, AuthPurpose } from "../../shared/auth-contract.js";
 import { NotificationChannel } from "../../shared/notification-contract.js";
 import { createRecoveryToken, readRecoveryToken, matchesRecoveryUser, recoveryDestination, recoveryOptionId } from "../src/services/auth/recovery-token.js";
 import { getRecoveryOptions } from "../src/services/auth/recovery-channels.js";
@@ -34,9 +34,8 @@ test("discovery token and option IDs bind account revisions, context, expiry and
 
 test("availability lists unverified cadastral contacts only with active configured channels and does not consume quota", async (t) => {
   secret(t);
-  const user = authUser({ profile_phone: "48999991234" }); const config = buildDefaultAuthDeliveryConfig();
-  const deps = { env: { EMAILJS_SERVICE_ID: "test", EMAILJS_PUBLIC_KEY: "test", EMAILJS_TEMPLATE_ID: "reset" },
-    loadConfig: async () => config, loadWhatsapp: async () => ({ active: true, accessToken: "test", phoneNumberId: "test" }),
+  const user = authUser({ profile_phone: "48999991234" });
+  const deps = { resolveEmail: async () => ({ ok: true, templateId: "reset" }), loadWhatsapp: async () => ({ active: true, accessToken: "test", phoneNumberId: "test" }),
     resolveTemplate: async () => ({ ok: true }), quotaAvailable: async () => true, smsAvailable: async () => ({ available: true }) };
   const options = await getRecoveryOptions(user, createRecoveryToken(user), deps);
   assert.deepEqual(options.map(item => item.channel), Object.values(NotificationChannel));
@@ -44,6 +43,7 @@ test("availability lists unverified cadastral contacts only with active configur
   assert.doesNotMatch(JSON.stringify(options), /tutor@example|48999991234/);
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, loadWhatsapp: async () => ({ active: false }),
     smsAvailable: async () => ({ available: false }) })).map(item => item.channel), [NotificationChannel.EMAIL]);
+  assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, resolveEmail: async () => ({ ok: false }) })).map(item => item.channel), [NotificationChannel.WHATSAPP, NotificationChannel.SMS]);
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, quotaAvailable: async () => false })).map(item => item.channel), [NotificationChannel.EMAIL, NotificationChannel.SMS]);
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, resolveTemplate: async () => ({ ok: false }) })).map(item => item.channel), [NotificationChannel.EMAIL, NotificationChannel.SMS]);
 });
@@ -55,7 +55,7 @@ test("availability inside a transaction uses the supplied client for every read 
   t.after(() => { pool.query = original; });
   const queried = [];
   const database = { query: async (_sql, values) => {
-    assert.equal(values[1], MUNICIPALITY); queried.push(values[0]);
+    assert.ok([MUNICIPALITY, null].includes(values[1]), "reads are either municipal or the platform rows"); queried.push(values[0]);
     const authTemplate = { name: "castracao_codigo_verificacao", language: "pt_BR", status: "APPROVED", category: "AUTHENTICATION", parameterFormat: "POSITIONAL",
       hasBody: true, bodyVariables: 1, bodySequential: true, header: "NONE", buttons: ["OTP_COPY_CODE"], extraComponents: false };
     const valuesByKey = { "whatsapp": { active: true, accessToken: "test", phoneNumberId: "test" }, "whatsapp_quota": { plan: 10 },
@@ -63,9 +63,10 @@ test("availability inside a transaction uses the supplied client for every read 
       "whatsapp_catalog": { syncedAt: "2026-11-15T10:00:00.000Z", templates: [authTemplate] } };
     return { rows: valuesByKey[values[0]] ? [{ value: valuesByKey[values[0]] }] : [] };
   } };
-  const options = await getRecoveryOptions(authUser({ profile_phone: "48999991234" }), "handle", { database, env: {} });
+  const options = await getRecoveryOptions(authUser({ profile_phone: "48999991234" }), "handle", { database });
   assert.deepEqual(options.map(item => item.channel), [NotificationChannel.WHATSAPP]);
   assert.equal(queried.includes("castragestao:sms"), true);
+  assert.equal(queried.includes("email_account"), true);
 });
 
 test("discovery sends nothing; explicit choice sends one code, enforces cooldown and confirms only used contact", async (t) => {

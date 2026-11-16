@@ -1,9 +1,8 @@
+import { secretPreview } from "../../../shared/secret-preview-contract.js";
 import { encryptSecretStrict } from "./config-secret-cipher.js";
 
 const ID_PATTERN = /^\d{5,30}$/;
 const MAX_TOKEN_LENGTH = 1000;
-// Only the start of the token is kept readable, so the screen can show which token is saved.
-const TOKEN_PREVIEW_LENGTH = 8;
 
 function fail(message, status = 400) {
   return Object.assign(new Error(message), { status });
@@ -30,7 +29,7 @@ export function prepareWhatsappCredentials(current = {}, input = {}) {
     } catch {
       throw fail("O armazenamento seguro do token do WhatsApp está indisponível.", 503);
     }
-    tokenPreview = nextToken.slice(0, TOKEN_PREVIEW_LENGTH);
+    tokenPreview = secretPreview(nextToken);
   }
   return {
     // Without a token the channel cannot send, so removing it also turns the channel off.
