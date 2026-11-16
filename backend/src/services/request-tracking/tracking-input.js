@@ -4,7 +4,8 @@ import { isUuid } from "../../repositories/request-tracking.js";
 import { normalizeAuthEmail, normalizeAuthPhone } from "../auth/auth-contacts.js";
 import { authError, authenticatedDigest, safeDigestEqual } from "../auth/auth-security.js";
 
-// The kind of contact decides the channel: an e-mail is answered by e-mail, a phone by WhatsApp.
+// The kind of contact decides the channel: an e-mail is answered by e-mail and a phone through the phone chain (WhatsApp, then
+// SMS). The channel kept here only tells an e-mail from a phone.
 function readContact(value) {
   if (typeof value !== "string" || value.length > 254) return null;
   if (value.includes("@")) {

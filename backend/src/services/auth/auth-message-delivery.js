@@ -1,6 +1,7 @@
-import { AuthPurpose } from "../../../../shared/auth-contract.js";
+import { AuthPurpose, AUTH_CHALLENGE_SECONDS } from "../../../../shared/auth-contract.js";
 import { NotificationChannel, DeliveryStatus, DeliveryCode } from "../../../../shared/notification-contract.js";
 import { EmailVariable } from "../../../../shared/email-uses-contract.js";
+import { getSmsUse } from "../../../../shared/sms-uses-contract.js";
 import { sendEmailTemplate } from "../email.js";
 import { loadEmailIdentityParams } from "../email-identity.js";
 import { resolveEmailTemplate } from "../email-templates.js";
@@ -11,7 +12,7 @@ import { sendResolvedTemplate } from "../whatsapp-template-sender.js";
 import { checkAndConsumeQuota } from "../whatsappQuota.js";
 import { deliveryFailure, knownDeliveryCode } from "../notifications/delivery-result.js";
 import { isGlobalUser } from "../../tenant.js";
-import { sendSmsRecoveryCode } from "../sms-integration-settings.js";
+import { sendSmsUse } from "../sms-integration-settings.js";
 
 function safeResult(purpose, channel, value) {
   if (value?.status === DeliveryStatus.SENT) return { purpose, channel, status: DeliveryStatus.SENT };
@@ -86,13 +87,42 @@ async function tryEmail(input, dependencies, { platform = false } = {}) {
   return safeResult(input.purpose, NotificationChannel.EMAIL, sent);
 }
 
+// What an SMS of this use needs besides the municipality name: the code, and how long it lasts (the rest of its challenge,
+// or the usual validity when the use has no challenge of its own).
+function smsData(input) {
+  const remaining = input.expiresAt ? new Date(input.expiresAt).getTime() - Date.now() : AUTH_CHALLENGE_SECONDS * 1000;
+  return { code: input.code, minutes: String(Math.max(1, Math.ceil(remaining / 60000))) };
+}
+
+// Answers `null` when the municipality does not use SMS for this message, so it leaves no result.
+async function trySms(input, dependencies) {
+  if (!getSmsUse(input.purpose)) return null;
+  const sent = await dependencies.sendSms({ municipalityId: input.municipalityId, use: input.purpose, phone: input.phone, data: smsData(input),
+    messageId: input.challengeId, expiresAt: input.expiresAt });
+  if (sent?.status === DeliveryStatus.SKIPPED && sent.code === DeliveryCode.CHANNEL_DISABLED) return null;
+  return safeResult(input.purpose, NotificationChannel.SMS, sent);
+}
+
+// WhatsApp first and, when it does not send, SMS, always to the same phone: a code never changes destination.
+async function tryPhone(input, dependencies) {
+  const results = [];
+  try { results.push(await tryWhatsapp(input, dependencies)); }
+  catch { results.push({ purpose: input.purpose, channel: NotificationChannel.WHATSAPP, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }); }
+  if (results[0].status === DeliveryStatus.SENT) return results;
+  try {
+    const sms = await trySms(input, dependencies);
+    if (sms) results.push(sms);
+  } catch { results.push({ purpose: input.purpose, channel: NotificationChannel.SMS, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }); }
+  return results;
+}
+
 // Destinations come from the auth use case, never request followUp or arbitrary fallback contacts.
 export async function deliverAuthMessage(input, overrides = {}) {
   const dependencies = { loadWhatsappConfig: getMunicipalityWhatsappConfig,
     consumeQuota: checkAndConsumeQuota, sendEmail: sendEmailTemplate, sendWhatsapp: sendWhatsappTemplateComponents,
     resolveTemplate: resolveActiveTemplate, markTemplateStatus: markCatalogTemplateStatus,
     resolveEmailTemplate, loadEmailIdentity: loadEmailIdentityParams,
-    sendSms: sendSmsRecoveryCode, ...overrides };
+    sendSms: sendSmsUse, ...overrides };
   const { purpose } = input;
   const globalStaffReset = purpose === AuthPurpose.PASSWORD_RESET && !input.municipalityId && isGlobalUser(input.user);
   if (!Object.values(AuthPurpose).includes(purpose) || (!input.municipalityId && !globalStaffReset)) return [];
@@ -112,9 +142,8 @@ export async function deliverAuthMessage(input, overrides = {}) {
   if (!emailAllowed && !phoneAllowed) return [];
   const results = [];
   if (phoneAllowed) {
-    try { results.push(await tryWhatsapp(input, dependencies)); }
-    catch { results.push({ purpose, channel: NotificationChannel.WHATSAPP, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }); }
-    if (results[0].status === DeliveryStatus.SENT) return results;
+    results.push(...await tryPhone(input, dependencies));
+    if (results.some(({ status }) => status === DeliveryStatus.SENT)) return results;
   }
   if (emailAllowed) {
     try { results.push(await tryEmail(input, dependencies)); }
@@ -130,8 +159,8 @@ async function deliverRecoveryChannel(input, dependencies, globalStaffReset) {
   try {
     if (channel === NotificationChannel.SMS) {
       if (globalStaffReset) return [unavailable(purpose, channel, DeliveryCode.CHANNEL_DISABLED)];
-      const result = await dependencies.sendSms({ municipalityId: input.municipalityId, phone: input.phone,
-        code: input.code, challengeId: input.challengeId, expiresAt: input.expiresAt });
+      const result = await dependencies.sendSms({ municipalityId: input.municipalityId, use: purpose, phone: input.phone, data: smsData(input),
+        messageId: input.challengeId, expiresAt: input.expiresAt });
       return [{ ...safeResult(purpose, channel, result), ...(result?.status === DeliveryStatus.SENT
         ? { providerMessageId: result.providerMessageId, reference: result.reference } : {}) }];
     }

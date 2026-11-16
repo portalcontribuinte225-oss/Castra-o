@@ -150,6 +150,10 @@ describe("templates panel", () => {
     expect(header).toContain("Variáveis existentes no sistema");
   });
 
+  it("has no note about sending a notice through more than one channel", () => {
+    expect(panel()).not.toContain("mais de um canal");
+  });
+
   it("shows loading, errors with retry, notices and the municipality prompt", () => {
     expect(panel({ ready: false, loading: true })).toContain("Carregando templates...");
     const failed = panel({ ready: false, error: "Não foi possível carregar os templates do WhatsApp." });

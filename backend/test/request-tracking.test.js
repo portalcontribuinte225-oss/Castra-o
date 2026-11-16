@@ -177,14 +177,15 @@ test("a request with the matching e-mail gets a code and every other case answer
   assert.deepEqual([...f.challenges.values()][0].delivery, [{ purpose: AuthPurpose.REQUEST_TRACKING, channel: NotificationChannel.EMAIL, status: "sent" }]);
 });
 
-test("a matching phone number is answered on WhatsApp only", async (t) => {
+test("a matching phone number is answered by phone only, never by e-mail, as a single delivery that picks WhatsApp or SMS", async (t) => {
   const f = await fixture(t);
   assert.equal((await f.start({ ...START, contact: "(48) 99999-1234" })).status, 200);
   await f.flush();
   assert.equal(f.deliveries.length, 1);
   assert.equal(f.deliveries[0].phone, PHONE);
   assert.equal(f.deliveries[0].email, "");
-  assert.equal([...f.challenges.values()][0].channel, NotificationChannel.WHATSAPP);
+  assert.equal(f.deliveries[0].channel, undefined, "the delivery chooses the phone channel, not the use case");
+  assert.equal([...f.challenges.values()][0].channel, NotificationChannel.WHATSAPP, "the stored channel only tells a phone contact from an e-mail");
 });
 
 test("malformed start input is refused before any database operation", async (t) => {

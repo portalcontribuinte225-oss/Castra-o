@@ -19,7 +19,6 @@ export function WhatsappTemplatesPanel({ municipalityId, readOnly, canSync, temp
         <span className="whatsapp-section-label">Templates da Meta</span>
         <WhatsappVariablesList />
       </div>
-      <p className="whatsapp-note">Os avisos da solicitação só saem por WhatsApp quando “Enviar o mesmo aviso por mais de um canal” está ligado na aba E-mail.</p>
       {!municipalityId && <p>Selecione um município para ver os templates.</p>}
       {readOnly && <p>Apenas administradores podem ligar ou desligar templates.</p>}
       {templates.loading && <p role="status">Carregando templates...</p>}

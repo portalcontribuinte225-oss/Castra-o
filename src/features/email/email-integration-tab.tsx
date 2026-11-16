@@ -1,7 +1,6 @@
 import React from "react";
 import { PanelHeader } from "../../components/ui";
 import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
-import { MultiChannelSwitch } from "../notifications/multi-channel-switch";
 import { EmailCredentials } from "./email-credentials";
 import { EmailTemplatesTable } from "./email-templates-table";
 import { useEmailAccount } from "./use-email-account";
@@ -40,7 +39,6 @@ export function EmailIntegrationTab({ municipalityId, master, canManage }: { mun
           {email.notice && <p role="status">{email.notice}</p>}
           {identity && <p>Identificação nos e-mails: <strong>{identity.name}</strong>{identity.departmentName ? ` · ${identity.departmentName}` : ""} · Brasão: {brasaoText[identity.brasao] || identity.brasao}</p>}
           {settings && !municipalityId && <p className="whatsapp-note">Selecione um município para ligar ou desligar as mensagens.</p>}
-          {municipalityId && <MultiChannelSwitch municipalityId={municipalityId} />}
           {settings && (
             <EmailTemplatesTable
               rows={settings.uses}

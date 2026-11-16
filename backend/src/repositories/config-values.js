@@ -1,9 +1,9 @@
 import { pool } from "../db/index.js";
 import { logAudit } from "../services/audit.js";
 
-// The e-mail account and its template ids are platform rows (`municipality_id` NULL); the switches are municipal rows.
-// Both are matched through the same expression as the unique index on `config`, so a NULL municipality never collides.
-export async function readEmailConfigValue(key, municipalityId = null, database = pool) {
+// Config rows without a municipality (`municipality_id` NULL) belong to the platform; the others to one municipality. Both are
+// matched through the same expression as the unique index on `config`, so a NULL municipality never collides.
+export async function readConfigValue(key, municipalityId = null, database = pool) {
   const { rows } = await database.query(
     `SELECT value FROM config WHERE key=$1
        AND COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)`,
@@ -14,13 +14,13 @@ export async function readEmailConfigValue(key, municipalityId = null, database 
 
 // Read-modify-write under a transaction lock so concurrent saves of one row cannot overwrite each other.
 // `update` receives the stored value and returns the next one; returning undefined keeps the stored value untouched.
-export async function updateEmailConfigValue(key, municipalityId, update, { audit, database = pool } = {}) {
+export async function updateConfigValue(key, municipalityId, update, { audit, database = pool } = {}) {
   const client = await database.connect();
   let transactionStarted = false;
   try {
     await client.query("BEGIN");
     transactionStarted = true;
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`email-config:${key}:${municipalityId ?? "platform"}`]);
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`config-values:${key}:${municipalityId ?? "platform"}`]);
     const { rows } = await client.query(
       `SELECT value FROM config WHERE key=$1
          AND COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)

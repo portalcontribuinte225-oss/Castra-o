@@ -455,7 +455,6 @@ router.patch("/:id", auth, async (req, res) => {
     client.release();
     released = true;
     rows[0].notificationResults = await notifyRequestChanges(existingRows[0], rows[0], {
-      loadSettings: loadRequestSettings,
       appendHistory: (entries, id, municipalityId) => pool.query(
         "UPDATE requests SET history = COALESCE(history, '[]'::jsonb) || $1::jsonb WHERE id = $2 AND municipality_id = $3",
         [JSON.stringify(entries), id, municipalityId],

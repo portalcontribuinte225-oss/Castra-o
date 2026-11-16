@@ -4,7 +4,9 @@ import express from "express";
 import smsRoutes from "../src/routes/sms.js";
 import configRoutes from "../src/routes/config.js";
 import { pool } from "../src/db/index.js";
-import { SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
+import { SMS_ACTIVE_USES_CONFIG_KEY, SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
+import { AuthPurpose } from "../../shared/auth-contract.js";
+import { NotificationEvent } from "../../shared/notification-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
 
@@ -39,15 +41,30 @@ async function fixture(t) {
   return { request, db, remoteCalls };
 }
 
-test("SMS config and connection test deny public, tutor and operator before any settings/provider access", async (t) => {
+const OUTSIDERS = [null, { ...ADMIN, role: "tutor" }, { ...ADMIN, role: "analista" }];
+
+test("writing the SMS settings, testing the connection and switching a message deny public, tutor and operator before any settings/provider access", async (t) => {
   const { request, db, remoteCalls } = await fixture(t);
-  for (const user of [null, { ...ADMIN, role: "tutor" }, { ...ADMIN, role: "analista" }]) {
+  for (const user of OUTSIDERS) {
     const expected = user ? 403 : 401;
-    assert.equal((await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${MUNICIPALITY}`, { user })).status, expected);
     assert.equal((await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${MUNICIPALITY}`, { user, method: "PUT", body: { token: TOKEN } })).status, expected);
     assert.equal((await request("/sms/test-connection", { user, method: "POST", body: { municipalityId: MUNICIPALITY, token: TOKEN } })).status, expected);
+    assert.equal((await request(`/sms/uses/active?municipalityId=${MUNICIPALITY}`, { user, method: "PUT", body: { use: AuthPurpose.PASSWORD_RESET, active: false } })).status, expected);
   }
   assert.equal(db.calls.length, 0); assert.equal(remoteCalls.length, 0);
+});
+
+test("anyone can read whether SMS is on for a municipality, and nothing else about the account", async (t) => {
+  const { request } = await fixture(t);
+  assert.deepEqual((await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${MUNICIPALITY}`, { user: null })).body, { active: false });
+  await request(`/config/${SMS_CONFIG_KEY}`, { method: "PUT", body: { active: true, token: TOKEN } });
+  for (const user of OUTSIDERS) {
+    const response = await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${MUNICIPALITY}`, { user });
+    assert.equal(response.status, 200); assert.deepEqual(response.body, { active: true }); assert.equal(response.cache, "no-store");
+  }
+  assert.deepEqual((await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${OTHER}`, { user: null })).body, { active: false });
+  assert.equal((await request(`/config/${SMS_CONFIG_KEY}`, { user: null })).status, 400);
+  assert.equal((await request(`/config/${SMS_CONFIG_KEY}?municipalityId=not-a-municipality`, { user: null })).status, 400);
 });
 
 test("SMS admin save/read never reveals token and forged municipality cannot cross tenant", async (t) => {
@@ -56,7 +73,8 @@ test("SMS admin save/read never reveals token and forged municipality cannot cro
   assert.equal(saved.status, 200); assert.equal(saved.body.value.active, true); assert.equal(saved.body.value.tokenValid, true); assert.equal(saved.cache, "no-store");
   assert.equal(db.records.has(MUNICIPALITY), true); assert.equal(db.records.has(OTHER), false); assert.equal(remoteCalls.length, 1);
   const own = await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${OTHER}`);
-  assert.equal(own.status, 200); assert.equal(own.body.hasToken, true);
+  assert.equal(own.status, 200); assert.equal(own.body.hasToken, true); assert.equal(own.body.tokenPreview, TOKEN.slice(0, 8));
+  assert.equal(own.body.municipalityName, "Test Town"); assert.equal(own.body.uses.length, 9);
   const different = await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${MUNICIPALITY}`, { user: { ...ADMIN, municipalityId: OTHER } });
   assert.equal(different.body.hasToken, false);
   for (const dto of [saved.body, own.body, different.body]) { assert.equal(JSON.stringify(dto).includes(TOKEN), false); assert.equal(JSON.stringify(dto).includes("enc:v1:"), false); }
@@ -85,4 +103,40 @@ test("secure-storage absence blocks secrets and activation while permitting safe
   db.state.failAudit = true;
   const failed = await request(`/config/${SMS_CONFIG_KEY}`, { method: "PUT", body: { active: false } });
   assert.equal(failed.status, 500); assert.equal(JSON.stringify(failed.body).includes("private database"), false);
+});
+
+test("an administrator switches a message for their own municipality only and gets the whole screen back", async (t) => {
+  const { request, db } = await fixture(t);
+  const confirmed = NotificationEvent.SCHEDULE_CONFIRMED;
+  const early = await request("/sms/uses/active", { method: "PUT", body: { use: confirmed, active: true } });
+  assert.equal(early.status, 400); assert.equal(db.configs.size, 0);
+  await request(`/config/${SMS_CONFIG_KEY}`, { method: "PUT", body: { active: true, token: TOKEN } });
+  const on = await request(`/sms/uses/active?municipalityId=${OTHER}`, { method: "PUT", body: { use: confirmed, active: true, municipalityId: OTHER } });
+  assert.equal(on.status, 200); assert.equal(on.cache, "no-store"); assert.equal(on.body.municipalityName, "Test Town");
+  assert.equal(on.body.uses.find(({ key }) => key === confirmed).active, true);
+  assert.deepEqual(db.configs.get(`${SMS_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`), { active: { [confirmed]: true } });
+  assert.equal(db.configs.has(`${SMS_ACTIVE_USES_CONFIG_KEY}:${OTHER}`), false);
+  assert.equal(JSON.stringify(on.body).includes(TOKEN), false); assert.equal(JSON.stringify(on.body).includes("enc:v1:"), false);
+  const audit = db.audits.find(({ action }) => action === "SMS_USE_UPDATE");
+  assert.deepEqual([audit.municipalityId, audit.changes], [MUNICIPALITY, { use: confirmed, active: true }]);
+  assert.equal(JSON.stringify(db.audits).includes(TOKEN), false);
+  const off = await request("/sms/uses/active", { method: "PUT", body: { use: confirmed, active: false } });
+  assert.equal(off.body.uses.find(({ key }) => key === confirmed).active, false);
+  assert.equal(off.body.uses.find(({ key }) => key === AuthPurpose.PASSWORD_RESET).active, true);
+});
+
+test("a message switch is validated, and a global user must choose an active municipality", async (t) => {
+  const { request, db } = await fixture(t);
+  for (const body of [{ use: "unknown", active: true }, { use: AuthPurpose.INITIAL_PASSWORD, active: true }, { use: AuthPurpose.PASSWORD_RESET, active: "true" },
+    { use: AuthPurpose.PASSWORD_RESET }, {}]) {
+    assert.equal((await request("/sms/uses/active", { method: "PUT", body })).status, 400, JSON.stringify(body));
+  }
+  assert.equal(db.configs.size, 0);
+  const global = { ...ADMIN, role: "master", municipalityId: null };
+  const body = { use: NotificationEvent.COMPLETED, active: false };
+  assert.equal((await request("/sms/uses/active", { method: "PUT", body, user: global })).status, 400);
+  assert.equal((await request(`/sms/uses/active?municipalityId=33333333-3333-4333-8333-333333333333`, { method: "PUT", body, user: global })).status, 400);
+  const chosen = await request(`/sms/uses/active?municipalityId=${OTHER}`, { method: "PUT", body, user: global });
+  assert.equal(chosen.status, 200); assert.equal(chosen.body.municipalityName, "Other Town");
+  assert.deepEqual(db.configs.get(`${SMS_ACTIVE_USES_CONFIG_KEY}:${OTHER}`), { active: { [NotificationEvent.COMPLETED]: false } });
 });

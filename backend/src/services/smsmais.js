@@ -1,5 +1,6 @@
 import { DeliveryCode, DeliveryStatus } from "../../../shared/notification-contract.js";
 import { validateSmsToken } from "../../../shared/sms-contract.js";
+import { SMS_MAX_LENGTH } from "../../../shared/sms-messages-contract.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
 
 const BASE_URL = "https://smsmais.com";
@@ -71,23 +72,25 @@ export async function querySmsBalance(token, options = {}) {
   return { valid: true, balance: { credits: data.saldo, sms: data.sms_equivalente } };
 }
 
-export async function sendSmsCode({ token, phone, code, challengeId, expiresAt }, options = {}) {
+const MESSAGE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Sends one text. The message id is a UUID the provider echoes back, so an answer can be tied to exactly this send. With
+// an expiry (a code) the call never outlives it; without one (a notice) only the usual deadline applies.
+export async function sendSmsMessage({ token, phone, text, messageId, expiresAt }, options = {}) {
   const to = normalizeSmsPhone(phone); const now = options.now ? options.now() : new Date();
-  const remaining = new Date(expiresAt).getTime() - now.getTime();
+  const remaining = expiresAt === undefined ? Infinity : new Date(expiresAt).getTime() - now.getTime();
   if (!to) return failure(DeliveryCode.INVALID_RECIPIENT);
-  if (!/^\d{6}$/.test(code || "") || typeof challengeId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(challengeId)
-    || !Number.isFinite(remaining) || remaining <= 0) return failure(DeliveryCode.PREPARATION_FAILED);
-  const minutes = Math.max(1, Math.ceil(remaining / 60000));
-  const message = `CastraGestao: seu codigo e ${code}. Valido por ${minutes} minutos. Nao compartilhe este codigo.`;
-  if (message.length > 160 || token?.startsWith("sbx_")) return failure(DeliveryCode.NOT_CONFIGURED);
-  const result = await providerRequest("/send", token, { messages: [{ id: challengeId, destinations: [{ to }], msg: message }] },
+  if (typeof text !== "string" || !text || text.length > SMS_MAX_LENGTH || !/^[ -~]+$/.test(text) || typeof messageId !== "string"
+    || !MESSAGE_ID_PATTERN.test(messageId) || Number.isNaN(remaining) || remaining <= 0) return failure(DeliveryCode.PREPARATION_FAILED);
+  if (token?.startsWith("sbx_")) return failure(DeliveryCode.NOT_CONFIGURED);
+  const result = await providerRequest("/send", token, { messages: [{ id: messageId, destinations: [{ to }], msg: text }] },
     { ...options, timeoutMs: Math.min(options.timeoutMs || TIMEOUT_MS, remaining) });
   if (!result.ok) return { status: result.status, code: result.code, reason: result.reason };
   const item = Array.isArray(result.data) && result.data.length === 1 ? result.data[0] : null;
-  if (!item || !/^[1-9]\d*$/.test(String(item.id)) || item.externalId !== challengeId || item.to !== to || item.msg !== message
+  if (!item || !/^[1-9]\d*$/.test(String(item.id)) || item.externalId !== messageId || item.to !== to || item.msg !== text
     || (item.schedule != null && item.schedule !== "") || item.error || item.sandbox || item.simulated || item.held
     || [item.status, item.state].some((value) => value != null && !["sent", "accepted"].includes(String(value).toLowerCase()))) {
     return failure(DeliveryCode.INVALID_RESPONSE);
   }
-  return { status: DeliveryStatus.SENT, providerMessageId: String(item.id), reference: challengeId };
+  return { status: DeliveryStatus.SENT, providerMessageId: String(item.id), reference: messageId };
 }

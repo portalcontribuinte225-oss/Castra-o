@@ -5,7 +5,7 @@ import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../whatsapp.js"
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { resolveEmailTemplate } from "../email-templates.js";
 import { isWhatsappQuotaAvailable } from "../whatsappQuota.js";
-import { getSmsAvailability } from "../sms-integration-settings.js";
+import { isSmsUseAvailable } from "../sms-integration-settings.js";
 import { recoveryContacts } from "./auth-contacts.js";
 import { maskEmail, maskPhone } from "./auth-security.js";
 import { recoveryOptionId } from "./recovery-token.js";
@@ -16,7 +16,7 @@ export async function getRecoveryOptions(user, token, overrides = {}) {
   const deps = { loadWhatsapp: (id) => getMunicipalityWhatsappConfig(id, database), quotaAvailable: (id) => isWhatsappQuotaAvailable(id, database),
     resolveTemplate: (id, purpose) => resolveActiveTemplate(id, purpose, database),
     resolveEmail: (id) => resolveEmailTemplate({ municipalityId: id, use: AuthPurpose.PASSWORD_RESET, database }),
-    smsAvailable: (id) => getSmsAvailability(id, { database }), ...overrides };
+    smsAvailable: (id) => isSmsUseAvailable({ municipalityId: id, use: AuthPurpose.PASSWORD_RESET, database }), ...overrides };
   const contacts = recoveryContacts(user);
   const municipalityId = user.municipality_id;
   const available = [];

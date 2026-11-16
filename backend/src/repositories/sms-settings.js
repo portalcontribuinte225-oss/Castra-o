@@ -4,11 +4,13 @@ import { AUDIT_ACTIONS } from "../services/audit.js";
 
 const unavailable = () => Object.assign(new Error("Selecione um município ativo."), { status: 400 });
 
-// The application uses pg; this adapter reuses its existing pool and explicit tenant predicates.
+// The application uses pg; this adapter reuses its existing pool and explicit tenant predicates. It answers with the active
+// municipality (id and name), so callers can put its name in a message.
 export async function assertSmsMunicipality(municipalityId, database = pool) {
   if (typeof municipalityId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(municipalityId)) throw unavailable();
-  const { rows } = await database.query("SELECT id FROM municipalities WHERE id=$1 AND active=TRUE", [municipalityId]);
+  const { rows } = await database.query("SELECT id, name FROM municipalities WHERE id=$1 AND active=TRUE", [municipalityId]);
   if (!rows[0]) throw unavailable();
+  return rows[0];
 }
 
 export async function loadSmsRecord(municipalityId, database = pool, lock = false) {

@@ -118,11 +118,13 @@ test("the switch request is validated: known use, real boolean, existing municip
   await assert.rejects(setEmailUseActive({ municipalityId: null, use: CONFIRMED, active: true, database }), { status: 400 });
 });
 
-test("resolving a use answers whether it may be sent: configured, then on for the municipality", async () => {
+test("resolving a use answers whether it may be sent: on for the municipality first, then configured", async () => {
   const database = configured();
   assert.deepEqual(await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: RESET, database }), { ok: true, templateId: "tpl_reset" });
   assert.deepEqual(await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: CONFIRMED, database }), { ok: false, code: DeliveryCode.CHANNEL_DISABLED });
-  assert.deepEqual(await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: NotificationEvent.COMPLETED, database }), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
+  assert.deepEqual(await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: NotificationEvent.COMPLETED, database }), { ok: false, code: DeliveryCode.CHANNEL_DISABLED });
+  const gap = configured({ [`${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`]: { active: { [NotificationEvent.COMPLETED]: true } } });
+  assert.deepEqual(await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: NotificationEvent.COMPLETED, database: gap }), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
   await setEmailUseActive({ municipalityId: MUNICIPALITY, use: CONFIRMED, active: true, database });
   assert.deepEqual(await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: CONFIRMED, database }), { ok: true, templateId: "tpl_confirmed" });
   assert.equal((await resolveEmailTemplate({ municipalityId: OTHER, use: CONFIRMED, database })).code, DeliveryCode.CHANNEL_DISABLED);

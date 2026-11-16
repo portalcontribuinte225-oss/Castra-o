@@ -4,7 +4,7 @@ import {
   validateEmailTemplateIds,
 } from "../../../shared/email-contract.js";
 import { emailUses, getEmailUse } from "../../../shared/email-uses-contract.js";
-import { readEmailConfigValue, updateEmailConfigValue } from "../repositories/email-config.js";
+import { readConfigValue, updateConfigValue } from "../repositories/config-values.js";
 import { loadMunicipalityIdentity } from "../repositories/municipality-identity.js";
 import { AUDIT_ACTIONS } from "./audit.js";
 import { isEmailAccountConfigured, loadEmailAccount } from "./email-account.js";
@@ -14,11 +14,11 @@ function badRequest(message, status = 400) {
 }
 
 export async function loadEmailTemplateIds(database) {
-  return normalizeEmailTemplateIds(await readEmailConfigValue(EMAIL_TEMPLATES_CONFIG_KEY, null, database));
+  return normalizeEmailTemplateIds(await readConfigValue(EMAIL_TEMPLATES_CONFIG_KEY, null, database));
 }
 
 export async function loadActiveEmailUses(municipalityId, database) {
-  return normalizeEmailActiveUses(await readEmailConfigValue(EMAIL_ACTIVE_USES_CONFIG_KEY, municipalityId, database));
+  return normalizeEmailActiveUses(await readConfigValue(EMAIL_ACTIVE_USES_CONFIG_KEY, municipalityId, database));
 }
 
 // One row per use. Ids and variables are for the master only; a municipal viewer just learns whether the use can be turned on.
@@ -39,7 +39,7 @@ export async function listEmailUses({ account, municipalityId = null, master = f
 export async function saveEmailTemplateIds({ patch, audit, database } = {}) {
   const invalid = validateEmailTemplateIds(patch);
   if (invalid) throw badRequest(invalid);
-  await updateEmailConfigValue(EMAIL_TEMPLATES_CONFIG_KEY, null, (current) => {
+  await updateConfigValue(EMAIL_TEMPLATES_CONFIG_KEY, null, (current) => {
     const templates = { ...normalizeEmailTemplateIds(current) };
     for (const [key, id] of Object.entries(patch)) {
       if (id.trim()) templates[key] = id.trim();
@@ -61,16 +61,18 @@ export async function setEmailUseActive({ municipalityId, use, active, audit, da
     const [account, ids] = await Promise.all([loadEmailAccount(database), loadEmailTemplateIds(database)]);
     if (!isEmailAccountConfigured(account) || !ids[use]) throw badRequest("Só é possível ligar mensagens com a conta de envio e o template configurados.");
   }
-  await updateEmailConfigValue(EMAIL_ACTIVE_USES_CONFIG_KEY, municipalityId, (current) => ({ active: { ...normalizeEmailActiveUses(current), [use]: active } }), {
+  await updateConfigValue(EMAIL_ACTIVE_USES_CONFIG_KEY, municipalityId, (current) => ({ active: { ...normalizeEmailActiveUses(current), [use]: active } }), {
     database,
     audit: audit && { ...audit, action: AUDIT_ACTIONS.EMAIL_USE_UPDATE, entityType: "config", entityId: EMAIL_ACTIVE_USES_CONFIG_KEY, changes: { use, active } },
   });
 }
 
-// The single answer to "may this use be sent?". A null municipality is the platform itself (staff recovery), which has no switch.
+// The single answer to "may this use be sent?". The municipal switch comes first: a use the municipality did not turn on is
+// simply not in use (channel disabled), while one it turned on without a configured template is a real gap (not configured).
+// A null municipality is the platform itself (staff recovery), which has no switch.
 export async function resolveEmailTemplate({ municipalityId = null, use, database } = {}) {
+  if (municipalityId && !isEmailUseActive(await loadActiveEmailUses(municipalityId, database), use)) return { ok: false, code: DeliveryCode.CHANNEL_DISABLED };
   const [account, ids] = await Promise.all([loadEmailAccount(database), loadEmailTemplateIds(database)]);
   if (!isEmailAccountConfigured(account) || !ids[use]) return { ok: false, code: DeliveryCode.NOT_CONFIGURED };
-  if (municipalityId && !isEmailUseActive(await loadActiveEmailUses(municipalityId, database), use)) return { ok: false, code: DeliveryCode.CHANNEL_DISABLED };
   return { ok: true, templateId: ids[use] };
 }

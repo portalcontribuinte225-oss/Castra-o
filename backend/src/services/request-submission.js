@@ -45,9 +45,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
       invalid("Tipo de identificação do animal não corresponde à solicitação.");
     }
     tutorRequired = configsAllowStep([selectedRequestType, selectedIdentification], "stepTutor");
-    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { whatsappEnabled: settings.whatsappEnabled });
+    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   } else if (workflow.followUp !== undefined) {
-    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { whatsappEnabled: settings.whatsappEnabled });
+    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   }
 
   if ((hasCpfInput || tutorRequired || isComplaint || internal || user?.role === "tutor") && !isValidCpf(cleanCpf)) {

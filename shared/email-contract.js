@@ -1,4 +1,5 @@
 import { emailUses, getEmailUse } from "./email-uses-contract.js";
+import { isUseOn, normalizeUseSwitches } from "./use-switches-contract.js";
 
 export const EMAIL_SETTINGS_PERMISSION = "email_settings";
 // The account and the template ids belong to the platform (no municipality); the switches belong to each municipality.
@@ -21,15 +22,9 @@ export function normalizeEmailTemplateIds(stored) {
 }
 
 // Reads the stored `email_active_uses` row. An explicit `false` is kept because password recovery is on by default.
-export function normalizeEmailActiveUses(stored) {
-  const active = asObject(asObject(stored).active);
-  return Object.fromEntries(emailUses.filter(({ key }) => typeof active[key] === "boolean").map(({ key }) => [key, active[key]]));
-}
+export const normalizeEmailActiveUses = (stored) => normalizeUseSwitches(stored, emailUses);
 
-export function isEmailUseActive(activeUses, key) {
-  const stored = asObject(activeUses)[key];
-  return typeof stored === "boolean" ? stored : getEmailUse(key)?.defaultActive === true;
-}
+export const isEmailUseActive = (activeUses, key) => isUseOn(activeUses, getEmailUse(key));
 
 // A patch of ids by use; an empty string clears the id of that use.
 export function validateEmailTemplateIds(patch) {

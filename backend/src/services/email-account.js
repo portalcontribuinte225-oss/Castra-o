@@ -1,6 +1,6 @@
 import { EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_ID_PATTERN } from "../../../shared/email-contract.js";
 import { secretPreview } from "../../../shared/secret-preview-contract.js";
-import { readEmailConfigValue, updateEmailConfigValue } from "../repositories/email-config.js";
+import { readConfigValue, updateConfigValue } from "../repositories/config-values.js";
 import { AUDIT_ACTIONS } from "./audit.js";
 import { decryptSecretStrict, encryptSecretStrict } from "./config-secret-cipher.js";
 
@@ -72,7 +72,7 @@ export function isEmailAccountConfigured(account) {
 }
 
 export async function loadEmailAccount(database) {
-  return asObject(await readEmailConfigValue(EMAIL_ACCOUNT_CONFIG_KEY, null, database));
+  return asObject(await readConfigValue(EMAIL_ACCOUNT_CONFIG_KEY, null, database));
 }
 
 // Read at every send, with no cache, so a change by the master applies at once. It throws when the stored key cannot be decrypted.
@@ -89,7 +89,7 @@ export async function getEmailRuntimeConfig(database) {
 export async function saveEmailAccount({ input, audit, database } = {}) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Informe os dados da conta de e-mail.");
   const fields = ACCOUNT_FIELDS.filter((name) => input[name] !== undefined);
-  const stored = await updateEmailConfigValue(EMAIL_ACCOUNT_CONFIG_KEY, null, (current) => prepareEmailAccount(asObject(current), input), {
+  const stored = await updateConfigValue(EMAIL_ACCOUNT_CONFIG_KEY, null, (current) => prepareEmailAccount(asObject(current), input), {
     database,
     audit: audit && { ...audit, action: AUDIT_ACTIONS.EMAIL_ACCOUNT_UPDATE, entityType: "config", entityId: EMAIL_ACCOUNT_CONFIG_KEY, changes: { fields } },
   });

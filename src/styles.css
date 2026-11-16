@@ -25588,19 +25588,6 @@ small,
   color: #78561d;
 }
 
-.notification-settings {
-  margin: 0 0 24px;
-  padding: 20px;
-  border: 1px solid var(--border, #dce4e0);
-  border-radius: 12px;
-}
-
-.notification-settings fieldset {
-  margin-top: 16px;
-  padding: 16px;
-  border: 1px solid var(--border, #dce4e0);
-  border-radius: 10px;
-}
 .tutor-access-shell {
   width: min(1100px, calc(100% - 32px));
   margin: 32px auto;

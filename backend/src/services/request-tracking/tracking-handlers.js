@@ -31,7 +31,7 @@ export function createTrackingHandlers({ deliver = deliverAuthMessage, schedule 
   async function sendCode({ challenge, code }, input) {
     const delivery = await deliver({ purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: challenge.municipality_id, user: {}, code,
       email: input.channel === NotificationChannel.EMAIL ? input.value : "",
-      phone: input.channel === NotificationChannel.WHATSAPP ? input.value : "" });
+      phone: input.channel !== NotificationChannel.EMAIL ? input.value : "" });
     await recordTrackingDelivery(challenge.id, delivery);
   }
 

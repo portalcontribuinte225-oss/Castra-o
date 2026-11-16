@@ -9,12 +9,12 @@ export interface FollowUpValue {
 export const emptyFollowUp: FollowUpValue = { enabled: null, email: "", phone: "" };
 
 export function getFollowUpIssues(value: FollowUpValue, phoneEnabled: boolean): string[] {
-  const issue = validateFollowUp(value, { whatsappEnabled: phoneEnabled });
+  const issue = validateFollowUp(value, { phoneEnabled });
   return issue ? [issue] : [];
 }
 
 export function buildFollowUpPayload(value: FollowUpValue, phoneEnabled: boolean) {
-  return normalizeFollowUp(value, { whatsappEnabled: phoneEnabled });
+  return normalizeFollowUp(value, { phoneEnabled });
 }
 
 export function maskFollowUpEmail(email: string): string {

@@ -23,33 +23,9 @@ export const DeliveryCode = Object.freeze({
   QUOTA_UNAVAILABLE: "quota_unavailable",
   TEMPLATE_UNAVAILABLE: "template_unavailable",
 });
-export const NOTIFICATIONS_CONFIG_KEY = "castragestao:notifications";
 
-// `multiChannel` is the municipality's choice for the automatic notices: off sends them by e-mail only, on also by WhatsApp.
-export function buildDefaultNotificationConfig() {
-  return {
-    emailEnabled: true,
-    smsEnabled: false,
-    multiChannel: false,
-  };
-}
-
-export function normalizeNotificationConfig(value = {}) {
-  return {
-    ...buildDefaultNotificationConfig(),
-    multiChannel: value?.multiChannel === true,
-  };
-}
-
-export function validateNotificationConfig(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "Configuração de notificações inválida.";
-  if (value.emailEnabled !== undefined && value.emailEnabled !== true) return "E-mail deve permanecer habilitado.";
-  if (value.smsEnabled !== undefined && value.smsEnabled !== false) return "SMS ainda não está disponível.";
-  if (value.multiChannel !== undefined && typeof value.multiChannel !== "boolean") return "Informe se os avisos saem por mais de um canal.";
-  return "";
-}
-
-export function validateFollowUp(value, { whatsappEnabled = false } = {}) {
+// The phone is accepted only when the municipality uses a phone channel (WhatsApp or SMS).
+export function validateFollowUp(value, { phoneEnabled = false } = {}) {
   if (!value || typeof value !== "object" || Array.isArray(value) || typeof value.enabled !== "boolean") {
     return "Informe se deseja acompanhar a solicitação.";
   }
@@ -57,7 +33,7 @@ export function validateFollowUp(value, { whatsappEnabled = false } = {}) {
   if (typeof value.email !== "string" || value.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.email.trim())) {
     return "Informe um e-mail válido para acompanhar a solicitação.";
   }
-  if (whatsappEnabled && value.phone !== undefined && value.phone !== "") {
+  if (phoneEnabled && value.phone !== undefined && value.phone !== "") {
     if (typeof value.phone !== "string" || value.phone.length > 30 || !/^\d{10,11}$/.test(value.phone.replace(/\D/g, ""))) {
       return "Informe um telefone válido com DDD.";
     }
@@ -69,7 +45,7 @@ export function normalizeFollowUp(value, options = {}) {
   const error = validateFollowUp(value, options);
   if (error) throw Object.assign(new Error(error), { status: 400 });
   return value.enabled
-    ? { enabled: true, email: value.email.trim().toLowerCase(), phone: options.whatsappEnabled ? String(value.phone || "").replace(/\D/g, "") : "" }
+    ? { enabled: true, email: value.email.trim().toLowerCase(), phone: options.phoneEnabled ? String(value.phone || "").replace(/\D/g, "") : "" }
     : { enabled: false, email: "", phone: "" };
 }
 

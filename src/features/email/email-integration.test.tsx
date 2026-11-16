@@ -3,8 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
 import { emailUses } from "../../../shared/email-uses-contract.js";
-import { MultiChannelSwitch } from "../notifications/multi-channel-switch";
-import { useNotificationSettings } from "../notifications/use-notification-settings";
 import { EmailIntegrationTab } from "./email-integration-tab";
 import type { EmailAccountView, EmailSettings, EmailUseRow } from "./email-integration-types";
 import { useEmailAccount } from "./use-email-account";
@@ -12,7 +10,6 @@ import { useEmailSettings } from "./use-email-settings";
 
 vi.mock("./use-email-settings", () => ({ useEmailSettings: vi.fn() }));
 vi.mock("./use-email-account", () => ({ useEmailAccount: vi.fn() }));
-vi.mock("../notifications/use-notification-settings", () => ({ useNotificationSettings: vi.fn() }));
 
 const noop = vi.fn();
 const account: EmailAccountView = { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", hasPrivateKey: true, privateKeyPreview: "PRIVATE0" };
@@ -33,7 +30,6 @@ const accountState = (overrides = {}) => ({
   form: { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", privateKey: "" }, edit: noop, status: "", statusOk: false,
   saving: false, changed: false, fieldsChanged: false, confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, removeKey: noop, ...overrides,
 });
-const notificationState = (overrides = {}) => ({ value: { emailEnabled: true, smsEnabled: false, multiChannel: false }, loading: false, saving: false, error: "", ready: true, retry: noop, setMultiChannel: noop, ...overrides });
 
 const tab = (props: Partial<React.ComponentProps<typeof EmailIntegrationTab>> = {}) => renderToStaticMarkup(
   <EmailIntegrationTab municipalityId="municipality-a" master canManage {...props} />,
@@ -43,7 +39,6 @@ const on = (html: string) => (html.match(/aria-checked="true"/g) || []).length;
 beforeEach(() => {
   vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf()));
   vi.mocked(useEmailAccount).mockReturnValue(accountState());
-  vi.mocked(useNotificationSettings).mockReturnValue(notificationState());
 });
 
 describe("e-mail tab for the master", () => {
@@ -85,14 +80,13 @@ describe("e-mail tab for the master", () => {
     expect(html).toContain("whatsapp-inline-status ok");
   });
 
-  it("keeps the ids editable without a municipality, but hides the switches and the channel option", () => {
+  it("keeps the ids editable without a municipality, but hides the switches", () => {
     vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ municipal: false, identity: null })));
     const html = tab({ municipalityId: "" });
     expect(html).toContain("Salvar templates");
     expect(html).toContain("Selecione um município para ligar ou desligar as mensagens.");
     expect(html).not.toContain("<th>Ativo</th>");
     expect(html).not.toContain('role="switch"');
-    expect(html).not.toContain("Enviar o mesmo aviso por mais de um canal");
     expect(html).not.toContain("Identificação nos e-mails");
   });
 
@@ -138,10 +132,8 @@ describe("e-mail tab for a municipal viewer", () => {
     }
   });
 
-  it("offers the channel option for the municipality", () => {
-    const html = tab({ master: false });
-    expect(html).toContain("Enviar o mesmo aviso por mais de um canal");
-    expect(html).toContain("só por e-mail");
+  it("has no shared option to send one notice through more than one channel", () => {
+    for (const master of [true, false]) expect(tab({ master })).not.toContain("mais de um canal");
   });
 });
 
@@ -171,25 +163,5 @@ describe("e-mail tab states", () => {
     expect(failed).toContain("Só é possível ligar mensagens");
     expect(failed).toContain("<table");
     expect(failed).not.toContain("Carregar novamente");
-  });
-});
-
-describe("channel option", () => {
-  it("shows the saved choice and explains both positions", () => {
-    const off = renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />);
-    expect(off).toContain("Enviar o mesmo aviso por mais de um canal");
-    expect(off).toContain("Desligado: os avisos da solicitação saem só por e-mail.");
-    expect(off).not.toMatch(/<input[^>]*checked=""/);
-    vi.mocked(useNotificationSettings).mockReturnValue(notificationState({ value: { emailEnabled: true, smsEnabled: false, multiChannel: true } }));
-    expect(renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />)).toMatch(/<input[^>]*checked=""/);
-  });
-
-  it("shows loading and an error with a way to try again", () => {
-    vi.mocked(useNotificationSettings).mockReturnValue(notificationState({ loading: true, ready: false }));
-    expect(renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />)).toContain("Carregando a opção de canais...");
-    vi.mocked(useNotificationSettings).mockReturnValue(notificationState({ error: "Não foi possível salvar a opção.", ready: false }));
-    const failed = renderToStaticMarkup(<MultiChannelSwitch municipalityId="municipality-a" />);
-    expect(failed).toContain("Não foi possível salvar a opção.");
-    expect(failed).toContain("Carregar novamente");
   });
 });

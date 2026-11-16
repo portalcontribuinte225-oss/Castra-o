@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
-import { NOTIFICATIONS_CONFIG_KEY, buildDefaultNotificationConfig } from "../../shared/notification-contract.js";
+import { NotificationEvent } from "../../shared/notification-contract.js";
+import { EMAIL_ACTIVE_USES_CONFIG_KEY } from "../../shared/email-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { assertInsertShape } from "./fixtures/insert-shape.js";
 
@@ -26,10 +27,10 @@ function procedureBody(overrides = {}) {
   };
 }
 
-async function fixture(t, { existing, failHistory = false, failNotificationSettings = false, failRequestInsert = false, agenda = false, requiredDocument = false } = {}) {
+async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false, agenda = false, requiredDocument = false } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
-  const stats = { calls: [], settingsReads: 0, historyAppends: 0, transports: 0 };
+  const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0 };
   const sessionUsers = new Map();
   const tutorProfiles = new Map();
   const createdUsers = new Map();
@@ -41,7 +42,9 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
       { id: "with_tutor", name: "Com tutor", active: true, stepTutor: true },
       { id: "without_tutor", name: "Sem tutor", active: true, stepTutor: false },
     ]],
-    [NOTIFICATIONS_CONFIG_KEY, buildDefaultNotificationConfig()], ["whatsapp", { active: false }],
+    // The municipality turned the confirmation e-mail on, but the platform has no account yet: a confirmed notice is reported
+    // as not configured, which leaves a result and a history entry without any transport.
+    [EMAIL_ACTIVE_USES_CONFIG_KEY, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true } }], ["whatsapp", { active: false }],
   ]);
   const lockTails = new Map();
   function acquireLock(key = "request-row") {
@@ -91,13 +94,16 @@ async function fixture(t, { existing, failHistory = false, failNotificationSetti
           return { rows: [] };
         }
         if (sql.includes("FROM municipalities m LEFT JOIN config")) {
-          if (source === "pool") {
-            stats.settingsReads += 1;
-            if (failNotificationSettings) throw new Error("Simulated config lookup failure");
-          }
           return { rows: [...configuration].map(([key, value]) => ({ key, value: clone(value), municipality_id: values[0] })) };
         }
-        if (sql.includes("SELECT value FROM config")) return { rows: [{ value: clone(configuration.get(values[0])) }] };
+        if (sql.includes("SELECT value FROM config")) {
+          // The notification channels read their settings through the pool, after the request was committed.
+          if (source === "pool") {
+            stats.channelReads += 1;
+            if (failChannelLookup) throw new Error("Simulated config lookup failure");
+          }
+          return { rows: [{ value: clone(configuration.get(values[0])) }] };
+        }
         if (sql.includes("INSERT INTO animals")) return { rows: [{
           id: crypto.randomUUID(), microchip: null, name: values[0], species: values[1], sex: values[2], size: values[3],
           breed: values[4], color: values[5], birth_date: values[6], metadata: JSON.parse(values[7]), status: "ATIVO",
@@ -350,7 +356,7 @@ test("generic PATCH preserves refusal and server delivery metadata while applyin
   assert.equal(row().workflow_data.notificationResults, undefined);
   assert.equal(row().workflow_data.assignedUserId, ADMIN.id);
   assert.deepEqual(response.body.notificationResults, []);
-  assert.equal(stats.settingsReads, 0);
+  assert.equal(stats.channelReads, 0, "A refused follow-up reads no channel setting");
 });
 
 test("concurrent identical PATCHes serialize snapshots and produce only one notification transition after commit", async (t) => {
@@ -358,11 +364,10 @@ test("concurrent identical PATCHes serialize snapshots and produce only one noti
   const responses = await Promise.all([1, 2].map(() => request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "AGENDADA" } })));
   assert.equal(responses.every(({ status }) => status === 200), true);
   assert.deepEqual(responses.map(({ body }) => body.notificationResults.length).sort(), [0, 1]);
-  assert.equal(stats.settingsReads, 1);
   assert.equal(stats.historyAppends, 1);
   assert.equal(row().history.length, 1);
   assert.equal(stats.calls.filter(({ sql }) => sql.includes("FOR UPDATE")).length, 2);
-  const firstNotificationRead = stats.calls.findIndex(({ source, sql }) => source === "pool" && sql.includes("FROM municipalities m"));
+  const firstNotificationRead = stats.calls.findIndex(({ source, sql }) => source === "pool" && sql.includes("SELECT value FROM config"));
   assert.equal(stats.calls.slice(0, firstNotificationRead).some(({ sql }) => sql === "COMMIT"), true);
 });
 
@@ -375,13 +380,33 @@ test("post-commit history failure keeps PATCH successful and preserves the saved
   assert.equal(stats.calls.some(({ sql }) => sql === "ROLLBACK"), false);
 });
 
-test("notification-settings failure is recorded in history after successful PATCH", async (t) => {
-  const { request, stats, row } = await fixture(t, { existing: pendingRequest({ enabled: true, email: "tutor@example.test", phone: "" }), failNotificationSettings: true });
+test("a channel whose settings cannot be read is recorded as failed in history after a successful PATCH", async (t) => {
+  const { request, stats, row } = await fixture(t, { existing: pendingRequest({ enabled: true, email: "tutor@example.test", phone: "" }), failChannelLookup: true });
   const response = await request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "AGENDADA" } });
   assert.equal(response.status, 200);
   assert.equal(row().status, "AGENDADA");
   assert.equal(stats.historyAppends, 1);
-  assert.equal(row().history[0].notification.status, "failed");
+  assert.equal(row().history.length >= 1 && row().history.every(({ notification }) => notification.status === "failed"), true);
+  assert.equal(response.body.notificationResults.every(({ status }) => status === "failed"), true);
+  assert.equal(JSON.stringify(response.body.notificationResults).includes("Simulated"), false);
+});
+
+test("a confirmed notice for a channel the municipality turned on but the platform has not set up is recorded as not configured", async (t) => {
+  const { request, row } = await fixture(t, { existing: pendingRequest({ enabled: true, email: "tutor@example.test", phone: "" }) });
+  const response = await request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "AGENDADA" } });
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.notificationResults.map(({ channel, status, code }) => [channel, status, code]), [["email", "skipped", "not_configured"]]);
+  assert.equal(row().history.length, 1);
+});
+
+test("a municipality that uses no channel for the notice leaves no result and no history entry", async (t) => {
+  const existing = { ...pendingRequest({ enabled: true, email: "tutor@example.test", phone: "48999991234" }), status: "AGENDADA" };
+  const { request, row } = await fixture(t, { existing });
+  const response = await request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "CANCELADA" } });
+  assert.equal(response.status, 200);
+  assert.equal(row().status, "CANCELADA");
+  assert.deepEqual(response.body.notificationResults, []);
+  assert.equal(row().history.length, 0);
 });
 
 test("HTTP submissions share the last agenda place without leaking another request", async (t) => {

@@ -10,23 +10,16 @@ const deliveryLabels = {
   [DeliveryStatus.SENT]: "aceito para envio", [DeliveryStatus.FAILED]: "falha no envio", [DeliveryStatus.SKIPPED]: "não enviado",
 };
 
-export async function notifyRequestChanges(before, after, { loadSettings, appendHistory, dispatch = dispatchNotification }) {
+export async function notifyRequestChanges(before, after, { appendHistory, dispatch = dispatchNotification }) {
   const legacy = after.workflow_data?.followUp === undefined;
   const failureChannel = legacy ? NotificationChannel.WHATSAPP : NotificationChannel.EMAIL;
   if (after.workflow_data?.followUp?.enabled === false) return [];
   const events = selectNotificationEvents(before, after).filter((event) => !legacy
     || event === NotificationEvent.SCHEDULE_CONFIRMED || event === NotificationEvent.SCHEDULE_CHANGED);
   const results = [];
-  if (!events.length) return results;
-  let settings;
-  try {
-    settings = await loadSettings(after.municipality_id);
-  } catch {
-    results.push(...events.map((event) => ({ event, channel: failureChannel, status: DeliveryStatus.FAILED, reason: "Configuração de envio indisponível." })));
-  }
-  for (const event of settings ? events : []) {
+  for (const event of events) {
     try {
-      results.push(...await dispatch({ event, request: after, config: settings.notifications, legacy }));
+      results.push(...await dispatch({ event, request: after, legacy }));
     } catch {
       results.push({ event, channel: failureChannel, status: DeliveryStatus.FAILED, reason: "Não foi possível preparar a notificação." });
     }
