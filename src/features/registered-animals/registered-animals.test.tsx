@@ -59,7 +59,7 @@ describe("registered request context", () => {
   it("skips Tutor while retaining configured steps and final follow-up", () => {
     const steps = getVisibleSteps({ internal: false, skipTutor: true, configs: [{ stepAgenda: false, stepDocuments: true }] }).map((item) => item.step);
     expect(steps).toEqual([RequestStep.ANIMAL, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
-    expect(getVisibleSteps({ internal: true, skipTutor: false, configs: [] }).map((item) => item.step)).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP]);
+    expect(getVisibleSteps({ internal: true, skipTutor: false, configs: [] }).map((item) => item.step)).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
   });
 });
 

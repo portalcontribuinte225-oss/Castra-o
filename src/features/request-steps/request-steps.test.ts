@@ -36,16 +36,21 @@ describe("getVisibleSteps", () => {
     ]);
   });
 
-  it("uses the fixed internal steps, Animal first and ending in the follow-up as the public form does, regardless of the agenda and documents configs and of skipTutor", () => {
+  it("uses the public steps for the internal form, Animal first and ending in the follow-up, regardless of the agenda config and of skipTutor", () => {
     expect(
-      steps({ internal: true, skipTutor: true, configs: [{ stepAgenda: false, stepDocuments: false }] }),
-    ).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP]);
+      steps({ internal: true, skipTutor: true, configs: [{ stepAgenda: false }] }),
+    ).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
+  });
+
+  it("takes the documents step away from the internal form only when a config disallows it, and keeps the tutor and the follow-up", () => {
+    expect(steps({ internal: true, skipTutor: false, configs: [{ stepDocuments: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP]);
+    expect(steps({ internal: true, skipTutor: false, configs: [{ stepTutor: false, stepDocuments: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE]);
   });
 
   it("takes the tutor step, and with it the follow-up, away from the internal form only when a config disallows it, as an animal without a tutor does", () => {
-    expect(steps({ internal: true, skipTutor: false, configs: [{ stepTutor: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE]);
-    expect(steps({ internal: true, skipTutor: false, configs: [{ stepTutor: true }] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP]);
-    expect(steps({ internal: true, skipTutor: false, configs: [null] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP]);
+    expect(steps({ internal: true, skipTutor: false, configs: [{ stepTutor: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.DOCUMENTS]);
+    expect(steps({ internal: true, skipTutor: false, configs: [{ stepTutor: true }] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
+    expect(steps({ internal: true, skipTutor: false, configs: [null] })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
   });
 
   it("hides a step when any config disallows it", () => {

@@ -35,7 +35,7 @@ export interface VisibleStepsInput {
 }
 
 // Animal first, as in the public form: the identification type chosen there is what decides whether the Tutor step exists.
-const internalStepOrder: RequestStep[] = [RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP];
+const internalStepOrder: RequestStep[] = [RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP];
 
 const publicStepOrder: RequestStep[] = [
   RequestStep.ANIMAL,
@@ -63,12 +63,14 @@ function isAllowedByConfigs(step: RequestStep, configs: VisibleStepsInput["confi
 }
 
 export function getVisibleSteps({ internal, skipTutor, configs }: VisibleStepsInput): RequestStepItem[] {
-  // The internal form has fixed steps, ending as the public one does with the follow-up; only an explicit `stepTutor: false` in the
-  // configs it is given (the identification type, for staff) takes the Tutor step away, and with no tutor there is nobody to follow up.
+  // The internal form has the public one's steps, except that the agenda is always there (the staff schedules). An explicit `stepTutor: false`
+  // in the configs it is given (the request types and the identification type) takes the Tutor step away, and with no tutor there is nobody
+  // to follow up; an explicit `stepDocuments: false` takes the Documents step away.
   if (internal) {
     const tutorVisible = isAllowedByConfigs(RequestStep.TUTOR, configs);
+    const hasTutorSteps = (step: RequestStep) => step !== RequestStep.TUTOR && step !== RequestStep.FOLLOW_UP || tutorVisible;
     return internalStepOrder
-      .filter((step) => (step === RequestStep.TUTOR ? tutorVisible : step !== RequestStep.FOLLOW_UP || tutorVisible))
+      .filter((step) => hasTutorSteps(step) && (step !== RequestStep.DOCUMENTS || isAllowedByConfigs(step, configs)))
       .map(toStepItem);
   }
 

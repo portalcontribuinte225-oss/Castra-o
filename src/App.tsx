@@ -2768,6 +2768,13 @@ function NewRequest({
     .every((document) => Boolean(reusedDocuments[document.id]?.eligible) || acceptableUploadStatuses.includes(documentUploads[document.id]?.status));
   const hasUploadNeedingReplacement = Object.values(documentUploads)
     .some((upload: AnyRecord) => upload?.status === "attached" && upload?.aiVerdict === "rejected");
+  // The staff's documents are optional, but one still being analysed or refused cannot be sent: it would be left out without a word.
+  const hasUnsendableDocument = selectedTypeDocuments.some((document) => documentUploads[document.id] && !acceptableUploadStatuses.includes(documentUploads[document.id].status));
+  // What goes with the request: the documents the types ask for that were accepted, and the animal's photo.
+  const uploadedDocumentsToSend = [
+    ...selectedTypeDocuments.map((document) => documentUploads[document.id]).filter((upload) => upload && acceptableUploadStatuses.includes(upload.status)),
+    ...(documentUploads.animal_photo ? [documentUploads.animal_photo] : []),
+  ];
   const contactIssues = registrationContactIssues(requestData.email, requestData.phone, hasStep(RequestStep.TUTOR));
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
@@ -2881,6 +2888,7 @@ function NewRequest({
     });
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Anexe ou reaproveite os documentos obrigatórios. Arquivos pendentes serão conferidos pela equipe.");
     if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
+    if (internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUnsendableDocument) issues.push("Aguarde a análise ou remova o anexo recusado antes de encerrar.");
     if ((requiresTutorIdentity || requestData.cpf) && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
     if (requiresTutorIdentity && validateTutorName(requestData.tutor)) issues.push(validateTutorName(requestData.tutor));
     if (!registered && contactIssues.email) issues.push(contactIssues.email);
@@ -2921,7 +2929,7 @@ function NewRequest({
     }
 
     if (step === RequestStep.DOCUMENTS) {
-      return [!requiredDocsApproved, !accepted, hasUploadNeedingReplacement].filter(Boolean);
+      return (internalSimple ? [hasUnsendableDocument] : [!requiredDocsApproved, !accepted, hasUploadNeedingReplacement]).filter(Boolean);
     }
 
     return [];
@@ -3169,7 +3177,7 @@ function NewRequest({
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
       }))),
-      documents: Object.values(documentUploads).filter((upload) => upload?.documentId === "animal_photo"),
+      ...buildDocumentSubmission(uploadedDocumentsToSend, reusedDocuments),
       signedAt: "",
       tags: [],
       origin: "INTERNA",
@@ -3193,15 +3201,7 @@ function NewRequest({
     const { latitude, longitude } = hasGpsCoords
       ? { latitude: requestData.latitude, longitude: requestData.longitude }
       : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
-    const uploadedDocuments = selectedTypeDocuments
-      .map((document) => documentUploads[document.id])
-      .filter((upload) => upload && acceptableUploadStatuses.includes(upload.status));
-    const animalPhotoUpload = documentUploads.animal_photo;
-    const allUploadedDocuments = [
-      ...uploadedDocuments,
-      ...(animalPhotoUpload ? [animalPhotoUpload] : []),
-    ];
-    const documentSubmission = buildDocumentSubmission(allUploadedDocuments, reusedDocuments);
+    const documentSubmission = buildDocumentSubmission(uploadedDocumentsToSend, reusedDocuments);
     const identificationPayload = selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {};
     const localPayload = {
       tutor: requestData.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
@@ -3441,15 +3441,15 @@ function NewRequest({
             )}
           </FormSection>}
 
-          {!internalSimple && formStep === RequestStep.DOCUMENTS && <FormSection title="Documentos e termo">
+          {formStep === RequestStep.DOCUMENTS && <FormSection title={internalSimple ? "Documentos" : "Documentos e termo"}>
             <div className="form-sub-card documents-step-card">
               <div className="documents-step-header">
-                <span className="form-sub-card-title">Documentos e termo</span>
-                <small>Anexe os comprovantes solicitados e confirme a declaração.</small>
+                <span className="form-sub-card-title">{internalSimple ? "Documentos" : "Documentos e termo"}</span>
+                <small>{internalSimple ? "Anexe os comprovantes do tutor. Os pendentes ficam para conferência da equipe." : "Anexe os comprovantes solicitados e confirme a declaração."}</small>
               </div>
 
               <div className="documents-step-grid">
-                <aside className="documents-photo-column">
+                {!internalSimple && <aside className="documents-photo-column">
                   <label className="doc-photo-zone doc-photo-zone--compact">
                     {documentUploads.animal_photo?.dataUrl ? (
                       <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
@@ -3468,7 +3468,7 @@ function NewRequest({
                     )}
                   </label>
                   {registeredContext && !contextLoading && <ReusableDocumentChoices candidates={registeredContext.documents.filter((candidate) => candidate.documentId === "animal_photo")} selected={reusedDocuments.animal_photo} onSelect={(candidate) => { animalPhotoGeneration.current += 1; setAnimalPhotoLoading(false); removeDocumentFile("animal_photo"); setReusedDocuments((current) => ({ ...current, animal_photo: candidate })); }} onPreview={setReusedPreview} onRemove={() => setReusedDocuments((current) => removeReusedDocument(current, "animal_photo"))} />}
-                </aside>
+                </aside>}
 
                 <div className="documents-main-column">
                   <div className="documents-list-card">
@@ -3496,7 +3496,7 @@ function NewRequest({
                     })}
                   </div>
 
-                  <div className="doc-declaration">
+                  {!internalSimple && <div className="doc-declaration">
                     <p>
                       O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.{" "}
                       <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
@@ -3507,7 +3507,7 @@ function NewRequest({
                       <span>Li e concordo com os termos<span className="required-asterisk">*</span></span>
                     </label>
                     {showInvalid("accepted") && <small className="field-error-message">Campo obrigatório</small>}
-                  </div>
+                  </div>}
                 </div>
               </div>
             </div>
