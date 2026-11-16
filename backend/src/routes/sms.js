@@ -17,7 +17,7 @@ router.post("/test-message", auth, requireMunicipalAdmin, async (req, res, next)
   try {
     const result = await sendSmsTestMessage({ municipalityId: pickMunicipalityId(req), phone: req.body?.phone, actor: req.user });
     res.set("Cache-Control", "no-store").json({ status: result.status, ...(result.reason ? { reason: result.reason } : {}),
-      ...(result.providerMessageId ? { providerMessageId: result.providerMessageId } : {}) });
+      ...(result.providerMessageId ? { providerMessageId: result.providerMessageId } : {}), ...(result.detail ? { detail: result.detail } : {}) });
   } catch (error) { next(error); }
 });
 // Turns one SMS message on or off for the municipality of the operation, and answers with the whole screen.

@@ -149,12 +149,12 @@ describe("municipal SMS settings", () => {
     await controller.load();
     await controller.sendTest();
     expect(api.sendSmsTest).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Informe um número para o teste.", providerMessageId: "" });
+    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Informe um número para o teste.", detail: "", providerMessageId: "" });
     controller.setTestPhone("  (48) 99999-1234  "); expect(controller.getSnapshot().testOutcome).toBeNull();
     await controller.sendTest();
     expect(api.sendSmsTest).toHaveBeenCalledTimes(1);
     expect(api.sendSmsTest).toHaveBeenLastCalledWith({ municipalityId: "municipality-a", phone: "(48) 99999-1234" });
-    expect(controller.getSnapshot()).toMatchObject({ sendingTest: false, testPhone: "  (48) 99999-1234  ", testOutcome: { sent: true, reason: "", providerMessageId: "4321" } });
+    expect(controller.getSnapshot()).toMatchObject({ sendingTest: false, testPhone: "  (48) 99999-1234  ", testOutcome: { sent: true, reason: "", detail: "", providerMessageId: "4321" } });
     expect(api.setConfig).not.toHaveBeenCalled();
     controller.setTestPhone("48999990000"); expect(controller.getSnapshot().testOutcome).toBeNull();
   });
@@ -163,7 +163,7 @@ describe("municipal SMS settings", () => {
     const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "municipality-a", true);
     await controller.load(); controller.setTestPhone("48999991234"); await controller.sendTest();
     expect(api.sendSmsTest).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Salve o token antes de enviar um teste.", providerMessageId: "" });
+    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Salve o token antes de enviar um teste.", detail: "", providerMessageId: "" });
     const saved = apiFixture(channelOn); const next = createSmsSettingsController(saved, "municipality-a", true);
     await next.load(); next.setTestPhone("48999991234"); await next.sendTest();
     expect(next.getSnapshot().testOutcome?.sent).toBe(true);
@@ -176,9 +176,12 @@ describe("municipal SMS settings", () => {
     await controller.load(); controller.setTestPhone("48999991234");
     const outcome = () => controller.getSnapshot().testOutcome;
     api.sendSmsTest.mockResolvedValue({ status: "skipped", reason: "Ative o SMS antes de enviar um teste." });
-    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Ative o SMS antes de enviar um teste.", providerMessageId: "" });
+    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Ative o SMS antes de enviar um teste.", detail: "", providerMessageId: "" });
     api.sendSmsTest.mockResolvedValue({ status: "failed", reason: "Saldo de SMS insuficiente.", providerMessageId: "must-not-show" });
-    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Saldo de SMS insuficiente.", providerMessageId: "" });
+    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Saldo de SMS insuficiente.", detail: "", providerMessageId: "" });
+    api.sendSmsTest.mockResolvedValue({ status: "failed", reason: "Não foi possível confirmar o aceite da mensagem.", detail: "externalId: enviado com 36 caracteres, devolvido com 32 caracteres" });
+    await controller.sendTest();
+    expect(outcome()).toEqual({ sent: false, reason: "Não foi possível confirmar o aceite da mensagem.", detail: "externalId: enviado com 36 caracteres, devolvido com 32 caracteres", providerMessageId: "" });
     api.sendSmsTest.mockResolvedValue({ status: "failed" });
     await controller.sendTest(); expect(outcome()?.reason).toBe("erro desconhecido");
     api.sendSmsTest.mockResolvedValue(null as never);
@@ -277,13 +280,16 @@ describe("SMS settings interface", () => {
     expect(typing).toContain("<code>typed-to</code>"); expect(typing).not.toMatch(/<button[^>]*disabled=""[^>]*>Salvar credenciais/);
   });
 
-  it("lists the nine messages with their sample text, named for the municipality", () => {
+  it("lists the nine messages with their text as it goes out, named for the municipality, and the two texts of the documents told apart", () => {
     const html = screen();
     expect(html.match(/<tr>/g)).toHaveLength(smsUses.length + 1);
     for (const use of smsUses) expect(html).toContain(use.label);
-    expect(html).toContain("Test Town: recebemos um pedido para redefinir sua senha. Codigo: 123456. Valido por 10 minutos. Nao compartilhe.");
-    expect(html).toContain("Test Town: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
-    expect(html).toContain("<th>Exemplo do texto</th>");
+    expect(html).toContain("Test Town: recebemos um pedido para redefinir sua senha. Codigo: {codigo}. Valido por {minutos} minutos. Nao compartilhe.");
+    expect(html).toContain("Test Town: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: {protocolo}.");
+    expect(html).toContain("<th>Texto</th>"); expect(html).not.toContain("Exemplo");
+    expect(html).toContain("<strong>Documentos aprovados</strong><br/>Test Town: seus documentos foram aprovados e a solicitacao segue para as proximas etapas. Protocolo: {protocolo}.");
+    expect(html).toContain("<strong>Documentos não aprovados</strong><br/>Test Town: seus documentos nao foram aprovados. Acesse a solicitacao para ver o motivo. Protocolo: {protocolo}.");
+    expect(html.match(/<strong>Documentos/g)).toHaveLength(2);
     expect(screen({ config: { ...stored, municipalityName: "" } })).toContain("Municipio: recebemos um pedido para redefinir sua senha.");
   });
 
@@ -315,12 +321,15 @@ describe("SMS settings interface", () => {
 
   it("shows the result of a test: taken by the provider with its code, and told to check the phone, or why it was not sent", () => {
     expect(screen()).not.toContain("sms-status");
-    const sent = screen({ testOutcome: { sent: true, reason: "", providerMessageId: "4321" } });
+    const sent = screen({ testOutcome: { sent: true, reason: "", detail: "", providerMessageId: "4321" } });
     expect(sent).toContain('class="sms-status confirmed"'); expect(sent).toContain("Teste enviado ao provedor (código 4321).");
     expect(sent).toContain("a entrega depende da operadora"); expect(sent).not.toContain("com sucesso");
-    expect(screen({ testOutcome: { sent: true, reason: "", providerMessageId: "" } })).toContain("Teste enviado ao provedor. Confira");
-    const refused = screen({ testOutcome: { sent: false, reason: "Saldo de SMS insuficiente.", providerMessageId: "" } });
+    expect(screen({ testOutcome: { sent: true, reason: "", detail: "", providerMessageId: "" } })).toContain("Teste enviado ao provedor. Confira");
+    const refused = screen({ testOutcome: { sent: false, reason: "Saldo de SMS insuficiente.", detail: "", providerMessageId: "" } });
     expect(refused).toContain('class="sms-status"'); expect(refused).toContain("Não enviado: Saldo de SMS insuficiente."); expect(refused).not.toContain("confirmed");
+    expect(refused).not.toContain("Detalhe");
+    const mismatch = screen({ testOutcome: { sent: false, reason: "Não foi possível confirmar o aceite da mensagem.", detail: "to: enviado com 13 dígitos, devolvido com 12 dígitos", providerMessageId: "" } });
+    expect(mismatch).toContain("Não enviado: Não foi possível confirmar o aceite da mensagem. Detalhe: to: enviado com 13 dígitos, devolvido com 12 dígitos.");
   });
 
   it("does not render settings for unauthorized or missing municipality contexts", () => {

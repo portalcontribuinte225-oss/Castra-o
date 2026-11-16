@@ -204,8 +204,8 @@ test("a test message refuses a phone that cannot receive an SMS before anything 
   const f = fixture(t); await f.save({ token: TOKEN, active: true });
   let sends = 0; const refused = { status: DeliveryStatus.FAILED, code: DeliveryCode.INSUFFICIENT_BALANCE, reason: "Saldo de SMS insuficiente." };
   const deps = { database: f.database, sendMessage: async () => { sends += 1; return refused; } };
-  for (const phone of ["", "   ", "123", "abc", "489999999999", undefined, null, 48999991234, ["48999991234"]]) {
-    await assert.rejects(sendSmsTestMessage({ municipalityId: MUNICIPALITY, phone, actor: ACTOR }, deps), { status: 400, message: "Informe um telefone válido com DDD." }, String(phone));
+  for (const phone of ["", "   ", "123", "abc", "489999999999", "(48) 3333-4444", "(48) 89999-1234", "(00) 99999-1234", undefined, null, 48999991234, ["48999991234"]]) {
+    await assert.rejects(sendSmsTestMessage({ municipalityId: MUNICIPALITY, phone, actor: ACTOR }, deps), { status: 400, message: "Informe um celular válido com DDD, por exemplo (48) 99999-1234. Telefone fixo não recebe SMS." }, String(phone));
   }
   await assert.rejects(sendSmsTestMessage({ municipalityId: null, phone: "48999991234", actor: ACTOR }, deps), { status: 400 });
   assert.equal(sends, 0);

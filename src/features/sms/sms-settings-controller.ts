@@ -15,12 +15,12 @@ function connectionResult(value: SmsConnectionResult): SmsConnectionResult | nul
   return { valid: true, environment: value.environment, balance: { credits: value.balance.credits, sms: value.balance.sms }, checkedAt: value.checkedAt };
 }
 
-const notSent = (reason: string): SmsTestOutcome => ({ sent: false, reason, providerMessageId: "" });
+const notSent = (reason: string, detail = ""): SmsTestOutcome => ({ sent: false, reason, detail, providerMessageId: "" });
 
 // The server answers a test send with fixed texts, so what it says is shown as it is; a missing reason is told as unknown.
 function testOutcome(answer: SmsTestAnswer): SmsTestOutcome {
-  if (answer?.status !== "sent") return notSent(String(answer?.reason || "erro desconhecido"));
-  return { sent: true, reason: "", providerMessageId: String(answer.providerMessageId || "") };
+  if (answer?.status !== "sent") return notSent(String(answer?.reason || "erro desconhecido"), String(answer?.detail || ""));
+  return { sent: true, reason: "", detail: "", providerMessageId: String(answer.providerMessageId || "") };
 }
 
 // This controller is private to one mounted municipality/permission context; secrets never enter shared storage.

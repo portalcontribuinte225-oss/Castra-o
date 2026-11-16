@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { querySmsBalance, sendSmsMessage } from "../src/services/smsmais.js";
+import { normalizeSmsPhone, querySmsBalance, sendSmsMessage } from "../src/services/smsmais.js";
 import { DeliveryCode, DeliveryStatus } from "../../shared/notification-contract.js";
 import { SMS_MAX_LENGTH } from "../../shared/sms-messages-contract.js";
 
@@ -60,20 +60,56 @@ test("provider failures are finite and sanitized, never retried", async () => {
   }
 });
 
-test("empty opt-out, malformed, retained, simulated or unrelated HTTP200 responses cannot count as an accepted message", async () => {
-  const blocked = [{ externalId: "other" }, { status: "held_no_balance" }, { state: "queued" }, { held: true },
-    { simulated: true }, { sandbox: true }, { error: "opt_out" }, { schedule: "2026-11-14T12:00:00Z" },
-    { msg: "Another text than the one sent." }, { to: "5548000000000" }];
-  for (const override of [null, ...blocked]) {
-    const result = await sendSmsMessage(input, { now: () => NOW, fetchImpl: async (_url, options) => {
-      const message = JSON.parse(options.body).messages[0];
-      return json(override === null ? [] : [{ id: 1, externalId: message.id, to: message.destinations[0].to,
-        msg: message.msg, schedule: "", ...override }]);
-    } });
-    assert.equal(result.code, DeliveryCode.INVALID_RESPONSE);
+const answer = (override) => async (_url, options) => {
+  const message = JSON.parse(options.body).messages[0];
+  return json(typeof override === "function" ? override(message) : [{ id: 1, externalId: message.id, to: message.destinations[0].to, msg: message.msg, schedule: "", ...override }]);
+};
+
+test("an answer that is not for this message cannot count as accepted, and says which field is wrong without any text, number or token", async () => {
+  const cases = [
+    [() => [], "a lista veio com 0 item(ns)"],
+    [() => ({ success: true }), "a resposta não é uma lista"],
+    [() => [1], "id ausente ou inválido"],
+    [{ id: 0 }, "id ausente ou inválido"],
+    [{ externalId: "other" }, `externalId: enviado com ${ID.length} caracteres, devolvido com 5 caracteres`],
+    [{ externalId: null }, `externalId: enviado com ${ID.length} caracteres, devolvido ausente`],
+    [{ to: "554800000000" }, "to: enviado com 13 dígitos, devolvido com 12 dígitos"],
+    [{ msg: "Another text than the one sent." }, `msg: enviado com ${TEXT.length} caracteres, devolvido com 31 caracteres`],
+    [{ status: "held_no_balance" }, "status: held_no_balance"],
+    [{ status: "optout" }, "status: optout"],
+    [{ state: "Not Sent!" }, "status: valor fora do esperado"],
+    [{ held: true }, "held: presente"], [{ simulated: true }, "simulated: presente"], [{ sandbox: true }, "sandbox: presente"], [{ error: "opt_out" }, "error: presente"],
+    [{ schedule: "2026-11-14T12:00:00Z" }, "schedule: marcada para depois"],
+    [{ schedule: "2026-11-13 09:30:00" }, "schedule: marcada para depois"],
+    [{ schedule: "not a date" }, "schedule: marcada para depois"],
+  ];
+  for (const [override, detail] of cases) {
+    const result = await sendSmsMessage(input, { now: () => NOW, fetchImpl: answer(override) });
+    assert.equal(result.status, DeliveryStatus.FAILED, detail); assert.equal(result.code, DeliveryCode.INVALID_RESPONSE, detail);
+    assert.equal(result.detail, detail);
+    assert.doesNotMatch(JSON.stringify(result), /123456|99999|production-token|Test Town/, detail);
   }
-  for (const content of ["invalid JSON", "x".repeat(32769)]) {
+  for (const [content, detail] of [["invalid JSON", "a resposta não é um JSON válido"], ["x".repeat(32769), "a resposta é grande demais"]]) {
+    const result = await sendSmsMessage(input, { now: () => NOW, fetchImpl: async () => new Response(content) });
+    assert.equal(result.code, DeliveryCode.INVALID_RESPONSE); assert.equal(result.detail, detail);
     assert.equal((await querySmsBalance(input.token, { fetchImpl: async () => new Response(content) })).code, DeliveryCode.INVALID_RESPONSE);
+  }
+});
+
+test("a message the provider queued is accepted, even when it echoes the moment it took the message or a zero date as the schedule", async () => {
+  for (const extra of [{ status: "queued" }, { state: "Sent" }, { status: "ACCEPTED" }, { schedule: "2026-11-13 09:00:00" }, { schedule: "2026-11-13 09:04:00" },
+    { schedule: "2026-11-13T12:00:00Z" }, { schedule: "0000-00-00 00:00:00" }, { schedule: null }, { nome: "" }]) {
+    const result = await sendSmsMessage(input, { now: () => NOW, fetchImpl: answer(extra) });
+    assert.deepEqual(result, { status: DeliveryStatus.SENT, providerMessageId: "1", reference: ID }, JSON.stringify(extra));
+  }
+});
+
+test("the phone is written the way the provider wants: 55, DDD and nine digits, with the 9 added to an old eight-digit mobile and no landline", () => {
+  for (const [typed, expected] of [["(48) 99999-1234", "5548999991234"], ["48999991234", "5548999991234"], ["+55 48 99999-1234", "5548999991234"], ["5548999991234", "5548999991234"],
+    ["48 9999-0000", "5548999990000"], ["(48) 8999-0000", "5548989990000"], ["(11) 7999-0000", "5511979990000"], ["554899990000", "5548999990000"],
+    ["(55) 99999-1234", "5555999991234"], ["(55) 9999-0000", "5555999990000"]]) assert.equal(normalizeSmsPhone(typed), expected, typed);
+  for (const typed of ["(48) 3333-4444", "(48) 2123-4567", "(00) 99999-1234", "(10) 99999-1234", "(48) 89999-1234", "123", "", "abc", "489999999999", null, undefined]) {
+    assert.equal(normalizeSmsPhone(typed), "", String(typed));
   }
 });
 

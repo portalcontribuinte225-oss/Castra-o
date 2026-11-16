@@ -35,6 +35,7 @@ export interface SmsConnectionResult {
 export interface SmsTestAnswer {
   status?: string;
   reason?: string;
+  detail?: string;
   providerMessageId?: string;
 }
 
@@ -42,6 +43,8 @@ export interface SmsTestAnswer {
 export interface SmsTestOutcome {
   sent: boolean;
   reason: string;
+  // Which field of the provider's answer did not match, when it was not the answer for the message (no text, number or token).
+  detail: string;
   providerMessageId: string;
 }
 

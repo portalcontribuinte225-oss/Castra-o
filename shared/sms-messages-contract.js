@@ -70,11 +70,15 @@ export function buildSmsTestText(municipality) {
   return toSmsText(`${town}: teste de envio de SMS do sistema de castracao. Se voce recebeu esta mensagem, o envio esta funcionando.`);
 }
 
-// The samples the screen shows next to each use: one text, or one for each outcome when the text depends on it.
-export function smsExamples(use, municipality = "Municipio") {
+// The text of a use as the screen shows it: the fixed words exactly as they go out, and the data in braces, named as the team wrote
+// them. One text, or one for each outcome when the text depends on it (`outcome` says which; it is null otherwise).
+export function smsTexts(use, municipality = "Municipio") {
+  const template = templates[use];
+  if (!template) return [];
   const data = {
-    municipality, protocol: "123/2026", date: "20/11/2026", time: "09:00", location: "Unidade Veterinaria Municipal", code: "123456", minutes: "10", fields: "e-mail",
+    town: clip(municipality, MAX_MUNICIPALITY) || "Prefeitura", protocol: "{protocolo}", date: "{data}", time: "{horario}",
+    place: `${PLACE_SEPARATOR}{unidade}`, code: "{codigo}", minutes: "{minutos}", fields: "{campos_alterados}",
   };
-  const outcomes = use === NotificationEvent.DOCUMENTS_REVIEWED ? Object.values(DocumentsOutcome) : [DocumentsOutcome.APPROVED];
-  return outcomes.map((outcome) => buildSmsText(use, { ...data, outcome }));
+  const outcomes = use === NotificationEvent.DOCUMENTS_REVIEWED ? Object.values(DocumentsOutcome) : [null];
+  return outcomes.map((outcome) => ({ outcome, text: template({ ...data, outcome }) }));
 }

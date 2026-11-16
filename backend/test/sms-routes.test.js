@@ -172,9 +172,9 @@ test("a test SMS needs a phone that can receive it, and a global user must choos
   const { request, remoteCalls } = await fixture(t);
   await request(`/config/${SMS_CONFIG_KEY}`, { method: "PUT", body: { active: true, token: TOKEN } });
   const before = remoteCalls.length;
-  for (const phone of ["", "123", "abc", 48999991234, undefined]) {
+  for (const phone of ["", "123", "abc", "(48) 3333-4444", 48999991234, undefined]) {
     const refused = await request("/sms/test-message", { method: "POST", body: { phone } });
-    assert.equal(refused.status, 400, String(phone)); assert.equal(refused.body.error, "Informe um telefone válido com DDD.");
+    assert.equal(refused.status, 400, String(phone)); assert.match(refused.body.error, /^Informe um celular válido com DDD/);
   }
   assert.equal((await request("/sms/test-message", { method: "POST" })).status, 400);
   const global = { ...ADMIN, role: "master", municipalityId: null };
@@ -182,4 +182,19 @@ test("a test SMS needs a phone that can receive it, and a global user must choos
   const chosen = await request("/sms/test-message", { method: "POST", body: { municipalityId: OTHER, phone: "48999991234" }, user: global });
   assert.equal(chosen.status, 200); assert.deepEqual(chosen.body, { status: "skipped", reason: "Ative o SMS antes de enviar um teste." });
   assert.equal(remoteCalls.length, before);
+});
+
+test("when the provider answers with something that is not this message, the test says which field, never the text, the number or the token", async (t) => {
+  const { request } = await fixture(t);
+  await request(`/config/${SMS_CONFIG_KEY}`, { method: "PUT", body: { active: true, token: TOKEN } });
+  const answering = globalThis.fetch;
+  globalThis.fetch = async (url, options) => {
+    if (url !== "https://smsmais.com/send") return answering(url, options);
+    const [message] = JSON.parse(options.body).messages;
+    return new Response(JSON.stringify([{ id: 4321, schedule: "", nome: "", to: message.destinations[0].to, msg: message.msg, externalId: "cut" }]), { status: 200 });
+  };
+  const refused = await request("/sms/test-message", { method: "POST", body: { phone: "(48) 99999-1234" } });
+  assert.equal(refused.status, 200);
+  assert.deepEqual(refused.body, { status: "failed", reason: "Não foi possível confirmar o aceite da mensagem.", detail: "externalId: enviado com 36 caracteres, devolvido com 3 caracteres" });
+  assert.doesNotMatch(JSON.stringify(refused.body), /99999|private-production|Test Town/);
 });

@@ -124,7 +124,7 @@ async function limitTestSending(actor, municipalityId, database) {
 // path the notices take, to a number of their choosing. A channel or token that is not ready answers "skipped" and sends nothing.
 export async function sendSmsTestMessage({ municipalityId, phone, actor }, { database = pool, sendMessage = sendSmsMessage, ...options } = {}) {
   const municipality = await assertSmsMunicipality(municipalityId, database);
-  if (typeof phone !== "string" || !normalizeSmsPhone(phone)) throw authError(400, "Informe um telefone válido com DDD.");
+  if (typeof phone !== "string" || !normalizeSmsPhone(phone)) throw authError(400, "Informe um celular válido com DDD, por exemplo (48) 99999-1234. Telefone fixo não recebe SMS.");
   const record = await loadSmsRecord(municipalityId, database);
   if (record?.active !== true) return notReady(DeliveryCode.CHANNEL_DISABLED);
   const credential = validatedCredential(record, municipalityId);

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SMS_MAX_LENGTH, buildSmsTestText, buildSmsText, smsExamples, toSmsText } from "../../shared/sms-messages-contract.js";
+import { SMS_MAX_LENGTH, buildSmsTestText, buildSmsText, smsTexts, toSmsText } from "../../shared/sms-messages-contract.js";
 import { smsUses } from "../../shared/sms-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DocumentsOutcome, NotificationEvent } from "../../shared/notification-contract.js";
@@ -85,16 +85,22 @@ test("without a municipality name the text still starts with a neutral one, and 
   assert.equal(buildSmsText(NotificationEvent.COMPLETED), "Prefeitura: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: .");
 });
 
-test("the screen sample is built by the same texts, with the municipality name or a neutral one", () => {
+test("the screen shows each message as it goes out, with the data in braces: filling them in gives exactly the text that is sent", () => {
+  const filled = { "{protocolo}": "123/2026", "{data}": "20/11/2026", "{horario}": "09:00", "{unidade}": "Unidade Veterinaria Municipal",
+    "{codigo}": "123456", "{minutos}": "10", "{campos_alterados}": "e-mail" };
   for (const { key } of smsUses) {
-    for (const text of smsExamples(key, "Criciúma")) {
+    const shown = smsTexts(key, "Criciúma");
+    assert.ok(shown.length > 0, key);
+    for (const { outcome, text } of shown) {
       assert.ok(text.startsWith("Criciuma: "), key);
-      assert.ok(text.length <= SMS_MAX_LENGTH, key);
+      const sent = Object.entries(filled).reduce((result, [name, value]) => result.replaceAll(name, value), text);
+      assert.equal(sent, buildSmsText(key, { ...full, outcome: outcome ?? undefined }), key);
     }
-    assert.ok(smsExamples(key).every((text) => text.startsWith("Municipio: ")), key);
+    assert.ok(smsTexts(key).every(({ text }) => text.startsWith("Municipio: ")), key);
   }
-  assert.equal(smsExamples(AuthPurpose.PASSWORD_RESET, "Criciúma").length, 1);
-  assert.equal(smsExamples(NotificationEvent.DOCUMENTS_REVIEWED).length, 2, "the documents text has one sample for each outcome");
+  assert.deepEqual(smsTexts(AuthPurpose.PASSWORD_RESET, "Criciúma").map(({ outcome }) => outcome), [null]);
+  assert.deepEqual(smsTexts(NotificationEvent.DOCUMENTS_REVIEWED).map(({ outcome }) => outcome), [DocumentsOutcome.APPROVED, DocumentsOutcome.REJECTED]);
+  assert.deepEqual(smsTexts("unknown"), []);
 });
 
 test("the test message names the municipality, says it is a test and fits one SMS in plain ASCII", () => {

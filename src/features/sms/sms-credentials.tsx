@@ -15,8 +15,8 @@ function displayDate(value: string | null) {
 }
 
 // "Sent" is only the provider taking the message, so the text sends the user to the phone to confirm it arrived.
-function testText({ sent, reason, providerMessageId }: SmsTestOutcome) {
-  if (!sent) return `Não enviado: ${reason}`;
+function testText({ sent, reason, detail, providerMessageId }: SmsTestOutcome) {
+  if (!sent) return `Não enviado: ${reason}${detail ? ` Detalhe: ${detail}.` : ""}`;
   return `Teste enviado ao provedor${providerMessageId ? ` (código ${providerMessageId})` : ""}. Confira se chegou ao celular: a entrega depende da operadora.`;
 }
 

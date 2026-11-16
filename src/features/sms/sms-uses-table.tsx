@@ -1,6 +1,7 @@
 import React from "react";
 import { Lock } from "lucide-react";
-import { smsExamples } from "../../../shared/sms-messages-contract.js";
+import { DocumentsOutcome } from "../../../shared/notification-contract.js";
+import { smsTexts } from "../../../shared/sms-messages-contract.js";
 import type { SmsUseRow } from "./sms-types";
 
 interface Props {
@@ -13,6 +14,8 @@ interface Props {
 }
 
 const LOCK_REASON = "Ative o SMS para ligar as mensagens.";
+// The documents message has one text for each result of the analysis; only one of them is sent.
+const OUTCOME_LABELS: Record<string, string> = { [DocumentsOutcome.APPROVED]: "Documentos aprovados", [DocumentsOutcome.REJECTED]: "Documentos não aprovados" };
 
 export function SmsUsesTable({ rows, municipalityName, channelActive, busy, onToggle }: Props) {
   return (
@@ -21,7 +24,7 @@ export function SmsUsesTable({ rows, municipalityName, channelActive, busy, onTo
         <thead>
           <tr>
             <th>Mensagem</th>
-            <th>Exemplo do texto</th>
+            <th>Texto</th>
             <th>Ativo</th>
           </tr>
         </thead>
@@ -31,7 +34,11 @@ export function SmsUsesTable({ rows, municipalityName, channelActive, busy, onTo
             return (
               <tr key={row.key}>
                 <td>{row.label}</td>
-                <td>{smsExamples(row.key, municipalityName || undefined).map((text) => <p key={text}>{text}</p>)}</td>
+                <td>
+                  {smsTexts(row.key, municipalityName || undefined).map(({ outcome, text }) => (
+                    <p key={text}>{outcome && <><strong>{OUTCOME_LABELS[outcome]}</strong><br /></>}{text}</p>
+                  ))}
+                </td>
                 <td className="whatsapp-switch-cell">
                   <button
                     type="button"
