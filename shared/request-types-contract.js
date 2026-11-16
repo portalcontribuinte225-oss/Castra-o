@@ -58,3 +58,9 @@ export function combineRequestFees(types) {
   if (!charged.length) return FREE_FEE_LABEL;
   return charged.map((type) => `${type.name}: ${type.billingAmount || type.fee || ""}`.trim()).join("; ");
 }
+
+// The fee as a request stores it (what combineRequestFees wrote): whether something is charged.
+export function isRequestFeeCharged(fee) {
+  const text = String(fee ?? "").trim();
+  return text !== "" && text !== FREE_FEE_LABEL;
+}

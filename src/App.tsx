@@ -5,7 +5,6 @@ import {
   BarChart3,
   Bell,
   CalendarDays,
-  Camera,
   Cat,
   CheckCircle2,
   ChevronDown,
@@ -174,7 +173,8 @@ import {
   procedureSignature,
   withProceduresAt,
 } from "./features/request-procedures/request-procedures";
-import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, resolveRequestTypes } from "../shared/request-types-contract.js";
+import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, isRequestFeeCharged, isRequestTypeCharged, resolveRequestTypes } from "../shared/request-types-contract.js";
+import { renderDeclaration } from "../shared/request-declaration-contract.js";
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
 import { MunicipalityAddressFields } from "./features/municipality-form/municipality-address-fields";
@@ -184,10 +184,11 @@ import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhood
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { RequestStep, requestSteps } from "./features/request-steps/request-steps";
 import { availableFollowUpContacts, buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./features/request-follow-up/follow-up";
-import { FollowUpSummary } from "./features/request-follow-up/follow-up-summary";
 import type { FollowUpValue } from "./features/request-follow-up/follow-up";
 import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-policy";
 import { RequesterStep } from "./features/request-requester/requester-step";
+import { RequestDoneCard } from "./features/request-requester/request-done-card";
+import { MUNICIPALITY_OPTION } from "./features/registered-animals/use-request-options";
 import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
 import type { NotificationResult } from "./features/notifications/notification-results";
 import { REJECTION_REASONS } from "../shared/notification-contract.js";
@@ -366,7 +367,7 @@ export default function App() {
   useEffect(() => { if (session.ready && !session.user) setProcedureIntent((current) => current?.ownerId ? null : current); }, [session.ready, session.user]);
   return <SessionBoundary session={{ ...session, accept, logout }}
     renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact setActive={() => {}} />}
-      renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} publicFlow selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
+      renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} publicFlow selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} municipality={input.options[MUNICIPALITY_OPTION]} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
         requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} identificationTypes={input.context?.identificationTypes || input.options[CONFIG_KEYS.identificationTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
     />}
     renderWorkspace={(user) => <ApplicationWorkspace key={user?.id || "public"} currentUser={user} setCurrentUser={accept} onProcedureIntent={setProcedureIntent} />} />;
@@ -1699,8 +1700,6 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
   const [activePublicService, setActivePublicService] = useState<string | null>(null);
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
   const [publicServiceDone, setPublicServiceDone] = useState<AnyRecord | null>(null);
-  const [publicServiceDoneDownloading, setPublicServiceDoneDownloading] = useState(false);
-  const [publicServiceDoneDownloadError, setPublicServiceDoneDownloadError] = useState("");
   const [publicServiceScheduleDays, setPublicServiceScheduleDays] = useState(scheduleDays);
   const [publicServiceScheduleRules, setPublicServiceScheduleRules] = useState([]);
   const [publicServiceRequestTypes, setPublicServiceRequestTypes] = useState(requestTypes);
@@ -1784,24 +1783,6 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
     setPublicServiceDone(null);
   }
 
-  async function downloadPublicServiceRequerimento() {
-    if (!publicServiceDone || publicServiceDoneDownloading) return;
-    setPublicServiceDoneDownloading(true);
-    setPublicServiceDoneDownloadError("");
-    try {
-      const dataUrl = await createRequestPdfDataUrl(publicServiceDone);
-      const anchor = window.document.createElement("a");
-      anchor.href = dataUrl;
-      anchor.download = `Requerimento ${publicServiceDone.protocol || ""}.pdf`.trim();
-      anchor.click();
-    } catch (error) {
-      console.error("Erro ao gerar requerimento:", error);
-      setPublicServiceDoneDownloadError("Não foi possível gerar o requerimento agora. Tente novamente em instantes.");
-    } finally {
-      setPublicServiceDoneDownloading(false);
-    }
-  }
-
   const publicFooterItems = [
     { label: "Contato", value: activeMunicipality?.contact, icon: Phone },
     { label: "Email", value: activeMunicipality?.email, icon: Mail },
@@ -1876,20 +1857,15 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
             )}
 
             {publicServiceDone ? (
-              <div className="public-inline-success public-service-success-card">
-                <CheckCircle2 size={52} />
-                <h3>Solicitação enviada!</h3>
-                <p>Protocolo oficial: <strong>{publicServiceDone.protocol}</strong></p>
-                <FollowUpSummary value={(publicServiceDone.workflow_data || publicServiceDone.workflowData)?.followUp} />
+              <RequestDoneCard
+                protocol={publicServiceDone.protocol}
+                followUp={(publicServiceDone.workflow_data || publicServiceDone.workflowData)?.followUp}
+                createRequirement={() => createRequestPdfDataUrl(publicServiceDone, activeMunicipality)}
+                closeLabel="Voltar ao início"
+                onClose={closePublicService}
+              >
                 {(enrollment || publicServiceDone.cpf) && <EnrollmentNotice credential={enrollment} onDismiss={() => setEnrollment(null)} onLogin={() => openAuthEntry(AuthEntryOrigin.ENROLLMENT)} />}
-                <div className="public-service-success-actions">
-                  <button className="primary-action" type="button" onClick={closePublicService}>Voltar ao início</button>
-                  <button className="ghost-button" type="button" onClick={downloadPublicServiceRequerimento} disabled={publicServiceDoneDownloading}>
-                    {publicServiceDoneDownloading ? "Gerando..." : "Baixar requerimento"}
-                  </button>
-                </div>
-                {publicServiceDoneDownloadError && <p className="form-error">{publicServiceDoneDownloadError}</p>}
-              </div>
+              </RequestDoneCard>
             ) : activePublicService === "procedure_entry" ? (
               <ProcedureEntry disabled={!selectedMunicipalityId} onFirst={() => setActivePublicService("procedure_form")} onRegistered={() => openAuthEntry(AuthEntryOrigin.REGISTERED_ANIMAL)} />
             ) : activePublicService === "procedure_form" ? (
@@ -1900,6 +1876,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
                 currentUser={GUEST_USER}
                 publicFlow
                 selectedMunicipalityId={selectedMunicipalityId}
+                municipality={activeMunicipality}
                 onBack={() => setActivePublicService("procedure_entry")}
                 backLabel="Voltar"
                 onDone={(request) => {
@@ -2633,6 +2610,7 @@ function NewRequest({
   initialSchedule = "",
   initialType = "",
   initialMunicipalityId = "",
+  municipality = null,
 }: AnyRecord) {
   const activeSpecies = Array.from(new Set<string>(
     speciesOptions
@@ -2748,6 +2726,8 @@ function NewRequest({
   // The request types the animals ask for, together: they decide the steps, the tutor and the documents of the request.
   const selectedRequestTypes = resolveRequestTypes({ animals }, configuredRequestTypes);
   const procedureFields = deriveRequestTypeFields(selectedRequestTypes);
+  // The declaration the tutor accepts: the words of the municipality, and the fee clause only when a chosen procedure is charged.
+  const declaration = renderDeclaration({ municipalityName: municipality?.name, departmentName: municipality?.department_name, charged: selectedRequestTypes.some(isRequestTypeCharged) });
   // Without request types configured there is nothing to choose, so the animals go without procedures, as before.
   const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
   // The identification type of a registered animal is still checked against the configuration, until the configuration goes.
@@ -2871,9 +2851,10 @@ function NewRequest({
     const filledAnimals = animals.length > 0 ? animals : [{}];
     if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) issues.push(registeredContext.eligibility?.reason || "Aguarde a validação do cadastro ou procure o atendimento.");
 
+    // The term and the required documents are the public form's only; everything else is asked of both forms.
     if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
-    if (!internalSimple && !requestData.schedule) issues.push("Escolha uma data disponível.");
-    else if (!internalSimple && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
+    if (!requestData.schedule) issues.push("Escolha uma data disponível.");
+    else if (!selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
     filledAnimals.forEach((animal, index) => {
       if (registered) {
         if (needsProcedure(animal, hasConfiguredTypes)) issues.push("Selecione o tipo de solicitação.");
@@ -2889,8 +2870,8 @@ function NewRequest({
       if (!animal.neighborhood) issues.push(`Informe o bairro${label}.`);
     });
     if (!internalSimple && !requiredDocsApproved) issues.push("Anexe ou reaproveite os documentos obrigatórios. Arquivos pendentes serão conferidos pela equipe.");
-    if (!internalSimple && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
-    if (internalSimple && hasUnsendableDocument) issues.push("Aguarde a análise ou remova o anexo recusado antes de encerrar.");
+    if (hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de continuar.");
+    if (hasUnsendableDocument) issues.push("Aguarde a análise ou remova o anexo recusado antes de continuar.");
     if ((requiresTutorIdentity || requestData.cpf) && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
     if (requiresTutorIdentity && validateTutorName(requestData.tutor)) issues.push(validateTutorName(requestData.tutor));
     if (!registered && contactIssues.email) issues.push(contactIssues.email);
@@ -2932,7 +2913,7 @@ function NewRequest({
     }
 
     if (step === RequestStep.DOCUMENTS) {
-      return (internalSimple ? [hasUnsendableDocument] : [!requiredDocsApproved, !accepted, hasUploadNeedingReplacement]).filter(Boolean);
+      return [!internalSimple && !requiredDocsApproved, !internalSimple && !accepted, hasUploadNeedingReplacement, hasUnsendableDocument].filter(Boolean);
     }
 
     return [];
@@ -3115,23 +3096,23 @@ function NewRequest({
     }
     setSubmitting(true);
     try {
-      if (internalSimple) {
-        await submitInternal();
-      } else {
-        await submitAccepted();
-      }
+      // The staff and the public send the same request; each adds only what is its own: the notes and the origin, or the term.
+      const own = internalSimple
+        ? { notes: sent.notes || "", signedAt: "", tags: [], origin: "INTERNA" }
+        : { declarationAccepted: accepted, signedAt: new Date().toISOString() };
+      await sendRequest({ ...(await buildRequestSubmission()), ...own });
     } finally {
       setSubmitting(false);
     }
   }
 
   function openDeclarationPdf() {
-    const html = buildDeclarationPdfHtml(requestData, animals.map((animal) => ({ ...animal, procedures: procedureNames(animal, configuredRequestTypes).join(", ") })));
+    const html = buildDeclarationPdfHtml(requestData, animals.map((animal) => ({ ...animal, procedures: procedureNames(animal, configuredRequestTypes).join(", ") })), declaration);
     printHtmlViaIframe(html);
   }
 
-  async function submitInternal() {
-    setSubmissionError("");
+  // What the staff and the public send in common: the tutor, the animals, the date chosen, the notices and the documents.
+  async function buildRequestSubmission() {
     const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, sent.schedule, sent.scheduleOccurrenceKey, Math.max(animals.length, 1));
     const selectedScheduleSlot = getAvailableScheduleSlot(selectedScheduleDay, Math.max(animals.length, 1));
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
@@ -3140,72 +3121,8 @@ function NewRequest({
     const { latitude, longitude } = hasGpsCoords
       ? { latitude: sent.latitude, longitude: sent.longitude }
       : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
-    const localPayload = {
-      tutor: sent.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
-      neighborhood: sent.neighborhood || "Bairro não informado",
-      address:
-        [sent.address, sent.number, sent.neighborhood, sent.city, sent.state]
-          .filter(Boolean)
-          .join(", ") || "Endereço não informado",
-      type: procedureFields.requestType || "Cadastro animal",
-      fee: combineRequestFees(selectedRequestTypes),
-      phone: sent.phone || "",
-      cpf: sent.cpf || "",
-      email: sent.email || "",
-      cep: sent.cep || "",
-      preferredSchedule: sent.schedule || "",
-      notes: sent.notes || "",
-      municipalityId: sent.municipalityId || selectedScheduleDay?.municipalityId || "",
-      scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
-      scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
-      scheduleLocationName: selectedScheduleDay?.locationName || "",
-      scheduleAddress: selectedScheduleDay?.locationAddress || "",
-      scheduleAddressUrl: selectedScheduleDay?.addressUrl || "",
-      scheduleMunicipality: selectedScheduleDay?.municipality || sent.city || "",
-      responsibleUnit: selectedScheduleDay?.responsibleUnit || selectedScheduleDay?.unit || "",
-      veterinarian: selectedScheduleDay?.veterinarian || selectedScheduleDay?.responsible || "",
-      latitude,
-      longitude,
-      workflowData: {
-        isFarmer: sent.isFarmer,
-        scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
-        scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
-        scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
-        ...(tutorship ? { identificationTypeId: tutorship } : {}),
-        followUp: buildFollowUpPayload({ enabled: noticesEnabled }, tutorContacts, followUpPolicy.phoneEnabled),
-      },
-      animals: payloadAnimals(animals.map((animal) => ({
-        ...animal,
-        name: animal.name || "",
-        age: animal.birthDate || animal.age || "",
-      }))),
-      ...buildDocumentSubmission(uploadedDocumentsToSend, reusedDocuments),
-      signedAt: "",
-      tags: [],
-      origin: "INTERNA",
-    };
-
-    try {
-      const newRequest = await createRequest(localPayload);
-      onDone?.(newRequest || localPayload);
-    } catch (err) {
-      setSubmissionError(err?.message || "Falha ao criar solicitação. Tente novamente.");
-    }
-  }
-
-  async function submitAccepted() {
-    setSubmissionError("");
-    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, sent.schedule, sent.scheduleOccurrenceKey, Math.max(animals.length, 1));
-    const selectedScheduleSlot = getAvailableScheduleSlot(selectedScheduleDay, Math.max(animals.length, 1));
-    const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-    const addressString = [sent.address, sent.number, sent.neighborhood, sent.city, sent.state, sent.cep].filter(Boolean).join(", ");
-    const hasGpsCoords = sent.latitude && sent.longitude;
-    const { latitude, longitude } = hasGpsCoords
-      ? { latitude: sent.latitude, longitude: sent.longitude }
-      : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
-    const documentSubmission = buildDocumentSubmission(uploadedDocumentsToSend, reusedDocuments);
-    const identificationPayload = tutorship ? { identificationTypeId: tutorship } : {};
-    const localPayload = {
+    const identification = tutorship ? { identificationTypeId: tutorship } : {};
+    return {
       tutor: sent.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
       neighborhood: sent.neighborhood || "Bairro não informado",
       address:
@@ -3236,30 +3153,29 @@ function NewRequest({
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
-        ...identificationPayload,
+        ...identification,
         followUp: buildFollowUpPayload({ enabled: noticesEnabled }, tutorContacts, followUpPolicy.phoneEnabled),
       },
       animalId: registeredContext?.animal.id || "",
       animals: registeredContext ? [{ id: registeredContext.animal.id }] : payloadAnimals(animals.map((animal) => ({
         ...animal,
-        ...identificationPayload,
+        ...identification,
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
       }))),
-      ...documentSubmission,
-      declarationAccepted: accepted,
-      signedAt: new Date().toISOString(),
+      ...buildDocumentSubmission(uploadedDocumentsToSend, reusedDocuments),
     };
-    try {
-      const newRequest = await createRequest(localPayload, onEnrollment);
-      const generatedProtocol = String(newRequest?.protocol || "").trim();
+  }
 
-      if (!generatedProtocol) {
+  async function sendRequest(payload) {
+    try {
+      const created = await createRequest(payload, onEnrollment);
+      const protocol = String(created?.protocol || "").trim();
+      if (!protocol) {
         setSubmissionError("Não foi possível obter o protocolo. Confira o envio antes de tentar novamente.");
         return;
       }
-
-      onDone?.(normalizeRequest({ ...localPayload, ...newRequest, protocol: generatedProtocol }));
+      onDone?.(normalizeRequest({ ...payload, ...created, protocol }));
     } catch (err) {
       if (err?.status === 409) availability.refresh();
       setSubmissionError(err?.message || "Falha ao enviar solicitação. Tente novamente.");
@@ -3291,35 +3207,6 @@ function NewRequest({
       })}
     </div>
   );
-  const inlineAnimalPhotoUpload = (
-    <div className="animal-photo-upload-card animal-photo-upload-card--inline">
-      <div>
-        <strong>Foto de registro</strong>
-        <span>{documentUploads.animal_photo?.fileName || "Opcional"}</span>
-      </div>
-      {documentUploads.animal_photo?.dataUrl && (
-        <button className="animal-photo-preview" type="button" onClick={() => setPreviewDocument(documentUploads.animal_photo)} aria-label="Ver foto de registro">
-          <img src={documentUploads.animal_photo.dataUrl} alt="Foto de registro animal" />
-        </button>
-      )}
-      <div className="animal-photo-actions">
-        <label className="icon-button file-button" title="Enviar foto" aria-label="Enviar foto">
-          <UploadCloud size={17} />
-          <input type="file" accept="image/*" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
-        </label>
-        <label className="icon-button file-button" title="Abrir câmera" aria-label="Abrir câmera">
-          <Camera size={17} />
-          <input type="file" accept="image/*" capture="environment" onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
-        </label>
-        {documentUploads.animal_photo && (
-          <button className="icon-button danger-action" type="button" onClick={() => removeDocumentFile("animal_photo")} title="Remover foto" aria-label="Remover foto">
-            <X size={16} />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-
   const internalCompact = compact && !publicFlow;
   const requestShellClassName = [
     "nr-shell",
@@ -3412,7 +3299,6 @@ function NewRequest({
                     onChange={(field, value) => updateAnimal(index, field, value)}
                     onSelectSpecies={(value) => selectSpecies(index, value)}
                   />
-                  {internalSimple && inlineAnimalPhotoUpload}
                   {animals.length > 1 && (
                     <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
                       Remover animal {index + 1}
@@ -3440,7 +3326,7 @@ function NewRequest({
               selectedOccurrenceKey={requestData.scheduleOccurrenceKey}
               pendingReservation={{ date: requestData.schedule, count: animals.length }}
               onSelect={(date, occurrenceKey) => setRequestData((current) => ({ ...current, schedule: date, scheduleOccurrenceKey: occurrenceKey }))}
-              title={publicFlow ? "Escolha data e horário" : ""}
+              title="Escolha data e horário"
             />
             {internalSimple && (
               <label className="field internal-notes-field">
@@ -3462,7 +3348,7 @@ function NewRequest({
               </div>
 
               <div className="documents-step-grid">
-                {!internalSimple && <aside className="documents-photo-column">
+                <aside className="documents-photo-column">
                   <label className="doc-photo-zone doc-photo-zone--compact">
                     {documentUploads.animal_photo?.dataUrl ? (
                       <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
@@ -3481,7 +3367,7 @@ function NewRequest({
                     )}
                   </label>
                   {registeredContext && !contextLoading && <ReusableDocumentChoices candidates={registeredContext.documents.filter((candidate) => candidate.documentId === "animal_photo")} selected={reusedDocuments.animal_photo} onSelect={(candidate) => { animalPhotoGeneration.current += 1; setAnimalPhotoLoading(false); removeDocumentFile("animal_photo"); setReusedDocuments((current) => ({ ...current, animal_photo: candidate })); }} onPreview={setReusedPreview} onRemove={() => setReusedDocuments((current) => removeReusedDocument(current, "animal_photo"))} />}
-                </aside>}
+                </aside>
 
                 <div className="documents-main-column">
                   <div className="documents-list-card">
@@ -3511,7 +3397,7 @@ function NewRequest({
 
                   {!internalSimple && <div className="doc-declaration">
                     <p>
-                      O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.{" "}
+                      {declaration.summary}{" "}
                       <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
                     </p>
                     <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
@@ -3575,26 +3461,7 @@ function NewRequest({
   );
 }
 
-const REQUEST_DECLARATION_ITEMS = [
-  "A total responsabilidade pela realização da captura e acondicionamento dos animais até a condução para o centro de castração onde serão realizados os procedimentos operatórios de castração.",
-  "Para fins de ordem legal, autorizo a prática dos procedimentos veterinário e declaro que estou ciente dos riscos inerentes a qualquer prática Anestésico-Cirúrgica Médico Veterinária, a ser procedida em meu animal.",
-  "A total responsabilidade pela realização dos cuidados pré e pós-operatório dos procedimentos de castração.",
-  "A total responsabilidade pela realização exames pré e pós-operatório dos procedimentos de castração que forem julgados como necessários pelos médicos veterinários do centro de castração, sem ônus para a FUNDAI.",
-  "Que não utilizarei os encaminhamentos para procedimentos cirúrgicos para favorecer animais de terceiros ou não pertencentes ao município de Içara, assim como não cobrarei pelos serviços de encaminhamento.",
-  "Que tenho como residência fixa o endereço acima informado.",
-  "As informações descritas na solicitação serão conferidas com o animal no dia da cirurgia, caso essas informações não descrevam o animal, ele não passará pelo procedimento cirúrgico.",
-  "Da solicitação cirúrgica para animais de raça de agricultores será realizado o procedimento após pagamento da taxa.",
-  "Declaro que todas as informações prestadas e documentos anexos são verdadeiros e assumo a responsabilidade pelos mesmos sob as penas da lei e afirmo ter conhecimento da legislação pertinente ao objetivo deste requerimento.",
-  "Declaro ainda, a inteira responsabilidade pelas informações contidas nessa declaração, estando ciente de que a omissão ou a apresentação de informações e/ou documentos falsos ou divergentes implicam na infração do art. 299 do Código Penal, além das medidas judiciais cabíveis.",
-];
-
-const REQUEST_RECOMMENDATION_ITEMS = [
-  "Jejum hídrico e alimentar de 8 horas;",
-  "Felinos levar em caixa de transporte;",
-  "Levar roupinha cirúrgica se tiver ou colar Elizabetano.",
-];
-
-function buildDeclarationPdfHtml(requestData, animals = []) {
+function buildDeclarationPdfHtml(requestData, animals = [], declaration) {
   const value = (input) => escapeHtml(String(input ?? "-"));
   const yesNo = (input) => input === true ? "Sim" : input === false ? "Não" : String(input || "-");
   const renderDataItem = (label, input) => `<div class="data-item"><span>${escapeHtml(label)}</span><strong>${value(input || "-")}</strong></div>`;
@@ -3639,8 +3506,8 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
       </div>
     </div>
   `).join("");
-  const declarationItems = REQUEST_DECLARATION_ITEMS;
-  const recommendationItems = REQUEST_RECOMMENDATION_ITEMS;
+  const declarationItems = declaration.items;
+  const recommendationItems = declaration.recommendations;
 
   return `<!doctype html>
 <html>
@@ -3755,6 +3622,12 @@ function AdminDashboard({
   const { filters: requestFilters, actions: requestFilterActions } = useRequestFilters();
   const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
+  // The request just made at the counter: the modal shows its last screen until it is closed.
+  const [createdRequest, setCreatedRequest] = useState<AnyRecord | null>(null);
+  function closeCreateRequest() {
+    setCreateRequestOpen(false);
+    setCreatedRequest(null);
+  }
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
@@ -3980,32 +3853,38 @@ function AdminDashboard({
               <div className="irm-header-text">
                 <strong>Nova solicitação</strong>
               </div>
-              <button className="irm-close-btn" type="button" aria-label="Fechar" onClick={() => setCreateRequestOpen(false)}>
+              <button className="irm-close-btn" type="button" aria-label="Fechar" onClick={closeCreateRequest}>
                 <X size={18} />
               </button>
             </div>
-            <NewRequest
-              key={`internal-procedure-${selectedMunicipalityId || currentUser.municipalityId || ""}`}
-              createRequest={async (payload) => {
-                const result = await createRequest?.(payload);
-                if (result?.protocol) showToast(`Cadastro criado — Protocolo #${result.protocol}`, "success");
-                return result;
-              }}
-              currentUser={currentUser}
-              selectedMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
-              initialMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
-              compact
-              internalSimple
-              onBack={() => setCreateRequestOpen(false)}
-              onDone={() => setCreateRequestOpen(false)}
-              requestTypes={requestTypes}
-              identificationTypes={identificationTypes}
-              aiSettings={aiSettings}
-              speciesOptions={speciesOptions}
-              sizeOptions={sizeOptions}
-              breeds={breeds}
-              neighborhoods={neighborhoods}
-            />
+            {createdRequest ? (
+              <RequestDoneCard
+                protocol={createdRequest.protocol}
+                followUp={(createdRequest.workflow_data || createdRequest.workflowData)?.followUp}
+                createRequirement={() => createRequestPdfDataUrl(createdRequest, municipalities.find((item) => item.id === createdRequest.municipalityId))}
+                closeLabel="Fechar"
+                onClose={closeCreateRequest}
+              />
+            ) : (
+              <NewRequest
+                key={`internal-procedure-${selectedMunicipalityId || currentUser.municipalityId || ""}`}
+                createRequest={createRequest}
+                currentUser={currentUser}
+                selectedMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
+                initialMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
+                compact
+                internalSimple
+                onBack={closeCreateRequest}
+                onDone={setCreatedRequest}
+                requestTypes={requestTypes}
+                identificationTypes={identificationTypes}
+                aiSettings={aiSettings}
+                speciesOptions={speciesOptions}
+                sizeOptions={sizeOptions}
+                breeds={breeds}
+                neighborhoods={neighborhoods}
+              />
+            )}
           </div>
         </div>
       )}
@@ -4024,6 +3903,8 @@ type AttachmentRow = AnyRecord & { id: string; document?: AnyRecord };
 export function RequestPreviewModal({ request, readOnly = true, neighborhoods = [], onTutorSaved, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
   const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
+  // The municipality of the request, whose name and department the request document and the declaration carry.
+  const requestMunicipality = municipalities.find((item) => item.id === normalizedRequest.municipalityId) || null;
   const [previewAttachment, setPreviewAttachment] = useState(null);
   const [previewLoadingId, setPreviewLoadingId] = useState("");
   const [downloadLoadingId, setDownloadLoadingId] = useState("");
@@ -4264,7 +4145,7 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
   async function handlePreview(item) {
     setPreviewLoadingId(item.id);
     try {
-      setPreviewAttachment(await prepareProcessDocumentPreview(item, request));
+      setPreviewAttachment(await prepareProcessDocumentPreview(item, request, requestMunicipality));
     } catch (err) {
       console.error("Erro ao preparar prévia do documento:", err);
       setPreviewAttachment({
@@ -4282,7 +4163,7 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
     setReportLoading(true);
     setReportError("");
     try {
-      const report = await generateProcessReportPdf(request, requestDocumentKind);
+      const report = await generateProcessReportPdf(request, requestDocumentKind, requestMunicipality);
       const anchor = window.document.createElement("a");
       anchor.href = report.dataUrl;
       anchor.download = report.fileName;
@@ -4298,7 +4179,7 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
   async function handleDownload(item) {
     setDownloadLoadingId(item.id);
     try {
-      const prepared = await prepareProcessDocumentPreview(item, request);
+      const prepared = await prepareProcessDocumentPreview(item, request, requestMunicipality);
       if (prepared?.dataUrl) {
         const anchor = window.document.createElement("a");
         anchor.href = prepared.dataUrl;
@@ -9230,14 +9111,14 @@ async function appendProcessTextPages(output: AnyRecord, request: AnyRecord, { d
 
 // The whole process in one PDF: its request document, the tramitação, every attachment the tutor sent and, when one was issued, the
 // prescription. An attachment that cannot be shown becomes a page that says so, never a failure of the report.
-async function generateProcessReportPdf(request: AnyRecord = {}, requestDocumentKind = "request") {
+async function generateProcessReportPdf(request: AnyRecord = {}, requestDocumentKind = "request", municipality: AnyRecord | null = null) {
   const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const output = await PDFDocument.create();
   const req = normalizeRequest(request);
   const workflow: AnyRecord = req.workflowData || req.workflow_data || {};
   const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
   try {
-    const requestDocument = await prepareProcessDocumentPreview({ kind: requestDocumentKind }, request);
+    const requestDocument = await prepareProcessDocumentPreview({ kind: requestDocumentKind }, request, municipality);
     await appendPdfDataUrl(output, requestDocument.dataUrl);
   } catch (error) {
     console.warn("Aviso: documento do processo ignorado no relatório:", error);
@@ -9287,14 +9168,14 @@ async function generateProcessReportPdf(request: AnyRecord = {}, requestDocument
   };
 }
 
-async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord) {
+async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord, municipality: AnyRecord | null = null) {
   if (item.kind === "request") {
     return {
       documentName: "Requerimento municipal",
       fileName: `Requerimento ${request.protocol || ""}.pdf`.trim(),
       fileType: "application/pdf",
       eyebrow: "Requerimento",
-      dataUrl: await createRequestPdfDataUrl(request),
+      dataUrl: await createRequestPdfDataUrl(request, municipality),
     };
   }
   if (item.kind === "tutor-transfer-request") {
@@ -10115,7 +9996,7 @@ async function createComplaintPdfDataUrl(request: AnyRecord = {}) {
   return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
 }
 
-async function createRequestPdfDataUrl(request: AnyRecord = {}) {
+async function createRequestPdfDataUrl(request: AnyRecord = {}, municipality: AnyRecord | null = null) {
   const { PDFDocument, rgb } = await importPdfLib();
   const pdf = await PDFDocument.create();
   const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
@@ -10267,8 +10148,10 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
   page2.drawText("Declaro para fins civis, penais e administrativos:", { x: margin + 9, y: y2, size: 9, font: bold, color: colors.ink });
   y2 -= 18;
 
-  const declarationItems = REQUEST_DECLARATION_ITEMS;
-  const recommendationItems = REQUEST_RECOMMENDATION_ITEMS;
+  // The text of the declaration is the municipality's: its name and department, and the fee clause only for a charged request.
+  const declaration = renderDeclaration({ municipalityName: municipality?.name || request.municipalityName || request.municipality_name, departmentName: municipality?.department_name, charged: isRequestFeeCharged(request.fee) });
+  const declarationItems = declaration.items;
+  const recommendationItems = declaration.recommendations;
 
   for (const paragraph of declarationItems) {
     const lines = wrapPdfText(pdfText(paragraph), 110);

@@ -3445,59 +3445,6 @@ button:disabled {
 }
 
 
-.animal-photo-upload-card {
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius);
-  background: #ffffff;
-  padding: 12px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px auto;
-  gap: 12px;
-  align-items: center;
-}
-
-
-.animal-photo-upload-card strong,
-.animal-photo-upload-card span,
-.animal-photo-upload-card small {
-  display: block;
-}
-
-
-.animal-photo-upload-card span,
-.animal-photo-upload-card small {
-  color: var(--muted);
-  font-size: 0.82rem;
-  margin-top: 2px;
-}
-
-
-.animal-photo-preview {
-  width: 120px;
-  aspect-ratio: 4 / 3;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: #f8fafc;
-  overflow: hidden;
-  padding: 0;
-}
-
-
-.animal-photo-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-
-.animal-photo-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-
 .address-lookup-grid {
   display: grid;
   grid-template-columns: 1fr 0.6fr 52px;
@@ -4055,33 +4002,6 @@ button:disabled {
   color: #1479b8;
   font-size: 0.86rem;
   font-weight: 600;
-}
-
-
-.file-button {
-  min-height: 40px;
-  border-radius: var(--radius);
-  border: 1px solid #bde0f4;
-  background: #eef8ff;
-  color: #1479b8;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0 12px;
-  transition: background-color 150ms ease, border-color 150ms ease;
-}
-
-
-.file-button:hover {
-  border-color: #2563eb;
-  background: #dff2ff;
-}
-
-
-.file-button input {
-  display: none;
 }
 
 
@@ -8539,7 +8459,6 @@ main {
 
 
   .summary-row,
-  .animal-photo-upload-card,
   .adoption-grid,
   .settings-grid,
   .public-animal-grid,
@@ -8664,11 +8583,6 @@ main {
   .request-type-grid,
   .ai-config-grid {
     grid-template-columns: 1fr;
-  }
-
-
-  .animal-photo-actions {
-    justify-content: stretch;
   }
 
 
@@ -12691,14 +12605,6 @@ body * {
 }
 
 
-.internal-request-modal .animal-photo-upload-card {
-  border: 1px solid rgba(203, 213, 225, 0.86);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.055);
-}
-
-
 .internal-request-modal .animal-form-header {
   margin: -14px -14px 12px;
   padding: 12px 14px;
@@ -12797,63 +12703,6 @@ body * {
 
 .internal-request-modal .calendar-day-button.selected {
   background: #e0f2fe;
-}
-
-
-.internal-request-modal .animal-photo-upload-card--inline {
-  min-height: 54px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, #ffffff, #f8fafc);
-  box-shadow: none;
-}
-
-
-.internal-request-modal .animal-photo-upload-card--inline strong {
-  color: #0f172a;
-  font-size: 0.88rem;
-}
-
-
-.internal-request-modal .animal-photo-upload-card--inline span,
-.internal-request-modal .animal-photo-upload-card--inline small {
-  color: #64748b;
-  font-size: 0.76rem;
-}
-
-
-.internal-request-modal .animal-photo-upload-card--inline .animal-photo-preview {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-}
-
-
-.internal-request-modal .animal-photo-upload-card--inline .animal-photo-actions {
-  display: inline-flex;
-  gap: 6px;
-}
-
-
-.internal-request-modal .animal-photo-upload-card--inline .icon-button {
-  width: 38px;
-  height: 38px;
-  min-height: 38px;
-  padding: 0;
-  border-radius: 10px;
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-
-.internal-request-modal .animal-photo-upload-card--inline .danger-action {
-  border-color: #fecaca;
-  background: #fff1f2;
-  color: #be123c;
 }
 
 
@@ -13368,7 +13217,6 @@ body * {
 .nr-home-btn,
 .nr-back-btn,
 .nr-topbar-continue,
-.file-button,
 .adoption-filter-group button,
 .municipality-chip-btn {
   touch-action: manipulation;
@@ -13379,7 +13227,6 @@ body * {
 .primary-action,
 .secondary-action,
 .ghost-button,
-.file-button,
 .public-back-button,
 .nr-topbar-continue {
   min-height: 44px;
@@ -13401,7 +13248,6 @@ body * {
 
 
 .document-upload-card,
-.animal-photo-upload-card,
 .attachment-card,
 .workflow-item,
 .info-tile {
@@ -13504,18 +13350,6 @@ body * {
   .consultation-inline-metrics span {
     width: 100%;
     justify-content: space-between;
-  }
-
-
-  .document-upload-actions,
-  .animal-photo-actions {
-    justify-content: stretch;
-  }
-
-
-  .document-upload-actions > *,
-  .animal-photo-actions > * {
-    flex: 1 1 auto;
   }
 
 
@@ -16198,7 +16032,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .animal-photo-upload-card,
 .nr-shell .public-schedule-picker,
 .nr-shell .doc-declaration,
 .nr-shell .doc-empty-note {
@@ -16569,7 +16402,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .animal-photo-upload-card,
 .nr-shell .public-schedule-picker,
 .nr-shell .doc-declaration,
 .nr-shell .doc-empty-note {
@@ -17783,15 +17615,6 @@ form textarea:focus,
 .nr-shell .animal-choice-grid,
 .nr-shell .single-request-form .animal-form .animal-choice-grid {
   gap: 10px;
-}
-
-
-.nr-shell .animal-photo-upload-card {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
 }
 
 
@@ -20790,7 +20613,6 @@ form textarea:focus,
 }
 
 
-.nr-shell--public .animal-photo-upload-card,
 .nr-shell--public .public-schedule-picker,
 .nr-shell--public .doc-empty-note,
 .nr-shell--public .form-sub-card {
@@ -21587,18 +21409,18 @@ form textarea:focus,
   line-height: 1.35;
 }
 
-.public-service-panel .documents-step-grid {
+.nr-shell .documents-step-grid {
   display: grid;
   grid-template-columns: minmax(140px, 180px) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
 
-.public-service-panel .documents-photo-column {
+.nr-shell .documents-photo-column {
   min-width: 0;
 }
 
-.public-service-panel .doc-photo-zone--compact {
+.nr-shell .doc-photo-zone--compact {
   aspect-ratio: 1 / 1;
   min-height: 0;
   border-width: 1px;
@@ -21608,17 +21430,17 @@ form textarea:focus,
   background: #f8fafc;
 }
 
-.public-service-panel .doc-photo-zone--compact .doc-photo-placeholder {
+.nr-shell .doc-photo-zone--compact .doc-photo-placeholder {
   gap: 5px;
   padding: 12px;
   text-align: center;
 }
 
-.public-service-panel .doc-photo-zone--compact .doc-photo-placeholder span {
+.nr-shell .doc-photo-zone--compact .doc-photo-placeholder span {
   font-size: 0.78rem;
 }
 
-.public-service-panel .doc-photo-zone--compact .doc-photo-placeholder small {
+.nr-shell .doc-photo-zone--compact .doc-photo-placeholder small {
   font-size: 0.68rem;
 }
 
@@ -21633,7 +21455,7 @@ form textarea:focus,
   padding: 0;
 }
 
-.public-service-panel .doc-declaration {
+.nr-shell .doc-declaration {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -21644,7 +21466,7 @@ form textarea:focus,
   background: rgba(248, 250, 252, 0.86);
 }
 
-.public-service-panel .doc-declaration p {
+.nr-shell .doc-declaration p {
   margin: 0;
   padding: 0;
   border: 0;
@@ -21653,7 +21475,7 @@ form textarea:focus,
   line-height: 1.45;
 }
 
-.public-service-panel .doc-accept-check {
+.nr-shell .doc-accept-check {
   min-height: 34px;
   padding: 0;
   flex: 0 0 auto;
@@ -21902,21 +21724,21 @@ form textarea:focus,
   .public-service-panel .svc-grid-2,
   .public-service-panel .svc-grid-3,
   .public-inline-card .two-column-fields,
-  .public-service-panel .documents-step-grid {
+  .nr-shell .documents-step-grid {
     grid-template-columns: 1fr;
   }
 
   .nr-shell .documents-step-header,
-  .public-service-panel .doc-declaration {
+  .nr-shell .doc-declaration {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .public-service-panel .doc-photo-zone--compact {
+  .nr-shell .doc-photo-zone--compact {
     width: min(170px, 100%);
   }
 
-  .public-service-panel .doc-accept-check {
+  .nr-shell .doc-accept-check {
     white-space: normal;
   }
 }
@@ -23412,7 +23234,7 @@ main,
 .public-form-page:not(.public-form-page--consultation),
 .nr-shell--public .sched-month-tab,
 .nr-shell--public .doc-photo-zone,
-.public-service-panel .doc-photo-zone--compact,
+.nr-shell .doc-photo-zone--compact,
 .access-type-card:hover,
 .access-modal .access-type-card:hover,
 .compact-auth-modal .ghost-button:hover {
@@ -24546,7 +24368,6 @@ textarea::placeholder,
 .btn-secondary,
 .danger-action,
 .icon-button,
-.file-button,
 .public-back-button,
 .inline-link-button,
 .adoption-clear-btn,
@@ -25090,15 +24911,10 @@ small,
   align-items: end !important;
 }
 
-.internal-request-modal .nr-shell--internal .internal-chip-check,
-.internal-request-modal .nr-shell--internal .animal-photo-upload-card--inline {
+.internal-request-modal .nr-shell--internal .internal-chip-check {
   border-color: #dbe5f1 !important;
   border-radius: 12px !important;
   background: #f8fafc !important;
-}
-
-.internal-request-modal .nr-shell--internal .animal-photo-upload-card--inline {
-  padding: 14px 16px !important;
 }
 
 .internal-request-modal .nr-shell--internal .anm-actions-row {
