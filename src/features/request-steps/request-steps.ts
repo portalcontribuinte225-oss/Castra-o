@@ -34,7 +34,8 @@ export interface VisibleStepsInput {
   configs: Array<StepToggles | null | undefined>;
 }
 
-const internalStepOrder: RequestStep[] = [RequestStep.TUTOR, RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP];
+// Animal first, as in the public form: the identification type chosen there is what decides whether the Tutor step exists.
+const internalStepOrder: RequestStep[] = [RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.FOLLOW_UP];
 
 const publicStepOrder: RequestStep[] = [
   RequestStep.ANIMAL,

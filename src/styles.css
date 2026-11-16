@@ -21068,18 +21068,18 @@ form textarea:focus,
 }
 
 
-/* -- ETAPA TUTOR (público): card único "Responsável e contato", igual ao mockup -- */
+/* -- ETAPA TUTOR (formulário público e o preenchido pela equipe, que usam o mesmo componente) -- */
 
 /* input + botão de ação lado a lado dentro do mesmo .access-field (ex.: CadÚnico
    com o toggle quadrado, Telefone com "Verificar") — a legenda (::before) do
    .access-field continua vindo de cima, essa linha só organiza o segundo item. */
-.nr-shell--public .access-field-action-row {
+.nr-shell .access-field-action-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.nr-shell--public .access-field-action-row input {
+.nr-shell .access-field-action-row input {
   flex: 1;
   min-width: 0;
 }
@@ -21087,13 +21087,13 @@ form textarea:focus,
 /* Botão quadrado do CadÚnico "se aplica" — checkbox real escondido (acessível),
    quadrado verde+check quando marcado, borda cinza-azulada quando não. Reaproveita o
    mesmo truque CSS (::after com borda rotacionada) já usado em .doc-check-box. */
-.nr-shell--public .cadunico-square-toggle {
+.nr-shell .cadunico-square-toggle {
   position: relative;
   flex-shrink: 0;
   display: flex;
 }
 
-.nr-shell--public .cadunico-square-toggle input {
+.nr-shell .cadunico-square-toggle input {
   position: absolute;
   inset: 0;
   opacity: 0;
@@ -21101,7 +21101,7 @@ form textarea:focus,
   margin: 0;
 }
 
-.nr-shell--public .cadunico-check-box {
+.nr-shell .cadunico-check-box {
   width: 38px;
   height: 38px;
   border-radius: 10px;
@@ -21113,12 +21113,12 @@ form textarea:focus,
   transition: background 0.15s, border-color 0.15s;
 }
 
-.nr-shell--public .cadunico-square-toggle input:checked ~ .cadunico-check-box {
+.nr-shell .cadunico-square-toggle input:checked ~ .cadunico-check-box {
   background: #1f8a5f;
   border-color: #1f8a5f;
 }
 
-.nr-shell--public .cadunico-square-toggle input:checked ~ .cadunico-check-box::after {
+.nr-shell .cadunico-square-toggle input:checked ~ .cadunico-check-box::after {
   content: "";
   width: 8px;
   height: 14px;

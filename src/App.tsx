@@ -2687,7 +2687,7 @@ function NewRequest({
   useEffect(() => () => { documentUploadGeneration.current += 1; }, []);
   const [reusedDocuments, setReusedDocuments] = useState<Record<string, ReusableDocumentCandidate>>({});
   const [reusedPreview, setReusedPreview] = useState<ReusableDocumentCandidate | null>(null);
-  const [formStep, setFormStep] = useState<RequestStep>(internalSimple ? RequestStep.TUTOR : RequestStep.ANIMAL);
+  const [formStep, setFormStep] = useState<RequestStep>(RequestStep.ANIMAL);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
