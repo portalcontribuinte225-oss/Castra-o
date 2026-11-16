@@ -184,7 +184,7 @@ import type { MunicipalityForm } from "./features/municipality-form/municipality
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
-import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./features/request-steps/request-steps";
+import { RequestStep, getVisibleSteps, requestTypeStepToggles } from "./features/request-steps/request-steps";
 import { FollowUpStep } from "./features/request-follow-up/follow-up-step";
 import { buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./features/request-follow-up/follow-up";
 import { FollowUpSummary } from "./features/request-follow-up/follow-up-summary";
@@ -2665,8 +2665,6 @@ function NewRequest({
     number: currentUser.number || "",
     city: currentUser.city || "",
     state: currentUser.state || "",
-    cadUnico: currentUser.cadUnico || "",
-    cadUnicoNotApplicable: currentUser.cadUnico ? false : Boolean(currentUser.cadUnicoNotApplicable ?? true),
     isFarmer: Boolean(currentUser.isFarmer || currentUser.is_farmer),
     latitude: "",
     longitude: "",
@@ -2755,9 +2753,10 @@ function NewRequest({
   const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
   const activeIdentificationTypes = publicFlow || internalSimple ? getActiveIdentificationTypes(identificationTypes) : [];
   const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
-  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [...selectedRequestTypes, selectedIdentificationType] });
+  // The request types decide the agenda and the documents; only the identification type can take the Tutor step away.
+  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [...requestTypeStepToggles(selectedRequestTypes), selectedIdentificationType] });
   const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
-  const requiresTutorIdentity = internalSimple ? hasStep(RequestStep.TUTOR) : currentUser.role === "tutor" || configsAllowStep([...selectedRequestTypes, selectedIdentificationType], "stepTutor");
+  const requiresTutorIdentity = internalSimple ? hasStep(RequestStep.TUTOR) : currentUser.role === "tutor" || configsAllowStep([selectedIdentificationType], "stepTutor");
   const selectedTypeDocuments = mergeProcedureDocuments(selectedRequestTypes.map((type) => (type.documents || [])
     .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
@@ -2843,14 +2842,6 @@ function NewRequest({
 
   function updateRequestField(field, value) {
     setRequestData((current) => ({ ...current, [field]: value }));
-  }
-
-  function toggleCadUnicoNotApplicable(checked) {
-    setRequestData((current) => ({
-      ...current,
-      cadUnicoNotApplicable: !checked,
-      cadUnico: !checked ? "" : current.cadUnico,
-    }));
   }
 
   function updateMaskedRequestField(field, value) {
@@ -3151,6 +3142,7 @@ function NewRequest({
       email: requestData.email || "",
       cep: requestData.cep || "",
       preferredSchedule: requestData.schedule || "",
+      notes: requestData.notes || "",
       municipalityId: requestData.municipalityId || selectedScheduleDay?.municipalityId || "",
       scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
@@ -3163,8 +3155,6 @@ function NewRequest({
       latitude,
       longitude,
       workflowData: {
-        cadUnico: requestData.cadUnicoNotApplicable ? "" : requestData.cadUnico,
-        cadUnicoNotApplicable: requestData.cadUnicoNotApplicable,
         isFarmer: requestData.isFarmer,
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
@@ -3230,8 +3220,6 @@ function NewRequest({
       latitude,
       longitude,
       workflowData: {
-        cadUnico: requestData.cadUnicoNotApplicable ? "" : requestData.cadUnico,
-        cadUnicoNotApplicable: requestData.cadUnicoNotApplicable,
         isFarmer: requestData.isFarmer,
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
@@ -3358,7 +3346,6 @@ function NewRequest({
               showErrors={submitAttempted}
               onField={updateRequestField}
               onMaskedField={updateMaskedRequestField}
-              onCadUnicoApplies={toggleCadUnicoNotApplicable}
               onCepChange={lookupCep}
             />
           </FormSection>}
@@ -3599,10 +3586,8 @@ function buildDeclarationPdfHtml(requestData, animals = []) {
     ["Bairro", requestData.neighborhood],
     ["Cidade", requestData.city],
     ["UF", requestData.state],
-    ["CadÚnico", requestData.cadUnicoNotApplicable ? "Não se aplica" : requestData.cadUnico],
     ["Agricultor", yesNo(requestData.isFarmer)],
     ["Data da agenda", requestData.schedule],
-    ["Observações", requestData.notes],
   ];
   const animalFieldLabels = [
     ["Procedimentos", "procedures"],
@@ -6104,7 +6089,7 @@ function ConfigView({
   aiSettings = initialAiSettings,
   setAiSettings,
 }) {
-  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepTutor: true, stepAgenda: true, stepDocuments: true, breedIds: [] };
+  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepAgenda: true, stepDocuments: true, breedIds: [] };
   const emptyAgendaForm = {
     description: "Agenda padrão",
     active: true,
@@ -6327,7 +6312,6 @@ function ConfigView({
         municipalityId: payload.municipalityId || configMunicipalityScopeId,
         documents: selectedDocuments,
         breedIds: Array.isArray(payload.breedIds) ? payload.breedIds : [],
-        stepTutor: payload.stepTutor !== false,
         stepAgenda: payload.stepAgenda !== false,
         stepDocuments: true,
       },
@@ -8510,18 +8494,6 @@ function ConfigView({
                 <label className="toggle-switch config-active-toggle request-type-step-toggle">
                   <input
                     type="checkbox"
-                    checked={newRequestType.stepTutor !== false}
-                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepTutor: e.target.checked }))}
-                  />
-                  <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  <span className="request-type-step-toggle-text">
-                    <span>Dados do tutor</span>
-                    <small>Esta etapa só aparece se o tipo de identificação também permitir.</small>
-                  </span>
-                </label>
-                <label className="toggle-switch config-active-toggle request-type-step-toggle">
-                  <input
-                    type="checkbox"
                     checked={newRequestType.stepAgenda !== false}
                     onChange={(e) => setNewRequestType((current) => ({ ...current, stepAgenda: e.target.checked }))}
                   />
@@ -8532,9 +8504,6 @@ function ConfigView({
                   </span>
                 </label>
               </div>
-              <span className="request-type-step-toggle-text">
-                <small>Etapas desta solicitação: {summarizeVisibleSteps([{ ...newRequestType, stepDocuments: true }])}</small>
-              </span>
             </div>
             <Field label="Nome" value={newRequestType.name} placeholder="Ex: Castração" onChange={(value) => setNewRequestType((current) => ({ ...current, name: value }))} />
             {newRequestType.charged && (
@@ -10216,7 +10185,6 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}) {
     [
       { label: "CIDADE", value: req.city || "-" },
       { label: "UF", value: req.state || "-" },
-      { label: "CADÚNICO", value: workflowData.cadUnicoNotApplicable || req.cadUnicoNotApplicable ? "Não se aplica" : workflowData.cadUnico || req.cadUnico || "-" },
       { label: "AGRICULTOR", value: workflowData.isFarmer || req.isFarmer ? "Sim" : "Não" },
     ],
   ], y, ctx);

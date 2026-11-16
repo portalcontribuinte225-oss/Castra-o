@@ -1,5 +1,6 @@
 import { authError } from "../services/auth/auth-security.js";
 import { normalizeAnimalData, animalFingerprint, validUuid } from "../services/registered-animals/animal-data.js";
+import { AnimalTutorship } from "../../../shared/request-tutorship-contract.js";
 
 // Compatibility adapter for the existing pg schema. All identity lookups retain municipal predicates.
 export async function findOwnedAnimal(client, { id, userId, municipalityId, lock = false, internal = false }) {
@@ -14,7 +15,7 @@ export async function findOwnedAnimal(client, { id, userId, municipalityId, lock
 
 export async function insertCanonicalAnimal(client, { data, request, index, tutorId, municipalityId, sourceFingerprint }) {
   const normalized = normalizeAnimalData(data);
-  const identificationTypeId = data.identificationTypeId || request.workflow_data?.identificationTypeId || "animal_com_tutor";
+  const identificationTypeId = data.identificationTypeId || request.workflow_data?.identificationTypeId || AnimalTutorship.WITH_TUTOR;
   const metadata = { registration: normalized, declaredMicrochip: normalized.declaredMicrochip,
     identificationTypes: { [municipalityId]: identificationTypeId },
     source: { requestId: request.id, animalIndex: index, fingerprint: sourceFingerprint || animalFingerprint(data) } };

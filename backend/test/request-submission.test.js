@@ -27,15 +27,14 @@ test("configured tutor omission accepts no CPF and normalizes an explicit refusa
   assert.deepEqual(result.workflow.followUp, { enabled: false, email: "", phone: "" });
 });
 
-test("all combinations use the conjunction of trusted tutor toggles", () => {
+test("only the identification type can dispense the tutor: the toggle of the request type never does", () => {
   for (const stepTutor of [true, false, undefined]) {
     for (const identificationTutor of [true, false, undefined]) {
       const input = structuredClone(defaults);
       input.body.cpf = "";
       input.settings.requestTypes[0].stepTutor = stepTutor;
       input.settings.identificationTypes[0].stepTutor = identificationTutor;
-      const permits = stepTutor === false || identificationTutor === false;
-      if (permits) assert.equal(prepareRequestSubmission(input).cpf, null);
+      if (identificationTutor === false) assert.equal(prepareRequestSubmission(input).cpf, null);
       else assert.throws(() => prepareRequestSubmission(input), /CPF/);
     }
   }
@@ -239,15 +238,16 @@ test("an old-style request keeps working, and its forged derived workflow keys a
   assert.throws(() => prepare({ ...procedureInput([{ name: "Rex" }]), body: { requestTypeId: "unknown", cpf, animals: [{ name: "Rex" }] } }), /solicitação/);
 });
 
-test("the tutor step is dispensed when any procedure or the identification type has no tutor step", () => {
+test("the tutor step is dispensed only by the identification type, never by a procedure", () => {
   const stray = { id: "stray", active: true, stepTutor: false };
   const settings = procedureSettings({ identificationTypes: [{ id: "owned", active: true }, stray] });
   const run = (animals, identificationTypeId, body = {}) => prepare({ body: { animals, ...body }, settings, workflow: { identificationTypeId, followUp: { enabled: false } } });
   const noTutor = [{ ...bairro, requestTypeIds: ["no-tutor"] }, { ...bairro, requestTypeIds: ["no-tutor-too"] }];
   const needsTutor = [{ ...bairro, requestTypeIds: ["castration"] }, { ...bairro, requestTypeIds: ["microchip"] }];
-  assert.deepEqual([run(noTutor, "owned").tutorRequired, run(noTutor, "owned").cpf], [false, null]);
-  assert.equal(run([...noTutor, ...needsTutor], "owned").tutorRequired, false, "one procedure without a tutor step is enough");
-  assert.equal(run([{ ...bairro, requestTypeIds: ["castration", "no-tutor"] }], "owned").tutorRequired, false);
+  assert.throws(() => run(noTutor, "owned"), /CPF/, "a procedure whose type has no tutor step does not dispense it");
+  assert.throws(() => run([...noTutor, ...needsTutor], "owned"), /CPF/);
+  assert.throws(() => run([{ ...bairro, requestTypeIds: ["castration", "no-tutor"] }], "owned"), /CPF/);
+  assert.deepEqual([run(noTutor, "stray").tutorRequired, run(noTutor, "stray").cpf], [false, null]);
   assert.equal(run(needsTutor, "stray").tutorRequired, false, "the identification type alone may dispense it");
   assert.throws(() => run(needsTutor, "owned"), /CPF/);
   assert.equal(run(needsTutor, "owned", { cpf, phone }).tutorRequired, true);
@@ -322,13 +322,10 @@ test("the follow-up needs at least one contact, and an internal request carries 
   assert.equal(prepare({ user: { role: "analista" }, workflow: {} }).workflow.followUp, undefined, "the internal request may still go without the answer");
 });
 
-test("the staff's request needs no tutor either when the request types of its animals have no tutor step, as in the public form", () => {
+test("the request types of the staff's animals do not dispense the tutor either", () => {
   const user = { role: "analista" };
   const asked = (...ids) => procedureInput([{ ...bairro, requestTypeIds: ids }], { user });
-  for (const ids of [["no-tutor"], ["no-tutor", "no-tutor-too"]]) {
-    const result = prepare(asked(...ids));
-    assert.deepEqual([result.cpf, result.internal, result.tutorRequired], [null, true, false], ids.join());
+  for (const ids of [["no-tutor"], ["no-tutor", "no-tutor-too"], ["castration", "no-tutor"], ["castration"]]) {
+    assert.throws(() => prepare(asked(...ids)), /CPF/, ids.join());
   }
-  assert.throws(() => prepare(asked("castration")), /CPF/);
-  assert.equal(prepare(asked("castration", "no-tutor")).tutorRequired, false, "one type without the step is enough, as the toggles combine everywhere");
 });

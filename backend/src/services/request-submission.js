@@ -54,19 +54,20 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
 
   let tutorRequired = true;
   if (publicProcedure) {
-    const selectedTypes = procedures ? procedures.types : [selectSingleRequestType()].filter(Boolean);
+    // An old-style request names its single type, which still has to be a valid one.
+    if (!procedures) selectSingleRequestType();
     if (Array.isArray(body.animals) && body.animals.some((animal) => !animal || typeof animal !== "object" || Array.isArray(animal))) {
       invalid("Dados do animal inválidos.");
     }
     const selectedIdentification = selectIdentification();
-    tutorRequired = configsAllowStep([...selectedTypes, selectedIdentification], "stepTutor");
+    tutorRequired = configsAllowStep([selectedIdentification], "stepTutor");
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   } else if (workflow.followUp !== undefined) {
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   }
-  // Staff register a tutor too, unless the request types of the animals or the identification type they chose have no Tutor step (an
-  // animal without a tutor).
-  if (internal && !isComplaint) tutorRequired = configsAllowStep([...(procedures?.types || []), selectIdentification()], "stepTutor");
+  // Staff register a tutor too, unless the identification type they chose has no Tutor step (an animal without a tutor); the request
+  // types never dispense it.
+  if (internal && !isComplaint) tutorRequired = configsAllowStep([selectIdentification()], "stepTutor");
 
   if ((hasCpfInput || tutorRequired || isComplaint || user?.role === "tutor") && !isValidCpf(cleanCpf)) {
     invalid(isComplaint ? "CPF válido é obrigatório para registrar a denúncia." : "Informe um CPF válido para o tutor.");

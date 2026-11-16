@@ -7,11 +7,11 @@ import type { TutorStepData } from "./tutor-step-fields";
 import { registrationContactIssues } from "./registration-contact-fields";
 
 const data: TutorStepData = {
-  tutor: "Maria Silva", cpf: "529.982.247-25", cadUnico: "", cadUnicoNotApplicable: true, cep: "88801-600", number: "88", state: "SC", address: "Rua Ararangua",
+  tutor: "Maria Silva", cpf: "529.982.247-25", cep: "88801-600", number: "88", state: "SC", address: "Rua Ararangua",
   neighborhood: "Centro", city: "Criciuma", latitude: "", longitude: "", email: "", phone: "",
 };
 const noop = vi.fn();
-const props = { data, nameInvalid: false, nameIssue: "", cpfInvalid: false, neighborhoodNames: ["Centro", "Liri"], showErrors: false, onField: noop, onMaskedField: noop, onCadUnicoApplies: noop, onCepChange: noop };
+const props = { data, nameInvalid: false, nameIssue: "", cpfInvalid: false, neighborhoodNames: ["Centro", "Liri"], showErrors: false, onField: noop, onMaskedField: noop, onCepChange: noop };
 const html = (overrides: Partial<React.ComponentProps<typeof TutorStepFields>> = {}) => renderToStaticMarkup(<TutorStepFields {...props} {...overrides} />);
 
 describe("the mobile in the registration contact", () => {
@@ -58,9 +58,7 @@ describe("the Tutor step", () => {
     expect(html({ neighborhoodNames: [] })).toMatch(/<input[^>]*aria-label="Bairro"/);
   });
 
-  it("locks the CadÚnico number until it applies, and shows the registered place when there is one", () => {
-    expect(html()).toMatch(/placeholder="Número"[^>]*readOnly=""/i);
-    expect(html({ data: { ...data, cadUnicoNotApplicable: false, cadUnico: "123" } })).not.toMatch(/value="123"[^>]*readonly/i);
+  it("shows the registered place when there is one", () => {
     expect(html()).not.toContain("Localização registrada");
     expect(html({ data: { ...data, latitude: "-28.6", longitude: "-49.3" } })).toContain("Localização registrada: -28.6, -49.3.");
   });
@@ -68,6 +66,6 @@ describe("the Tutor step", () => {
   it("is one copy: the staff's form has no other markup for the same step", () => {
     const markup = html();
     expect(markup).not.toContain("cadunico-row"); expect(markup).not.toContain("Se aplica"); expect(markup).not.toContain("Identificação");
-    expect(markup).toContain("cadunico-square-toggle");
+    expect(markup).not.toContain("CadÚnico"); expect(markup).not.toContain("cadunico-square-toggle");
   });
 });

@@ -477,8 +477,6 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     rejectionNote: request.rejectionNote || workflowData.rejectionNote || "",
     performedProcedures: request.performedProcedures || workflowData.performedProcedures || "",
     attendanceNote: request.attendanceNote || workflowData.attendanceNote || "",
-    cadUnico: request.cadUnico || workflowData.cadUnico || "",
-    cadUnicoNotApplicable: Boolean(request.cadUnicoNotApplicable || workflowData.cadUnicoNotApplicable),
     isFarmer: Boolean(request.isFarmer || request.is_farmer || workflowData.isFarmer || workflowData.is_farmer),
     documents: Array.isArray(request.documents) ? request.documents : [],
     rawHistory: Array.isArray(request.history) ? request.history : [],

@@ -5,8 +5,6 @@ import { RegistrationContactFields } from "./registration-contact-fields";
 export interface TutorStepData {
   tutor: string;
   cpf: string;
-  cadUnico: string;
-  cadUnicoNotApplicable: boolean;
   cep: string;
   number: string;
   state: string;
@@ -31,13 +29,12 @@ interface TutorStepFieldsProps {
   showErrors: boolean;
   onField: (field: TutorField, value: string) => void;
   onMaskedField: (field: TutorField, value: string) => void;
-  onCadUnicoApplies: (applies: boolean) => void;
   onCepChange: (value: string) => void;
 }
 
 // The Tutor step of the request, the same for the public form and for the one the staff fills: who is responsible, where they live and
 // how to reach them.
-export function TutorStepFields({ data, nameInvalid, nameIssue, cpfInvalid, neighborhoodNames, showErrors, onField, onMaskedField, onCadUnicoApplies, onCepChange }: TutorStepFieldsProps) {
+export function TutorStepFields({ data, nameInvalid, nameIssue, cpfInvalid, neighborhoodNames, showErrors, onField, onMaskedField, onCepChange }: TutorStepFieldsProps) {
   return (
     <>
       <div className="form-sub-card">
@@ -50,15 +47,6 @@ export function TutorStepFields({ data, nameInvalid, nameIssue, cpfInvalid, neig
           <div className={`access-field${cpfInvalid ? " is-invalid" : ""}`} data-label="CPF">
             <input type="text" placeholder="000.000.000-00" value={data.cpf} onChange={(event) => onMaskedField("cpf", event.target.value)} aria-invalid={cpfInvalid} />
             {cpfInvalid && <small className="field-error-message">Informe um CPF válido.</small>}
-          </div>
-          <div className="access-field" data-label="CadÚnico (se aplica)">
-            <div className="access-field-action-row">
-              <input type="text" placeholder="Número" value={data.cadUnico} onChange={(event) => onField("cadUnico", event.target.value)} readOnly={data.cadUnicoNotApplicable} />
-              <label className={`cadunico-square-toggle${!data.cadUnicoNotApplicable ? " is-checked" : ""}`}>
-                <input type="checkbox" checked={!data.cadUnicoNotApplicable} onChange={(event) => onCadUnicoApplies(event.target.checked)} />
-                <span className="cadunico-check-box" />
-              </label>
-            </div>
           </div>
         </div>
       </div>

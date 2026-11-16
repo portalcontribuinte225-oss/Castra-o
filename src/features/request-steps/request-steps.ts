@@ -86,3 +86,8 @@ export function summarizeVisibleSteps(configs: VisibleStepsInput["configs"]): st
     .map((item) => item.label)
     .join(", ");
 }
+
+// The request types decide the agenda and the documents; the Tutor step belongs to the identification type alone.
+export function requestTypeStepToggles(types: StepToggles[]): StepToggles[] {
+  return types.map(({ stepAgenda, stepDocuments }) => ({ stepAgenda, stepDocuments }));
+}

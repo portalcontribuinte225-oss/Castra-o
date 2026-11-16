@@ -1,7 +1,8 @@
+import { AnimalTutorship } from "../../../shared/request-tutorship-contract.js";
 import type { RegisteredAnimal, ReusableDocumentCandidate, RequestConfigItem } from "./registered-animal-types";
 
 export function resolveRegisteredIdentificationType(types: RequestConfigItem[], animal: RegisteredAnimal) {
-  const id = animal.identificationTypeId || "animal_com_tutor";
+  const id = animal.identificationTypeId || AnimalTutorship.WITH_TUTOR;
   return types.find((type) => type.id === id) || null;
 }
 

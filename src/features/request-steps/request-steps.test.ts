@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RequestStep, getVisibleSteps, summarizeVisibleSteps } from "./request-steps";
+import { RequestStep, getVisibleSteps, requestTypeStepToggles, summarizeVisibleSteps } from "./request-steps";
 import type { VisibleStepsInput } from "./request-steps";
 
 function steps(overrides: Partial<VisibleStepsInput> = {}): RequestStep[] {
@@ -92,5 +92,18 @@ describe("summarizeVisibleSteps", () => {
 
   it("combines several configs", () => {
     expect(summarizeVisibleSteps([{ stepAgenda: false }, { stepDocuments: false }])).toBe("Animal, Tutor");
+  });
+});
+
+describe("requestTypeStepToggles", () => {
+  const types = [{ stepTutor: false, stepAgenda: false, stepDocuments: true }, { stepTutor: false }];
+
+  it("keeps only what a request type may decide: the agenda and the documents", () => {
+    expect(requestTypeStepToggles(types)).toEqual([{ stepAgenda: false, stepDocuments: true }, {}]);
+  });
+
+  it("never takes the Tutor step away; only the identification type does", () => {
+    expect(steps({ configs: requestTypeStepToggles(types) })).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
+    expect(steps({ configs: [...requestTypeStepToggles(types), { stepTutor: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
   });
 });

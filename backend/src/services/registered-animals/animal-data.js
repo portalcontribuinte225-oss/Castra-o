@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { AnimalStatus, MicrochipStatus } from "../../../../shared/animal-contract.js";
+import { AnimalTutorship } from "../../../../shared/request-tutorship-contract.js";
 import { authError } from "../auth/auth-security.js";
 
 export const ANIMAL_FIELDS = ["name", "species", "sex", "size", "breedType", "breedDescription", "coat", "birthDate", "age", "weight",
@@ -21,7 +22,7 @@ export function normalizeAnimalData(input = {}) {
 // Materializing the same source changes its id, never its source identity fingerprint.
 export function animalFingerprint(input) {
   const data = normalizeAnimalData(input);
-  return createHash("sha256").update(JSON.stringify({ ...data, identificationTypeId: input.identificationTypeId || "animal_com_tutor" })).digest("hex");
+  return createHash("sha256").update(JSON.stringify({ ...data, identificationTypeId: input.identificationTypeId || AnimalTutorship.WITH_TUTOR })).digest("hex");
 }
 
 export function animalView(row, municipalityId) {
@@ -38,7 +39,7 @@ export function animalView(row, municipalityId) {
     confirmedMicrochip: confirmed, declaredMicrochip: declared, microchip: confirmed || declared,
     hasChip: confirmed || declared ? "Sim" : "Nao",
     microchipStatus: confirmed ? MicrochipStatus.CONFIRMED : declared ? MicrochipStatus.DECLARED : MicrochipStatus.ABSENT,
-    identificationTypeId: metadata.identificationTypes?.[municipalityId] || "animal_com_tutor",
+    identificationTypeId: metadata.identificationTypes?.[municipalityId] || AnimalTutorship.WITH_TUTOR,
     status: row.status || AnimalStatus.ACTIVE,
   };
 }
