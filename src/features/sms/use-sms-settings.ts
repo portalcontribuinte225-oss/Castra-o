@@ -8,5 +8,5 @@ export function useSmsSettings(municipalityId: string, canManage: boolean) {
   useEffect(() => { void controller.load(); return controller.cancel; }, [controller]);
   return { ...state, retry: controller.load, setToken: controller.setToken, setConfirmingRemoval: controller.setConfirmingRemoval,
     saveToken: controller.saveToken, toggleActive: controller.toggleActive, removeToken: controller.removeToken,
-    setUseActive: controller.setUseActive, testConnection: controller.testConnection };
+    setUseActive: controller.setUseActive, testConnection: controller.testConnection, setTestPhone: controller.setTestPhone, sendTest: controller.sendTest };
 }

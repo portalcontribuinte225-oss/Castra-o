@@ -4,7 +4,7 @@ import { SMS_ACTIVE_USES_CONFIG_KEY, SMS_CONFIG_KEY, validateSmsToken } from "..
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DeliveryCode, DeliveryStatus, NotificationEvent } from "../../shared/notification-contract.js";
 import { smsUses } from "../../shared/sms-uses-contract.js";
-import { saveSmsIntegrationSettings, getSmsIntegrationSettings, getPublicSmsConfig, getSmsAvailability, isSmsUseAvailable, sendSmsUse, testSmsConnection } from "../src/services/sms-integration-settings.js";
+import { saveSmsIntegrationSettings, getSmsIntegrationSettings, getPublicSmsConfig, getSmsAvailability, isSmsUseAvailable, sendSmsTestMessage, sendSmsUse, testSmsConnection } from "../src/services/sms-integration-settings.js";
 import { decryptSecretStrict, encryptSecret, encryptSecretStrict, isSecretEncryptionAvailable } from "../src/services/config-secret-cipher.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
 
@@ -178,4 +178,50 @@ test("connection test only checks balance, never activates, saves or leaks provi
   assert.equal(f.database.records.size, 0); assert.equal(f.database.state.borrowed, 0);
   for (const token of ["Bearer secret", "secret\nheader", "a".repeat(2049)]) assert.ok(validateSmsToken(token));
   assert.equal(validateSmsToken(""), "");
+});
+
+test("a test message goes to the typed phone through the saved token with a fixed text, and nothing is sent before the channel and the token are ready", async (t) => {
+  const f = fixture(t); const sent = [];
+  const sendMessage = async (input) => { sent.push(input); return { status: DeliveryStatus.SENT, providerMessageId: "4321", reference: input.messageId }; };
+  const deps = { database: f.database, sendMessage };
+  const input = { municipalityId: MUNICIPALITY, phone: "(48) 99999-1234", actor: ACTOR };
+  const off = await sendSmsTestMessage(input, deps);
+  assert.deepEqual([off.status, off.code, off.reason, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED, "Ative o SMS antes de enviar um teste.", 0]);
+  await f.save({ token: TOKEN, active: true });
+  const result = await sendSmsTestMessage(input, deps);
+  assert.deepEqual(result, { status: DeliveryStatus.SENT, providerMessageId: "4321", reference: sent[0].messageId });
+  assert.deepEqual(Object.keys(sent[0]).sort(), ["messageId", "phone", "text", "token"]);
+  assert.deepEqual([sent[0].token, sent[0].phone], [TOKEN, "(48) 99999-1234"]);
+  assert.equal(sent[0].text, "Test Town: teste de envio de SMS do sistema de castracao. Se voce recebeu esta mensagem, o envio esta funcionando.");
+  assert.match(sent[0].messageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  f.database.records.set(OTHER, structuredClone(f.database.records.get(MUNICIPALITY)));
+  const copied = await sendSmsTestMessage({ ...input, municipalityId: OTHER }, deps);
+  assert.deepEqual([copied.status, copied.code, copied.reason], [DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED, "Salve um token de produção válido antes de enviar um teste."]);
+  assert.equal(sent.length, 1);
+});
+
+test("a test message refuses a phone that cannot receive an SMS before anything is sent, and a refusal of the provider is answered as it is", async (t) => {
+  const f = fixture(t); await f.save({ token: TOKEN, active: true });
+  let sends = 0; const refused = { status: DeliveryStatus.FAILED, code: DeliveryCode.INSUFFICIENT_BALANCE, reason: "Saldo de SMS insuficiente." };
+  const deps = { database: f.database, sendMessage: async () => { sends += 1; return refused; } };
+  for (const phone of ["", "   ", "123", "abc", "489999999999", undefined, null, 48999991234, ["48999991234"]]) {
+    await assert.rejects(sendSmsTestMessage({ municipalityId: MUNICIPALITY, phone, actor: ACTOR }, deps), { status: 400, message: "Informe um telefone válido com DDD." }, String(phone));
+  }
+  await assert.rejects(sendSmsTestMessage({ municipalityId: null, phone: "48999991234", actor: ACTOR }, deps), { status: 400 });
+  assert.equal(sends, 0);
+  assert.equal(await sendSmsTestMessage({ municipalityId: MUNICIPALITY, phone: "5548999991234", actor: ACTOR }, deps), refused); assert.equal(sends, 1);
+});
+
+test("test messages are limited to five in ten minutes for each administrator and municipality", async (t) => {
+  const f = fixture(t); await f.save({ token: TOKEN, active: true });
+  let attempts = 0; let sends = 0;
+  const database = { ...f.database, query: (sql, values) => sql.includes("INSERT INTO auth_rate_limits") ? { rows: [{ attempts: ++attempts }] } : f.database.query(sql, values) };
+  const deps = { database, sendMessage: async () => { sends += 1; return { status: DeliveryStatus.SENT, providerMessageId: "1" }; } };
+  const input = { municipalityId: MUNICIPALITY, phone: "48999991234", actor: ACTOR };
+  for (let test = 0; test < 5; test += 1) assert.equal((await sendSmsTestMessage(input, deps)).status, DeliveryStatus.SENT);
+  await assert.rejects(sendSmsTestMessage(input, deps), { status: 429 });
+  assert.equal(sends, 5);
+  const limits = f.database.calls.filter(({ sql }) => sql.includes("INSERT INTO auth_rate_limits")).length;
+  await assert.rejects(sendSmsTestMessage({ ...input, phone: "abc" }, deps), { status: 400 });
+  assert.equal(f.database.calls.filter(({ sql }) => sql.includes("INSERT INTO auth_rate_limits")).length, limits, "a refused number does not use up a test");
 });

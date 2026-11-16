@@ -29,6 +29,7 @@ function apiFixture(initial: SmsConfig = stored) {
       return { value: server };
     }),
     testSmsConnection: vi.fn<SmsSettingsApi["testSmsConnection"]>(async () => connected),
+    sendSmsTest: vi.fn<SmsSettingsApi["sendSmsTest"]>(async () => ({ status: "sent", providerMessageId: "4321" })),
     setSmsUseActive: vi.fn<SmsSettingsApi["setSmsUseActive"]>(async (_municipalityId, use, active) => {
       server = { ...server, uses: server.uses.map((row) => row.key === use ? { ...row, active } : row) };
       return server;
@@ -49,9 +50,10 @@ describe("municipal SMS settings", () => {
       await controller.load(); controller.setToken("new-token"); controller.setConfirmingRemoval(true);
       await controller.saveToken(); await controller.toggleActive(true); await controller.setUseActive("password_reset", true);
       await controller.testConnection(); await controller.removeToken();
+      controller.setTestPhone("(48) 99999-1234"); await controller.sendTest();
       expect(api.getConfig).not.toHaveBeenCalled(); expect(api.setConfig).not.toHaveBeenCalled();
-      expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.setSmsUseActive).not.toHaveBeenCalled();
-      expect(controller.getSnapshot()).toMatchObject({ token: "", confirmingRemoval: false });
+      expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.setSmsUseActive).not.toHaveBeenCalled(); expect(api.sendSmsTest).not.toHaveBeenCalled();
+      expect(controller.getSnapshot()).toMatchObject({ token: "", confirmingRemoval: false, testPhone: "", testOutcome: null });
     }
   });
 
@@ -142,6 +144,69 @@ describe("municipal SMS settings", () => {
     expect(controller.getSnapshot().config.active).toBe(true);
   });
 
+  it("sends one test message to the typed number through the saved token, and says the provider took it", async () => {
+    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true);
+    await controller.load();
+    await controller.sendTest();
+    expect(api.sendSmsTest).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Informe um número para o teste.", providerMessageId: "" });
+    controller.setTestPhone("  (48) 99999-1234  "); expect(controller.getSnapshot().testOutcome).toBeNull();
+    await controller.sendTest();
+    expect(api.sendSmsTest).toHaveBeenCalledTimes(1);
+    expect(api.sendSmsTest).toHaveBeenLastCalledWith({ municipalityId: "municipality-a", phone: "(48) 99999-1234" });
+    expect(controller.getSnapshot()).toMatchObject({ sendingTest: false, testPhone: "  (48) 99999-1234  ", testOutcome: { sent: true, reason: "", providerMessageId: "4321" } });
+    expect(api.setConfig).not.toHaveBeenCalled();
+    controller.setTestPhone("48999990000"); expect(controller.getSnapshot().testOutcome).toBeNull();
+  });
+
+  it("asks for a saved token before testing, and clears the result when the channel or the token changes", async () => {
+    const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "municipality-a", true);
+    await controller.load(); controller.setTestPhone("48999991234"); await controller.sendTest();
+    expect(api.sendSmsTest).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Salve o token antes de enviar um teste.", providerMessageId: "" });
+    const saved = apiFixture(channelOn); const next = createSmsSettingsController(saved, "municipality-a", true);
+    await next.load(); next.setTestPhone("48999991234"); await next.sendTest();
+    expect(next.getSnapshot().testOutcome?.sent).toBe(true);
+    await next.toggleActive(false); expect(next.getSnapshot().testOutcome).toBeNull();
+    await next.sendTest(); await next.removeToken(); expect(next.getSnapshot().testOutcome).toBeNull();
+  });
+
+  it("tells why a test was not sent, with the server's words for a refused number or too many tests and nothing else of the failure", async () => {
+    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true);
+    await controller.load(); controller.setTestPhone("48999991234");
+    const outcome = () => controller.getSnapshot().testOutcome;
+    api.sendSmsTest.mockResolvedValue({ status: "skipped", reason: "Ative o SMS antes de enviar um teste." });
+    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Ative o SMS antes de enviar um teste.", providerMessageId: "" });
+    api.sendSmsTest.mockResolvedValue({ status: "failed", reason: "Saldo de SMS insuficiente.", providerMessageId: "must-not-show" });
+    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Saldo de SMS insuficiente.", providerMessageId: "" });
+    api.sendSmsTest.mockResolvedValue({ status: "failed" });
+    await controller.sendTest(); expect(outcome()?.reason).toBe("erro desconhecido");
+    api.sendSmsTest.mockResolvedValue(null as never);
+    await controller.sendTest(); expect(outcome()).toMatchObject({ sent: false, reason: "erro desconhecido" });
+    api.sendSmsTest.mockRejectedValue(Object.assign(new Error("Informe um telefone válido com DDD."), { status: 400 }));
+    await controller.sendTest(); expect(outcome()?.reason).toBe("Informe um telefone válido com DDD.");
+    api.sendSmsTest.mockRejectedValue(Object.assign(new Error("Muitos testes de envio. Aguarde alguns minutos."), { status: 429 }));
+    await controller.sendTest(); expect(outcome()?.reason).toBe("Muitos testes de envio. Aguarde alguns minutos.");
+    api.sendSmsTest.mockRejectedValue(Object.assign(new Error("raw-provider-secret"), { status: 502 }));
+    await controller.sendTest(); expect(outcome()?.reason).toBe("Não foi possível enviar o teste. Tente novamente."); expect(JSON.stringify(outcome())).not.toContain("secret");
+    api.sendSmsTest.mockRejectedValue(Object.assign(new Error("raw-provider-secret"), { status: 403 }));
+    await controller.sendTest(); expect(outcome()?.reason).toContain("Sem permissão");
+    expect(controller.getSnapshot()).toMatchObject({ sendingTest: false, error: "" });
+  });
+
+  it("keeps one test in flight and ignores its answer after another municipality opens", async () => {
+    const api = apiFixture(channelOn); const old = createSmsSettingsController(api, "municipality-a", true); await old.load();
+    const pending = deferred<{ status: string; providerMessageId: string }>(); api.sendSmsTest.mockReturnValue(pending.promise);
+    old.setTestPhone("48999991234"); const sending = old.sendTest();
+    expect(old.getSnapshot().sendingTest).toBe(true);
+    await old.sendTest(); await old.testConnection(); await old.toggleActive(false); old.setTestPhone("48988887777");
+    expect(api.sendSmsTest).toHaveBeenCalledTimes(1); expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.setConfig).not.toHaveBeenCalled();
+    expect(old.getSnapshot().testPhone).toBe("48999991234");
+    old.cancel(); const next = createSmsSettingsController(api, "municipality-b", true); await next.load();
+    pending.resolve({ status: "sent", providerMessageId: "4321" }); await sending;
+    expect(next.getSnapshot().testOutcome).toBeNull(); expect(old.getSnapshot()).toMatchObject({ testOutcome: null, sendingTest: false, testPhone: "" });
+  });
+
   it("discards late load, save and message responses after cancellation without retaining draft secrets", async () => {
     const api = apiFixture(withoutToken); const pendingLoad = deferred<typeof stored>(); api.getConfig.mockReturnValue(pendingLoad.promise);
     const controller = createSmsSettingsController(api, "municipality-a", true);
@@ -186,7 +251,8 @@ describe("SMS settings interface", () => {
     const controller = createSmsSettingsController(apiFixture(), "municipality-a", true);
     return { ...controller.getSnapshot(), config: stored, ready: true, loading: false, retry: controller.load, setToken: controller.setToken,
       setConfirmingRemoval: controller.setConfirmingRemoval, saveToken: controller.saveToken, toggleActive: controller.toggleActive,
-      removeToken: controller.removeToken, setUseActive: controller.setUseActive, testConnection: controller.testConnection, ...overrides };
+      removeToken: controller.removeToken, setUseActive: controller.setUseActive, testConnection: controller.testConnection,
+      setTestPhone: controller.setTestPhone, sendTest: controller.sendTest, ...overrides };
   };
   const screen = (overrides: Partial<ReturnType<typeof useSmsSettings>> = {}) => {
     vi.mocked(useSmsSettings).mockReturnValue(view(overrides));
@@ -233,6 +299,28 @@ describe("SMS settings interface", () => {
     expect(open.match(/aria-checked="true"/g)).toHaveLength(1);
     expect(open).toContain('aria-label="Desativar Recuperação de senha"');
     expect(open).toContain('aria-label="Ativar Agendamento confirmado"');
+  });
+
+  it("asks for a number to test next to the credentials, and only lets it go with a saved token", () => {
+    const html = screen();
+    expect(html).toContain("Teste de envio"); expect(html).toContain("Número"); expect(html).toContain("Enviar teste");
+    expect(html).toContain('placeholder="(00) 00000-0000"');
+    expect(html.indexOf("Credenciais")).toBeLessThan(html.indexOf("Teste de envio")); expect(html.indexOf("Teste de envio")).toBeLessThan(html.indexOf("Mensagens"));
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Enviar teste/);
+    expect(screen({ config: withoutToken })).toMatch(/<button[^>]*disabled=""[^>]*>Enviar teste/);
+    const sending = screen({ sendingTest: true });
+    expect(sending).toMatch(/<button[^>]*disabled=""[^>]*>Enviando\.\.\./); expect(sending).not.toContain("Enviar teste");
+    expect(screen({ testPhone: "48999991234" })).toContain('value="48999991234"');
+  });
+
+  it("shows the result of a test: taken by the provider with its code, and told to check the phone, or why it was not sent", () => {
+    expect(screen()).not.toContain("sms-status");
+    const sent = screen({ testOutcome: { sent: true, reason: "", providerMessageId: "4321" } });
+    expect(sent).toContain('class="sms-status confirmed"'); expect(sent).toContain("Teste enviado ao provedor (código 4321).");
+    expect(sent).toContain("a entrega depende da operadora"); expect(sent).not.toContain("com sucesso");
+    expect(screen({ testOutcome: { sent: true, reason: "", providerMessageId: "" } })).toContain("Teste enviado ao provedor. Confira");
+    const refused = screen({ testOutcome: { sent: false, reason: "Saldo de SMS insuficiente.", providerMessageId: "" } });
+    expect(refused).toContain('class="sms-status"'); expect(refused).toContain("Não enviado: Saldo de SMS insuficiente."); expect(refused).not.toContain("confirmed");
   });
 
   it("does not render settings for unauthorized or missing municipality contexts", () => {

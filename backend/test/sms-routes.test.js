@@ -20,7 +20,12 @@ async function fixture(t) {
   pool.query = async (sql, values) => resolveTestSession(sql, values, sessions) || db.query(sql, values);
   pool.connect = db.connect;
   globalThis.fetch = async (url, options) => {
-    remoteCalls.push({ url, options }); assert.equal(db.state.borrowed, 0); assert.equal(url, "https://smsmais.com/saldo");
+    remoteCalls.push({ url, options }); assert.equal(db.state.borrowed, 0);
+    if (url === "https://smsmais.com/send") {
+      const [message] = JSON.parse(options.body).messages;
+      return new Response(JSON.stringify([{ id: 4321, schedule: "", nome: "", to: message.destinations[0].to, msg: message.msg, externalId: message.id }]), { status: 200 });
+    }
+    assert.equal(url, "https://smsmais.com/saldo");
     assert.equal(options.method, "GET");
     return new Response(JSON.stringify({ success: true, data: { saldo: 0, sms_equivalente: 0, total_recargas: 1234, privateToken: TOKEN } }), { status: 200 });
   };
@@ -49,6 +54,7 @@ test("writing the SMS settings, testing the connection and switching a message d
     const expected = user ? 403 : 401;
     assert.equal((await request(`/config/${SMS_CONFIG_KEY}?municipalityId=${MUNICIPALITY}`, { user, method: "PUT", body: { token: TOKEN } })).status, expected);
     assert.equal((await request("/sms/test-connection", { user, method: "POST", body: { municipalityId: MUNICIPALITY, token: TOKEN } })).status, expected);
+    assert.equal((await request("/sms/test-message", { user, method: "POST", body: { municipalityId: MUNICIPALITY, phone: "48999991234" } })).status, expected);
     assert.equal((await request(`/sms/uses/active?municipalityId=${MUNICIPALITY}`, { user, method: "PUT", body: { use: AuthPurpose.PASSWORD_RESET, active: false } })).status, expected);
   }
   assert.equal(db.calls.length, 0); assert.equal(remoteCalls.length, 0);
@@ -139,4 +145,41 @@ test("a message switch is validated, and a global user must choose an active mun
   const chosen = await request(`/sms/uses/active?municipalityId=${OTHER}`, { method: "PUT", body, user: global });
   assert.equal(chosen.status, 200); assert.equal(chosen.body.municipalityName, "Other Town");
   assert.deepEqual(db.configs.get(`${SMS_ACTIVE_USES_CONFIG_KEY}:${OTHER}`), { active: { [NotificationEvent.COMPLETED]: false } });
+});
+
+test("an administrator sends a test SMS to a typed phone through their own municipality's account, and only learns whether it went", async (t) => {
+  const { request, remoteCalls } = await fixture(t);
+  const body = { municipalityId: OTHER, phone: "(48) 99999-1234" };
+  const off = await request("/sms/test-message", { method: "POST", body });
+  assert.equal(off.status, 200); assert.equal(off.cache, "no-store");
+  assert.deepEqual(off.body, { status: "skipped", reason: "Ative o SMS antes de enviar um teste." });
+  assert.equal(remoteCalls.length, 0);
+  await request(`/config/${SMS_CONFIG_KEY}`, { method: "PUT", body: { active: true, token: TOKEN } });
+  const before = remoteCalls.length;
+  const sent = await request("/sms/test-message", { method: "POST", body });
+  assert.equal(sent.status, 200); assert.equal(sent.cache, "no-store");
+  assert.deepEqual(sent.body, { status: "sent", providerMessageId: "4321" });
+  assert.equal(remoteCalls.length, before + 1);
+  const call = remoteCalls[before];
+  assert.equal(call.url, "https://smsmais.com/send"); assert.equal(call.options.headers.Authorization, `Bearer ${TOKEN}`);
+  const [message] = JSON.parse(call.options.body).messages;
+  assert.equal(message.destinations[0].to, "5548999991234");
+  assert.match(message.msg, /^Test Town: teste de envio de SMS/, "the municipality is the administrator's own, not the forged one");
+  assert.equal(JSON.stringify(sent.body).includes(TOKEN), false); assert.equal(JSON.stringify(sent.body).includes(message.msg), false);
+});
+
+test("a test SMS needs a phone that can receive it, and a global user must choose the municipality", async (t) => {
+  const { request, remoteCalls } = await fixture(t);
+  await request(`/config/${SMS_CONFIG_KEY}`, { method: "PUT", body: { active: true, token: TOKEN } });
+  const before = remoteCalls.length;
+  for (const phone of ["", "123", "abc", 48999991234, undefined]) {
+    const refused = await request("/sms/test-message", { method: "POST", body: { phone } });
+    assert.equal(refused.status, 400, String(phone)); assert.equal(refused.body.error, "Informe um telefone válido com DDD.");
+  }
+  assert.equal((await request("/sms/test-message", { method: "POST" })).status, 400);
+  const global = { ...ADMIN, role: "master", municipalityId: null };
+  assert.equal((await request("/sms/test-message", { method: "POST", body: { phone: "48999991234" }, user: global })).status, 400);
+  const chosen = await request("/sms/test-message", { method: "POST", body: { municipalityId: OTHER, phone: "48999991234" }, user: global });
+  assert.equal(chosen.status, 200); assert.deepEqual(chosen.body, { status: "skipped", reason: "Ative o SMS antes de enviar um teste." });
+  assert.equal(remoteCalls.length, before);
 });

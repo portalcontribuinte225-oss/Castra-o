@@ -143,6 +143,7 @@ export const api = {
   saveEmailTemplates: (templates: Record<string, string>, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/templates?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/templates", { templates }),
   setEmailUseActive: (municipalityId: string, use: string, active: boolean): Promise<EmailSettings> => request("PUT", `/email/templates/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   testSmsConnection: (body: { municipalityId: string; token?: string }) => request("POST", "/sms/test-connection", body),
+  sendSmsTest: (body: { municipalityId: string; phone: string }) => request("POST", "/sms/test-message", body),
   setSmsUseActive: (municipalityId: string, use: string, active: boolean) => request("PUT", `/sms/uses/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   setConfig: (key, value, municipalityId = "") => request(
     "PUT",

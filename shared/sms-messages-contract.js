@@ -64,6 +64,12 @@ export function buildSmsText(use, data = {}) {
   return toSmsText(template({ ...fields, place: location ? `${PLACE_SEPARATOR}${location}` : "" }));
 }
 
+// The fixed text of the test the administrator sends from the screen to a phone of their choice.
+export function buildSmsTestText(municipality) {
+  const town = clip(municipality, MAX_MUNICIPALITY) || "Prefeitura";
+  return toSmsText(`${town}: teste de envio de SMS do sistema de castracao. Se voce recebeu esta mensagem, o envio esta funcionando.`);
+}
+
 // The samples the screen shows next to each use: one text, or one for each outcome when the text depends on it.
 export function smsExamples(use, municipality = "Municipio") {
   const data = {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SMS_MAX_LENGTH, buildSmsText, smsExamples, toSmsText } from "../../shared/sms-messages-contract.js";
+import { SMS_MAX_LENGTH, buildSmsTestText, buildSmsText, smsExamples, toSmsText } from "../../shared/sms-messages-contract.js";
 import { smsUses } from "../../shared/sms-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DocumentsOutcome, NotificationEvent } from "../../shared/notification-contract.js";
@@ -95,4 +95,12 @@ test("the screen sample is built by the same texts, with the municipality name o
   }
   assert.equal(smsExamples(AuthPurpose.PASSWORD_RESET, "Criciúma").length, 1);
   assert.equal(smsExamples(NotificationEvent.DOCUMENTS_REVIEWED).length, 2, "the documents text has one sample for each outcome");
+});
+
+test("the test message names the municipality, says it is a test and fits one SMS in plain ASCII", () => {
+  assert.equal(buildSmsTestText("Criciúma"), "Criciuma: teste de envio de SMS do sistema de castracao. Se voce recebeu esta mensagem, o envio esta funcionando.");
+  for (const municipality of ["", "   ", undefined, null]) assert.ok(buildSmsTestText(municipality).startsWith("Prefeitura: "), String(municipality));
+  const huge = buildSmsTestText("Município de São José dos Campos do Norte ".repeat(5));
+  assert.match(huge, BASIC); assert.ok(huge.length <= SMS_MAX_LENGTH);
+  assert.ok(huge.startsWith("Municipio de Sao Jose dos Camp: "));
 });

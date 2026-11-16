@@ -9,7 +9,7 @@ export function SmsSettings({ municipalityId, canManage }: { municipalityId: str
   const state = useSmsSettings(municipalityId, canManage);
   if (!canManage) return <p role="status">Configuração de SMS restrita à administração.</p>;
   if (!municipalityId) return <p>Selecione um município para configurar o SMS.</p>;
-  const busy = state.loading || state.saving || state.testing;
+  const busy = state.loading || state.saving || state.testing || state.sendingTest;
   return (
     <div className="config-panel wide">
       <PanelHeader title="SMS" />

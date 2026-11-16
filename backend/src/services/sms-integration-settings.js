@@ -2,14 +2,14 @@ import { randomUUID } from "node:crypto";
 import { pool } from "../db/index.js";
 import { SMS_CONFIG_KEY, SmsProvider, SmsEnvironment, normalizeSmsConfig, validateSmsToken } from "../../../shared/sms-contract.js";
 import { secretPreview } from "../../../shared/secret-preview-contract.js";
-import { buildSmsText } from "../../../shared/sms-messages-contract.js";
+import { buildSmsTestText, buildSmsText } from "../../../shared/sms-messages-contract.js";
 import { getSmsUse } from "../../../shared/sms-uses-contract.js";
 import { DeliveryCode, DeliveryStatus } from "../../../shared/notification-contract.js";
 import { assertSmsMunicipality, loadSmsRecord, storeSmsRecord } from "../repositories/sms-settings.js";
 import { consumeAuthLimit } from "../repositories/auth-limits.js";
 import { authenticatedDigest, authError } from "./auth/auth-security.js";
 import { decryptSecretStrict, encryptSecretStrict, isSecretEncryptionAvailable } from "./config-secret-cipher.js";
-import { querySmsBalance, sendSmsMessage } from "./smsmais.js";
+import { normalizeSmsPhone, querySmsBalance, sendSmsMessage } from "./smsmais.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
 import { isSmsUseOn, listSmsUses } from "./sms-uses.js";
 
@@ -105,6 +105,32 @@ export async function testSmsConnection({ municipalityId, token, actor }, { data
   const result = await queryBalance(selected);
   return { valid: result.valid === true, environment: environmentFor(selected), checkedAt: now().toISOString(),
     ...(result.valid ? { balance: result.balance } : { balance: null, code: result.code, reason: result.reason }) };
+}
+
+// What the screen says when the test cannot start; the codes are the ones the notices use.
+const TEST_NOT_READY = Object.freeze({
+  [DeliveryCode.CHANNEL_DISABLED]: "Ative o SMS antes de enviar um teste.",
+  [DeliveryCode.NOT_CONFIGURED]: "Salve um token de produção válido antes de enviar um teste.",
+});
+const notReady = (code) => ({ ...deliveryFailure(DeliveryStatus.SKIPPED, code), reason: TEST_NOT_READY[code] });
+
+async function limitTestSending(actor, municipalityId, database) {
+  if (!await consumeAuthLimit(["sms-test-message", actor.id, municipalityId], { limit: 5, seconds: 600, database })) {
+    throw authError(429, "Muitos testes de envio. Aguarde alguns minutos.");
+  }
+}
+
+// Sends one real SMS, with a fixed text, to the phone the administrator typed, through the municipality's own account: the
+// path the notices take, to a number of their choosing. A channel or token that is not ready answers "skipped" and sends nothing.
+export async function sendSmsTestMessage({ municipalityId, phone, actor }, { database = pool, sendMessage = sendSmsMessage, ...options } = {}) {
+  const municipality = await assertSmsMunicipality(municipalityId, database);
+  if (typeof phone !== "string" || !normalizeSmsPhone(phone)) throw authError(400, "Informe um telefone válido com DDD.");
+  const record = await loadSmsRecord(municipalityId, database);
+  if (record?.active !== true) return notReady(DeliveryCode.CHANNEL_DISABLED);
+  const credential = validatedCredential(record, municipalityId);
+  if (!credential?.valid || credential.environment !== SmsEnvironment.PRODUCTION) return notReady(DeliveryCode.NOT_CONFIGURED);
+  await limitTestSending(actor, municipalityId, database);
+  return sendMessage({ token: credential.token, phone, text: buildSmsTestText(municipality.name), messageId: randomUUID() }, options);
 }
 
 // Discovery may call this within its own transaction. It performs no network call or quota debit.

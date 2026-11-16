@@ -1,11 +1,11 @@
 import { buildDefaultSmsConfig, normalizeSmsConfig, SMS_CONFIG_KEY, SmsEnvironment, validateSmsToken } from "../../../shared/sms-contract.js";
-import type { SmsConnectionResult, SmsSettingsApi, SmsSettingsState } from "./sms-types";
+import type { SmsConnectionResult, SmsSettingsApi, SmsSettingsState, SmsTestAnswer, SmsTestOutcome } from "./sms-types";
 
 const SECURE_STORAGE_UNAVAILABLE = "A configuração segura do servidor está indisponível. É possível apenas desativar ou remover o token.";
 
 function initialState(): SmsSettingsState {
   return { config: buildDefaultSmsConfig(), token: "", ready: false, loading: false,
-    saving: false, testing: false, confirmingRemoval: false, error: "", notice: "", connection: null };
+    saving: false, testing: false, confirmingRemoval: false, testPhone: "", sendingTest: false, testOutcome: null, error: "", notice: "", connection: null };
 }
 
 function connectionResult(value: SmsConnectionResult): SmsConnectionResult | null {
@@ -13,6 +13,14 @@ function connectionResult(value: SmsConnectionResult): SmsConnectionResult | nul
     || !Number.isFinite(new Date(value.checkedAt).getTime()) || !value.balance
     || !Number.isFinite(value.balance.credits) || value.balance.credits < 0 || !Number.isFinite(value.balance.sms) || value.balance.sms < 0) return null;
   return { valid: true, environment: value.environment, balance: { credits: value.balance.credits, sms: value.balance.sms }, checkedAt: value.checkedAt };
+}
+
+const notSent = (reason: string): SmsTestOutcome => ({ sent: false, reason, providerMessageId: "" });
+
+// The server answers a test send with fixed texts, so what it says is shown as it is; a missing reason is told as unknown.
+function testOutcome(answer: SmsTestAnswer): SmsTestOutcome {
+  if (answer?.status !== "sent") return notSent(String(answer?.reason || "erro desconhecido"));
+  return { sent: true, reason: "", providerMessageId: String(answer.providerMessageId || "") };
 }
 
 // This controller is private to one mounted municipality/permission context; secrets never enter shared storage.
@@ -23,11 +31,18 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
   const listeners = new Set<() => void>();
   const publish = (patch: Partial<SmsSettingsState>) => { state = { ...state, ...patch }; listeners.forEach((listener) => listener()); };
   const current = (captured: number) => mounted && captured === revision;
-  const busy = () => state.loading || state.saving || state.testing;
+  const busy = () => state.loading || state.saving || state.testing || state.sendingTest;
   const allowed = () => mounted && canManage && Boolean(municipalityId) && state.ready && !busy();
+  const statusOf = (error: unknown) => error && typeof error === "object" && "status" in error ? error.status : null;
   const failure = (error: unknown, message: string) => {
-    const status = error && typeof error === "object" && "status" in error ? error.status : null;
+    const status = statusOf(error);
     return status === 401 || status === 403 ? "Sem permissão para configurar o SMS deste município." : message;
+  };
+  // A refused number or too many tests come with the server's own words; any other failure stays generic.
+  const testFailure = (error: unknown) => {
+    const status = statusOf(error);
+    return (status === 400 || status === 429) && error instanceof Error && error.message
+      ? error.message : failure(error, "Não foi possível enviar o teste. Tente novamente.");
   };
   async function load() {
     const captured = ++revision;
@@ -50,7 +65,7 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
   // Every change to the channel (token, switch, removal) is stored at once and answered with the safe settings.
   async function persist(input: { active?: boolean; token?: string; clearToken?: boolean }, notice: string) {
     const captured = revision;
-    publish({ saving: true, error: "", notice: "", connection: null });
+    publish({ saving: true, error: "", notice: "", connection: null, testOutcome: null });
     try {
       const saved = await client.setConfig(SMS_CONFIG_KEY, input, municipalityId);
       if (!current(captured)) return;
@@ -102,6 +117,21 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
       if (current(captured)) publish({ error: failure(error, "Não foi possível consultar a conexão e o saldo. Tente novamente.") });
     } finally { if (current(captured)) publish({ testing: false }); }
   }
+  // One real SMS to the typed number, through the saved token. "Sent" is the provider taking it; the carrier may still refuse.
+  async function sendTest() {
+    if (!allowed()) return;
+    const phone = state.testPhone.trim();
+    if (!phone) { publish({ testOutcome: notSent("Informe um número para o teste.") }); return; }
+    if (!state.config.hasToken) { publish({ testOutcome: notSent("Salve o token antes de enviar um teste.") }); return; }
+    const captured = revision;
+    publish({ sendingTest: true, testOutcome: null, error: "", notice: "" });
+    try {
+      const answer = await client.sendSmsTest({ municipalityId, phone });
+      if (current(captured)) publish({ testOutcome: testOutcome(answer) });
+    } catch (error) {
+      if (current(captured)) publish({ testOutcome: notSent(testFailure(error)) });
+    } finally { if (current(captured)) publish({ sendingTest: false }); }
+  }
   return {
     getSnapshot: () => state,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
@@ -109,6 +139,7 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
     cancel: () => { mounted = false; revision++; publish(initialState()); },
     setToken: (token: string) => { if (allowed()) publish({ token, connection: null, error: "", notice: "" }); },
     setConfirmingRemoval: (confirmingRemoval: boolean) => { if (allowed()) publish({ confirmingRemoval }); },
-    saveToken, toggleActive, removeToken, setUseActive, testConnection,
+    setTestPhone: (testPhone: string) => { if (allowed()) publish({ testPhone, testOutcome: null }); },
+    saveToken, toggleActive, removeToken, setUseActive, testConnection, sendTest,
   };
 }

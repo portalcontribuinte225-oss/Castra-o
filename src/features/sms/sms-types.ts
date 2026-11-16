@@ -31,6 +31,20 @@ export interface SmsConnectionResult {
   reason?: string;
 }
 
+// What the server answers to a test send: whether it went and, when it did not, why.
+export interface SmsTestAnswer {
+  status?: string;
+  reason?: string;
+  providerMessageId?: string;
+}
+
+// What the screen shows under the test field. `sent` only means the provider took the message: the carrier delivers it.
+export interface SmsTestOutcome {
+  sent: boolean;
+  reason: string;
+  providerMessageId: string;
+}
+
 export interface SmsSettingsState {
   config: SmsConfig;
   token: string;
@@ -39,6 +53,9 @@ export interface SmsSettingsState {
   testing: boolean;
   ready: boolean;
   confirmingRemoval: boolean;
+  testPhone: string;
+  sendingTest: boolean;
+  testOutcome: SmsTestOutcome | null;
   error: string;
   notice: string;
   connection: SmsConnectionResult | null;
@@ -49,4 +66,5 @@ export interface SmsSettingsApi {
   setConfig: (key: string, value: { active?: boolean; token?: string; clearToken?: boolean }, municipalityId: string) => Promise<{ value?: unknown }>;
   testSmsConnection: (body: { municipalityId: string; token?: string }) => Promise<SmsConnectionResult>;
   setSmsUseActive: (municipalityId: string, use: string, active: boolean) => Promise<unknown>;
+  sendSmsTest: (body: { municipalityId: string; phone: string }) => Promise<SmsTestAnswer>;
 }
