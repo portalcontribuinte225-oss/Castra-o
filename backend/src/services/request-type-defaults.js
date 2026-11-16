@@ -4,8 +4,8 @@ const DEFAULT_REQUEST_TYPES = Object.freeze([
   { id: "castracao", name: "Castração" },
   { id: "microchipagem", name: "Microchipagem" },
   { id: "vacinacao_antirrabica", name: "Vacinação antirrábica" },
-  { id: "ninhada", name: "Ninhada" },
-  { id: "animal_rua", name: "Animal de Rua" },
+  { id: "remocao_tumor", name: "Remoção de tumor" },
+  { id: "esterilizacao_animal_rua", name: "Esterilização de animal de rua" },
 ]);
 
 // Every default procedure is free, asks for the proof of residence (not required) and is linked to the given breeds.

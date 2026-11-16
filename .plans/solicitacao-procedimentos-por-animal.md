@@ -20,7 +20,7 @@ Passa a funcionar assim:
 - **Regras combinadas:** etapas (Tutor, Agenda, Documentos) valem quando **todos** os procedimentos de todos os animais, mais o tipo de identificação, permitem; documentos são a **soma por pedido**, sem repetir, e obrigatório vale se algum tipo exigir; a lista de raças de cada animal é a união das raças ligadas aos procedimentos dele, filtrada pela espécie.
 - **Listas, filtros e análises** mostram cada procedimento por inteiro e filtram por procedimento.
 - **Vínculo de raças no cadastro do tipo de solicitação** deixa de ser chips e vira lista com rolagem, checkbox, agrupada por espécie e com busca.
-- **Tipos de solicitação padrão** de município novo: Castração, Microchipagem, Vacinação antirrábica, Ninhada e Animal de Rua, todos gratuitos, com o comprovante de residência como hoje e ligados às 10 raças padrão.
+- **Tipos de solicitação padrão** de município novo: Castração, Microchipagem, Vacinação antirrábica, Remoção de tumor e Esterilização de animal de rua, todos gratuitos, com o comprovante de residência como hoje e ligados às 10 raças padrão.
 - **Municípios existentes** recebem os tipos que faltam por um script (simulação por padrão, `--apply` para gravar), sem remover nem alterar nada do que já têm.
 - **Pedidos antigos** continuam valendo: sem `requestTypeIds`, vale o tipo antigo (`workflow_data.requestTypeId` ou `request_type`).
 
@@ -96,7 +96,7 @@ Fatos verificados que sustentam o plano:
 - **`schedule/schedule-booking.js`:** `stepAgenda` pela conjunção; `bookingChanged` compara os procedimentos derivados.
 - **`routes/requests.js`:** grava `workflow_data.requestTypeIds` e `request_type` derivados; no PATCH, o recálculo parte dos animais (o texto de `request_type` deixa de ser a fonte).
 - **`tracking-view.js` e `repositories/request-tracking.js`:** o `requestType` exibido é a lista.
-- **`municipalityDefaults.js`:** tipos padrão (Castração, Microchipagem, Vacinação antirrábica, Ninhada, Animal de Rua), cada um com `breedIds` das 10 raças padrão e o comprovante de residência.
+- **`municipalityDefaults.js`:** tipos padrão (Castração, Microchipagem, Vacinação antirrábica, Remoção de tumor, Esterilização de animal de rua), cada um com `breedIds` das 10 raças padrão e o comprovante de residência.
 - **Script `backend/scripts/add-default-request-types.js`** (novo, usa `config-store.js`): para cada município, acrescenta os tipos padrão cujo id ainda não existe; nunca remove nem altera os existentes; liga as raças padrão aos novos só quando o município tem as raças padrão; simula por padrão e grava só com `--apply`.
 - **Isolamento:** tudo continua por `municipality_id`; o município vem de `pickMunicipalityId`/JWT, nunca do body.
 
@@ -177,7 +177,7 @@ A divisão em entregas é decisão do usuário. Corte natural, se pedido: (A) co
 - **Agenda:** uma data para o pedido, contando uma vaga por animal, como hoje.
 - **Listas e filtros:** cada procedimento aparece por inteiro e filtra por procedimento; análises contam por procedimento e animal.
 - **Pedidos antigos e "Animal já cadastrado":** sem `requestTypeIds`, vale o tipo antigo; o fluxo de animal cadastrado continua com um tipo.
-- **Tipos padrão de município novo:** Castração, Microchipagem, Vacinação antirrábica, Ninhada e Animal de Rua, gratuitos, com o comprovante de residência e ligados às 10 raças padrão. Município existente só recebe o que falta.
+- **Tipos padrão de município novo:** Castração, Microchipagem, Vacinação antirrábica, Remoção de tumor e Esterilização de animal de rua, gratuitos, com o comprovante de residência e ligados às 10 raças padrão. Município existente só recebe o que falta.
 
 ---
 
@@ -276,7 +276,7 @@ A implementação deve ser considerada pronta quando:
 - Etapas, documentos e raças seguem as regras combinadas; o servidor valida os ids contra os tipos ativos do município e recalcula os derivados.
 - Listas, filtros, agenda, acompanhamento, detalhe e PDF mostram cada procedimento por inteiro e filtram por procedimento; pedidos antigos continuam corretos.
 - O vínculo de raças no cadastro do tipo é uma lista com rolagem, checkbox, busca e grupos por espécie; o `BreedPicker` em chips foi removido.
-- Município novo nasce com os 5 tipos padrão (Castração, Microchipagem, Vacinação antirrábica, Ninhada, Animal de Rua) ligados às raças padrão; o script acrescenta o que falta nos existentes sem alterar o que já têm.
+- Município novo nasce com os 5 tipos padrão (Castração, Microchipagem, Vacinação antirrábica, Remoção de tumor, Esterilização de animal de rua) ligados às raças padrão; o script acrescenta o que falta nos existentes sem alterar o que já têm.
 - Nada do que está em "O que será removido" permanece no código.
 - Typecheck, testes de frontend e de backend e build passam sem erros novos.
 
