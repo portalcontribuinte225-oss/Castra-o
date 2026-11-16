@@ -6,7 +6,6 @@ import { lockMunicipalSchedule } from "../src/services/schedule/schedule-lock.js
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
 const day = { id: "day-a", date: "20/12/2026", active: true, slots: [{ time: "08:00", vacancies: 1 }], location_name: "Local A" };
-const settings = { requestTypes: [{ id: "castration", name: "Castração", stepAgenda: true }], identificationTypes: [{ id: "owned", stepAgenda: true }] };
 function body() { return { type: "Castração", requestTypeId: "castration", animals: [{}], preferredSchedule: day.date, workflow_data: { identificationTypeId: "owned", scheduleOccurrenceKey: "day:day-a", scheduleSlotTime: "08:00" } }; }
 const now = new Date("2026-11-13T15:00:00Z");
 
@@ -52,7 +51,7 @@ test("the last place is reserved once under the municipal transaction lock", asy
     const client = connection();
     await lockMunicipalSchedule(client, MUNICIPALITY);
     try {
-      const reserved = await reserveRequestSchedule(client, { body: body(), municipalityId: MUNICIPALITY, settings, now });
+      const reserved = await reserveRequestSchedule(client, { body: body(), municipalityId: MUNICIPALITY, now });
       requests.push({ ...reserved, status: "NOVA" });
       return reserved;
     } finally { client.commit(); }
@@ -64,9 +63,9 @@ test("the last place is reserved once under the municipal transaction lock", asy
   assert.equal(requests[0].schedule_location_name, "Local A");
   assert.equal(calls.filter((item) => item.sql.includes("FROM requests")).every((item) => item.values[0] === MUNICIPALITY), true);
 });
-test("trusted no-agenda configuration clears forged booking data and restoration rechecks capacity", async () => {
+test("a request that is not a procedure clears forged booking data, and restoration rechecks capacity", async () => {
   const reserved = await reserveRequestSchedule({ query() { throw new Error("No booking read expected"); } }, {
-    body: body(), municipalityId: MUNICIPALITY, settings: { ...settings, requestTypes: [{ id: "castration", stepAgenda: false }] }, now,
+    body: { ...body(), type: "DENUNCIA", requestTypeId: "" }, municipalityId: MUNICIPALITY, now,
   });
   assert.equal(reserved.schedule_date, null); assert.equal(reserved.workflow_data.scheduleOccurrenceKey, undefined);
   assert.equal(bookingChanged({ ...reserved, status: "CANCELADA" }, { ...reserved, status: "NOVA" }), true);
@@ -89,30 +88,10 @@ test("reducing day vacancies updates slots and excess legacy bookings cannot lea
 test("internal unscheduled registration is allowed while public missing agenda is rejected", async()=>{
   const client={query(){throw new Error("Unscheduled registration must not query capacity");}};
   const input={...body(),preferredSchedule:"",workflow_data:{identificationTypeId:"owned"}};
-  const registered=await reserveRequestSchedule(client,{body:input,municipalityId:MUNICIPALITY,settings,user:{role:"analista"},now});
+  const registered=await reserveRequestSchedule(client,{body:input,municipalityId:MUNICIPALITY,user:{role:"analista"},now});
   assert.equal(registered.schedule_date,null);
-  await assert.rejects(reserveRequestSchedule(client,{body:input,municipalityId:MUNICIPALITY,settings,user:{role:"tutor"},now}),{status:400});
+  await assert.rejects(reserveRequestSchedule(client,{body:input,municipalityId:MUNICIPALITY,user:{role:"tutor"},now}),{status:400});
   assert.equal(bookingChanged({workflow_data:{scheduleTime:"08:00"}},{workflow_data:{scheduleTime:"09:00"}}),true);
-});
-
-test("the agenda step is dispensed when any procedure of the request has no agenda step, and kept when they all keep it", async () => {
-  const types = { requestTypes: [{ id: "keeps", name: "Mantém", stepAgenda: true }, { id: "also-keeps", name: "Também mantém" }, { id: "dispenses", name: "Dispensa", stepAgenda: false }],
-    identificationTypes: [{ id: "owned", stepAgenda: true }] };
-  const request = (...idLists) => ({ ...body(), requestTypeId: undefined, type: "", animals: idLists.map((requestTypeIds) => ({ requestTypeIds })) });
-  const noLookup = { query() { throw new Error("No booking read expected"); } };
-  const dispensed = await reserveRequestSchedule(noLookup, { body: request(["keeps"], ["dispenses"]), municipalityId: MUNICIPALITY, settings: types, now });
-  assert.equal(dispensed.schedule_date, null);
-  assert.equal(dispensed.workflow_data.scheduleOccurrenceKey, undefined);
-  const within = await reserveRequestSchedule(noLookup, { body: request(["keeps", "dispenses"]), municipalityId: MUNICIPALITY, settings: types, now });
-  assert.equal(within.schedule_date, null, "one animal's procedure without an agenda step is enough");
-  const client = { query: async (sql) => {
-    if (sql.includes("FROM schedule_days")) return { rows: [{ ...day, slots: [{ time: "08:00", vacancies: 3 }] }] };
-    if (sql.includes("FROM config") || sql.includes("FROM requests")) return { rows: [] };
-    throw new Error("Unexpected test query");
-  } };
-  const kept = await reserveRequestSchedule(client, { body: request(["keeps"], ["also-keeps"]), municipalityId: MUNICIPALITY, settings: types, now });
-  assert.equal(kept.workflow_data.scheduleOccurrenceKey, "day:day-a");
-  assert.equal(kept.schedule_location_name, "Local A");
 });
 
 test("changing the procedures of a booked request counts as a booking change", () => {

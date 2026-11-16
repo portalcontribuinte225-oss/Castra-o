@@ -15,11 +15,11 @@ const documentTypes = [
   { id: "identity", name: "Identidade", required: true },
   { id: "retired", name: "Documento desativado", required: true, active: false },
 ];
-const settings = (stepDocuments = {}) => ({
+const settings = () => ({
   documentTypes,
   requestTypes: [
-    { id: "castration", name: "Castração", stepDocuments: stepDocuments.castration, documents: [{ id: "residence" }, { id: "identity" }, { id: "retired" }, { id: "extra", name: "Extra", required: false }] },
-    { id: "vaccine", name: "Vacinação antirrábica", stepDocuments: stepDocuments.vaccine, documents: [{ id: "vaccine-card" }, { id: "extra", name: "Extra", required: true }, { id: "residence" }] },
+    { id: "castration", name: "Castração", documents: [{ id: "residence" }, { id: "identity" }, { id: "retired" }, { id: "extra", name: "Extra", required: false }] },
+    { id: "vaccine", name: "Vacinação antirrábica", documents: [{ id: "vaccine-card" }, { id: "extra", name: "Extra", required: true }, { id: "residence" }] },
     { id: "microchip", name: "Microchipagem", documents: [] },
   ],
   identificationTypes: [],
@@ -82,11 +82,10 @@ test("every document required by any procedure must be attached, and the ones th
     { status: 400, message: /não permitido/ }, "a document of a procedure the request does not have is refused");
 });
 
-test("the declaration and the required documents are skipped only when a procedure has no documents step", async () => {
-  const base = submission({ body: { animals: animals(["castration"], ["vaccine"]) } });
-  await assert.rejects(() => prepareRequestDocuments(client, base), { status: 400 });
-  const dispensed = submission({ settings: settings({ vaccine: false }), body: { animals: animals(["castration"], ["vaccine"]) } });
-  assert.deepEqual(await prepareRequestDocuments(client, dispensed), []);
-  const notDispensed = submission({ settings: settings({ vaccine: true }), body: { animals: animals(["castration"], ["vaccine"]) } });
-  await assert.rejects(() => prepareRequestDocuments(client, notDispensed), { status: 400 });
+test("the declaration and the required documents are asked of every public procedure, and never of the staff", async () => {
+  const body = { animals: animals(["castration"], ["vaccine"]) };
+  await assert.rejects(() => prepareRequestDocuments(client, submission({ body })), { status: 400, message: /declaração/ });
+  await assert.rejects(() => prepareRequestDocuments(client, submission({ body: { ...body, declarationAccepted: true } })), { status: 400, message: /documento obrigatório/ });
+  const staff = { id: "staff-1", role: "analista", municipality_id: "municipality-1" };
+  assert.deepEqual(await prepareRequestDocuments(client, submission({ user: staff, body })), []);
 });

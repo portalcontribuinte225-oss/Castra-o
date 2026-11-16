@@ -119,7 +119,7 @@ test("expiry happens at the exact server UTC boundary and policy changes preserv
   assert.equal(describeStoredDocument(row(document), definition(), { now: new Date("2030-01-01") }).receivedAt, NOW.toISOString());
 });
 
-test("fresh uploads ignore forged review, dates and ownership; declaration is required only for applicable public procedure", async () => {
+test("fresh uploads ignore forged review, dates and ownership; declaration is required of every public procedure", async () => {
   const upload = { documentId: "identity", dataUrl: PDF, fileName: "new.pdf", status: "approved", receivedAt: "2099-01-01", ownerUserId: "other", review: { reviewedBy: "fake" } };
   const args = submission({ body: { request_type: "procedure", declarationAccepted: true, documents: [upload] } });
   const [document] = await prepareRequestDocuments(clientFor([]), args);
@@ -131,23 +131,15 @@ test("fresh uploads ignore forged review, dates and ownership; declaration is re
   for (const declarationAccepted of [false, undefined, "true", 1]) await assert.rejects(() => prepareRequestDocuments(clientFor([]), { ...args,
     body: { ...args.body, declarationAccepted } }), { status: 400 });
   await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), { ...args, user: STAFF, body: { request_type: "procedure" } }));
-  const disabled = settingsFor(); disabled.requestTypes[0].stepDocuments = false;
-  await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), submission({ settings: disabled })));
 });
 
-test("all supported request type aliases enforce required documents and honor configured document steps", async () => {
+test("all supported request type aliases enforce required documents", async () => {
   for (const type of [{ requestTypeId: "procedure" }, { request_type: "procedure" }, { request_type: "CASTRACAO" },
     { requestType: "procedure" }, { requestType: "CASTRACAO" }, { type: "CASTRACAO" }]) {
     const args = submission({ body: { ...type, declarationAccepted: true } });
     await assert.rejects(() => prepareRequestDocuments(clientFor([]), args), { status: 400 }, JSON.stringify(type));
     await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), { ...args,
       body: { ...args.body, documents: [{ documentId: "identity", dataUrl: PDF }] } }));
-    const disabled = settingsFor(); disabled.requestTypes[0].stepDocuments = false;
-    await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), { ...args, settings: disabled,
-      body: { ...type, declarationAccepted: false } }));
-    const identityDisabled = settingsFor(); identityDisabled.identificationTypes = [{ id: "without-documents", stepDocuments: false }];
-    await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), { ...args, settings: identityDisabled,
-      body: { ...type, workflowData: { identificationTypeId: "without-documents" } } }));
   }
   await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), submission({ body: { requestType: "DENUNCIA" } })));
 });

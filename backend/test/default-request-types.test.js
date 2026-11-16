@@ -31,7 +31,7 @@ test("each default type is its own copy, so changing one municipality's list nev
 
 test("the load adds only the procedures a municipality lacks, at the end, and never changes or removes what it has", () => {
   const stored = [
-    { id: "remocao_tumor", name: "Remoção de tumor", fee: "R$ 30,00", charged: true, active: false, breedIds: ["mine"], stepAgenda: false },
+    { id: "remocao_tumor", name: "Remoção de tumor", fee: "R$ 30,00", charged: true, active: false, breedIds: ["mine"], overrideDailyLimit: true },
     { id: "esterilizacao_animal_rua", name: "Esterilização de animal de rua", active: true },
     { id: "custom", name: "Atendimento do município", active: true },
   ];

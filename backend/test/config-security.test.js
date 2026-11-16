@@ -102,9 +102,9 @@ test("request type document policy is validated and normalized without removing 
   const key = "castragestao:request-types";
   const invalid = await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: [{ id: "procedure", documents: [{ id: "identity", reuseValidityDays: -1 }] }] });
   assert.equal(invalid.status, 400);
-  const saved = await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: [{ id: "procedure", stepAgenda: false, documents: [{ id: "identity", required: false }] }] });
+  const saved = await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: [{ id: "procedure", overrideDailyLimit: true, documents: [{ id: "identity", required: false }] }] });
   assert.equal(saved.status, 200);
-  assert.equal(saved.body.value[0].stepAgenda, false);
+  assert.equal(saved.body.value[0].overrideDailyLimit, true);
   assert.deepEqual(saved.body.value[0].documents[0], { id: "identity", required: false, reuseScope: "request", reuseValidityDays: null });
 });
 

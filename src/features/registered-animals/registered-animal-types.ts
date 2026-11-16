@@ -1,4 +1,3 @@
-import type { StepToggles } from "../request-steps/request-steps";
 import { DocumentReviewStatus, DocumentReuseState } from "../../../shared/document-reuse-contract.js";
 
 export interface RegisteredAnimal {
@@ -57,7 +56,7 @@ export interface ReusableDocumentCandidate {
   reuseRef: ReusedDocumentReference;
 }
 
-export interface RequestConfigItem extends StepToggles {
+export interface RequestConfigItem {
   id: string;
   name: string;
   active?: boolean;

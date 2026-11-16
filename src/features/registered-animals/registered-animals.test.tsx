@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { DocumentReviewStatus, DocumentReuseScope, DocumentReuseState } from "../../../shared/document-reuse-contract.js";
 import { normalizeDocumentType } from "../../domain";
-import { RequestStep, getVisibleSteps } from "../request-steps/request-steps";
+import { RequestStep, requestSteps } from "../request-steps/request-steps";
 import { TutorArea } from "../tutor-access/tutor-area";
 import { ProcedureEntry } from "./procedure-entry";
 import { bindProcedureIntent } from "./procedure-intent";
@@ -56,10 +56,8 @@ describe("registered request context", () => {
     expect(html).not.toContain("<input"); expect(html).not.toContain("ana@example.com"); expect(html).not.toContain(user.cpf);
   });
 
-  it("skips Tutor while retaining configured steps and final follow-up", () => {
-    const steps = getVisibleSteps({ internal: false, skipTutor: true, configs: [{ stepAgenda: false, stepDocuments: true }] }).map((item) => item.step);
-    expect(steps).toEqual([RequestStep.ANIMAL, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
-    expect(getVisibleSteps({ internal: true, skipTutor: false, configs: [] }).map((item) => item.step)).toEqual([RequestStep.ANIMAL, RequestStep.TUTOR, RequestStep.SCHEDULE, RequestStep.DOCUMENTS, RequestStep.FOLLOW_UP]);
+  it("has the same four steps for a registered animal, a tutor and the staff", () => {
+    expect(requestSteps.map((item) => item.step)).toEqual([RequestStep.TUTOR, RequestStep.ANIMAL, RequestStep.SCHEDULE, RequestStep.DOCUMENTS]);
   });
 });
 

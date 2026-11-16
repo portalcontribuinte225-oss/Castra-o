@@ -9,16 +9,12 @@ export function buildDefaultIdentificationTypes() {
       name: "Animal com Tutor",
       active: true,
       stepTutor: true,
-      stepAgenda: true,
-      stepDocuments: true,
     },
     {
       id: AnimalTutorship.WITHOUT_TUTOR,
       name: "Animal sem Tutor",
       active: true,
       stepTutor: false,
-      stepAgenda: true,
-      stepDocuments: true,
     },
   ];
 }

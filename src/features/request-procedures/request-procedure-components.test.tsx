@@ -5,7 +5,6 @@ import { CHECKLIST_SEARCH_THRESHOLD, ScrollChecklist, filterChecklistGroups, tog
 import { BreedChecklist } from "../breeds/breed-checklist";
 import { AnimalAccordionCard } from "./animal-accordion-card";
 import { AnimalFields } from "./animal-fields";
-import { RequestIdentificationCard } from "./request-identification-card";
 import { RequestProcedureList } from "./request-procedure-list";
 import { blankAnimal } from "./request-procedures";
 
@@ -148,23 +147,6 @@ describe("AnimalAccordionCard", () => {
 
   it("leaves the detail out when it is empty", () => {
     expect(render({ detail: "" })).not.toContain("animal-accordion-summary");
-  });
-});
-
-describe("RequestIdentificationCard", () => {
-  const identification = [{ id: "with", name: "Animal com Tutor" }, { id: "without", name: "Animal sem Tutor" }];
-
-  it("shows the choice between the identification types when there are two or more", () => {
-    const html = renderToStaticMarkup(<RequestIdentificationCard types={identification} selectedId="without" onChange={noop} />);
-    expect(html).toContain("Solicitação");
-    expect(html).toContain("Tipo de identificação");
-    expect(html).toContain("Animal com Tutor");
-    expect(html).toContain("Animal sem Tutor");
-  });
-
-  it("shows nothing when there is no choice to make", () => {
-    expect(renderToStaticMarkup(<RequestIdentificationCard types={[identification[0]]} selectedId="with" onChange={noop} />)).toBe("");
-    expect(renderToStaticMarkup(<RequestIdentificationCard types={[]} onChange={noop} />)).toBe("");
   });
 });
 

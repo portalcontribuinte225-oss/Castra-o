@@ -10,8 +10,6 @@ import {
 } from "../../components/ui";
 import { filterByMunicipalityScope, getItemMunicipalityId } from "../../domain";
 import type { AnyRecord } from "../../types";
-import { summarizeVisibleSteps } from "../request-steps/request-steps";
-import type { StepToggles } from "../request-steps/request-steps";
 import { hasDuplicateIdentificationTypeName } from "./identification-types";
 
 interface IdentificationTypesConfigProps {
@@ -20,21 +18,13 @@ interface IdentificationTypesConfigProps {
   municipalityScopeId: string;
 }
 
-type IdentificationTypeForm = Required<StepToggles> & { name: string; active: boolean };
+type IdentificationTypeForm = { name: string; active: boolean; stepTutor: boolean };
 
 const emptyForm: IdentificationTypeForm = {
   name: "",
   active: true,
   stepTutor: true,
-  stepAgenda: true,
-  stepDocuments: true,
 };
-
-const stepToggleOptions: Array<{ key: keyof StepToggles; label: string }> = [
-  { key: "stepTutor", label: "Dados do tutor" },
-  { key: "stepAgenda", label: "Agenda" },
-  { key: "stepDocuments", label: "Documentos e termo" },
-];
 
 function isSameItem(left: AnyRecord, right: AnyRecord) {
   return left.id === right.id && getItemMunicipalityId(left) === getItemMunicipalityId(right);
@@ -69,8 +59,6 @@ export function IdentificationTypesConfig({ items, setItems, municipalityScopeId
             name: item.name || "",
             active: item.active !== false,
             stepTutor: item.stepTutor !== false,
-            stepAgenda: item.stepAgenda !== false,
-            stepDocuments: item.stepDocuments !== false,
           }
         : emptyForm,
     );
@@ -95,8 +83,6 @@ export function IdentificationTypesConfig({ items, setItems, municipalityScopeId
       name: trimmedName,
       active: form.active,
       stepTutor: form.stepTutor,
-      stepAgenda: form.stepAgenda,
-      stepDocuments: form.stepDocuments,
     };
     if (editingItem) {
       setItems((current) => current.map((item) => (isSameItem(item, editingItem) ? { ...item, ...values } : item)));
@@ -121,7 +107,7 @@ export function IdentificationTypesConfig({ items, setItems, municipalityScopeId
           {visibleItems.length === 0 && (
             <EmptyState
               title="Nenhum tipo configurado"
-              text="Crie os tipos de identificação que o tutor poderá escolher. Cada tipo define quais etapas aparecem no cadastro."
+              text="Cada tipo de identificação diz se o cadastro pede os dados do tutor."
             />
           )}
           {visibleItems.map((item, index) => (
@@ -135,7 +121,7 @@ export function IdentificationTypesConfig({ items, setItems, municipalityScopeId
               <span className="config-list-index">{index + 1}</span>
               <div className="config-list-main">
                 <strong>{item.name}</strong>
-                <span>Etapas: {summarizeVisibleSteps([item])}</span>
+                <span>{item.stepTutor === false ? "Cadastro sem os dados do tutor" : "Cadastro com os dados do tutor"}</span>
               </div>
               <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
                 {item.active === false ? "Inativo" : "Ativo"}
@@ -158,24 +144,15 @@ export function IdentificationTypesConfig({ items, setItems, municipalityScopeId
             <div className="request-type-steps-section">
               <span className="request-type-steps-label">Etapas do cadastro</span>
               <div className="request-type-steps-toggles">
-                {stepToggleOptions.map((option) => (
-                  <label className="toggle-switch config-active-toggle request-type-step-toggle" key={option.key}>
-                    <input
-                      type="checkbox"
-                      checked={form[option.key]}
-                      onChange={(event) => setForm((current) => ({ ...current, [option.key]: event.target.checked }))}
-                    />
-                    <span className="toggle-track"><span className="toggle-thumb" /></span>
-                    <span className="request-type-step-toggle-text">
-                      <span>{option.label}</span>
-                      <small>Esta etapa só aparece se o tipo de solicitação também permitir.</small>
-                    </span>
-                  </label>
-                ))}
+                <label className="toggle-switch config-active-toggle request-type-step-toggle">
+                  <input type="checkbox" checked={form.stepTutor} onChange={(event) => setForm((current) => ({ ...current, stepTutor: event.target.checked }))} />
+                  <span className="toggle-track"><span className="toggle-thumb" /></span>
+                  <span className="request-type-step-toggle-text">
+                    <span>Dados do tutor</span>
+                    <small>Desligado, o cadastro com este tipo não pede os dados do tutor.</small>
+                  </span>
+                </label>
               </div>
-              <span className="request-type-step-toggle-text">
-                <small>Etapas desta solicitação: {summarizeVisibleSteps([form])}</small>
-              </span>
             </div>
             <Field
               label="Nome"

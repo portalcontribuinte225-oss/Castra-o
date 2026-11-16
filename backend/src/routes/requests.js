@@ -127,7 +127,7 @@ router.post("/", optionalAuth, async (req, res) => {
     // With procedures per animal the request type is derived from them; the single type the client may also send is dropped.
     body = { ...body, request_type: requestType, ...(procedureAnimals ? { animals: procedureAnimals, requestTypeId: "" } : {}) };
     await validateRequestAnimalLink(client, { body, user: req.user, municipalityId });
-    body = await reserveRequestSchedule(client, { body: { ...body, status: RequestStatus.NEW, workflow_data: submittedWorkflow }, municipalityId, settings, user: req.user });
+    body = await reserveRequestSchedule(client, { body: { ...body, status: RequestStatus.NEW, workflow_data: submittedWorkflow }, municipalityId, user: req.user });
     const workflow = body.workflow_data;
     if (!procedureAnimals) {
       const selectedType = settings.requestTypes.find((item) => item.id === body.requestTypeId || item.name === requestType || item.id === requestType);
@@ -420,7 +420,7 @@ router.patch("/:id", auth, async (req, res) => {
     }
     if (bookingChanged(existingRows[0], nextRequest)) {
       nextRequest = await reserveRequestSchedule(client, {
-        body: { ...nextRequest, requestTypeId: nextWorkflow.requestTypeId }, settings, user: req.user,
+        body: nextRequest, user: req.user,
         internal: existingRows[0].origin === "INTERNA", municipalityId: existingRows[0].municipality_id, excludeId: req.params.id,
       });
       nextWorkflow = nextRequest.workflow_data;

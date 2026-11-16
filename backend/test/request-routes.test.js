@@ -22,12 +22,14 @@ const clone = (value) => structuredClone(value);
 function procedureBody(overrides = {}) {
   return {
     municipalityId: MUNICIPALITY_ID, requestTypeId: "castration", type: "Castração", declarationAccepted: true,
+    // The agenda is a fixed step: a public procedure always comes with the date it chose.
+    preferredSchedule: FUTURE_DATE,
     animals: [{ species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida" }],
     workflow_data: { identificationTypeId: "without_tutor", followUp: { enabled: false } }, ...overrides,
   };
 }
 
-async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false, agenda = false, requiredDocument = false } = {}) {
+async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false, requiredDocument = false } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
   const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0 };
@@ -36,8 +38,8 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
   const createdUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
-    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true, stepAgenda: agenda, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] },
-      { id: "microchip", name: "Microchipagem", active: true, stepTutor: true, stepAgenda: agenda, documents: [] }]],
+    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] },
+      { id: "microchip", name: "Microchipagem", active: true, stepTutor: true, documents: [] }]],
     ["castragestao:document-types", requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : []],
     ["castragestao:identification-types", [
       { id: "with_tutor", name: "Com tutor", active: true, stepTutor: true },
@@ -411,7 +413,7 @@ test("a municipality that uses no channel for the notice leaves no result and no
 });
 
 test("HTTP submissions share the last agenda place without leaking another request", async (t) => {
-  const { request, stats } = await fixture(t, {agenda:true});
+  const { request, stats } = await fixture(t);
   const payload = procedureBody({ animals:Array.from({length:10},()=>({species:"Cão",sex:"Macho",size:"Pequeno",breedType:"Indefinida"})), preferredSchedule:FUTURE_DATE });
   const results = await Promise.all([request({body:payload}),request({body:payload})]);
   assert.deepEqual(results.map(r=>r.status).sort(),[201,409]);
@@ -456,7 +458,8 @@ test("public POST refuses an unknown procedure, one switched off and an animal l
 });
 
 test("a PATCH that changes the procedures of the animals derives the request type again, and one that forges them does not", async (t) => {
-  const existing = { ...pendingRequest(), request_type: "Castração", animals: [{ ...dog, requestTypeIds: ["castration"] }],
+  // Registered by the staff, the only kind of request that may have no date.
+  const existing = { ...pendingRequest(), origin: "INTERNA", request_type: "Castração", animals: [{ ...dog, requestTypeIds: ["castration"] }],
     workflow_data: { followUp: { enabled: false, email: "", phone: "" }, requestTypeIds: ["castration"], requestTypeNames: ["Castração"] } };
   const { request, row } = await fixture(t, { existing });
   const path = `/requests/${REQUEST_ID}`;

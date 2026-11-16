@@ -1,7 +1,5 @@
 import { buildScheduleOccurrences, allocateScheduleAvailability, scheduleDate, displayScheduleDate } from "../../../../shared/schedule-contract.js";
-import { configsAllowStep } from "../../../../shared/notification-contract.js";
 import { RequestStatus, isProcedureRequest } from "../../../../shared/request-contract.js";
-import { resolveRequestTypes } from "../../../../shared/request-types-contract.js";
 import { loadScheduleAvailability } from "../../repositories/schedule-availability.js";
 import { isInternalUser } from "../../tenant.js";
 
@@ -22,15 +20,12 @@ export async function getAvailability(database, { municipalityId, from, to, excl
   const source = await loadScheduleAvailability(database, { municipalityId, from, to, excludeId });
   return { days: allocateScheduleAvailability(buildScheduleOccurrences(source.days, source.rules, from, to), source.requests), from, to };
 }
-export async function reserveRequestSchedule(client, { body, municipalityId, settings, user, internal = isInternalUser(user), excludeId, now = new Date() }) {
+export async function reserveRequestSchedule(client, { body, municipalityId, user, internal = isInternalUser(user), excludeId, now = new Date() }) {
   const type = body.request_type ?? body.requestType ?? body.type;
   if (body.status === RequestStatus.CANCELLED) return body;
   const workflow = { ...(body.workflow_data || body.workflowData || {}) };
-  const requestTypes = resolveRequestTypes({ animals: body.animals, workflow, requestTypeId: body.requestTypeId, requestType: type }, settings.requestTypes);
-  const identification = settings.identificationTypes.find((item) => item.id === workflow.identificationTypeId);
-  // Staff may register an unscheduled visit; public omission never grants that privilege.
-  const required = internal ? Boolean(body.schedule_date || body.preferredSchedule || body.appointment)
-    : configsAllowStep([...requestTypes, identification], "stepAgenda");
+  // The agenda is a fixed step of every procedure. Staff may register an unscheduled visit; public omission never grants that privilege.
+  const required = !internal || Boolean(body.schedule_date || body.preferredSchedule || body.appointment);
   if (!required || !isProcedureRequest(type)) {
     for (const key of ["scheduleOccurrenceKey", "scheduleSlotTime", "scheduleTime"]) delete workflow[key];
     return { ...body, schedule_date: null, preferredSchedule: "", appointment: "", scheduleLocationName: "", schedule_location_name: "",

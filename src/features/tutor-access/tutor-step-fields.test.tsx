@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { MOBILE_PHONE_MESSAGE } from "../../../shared/phone-contract.js";
 import { TutorStepFields } from "./tutor-step-fields";
 import type { TutorStepData } from "./tutor-step-fields";
-import { registrationContactIssues } from "./registration-contact-fields";
+import { RegistrationContactFields, registrationContactIssues } from "./registration-contact-fields";
 
 const data: TutorStepData = {
   tutor: "Maria Silva", cpf: "529.982.247-25", cep: "88801-600", number: "88", state: "SC", address: "Rua Ararangua",
@@ -67,5 +67,21 @@ describe("the Tutor step", () => {
     const markup = html();
     expect(markup).not.toContain("cadunico-row"); expect(markup).not.toContain("Se aplica"); expect(markup).not.toContain("Identificação");
     expect(markup).not.toContain("CadÚnico"); expect(markup).not.toContain("cadunico-square-toggle");
+  });
+});
+
+describe("the contacts for the notices of an animal without a tutor", () => {
+  it("require neither contact by itself, but each one given must be valid", () => {
+    expect(registrationContactIssues("", "", true, false)).toEqual({ email: "", phone: "" });
+    expect(registrationContactIssues("tutor@example.com", "", true, false)).toEqual({ email: "", phone: "" });
+    expect(registrationContactIssues("", "(48) 99999-1234", true, false)).toEqual({ email: "", phone: "" });
+    expect(registrationContactIssues("bad", "123", true, false)).toEqual({ email: "Informe um e-mail válido.", phone: MOBILE_PHONE_MESSAGE });
+  });
+
+  it("are asked as contacts for the notices, with neither marked as required", () => {
+    const markup = renderToStaticMarkup(<RegistrationContactFields notices email="" phone="" onEmailChange={noop} onPhoneChange={noop} showErrors />);
+    expect(markup).toContain("Contato para os avisos"); expect(markup).toContain('data-label="E-mail"'); expect(markup).toContain('data-label="Celular"');
+    expect(markup).not.toContain("Celular *"); expect(markup).not.toContain("(opcional)");
+    expect(markup).not.toMatch(/aria-label="Celular para os avisos"[^>]*required/); expect(markup).not.toContain("field-error-message");
   });
 });

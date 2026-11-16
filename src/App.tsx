@@ -161,7 +161,6 @@ import { useRequestFilterResults, useRequestFilters } from "./features/request-f
 import { BreedChecklist } from "./features/breeds/breed-checklist";
 import { AnimalAccordionCard } from "./features/request-procedures/animal-accordion-card";
 import { AnimalFields } from "./features/request-procedures/animal-fields";
-import { RequestIdentificationCard } from "./features/request-procedures/request-identification-card";
 import { RequestProcedureList } from "./features/request-procedures/request-procedure-list";
 import {
   animalHeader,
@@ -183,16 +182,16 @@ import { emptyMunicipalityForm, formFromMunicipality, formatMunicipalityAddress,
 import type { MunicipalityForm } from "./features/municipality-form/municipality-address";
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
 import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
-import { getActiveIdentificationTypes, resolveSelectedIdentificationType } from "./features/identification-types/identification-types";
-import { RequestStep, getVisibleSteps, requestTypeStepToggles } from "./features/request-steps/request-steps";
-import { FollowUpStep } from "./features/request-follow-up/follow-up-step";
-import { buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./features/request-follow-up/follow-up";
+import { RequestStep, requestSteps } from "./features/request-steps/request-steps";
+import { availableFollowUpContacts, buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./features/request-follow-up/follow-up";
 import { FollowUpSummary } from "./features/request-follow-up/follow-up-summary";
 import type { FollowUpValue } from "./features/request-follow-up/follow-up";
 import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-policy";
+import { RequesterStep } from "./features/request-requester/requester-step";
 import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
 import type { NotificationResult } from "./features/notifications/notification-results";
-import { REJECTION_REASONS, configsAllowStep } from "../shared/notification-contract.js";
+import { REJECTION_REASONS } from "../shared/notification-contract.js";
+import { AnimalTutorship } from "../shared/request-tutorship-contract.js";
 import { historyBlocks, prescriptionBlocks } from "./features/process-report/process-report";
 import type { ReportBlock } from "./features/process-report/process-report";
 import { useSession } from "./features/tutor-access/use-session";
@@ -207,7 +206,6 @@ import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedu
 import type { AnimalRecord } from "./features/animal-services/animal-service-types";
 import { RequestTracking } from "./features/request-tracking/request-tracking";
 import { registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
-import { TutorStepFields } from "./features/tutor-access/tutor-step-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
 import { EnrollmentNotice } from "./features/tutor-access/enrollment-notice";
@@ -2654,7 +2652,8 @@ function NewRequest({
     return { value: s.name, label: s.name, subtitle };
   });
   const registered = Boolean(registeredContext);
-  const skipTutorStep = registered || (currentUser.role === "tutor" && currentUser.profileComplete && isValidCpf(currentUser.cpf || ""));
+  // The tutor's data already exist: the account of a tutor with a complete profile, or the registered animal.
+  const tutorKnown = registered || (currentUser.role === "tutor" && currentUser.profileComplete && isValidCpf(currentUser.cpf || ""));
   const [requestData, setRequestData] = useState({
     tutor: registeredContext?.tutor.name || registeredContext?.tutor.tutor || (canManagePublicAnimalFlows(currentUser.role) ? "" : currentUser.name),
     neighborhood: registeredContext?.tutor.neighborhood || currentUser.neighborhood || "",
@@ -2687,7 +2686,7 @@ function NewRequest({
   useEffect(() => () => { documentUploadGeneration.current += 1; }, []);
   const [reusedDocuments, setReusedDocuments] = useState<Record<string, ReusableDocumentCandidate>>({});
   const [reusedPreview, setReusedPreview] = useState<ReusableDocumentCandidate | null>(null);
-  const [formStep, setFormStep] = useState<RequestStep>(RequestStep.ANIMAL);
+  const [formStep, setFormStep] = useState<RequestStep>(RequestStep.TUTOR);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState(null);
@@ -2695,7 +2694,7 @@ function NewRequest({
   const [followUp, setFollowUp] = useState<FollowUpValue>(emptyFollowUp);
   const followUpMunicipalityId = selectedMunicipalityId || requestData.municipalityId || currentUser.municipalityId || "";
   const followUpPolicy = useFollowUpPolicy(followUpMunicipalityId);
-  // The follow-up offers the contacts the tutor gave in the Tutor step (or the profile's), so nothing is typed twice.
+  // The notices go to the contacts typed in the first step (or the profile's), so nothing is typed twice.
   const tutorContacts = { email: requestData.email, phone: requestData.phone };
   const availability = useScheduleAvailability(followUpMunicipalityId, initialSchedule);
   const scheduleDays = availability.days;
@@ -2751,12 +2750,23 @@ function NewRequest({
   const procedureFields = deriveRequestTypeFields(selectedRequestTypes);
   // Without request types configured there is nothing to choose, so the animals go without procedures, as before.
   const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
-  const activeIdentificationTypes = publicFlow || internalSimple ? getActiveIdentificationTypes(identificationTypes) : [];
-  const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
-  // The request types decide the agenda and the documents; only the identification type can take the Tutor step away.
-  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [...requestTypeStepToggles(selectedRequestTypes), selectedIdentificationType] });
-  const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
-  const requiresTutorIdentity = internalSimple ? hasStep(RequestStep.TUTOR) : currentUser.role === "tutor" || configsAllowStep([selectedIdentificationType], "stepTutor");
+  // The identification type of a registered animal is still checked against the configuration, until the configuration goes.
+  const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : null;
+  // Whoever is a tutor already (the account, or a registered animal) is not asked whether the animal has one: the answer is "with tutor".
+  const tutorshipFixed = registered || currentUser.role === "tutor";
+  const tutorship = registeredContext ? (registeredContext.animal.identificationTypeId || AnimalTutorship.WITH_TUTOR)
+    : currentUser.role === "tutor" ? AnimalTutorship.WITH_TUTOR : requestData.identificationTypeId;
+  const requiresTutorIdentity = currentUser.role === "tutor" || tutorship !== AnimalTutorship.WITHOUT_TUTOR;
+  const showsTutorFields = tutorship === AnimalTutorship.WITH_TUTOR && !tutorKnown;
+  const withoutTutor = tutorship === AnimalTutorship.WITHOUT_TUTOR && !tutorKnown;
+  const reachableContacts = availableFollowUpContacts(tutorContacts, followUpPolicy.phoneEnabled);
+  // The acceptance cannot stand without a contact the notices can reach (the box is locked then), so it counts as not given.
+  const noticesEnabled = followUp.enabled && Boolean(reachableContacts.email || reachableContacts.phone);
+  // Without a tutor the person that said yes to the notices has to give a contact for them.
+  const noticesIssues = withoutTutor && followUp.enabled ? getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled) : [];
+  // Without a tutor nothing about one is sent, whatever was typed before the answer changed; the contacts go only for the notices.
+  const sent = requiresTutorIdentity ? requestData
+    : { ...requestData, tutor: "", cpf: "", cep: "", number: "", address: "", neighborhood: "", city: "", state: "", latitude: "", longitude: "", ...(noticesEnabled ? {} : { email: "", phone: "" }) };
   const selectedTypeDocuments = mergeProcedureDocuments(selectedRequestTypes.map((type) => (type.documents || [])
     .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
@@ -2774,10 +2784,10 @@ function NewRequest({
     ...selectedTypeDocuments.map((document) => documentUploads[document.id]).filter((upload) => upload && acceptableUploadStatuses.includes(upload.status)),
     ...(documentUploads.animal_photo ? [documentUploads.animal_photo] : []),
   ];
-  const contactIssues = registrationContactIssues(requestData.email, requestData.phone, hasStep(RequestStep.TUTOR));
+  const contactIssues = registrationContactIssues(requestData.email, requestData.phone, showsTutorFields || (withoutTutor && followUp.enabled), showsTutorFields);
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
-  const currentStepIndex = Math.max(formSteps.findIndex((item) => item.step === formStep), 0);
+  const currentStepIndex = Math.max(requestSteps.findIndex((item) => item.step === formStep), 0);
   function selectedScheduleHasCapacity() {
     if (!requestData.schedule) return false;
     const selectedDay = selectScheduleOccurrence(scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, Math.max(animals.length, 1));
@@ -2857,12 +2867,13 @@ function NewRequest({
   function getRequestValidationIssues() {
     const issues = [];
     if (animalPhotoLoading) issues.push("Aguarde a leitura da foto do animal.");
+    if (!tutorshipFixed && !tutorship) issues.push("Informe se o animal tem tutor ou responsável.");
     const filledAnimals = animals.length > 0 ? animals : [{}];
     if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) issues.push(registeredContext.eligibility?.reason || "Aguarde a validação do cadastro ou procure o atendimento.");
 
-    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
-    if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !requestData.schedule) issues.push("Escolha uma data disponível.");
-    else if (!internalSimple && hasStep(RequestStep.SCHEDULE) && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
+    if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
+    if (!internalSimple && !requestData.schedule) issues.push("Escolha uma data disponível.");
+    else if (!internalSimple && !selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
     filledAnimals.forEach((animal, index) => {
       if (registered) {
         if (needsProcedure(animal, hasConfiguredTypes)) issues.push("Selecione o tipo de solicitação.");
@@ -2877,16 +2888,16 @@ function NewRequest({
       if (!animal.breedType) issues.push(`Informe se a raça é definida ou indefinida${label}.`);
       if (!animal.neighborhood) issues.push(`Informe o bairro${label}.`);
     });
-    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && !requiredDocsApproved) issues.push("Anexe ou reaproveite os documentos obrigatórios. Arquivos pendentes serão conferidos pela equipe.");
-    if (!internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
-    if (internalSimple && hasStep(RequestStep.DOCUMENTS) && hasUnsendableDocument) issues.push("Aguarde a análise ou remova o anexo recusado antes de encerrar.");
+    if (!internalSimple && !requiredDocsApproved) issues.push("Anexe ou reaproveite os documentos obrigatórios. Arquivos pendentes serão conferidos pela equipe.");
+    if (!internalSimple && hasUploadNeedingReplacement) issues.push("Um dos arquivos anexados não corresponde ao documento solicitado. Anexe o comprovante correto antes de enviar.");
+    if (internalSimple && hasUnsendableDocument) issues.push("Aguarde a análise ou remova o anexo recusado antes de encerrar.");
     if ((requiresTutorIdentity || requestData.cpf) && !isValidCpf(requestData.cpf)) issues.push("Informe um CPF válido.");
     if (requiresTutorIdentity && validateTutorName(requestData.tutor)) issues.push(validateTutorName(requestData.tutor));
     if (!registered && contactIssues.email) issues.push(contactIssues.email);
     if (contactIssues.phone) issues.push(contactIssues.phone);
-    if (hasStep(RequestStep.FOLLOW_UP)) {
+    if (followUp.enabled) {
       if (!followUpPolicy.ready) issues.push(followUpPolicy.error || "Aguarde o carregamento dos canais de acompanhamento.");
-      issues.push(...getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled));
+      issues.push(...noticesIssues);
     }
 
     return issues;
@@ -2894,11 +2905,12 @@ function NewRequest({
 
   function getStepIssues(step = formStep) {
     if (step === RequestStep.TUTOR) {
-      return [...(requiresTutorIdentity ? [!isValidCpf(requestData.cpf), validateTutorName(requestData.tutor)] : []), contactIssues.email, contactIssues.phone].filter(Boolean);
-    }
-
-    if (step === RequestStep.FOLLOW_UP) {
-      return [!followUpPolicy.ready, ...getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled)].filter(Boolean);
+      return [
+        !tutorship,
+        ...(showsTutorFields ? [!isValidCpf(requestData.cpf), validateTutorName(requestData.tutor)] : []),
+        contactIssues.email, contactIssues.phone,
+        ...(followUp.enabled ? [!followUpPolicy.ready, ...noticesIssues] : []),
+      ].filter(Boolean);
     }
 
     if (step === RequestStep.ANIMAL) {
@@ -2943,7 +2955,7 @@ function NewRequest({
   }
 
   function navigateToStep(targetStep) {
-    const targetIndex = formSteps.findIndex((item) => item.step === targetStep);
+    const targetIndex = requestSteps.findIndex((item) => item.step === targetStep);
     if (targetIndex < 0 || targetIndex === currentStepIndex) return;
 
     if (targetIndex < currentStepIndex) {
@@ -2953,7 +2965,7 @@ function NewRequest({
     }
 
     for (let index = currentStepIndex; index < targetIndex; index += 1) {
-      const step = formSteps[index].step;
+      const step = requestSteps[index].step;
       if (getStepIssues(step).length > 0) {
         setSubmitAttempted(true);
         setFormStep(step);
@@ -3093,7 +3105,7 @@ function NewRequest({
     setSubmissionError("");
     if (submitting) return;
     if (!canSubmit) {
-      const firstInvalidStep = formSteps.find((item) => getStepIssues(item.step).length > 0);
+      const firstInvalidStep = requestSteps.find((item) => getStepIssues(item.step).length > 0);
       const nextMessage = requiredIssues[0] || "Revise os dados obrigatórios antes de enviar.";
       setSubmissionError(nextMessage);
       if (firstInvalidStep && firstInvalidStep.step !== formStep) {
@@ -3120,47 +3132,47 @@ function NewRequest({
 
   async function submitInternal() {
     setSubmissionError("");
-    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, Math.max(animals.length, 1));
+    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, sent.schedule, sent.scheduleOccurrenceKey, Math.max(animals.length, 1));
     const selectedScheduleSlot = getAvailableScheduleSlot(selectedScheduleDay, Math.max(animals.length, 1));
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-    const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
-    const hasGpsCoords = requestData.latitude && requestData.longitude;
+    const addressString = [sent.address, sent.number, sent.neighborhood, sent.city, sent.state, sent.cep].filter(Boolean).join(", ");
+    const hasGpsCoords = sent.latitude && sent.longitude;
     const { latitude, longitude } = hasGpsCoords
-      ? { latitude: requestData.latitude, longitude: requestData.longitude }
+      ? { latitude: sent.latitude, longitude: sent.longitude }
       : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
     const localPayload = {
-      tutor: requestData.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
-      neighborhood: requestData.neighborhood || "Bairro não informado",
+      tutor: sent.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
+      neighborhood: sent.neighborhood || "Bairro não informado",
       address:
-        [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
+        [sent.address, sent.number, sent.neighborhood, sent.city, sent.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
       type: procedureFields.requestType || "Cadastro animal",
       fee: combineRequestFees(selectedRequestTypes),
-      phone: requestData.phone || "",
-      cpf: requestData.cpf || "",
-      email: requestData.email || "",
-      cep: requestData.cep || "",
-      preferredSchedule: requestData.schedule || "",
-      notes: requestData.notes || "",
-      municipalityId: requestData.municipalityId || selectedScheduleDay?.municipalityId || "",
+      phone: sent.phone || "",
+      cpf: sent.cpf || "",
+      email: sent.email || "",
+      cep: sent.cep || "",
+      preferredSchedule: sent.schedule || "",
+      notes: sent.notes || "",
+      municipalityId: sent.municipalityId || selectedScheduleDay?.municipalityId || "",
       scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleLocationName: selectedScheduleDay?.locationName || "",
       scheduleAddress: selectedScheduleDay?.locationAddress || "",
       scheduleAddressUrl: selectedScheduleDay?.addressUrl || "",
-      scheduleMunicipality: selectedScheduleDay?.municipality || requestData.city || "",
+      scheduleMunicipality: selectedScheduleDay?.municipality || sent.city || "",
       responsibleUnit: selectedScheduleDay?.responsibleUnit || selectedScheduleDay?.unit || "",
       veterinarian: selectedScheduleDay?.veterinarian || selectedScheduleDay?.responsible || "",
       latitude,
       longitude,
       workflowData: {
-        isFarmer: requestData.isFarmer,
+        isFarmer: sent.isFarmer,
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
-        ...(selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {}),
-        ...(hasStep(RequestStep.FOLLOW_UP) ? { followUp: buildFollowUpPayload(followUp, tutorContacts, followUpPolicy.phoneEnabled) } : {}),
+        ...(tutorship ? { identificationTypeId: tutorship } : {}),
+        followUp: buildFollowUpPayload({ enabled: noticesEnabled }, tutorContacts, followUpPolicy.phoneEnabled),
       },
       animals: payloadAnimals(animals.map((animal) => ({
         ...animal,
@@ -3183,49 +3195,49 @@ function NewRequest({
 
   async function submitAccepted() {
     setSubmissionError("");
-    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, Math.max(animals.length, 1));
+    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, sent.schedule, sent.scheduleOccurrenceKey, Math.max(animals.length, 1));
     const selectedScheduleSlot = getAvailableScheduleSlot(selectedScheduleDay, Math.max(animals.length, 1));
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
-    const addressString = [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state, requestData.cep].filter(Boolean).join(", ");
-    const hasGpsCoords = requestData.latitude && requestData.longitude;
+    const addressString = [sent.address, sent.number, sent.neighborhood, sent.city, sent.state, sent.cep].filter(Boolean).join(", ");
+    const hasGpsCoords = sent.latitude && sent.longitude;
     const { latitude, longitude } = hasGpsCoords
-      ? { latitude: requestData.latitude, longitude: requestData.longitude }
+      ? { latitude: sent.latitude, longitude: sent.longitude }
       : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
     const documentSubmission = buildDocumentSubmission(uploadedDocumentsToSend, reusedDocuments);
-    const identificationPayload = selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {};
+    const identificationPayload = tutorship ? { identificationTypeId: tutorship } : {};
     const localPayload = {
-      tutor: requestData.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
-      neighborhood: requestData.neighborhood || "Bairro não informado",
+      tutor: sent.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
+      neighborhood: sent.neighborhood || "Bairro não informado",
       address:
-        [requestData.address, requestData.number, requestData.neighborhood, requestData.city, requestData.state]
+        [sent.address, sent.number, sent.neighborhood, sent.city, sent.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
       type: procedureFields.requestType || "Cadastro animal",
       requestTypeId: registeredContext ? selectedRequestTypes[0]?.id || "" : "",
       fee: combineRequestFees(selectedRequestTypes),
-      phone: requestData.phone || "",
-      cpf: requestData.cpf || "",
-      email: requestData.email || "",
-      cep: requestData.cep || "",
-      preferredSchedule: requestData.schedule || "",
+      phone: sent.phone || "",
+      cpf: sent.cpf || "",
+      email: sent.email || "",
+      cep: sent.cep || "",
+      preferredSchedule: sent.schedule || "",
       municipalityId: followUpMunicipalityId || selectedScheduleDay?.municipalityId || "",
       scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
       scheduleLocationName: selectedScheduleDay?.locationName || "",
       scheduleAddress: selectedScheduleDay?.locationAddress || "",
       scheduleAddressUrl: selectedScheduleDay?.addressUrl || "",
-      scheduleMunicipality: selectedScheduleDay?.municipality || requestData.city || "",
+      scheduleMunicipality: selectedScheduleDay?.municipality || sent.city || "",
       responsibleUnit: selectedScheduleDay?.responsibleUnit || selectedScheduleDay?.unit || "",
       veterinarian: selectedScheduleDay?.veterinarian || selectedScheduleDay?.responsible || "",
       latitude,
       longitude,
       workflowData: {
-        isFarmer: requestData.isFarmer,
+        isFarmer: sent.isFarmer,
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
         ...identificationPayload,
-        followUp: buildFollowUpPayload(followUp, tutorContacts, followUpPolicy.phoneEnabled),
+        followUp: buildFollowUpPayload({ enabled: noticesEnabled }, tutorContacts, followUpPolicy.phoneEnabled),
       },
       animalId: registeredContext?.animal.id || "",
       animals: registeredContext ? [{ id: registeredContext.animal.id }] : payloadAnimals(animals.map((animal) => ({
@@ -3256,7 +3268,7 @@ function NewRequest({
 
   const stepperNode = (
     <div className="nr-stepper" aria-label="Etapas da solicitação">
-      {formSteps.map((item, index) => {
+      {requestSteps.map((item, index) => {
         const isDone = index < currentStepIndex;
         const isCurrent = index === currentStepIndex;
         const hasIssue = submitAttempted && isCurrent && getStepIssues(item.step).length > 0;
@@ -3273,7 +3285,7 @@ function NewRequest({
               </span>
               <span className="nr-step-label">{item.label}</span>
             </button>
-            {index < formSteps.length - 1 && <span className="nr-step-connector" aria-hidden="true" />}
+            {index < requestSteps.length - 1 && <span className="nr-step-connector" aria-hidden="true" />}
           </React.Fragment>
         );
       })}
@@ -3336,23 +3348,37 @@ function NewRequest({
 
           {submissionError && <p className="form-error">{submissionError}</p>}
           <div className="single-request-form clean-form">
-          {formStep === RequestStep.TUTOR && <FormSection title="Tutor">
-            <TutorStepFields
-              data={requestData}
-              nameInvalid={showInvalid("tutor")}
-              nameIssue={validateTutorName(requestData.tutor)}
-              cpfInvalid={showInvalid("cpf")}
-              neighborhoodNames={neighborhoodList}
+          {formStep === RequestStep.TUTOR && <FormSection title="Você">
+            <RequesterStep
+              tutorship={tutorship}
+              tutorshipFixed={tutorshipFixed}
+              tutorKnown={tutorKnown}
               showErrors={submitAttempted}
-              onField={updateRequestField}
-              onMaskedField={updateMaskedRequestField}
-              onCepChange={lookupCep}
+              onTutorshipChange={(value) => {
+                // The acceptance of the notices belongs to the answer it was given under: a new answer starts it unchecked again.
+                if (value !== tutorship) setFollowUp({ ...emptyFollowUp });
+                updateRequestField("identificationTypeId", value);
+              }}
+              tutorFields={{
+                data: requestData,
+                nameInvalid: showInvalid("tutor"),
+                nameIssue: validateTutorName(requestData.tutor),
+                cpfInvalid: showInvalid("cpf"),
+                neighborhoodNames: neighborhoodList,
+                showErrors: submitAttempted,
+                onField: updateRequestField,
+                onMaskedField: updateMaskedRequestField,
+                onCepChange: lookupCep,
+              }}
+              contacts={tutorContacts}
+              followUp={followUp}
+              onFollowUpChange={setFollowUp}
+              policy={{ loading: followUpPolicy.loading, error: followUpPolicy.error, phoneEnabled: followUpPolicy.phoneEnabled, retry: followUpPolicy.retry }}
             />
           </FormSection>}
 
           {formStep === RequestStep.ANIMAL && <FormSection title="Dados do animal">
             {registeredContext ? <><RegisteredRequestSelection context={registeredContext} selectedType={selectedRequestTypes[0]?.name || ""} onSelectType={selectRegisteredProcedure} />{contextLoading && <p role="status">Atualizando os requisitos do procedimento...</p>}</> : <>
-            <RequestIdentificationCard types={activeIdentificationTypes} selectedId={selectedIdentificationType?.id} onChange={(id) => updateRequestField("identificationTypeId", id)} />
             {animals.map((animal, index) => {
               const header = animalHeader(animal, index);
               return (
@@ -3498,17 +3524,14 @@ function NewRequest({
               </div>
             </div>
           </FormSection>}
-          {formStep === RequestStep.FOLLOW_UP && <FormSection title="Acompanhamento">
-            <FollowUpStep value={followUp} onChange={setFollowUp} contacts={tutorContacts} phoneEnabled={followUpPolicy.phoneEnabled} loading={followUpPolicy.loading} error={followUpPolicy.error} onRetry={followUpPolicy.retry} showErrors={submitAttempted || followUp.enabled === true} onEditContacts={hasStep(RequestStep.TUTOR) ? () => navigateToStep(RequestStep.TUTOR) : undefined} />
-          </FormSection>}
           </div>
           {submissionError && <p className="form-error nr-bottom-error">{submissionError}</p>}
-          <div className={`nr-nav-row${currentStepIndex === formSteps.length - 1 ? " nr-nav-row--final" : ""}`}>
+          <div className={`nr-nav-row${currentStepIndex === requestSteps.length - 1 ? " nr-nav-row--final" : ""}`}>
             {currentStepIndex > 0 && (
               <button
                 className="nr-back-btn primary-action"
                 type="button"
-                onClick={() => navigateToStep(formSteps[currentStepIndex - 1].step)}
+                onClick={() => navigateToStep(requestSteps[currentStepIndex - 1].step)}
               >
                 Voltar
               </button>
@@ -3523,11 +3546,11 @@ function NewRequest({
                 </button>
               </>
             )}
-            {currentStepIndex < formSteps.length - 1 ? (
+            {currentStepIndex < requestSteps.length - 1 ? (
               <button
                 className="nr-topbar-continue primary-action"
                 type="button"
-                onClick={() => navigateToStep(formSteps[currentStepIndex + 1].step)}
+                onClick={() => navigateToStep(requestSteps[currentStepIndex + 1].step)}
               >
                 Próximo
                 {publicFlow && <ChevronRight size={15} />}
@@ -3536,7 +3559,7 @@ function NewRequest({
               <button
                 className="nr-topbar-continue primary-action"
                 type="button"
-                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) || (hasStep(RequestStep.FOLLOW_UP) && (!followUpPolicy.ready || getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled).length > 0))}
+                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) || (followUp.enabled && (!followUpPolicy.ready || noticesIssues.length > 0))}
                 onClick={submit}
               >
                 {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
@@ -6089,7 +6112,7 @@ function ConfigView({
   aiSettings = initialAiSettings,
   setAiSettings,
 }) {
-  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, stepAgenda: true, stepDocuments: true, breedIds: [] };
+  const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, breedIds: [] };
   const emptyAgendaForm = {
     description: "Agenda padrão",
     active: true,
@@ -6312,8 +6335,6 @@ function ConfigView({
         municipalityId: payload.municipalityId || configMunicipalityScopeId,
         documents: selectedDocuments,
         breedIds: Array.isArray(payload.breedIds) ? payload.breedIds : [],
-        stepAgenda: payload.stepAgenda !== false,
-        stepDocuments: true,
       },
     ]);
   }
@@ -8451,7 +8472,7 @@ function ConfigView({
             onSubmit={(event) => {
               event.preventDefault();
               if (editingRequestTypeId) {
-                patchRequestType(editingRequestTypeId, { ...newRequestType, stepDocuments: true });
+                patchRequestType(editingRequestTypeId, newRequestType);
               } else {
                 createRequestType(newRequestType);
               }
@@ -8487,23 +8508,6 @@ function ConfigView({
                 <span className="toggle-track"><span className="toggle-thumb" /></span>
                 <span>Sobrepor limite</span>
               </label>
-            </div>
-            <div className="request-type-steps-section">
-              <span className="request-type-steps-label">Etapas do cadastro</span>
-              <div className="request-type-steps-toggles">
-                <label className="toggle-switch config-active-toggle request-type-step-toggle">
-                  <input
-                    type="checkbox"
-                    checked={newRequestType.stepAgenda !== false}
-                    onChange={(e) => setNewRequestType((current) => ({ ...current, stepAgenda: e.target.checked }))}
-                  />
-                  <span className="toggle-track"><span className="toggle-thumb" /></span>
-                  <span className="request-type-step-toggle-text">
-                    <span>Agenda</span>
-                    <small>Esta etapa só aparece se o tipo de identificação também permitir.</small>
-                  </span>
-                </label>
-              </div>
             </div>
             <Field label="Nome" value={newRequestType.name} placeholder="Ex: Castração" onChange={(value) => setNewRequestType((current) => ({ ...current, name: value }))} />
             {newRequestType.charged && (

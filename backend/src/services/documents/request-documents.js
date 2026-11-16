@@ -3,11 +3,10 @@ import { DocumentReviewStatus, MAX_REQUEST_DOCUMENTS } from "../../../../shared/
 import { isInternalUser } from "../../tenant.js";
 import { readDocumentSource } from "../../repositories/document-sources.js";
 import { assertMaterializedRequestSize, decodeDocumentContent, documentError } from "./document-content.js";
-import { PHOTO_DEFINITION, canonicalDocumentDefinition, requestDocumentDefinitions, resolveDocumentRequestTypes } from "./document-policy.js";
+import { PHOTO_DEFINITION, canonicalDocumentDefinition, requestDocumentDefinitions } from "./document-policy.js";
 import { signDocumentReceipt } from "./document-provenance.js";
 import { describeStoredDocument, isReusableForAnimal } from "./stored-document.js";
 import { checkOriginalDocument } from "./document-catalog.js";
-import { configsAllowStep } from "../../../../shared/notification-contract.js";
 import { isProcedureRequest } from "../../../../shared/request-contract.js";
 
 export function definitionsForRequest(settings, body) {
@@ -66,11 +65,9 @@ export async function prepareRequestDocuments(client, { body, user, tutorId, mun
     seen.add(definition.id);
     assertMaterializedRequestSize({ ...body, documents });
   }
-  const identificationId = body.workflow_data?.identificationTypeId || body.workflowData?.identificationTypeId;
-  const identification = settings.identificationTypes?.find((item) => item.id === identificationId);
-  const requestTypes = resolveDocumentRequestTypes(settings, body);
+  // The Documents step is fixed: a public procedure always carries the declaration and the required documents.
   const publicProcedure = !isInternalUser(user) && isProcedureRequest(body.request_type ?? body.requestType ?? body.requestTypeId ?? body.type);
-  if (publicProcedure && configsAllowStep([...requestTypes, identification], "stepDocuments")) {
+  if (publicProcedure) {
     if (body.declarationAccepted !== true) throw documentError("Leia e aceite a declaração deste novo pedido.");
     for (const definition of definitions.filter((item) => item.required && item.active)) {
       if (!seen.has(definition.id)) throw documentError(`Anexe o documento obrigatório: ${definition.name || "Documento"}.`);

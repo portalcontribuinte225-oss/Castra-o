@@ -19,7 +19,7 @@ export interface TutorStepData {
 
 type TutorField = keyof TutorStepData;
 
-interface TutorStepFieldsProps {
+export interface TutorStepFieldsProps {
   data: TutorStepData;
   nameInvalid: boolean;
   nameIssue: string;

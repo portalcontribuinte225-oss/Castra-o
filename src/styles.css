@@ -6167,11 +6167,6 @@ main {
 }
 
 
-.animal-choice-grid.species-row {
-  grid-template-columns: 1fr;
-}
-
-
 .animal-choice-grid.two-col {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
@@ -8557,7 +8552,6 @@ main {
   .schedule-rule-row,
   .health-grid,
   .animal-choice-grid,
-  .animal-choice-grid.species-row,
   .inline-microchip-fields,
   .animal-main-grid,
   .admin-calendar-grid,
@@ -8659,7 +8653,6 @@ main {
   .modal-form-grid,
   .toggle-row,
   .animal-choice-grid,
-  .animal-choice-grid.species-row,
   .animal-choice-grid.two-col,
   .animal-choice-grid.three-col,
   .inline-microchip-fields,
@@ -20742,14 +20735,6 @@ form textarea:focus,
 }
 
 
-/* Mockup vai direto do título do card "Procedimento desejado" para os pills, sem
-   legenda extra (o título do card já basta) — esconde a legenda redundante do
-   CompactChoiceField só aqui, sem afetar Espécie/Sexo/Raça (grid .three-col). */
-.nr-shell--public .animal-choice-grid.species-row .compact-choice-field > span {
-  display: none;
-}
-
-
 /* "Adicionar outro animal": .nr-shell .anm-add-btn (~L16887) o deixa azul sólido preenchido —
    esta sobrepõe para o tracejado verde do mockup. */
 .nr-shell--public .anm-add-btn {
@@ -25029,10 +25014,6 @@ small,
   gap: 20px !important;
 }
 
-.internal-request-modal .nr-shell--internal .animal-choice-grid.species-row .compact-choice-field > span {
-  display: none !important;
-}
-
 .internal-request-modal .nr-shell--internal .health-grid {
   grid-template-columns: 1fr !important;
   gap: 0 !important;
@@ -25363,36 +25344,6 @@ small,
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
-.follow-up-card {
-  max-width: 660px;
-  display: grid;
-  gap: 16px;
-}
-
-.follow-up-card h3,
-.follow-up-card p {
-  margin: 0;
-}
-
-.follow-up-choice {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px 28px;
-  border: 1px solid var(--border, #dce4e0);
-  padding: 16px;
-  border-radius: 12px;
-}
-
-.follow-up-choice legend {
-  padding: 0 6px;
-  font-weight: 600;
-}
-
-.follow-up-choice input {
-  accent-color: var(--primary, #277d5c);
-}
-
-.follow-up-fields,
 .notification-template-fields {
   display: grid;
   gap: 14px;
@@ -25403,6 +25354,54 @@ small,
   border-radius: 12px;
   background: #fff6e5;
   color: #78561d;
+}
+
+/* -- PASSO "VOCÊ": a resposta sobre o tutor, o que ela abre e o aceite dos avisos (público e balcão) -- */
+
+.nr-shell .requester-answer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.nr-shell .requester-answer span {
+  color: #475569;
+  font-size: 0.88rem;
+}
+
+.nr-shell .requester-reveal {
+  display: grid;
+  gap: 14px;
+  animation: requester-reveal 0.22s ease-out;
+}
+
+.nr-shell .requester-notice {
+  display: grid;
+  gap: 8px;
+}
+
+.nr-shell .requester-notice p {
+  margin: 0;
+  font-size: 0.78rem;
+}
+
+@keyframes requester-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nr-shell .requester-reveal {
+    animation: none;
+  }
 }
 
 .tutor-access-shell {

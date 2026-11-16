@@ -7,7 +7,7 @@ test("every municipality starts with both identification types active: with a tu
   const [withTutor, withoutTutor] = buildDefaultIdentificationTypes();
   assert.deepEqual([withTutor.id, withTutor.name, withTutor.active, withTutor.stepTutor], ["animal_com_tutor", "Animal com Tutor", true, true]);
   assert.deepEqual([withoutTutor.id, withoutTutor.name, withoutTutor.active, withoutTutor.stepTutor], ["animal_sem_tutor", "Animal sem Tutor", true, false]);
-  for (const type of [withTutor, withoutTutor]) assert.deepEqual([type.stepAgenda, type.stepDocuments], [true, true]);
+  for (const type of [withTutor, withoutTutor]) assert.deepEqual(Object.keys(type), ["id", "name", "active", "stepTutor"], "the agenda and the documents are not configured per type");
 });
 
 test("a new municipality gets those types, each time as a separate copy", () => {
@@ -20,7 +20,7 @@ test("a new municipality gets those types, each time as a separate copy", () => 
 
 test("the load for an existing municipality only turns Animal sem Tutor on, leaving everything else as it is", () => {
   const stored = [{ id: "animal_com_tutor", name: "Com tutor (renomeado)", active: true, stepTutor: true },
-    { id: "animal_sem_tutor", name: "Animal sem Tutor", active: false, stepTutor: false, stepAgenda: false },
+    { id: "animal_sem_tutor", name: "Animal sem Tutor", active: false, stepTutor: false },
     { id: "custom", name: "Outro", active: false, stepTutor: true }];
   const before = JSON.stringify(stored);
   const plan = planDefaultIdentificationTypes(stored);

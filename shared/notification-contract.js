@@ -81,7 +81,7 @@ export function validateFollowUp(value, { phoneEnabled = false } = {}) {
   if (isFilled(value.email) && !isEmailAddress(value.email)) return "Informe um e-mail válido para acompanhar a solicitação.";
   if (phoneEnabled && isFilled(value.phone) && !followUpContacts(value, { phoneEnabled }).phone) return MOBILE_PHONE_MESSAGE;
   const { email, phone } = followUpContacts(value, { phoneEnabled });
-  return email || phone ? "" : "Selecione ao menos um contato para acompanhar a solicitação.";
+  return email || phone ? "" : "Informe ao menos um contato válido para receber os avisos.";
 }
 
 export function normalizeFollowUp(value, options = {}) {
