@@ -193,6 +193,8 @@ import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-po
 import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
 import type { NotificationResult } from "./features/notifications/notification-results";
 import { REJECTION_REASONS, configsAllowStep } from "../shared/notification-contract.js";
+import { historyBlocks, prescriptionBlocks } from "./features/process-report/process-report";
+import type { ReportBlock } from "./features/process-report/process-report";
 import { useSession } from "./features/tutor-access/use-session";
 import { AuthEntry } from "./features/tutor-access/auth-entry";
 import { AuthEntryOrigin, authEntryKey, createAuthEntryContext } from "./features/tutor-access/auth-entry-context";
@@ -4042,6 +4044,8 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
   });
   const [confirmedAnimalChips, setConfirmedAnimalChips] = useState<Record<string, string>>(() => Object.fromEntries((normalizedRequest.animals || []).filter((animal) => animal.id).map((animal) => [animal.id, animal.confirmedMicrochip || ""])));
   const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState("");
   const [assignData, setAssignData] = useState({
     sectorId: normalizedRequest.assignedSectorId || sectors[0]?.id || "",
     userId: normalizedRequest.assignedUserId || "",
@@ -4264,6 +4268,23 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
       });
     } finally {
       setPreviewLoadingId("");
+    }
+  }
+
+  async function downloadProcessReport() {
+    setReportLoading(true);
+    setReportError("");
+    try {
+      const report = await generateProcessReportPdf(request, requestDocumentKind);
+      const anchor = window.document.createElement("a");
+      anchor.href = report.dataUrl;
+      anchor.download = report.fileName;
+      anchor.click();
+    } catch (err) {
+      console.error("Erro ao gerar o relatório do processo:", err);
+      setReportError("Não foi possível gerar o relatório do processo agora. Tente novamente em instantes.");
+    } finally {
+      setReportLoading(false);
     }
   }
 
@@ -4614,6 +4635,10 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
             </div>
             <div className="prm-header-actions">
               <StatusBadge status={normalizedRequest.status} />
+              <button className="prm-pdf-btn" type="button" disabled={reportLoading} onClick={downloadProcessReport}>
+                <Download size={13} />
+                {reportLoading ? "Preparando..." : "Relatório"}
+              </button>
               <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
                 <X size={17} />
               </button>
@@ -4627,6 +4652,7 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
             </div>
           )}
         </header>
+        {reportError && <p className="form-error" role="alert">{reportError}</p>}
 
         <div className="prm-body">
 
@@ -9190,6 +9216,104 @@ const PDF_BASE_STYLES = `
   .recommendation-list { margin-top: 7px; padding-left: 18px; }
   .recommendation-list > li { margin-bottom: 4px; }
 `;
+
+const PROCESS_REPORT_FOOTER = "Relatório do processo emitido pelo sistema municipal";
+
+// Pages of text for the process report (the tramitação, the prescription): a header, a section and the blocks wrapped and placed one after
+// another, with a new page when one does not fit.
+async function appendProcessTextPages(output: AnyRecord, request: AnyRecord, { docTitle, subtitle, section, blocks, emptyText }: { docTitle: string; subtitle: string; section: string; blocks: ReportBlock[]; emptyText: string }) {
+  const { rgb } = await importPdfLib();
+  const ctx = await createPdfDocContext(output, rgb);
+  const { font, bold, colors, margin, pageSize } = ctx;
+  const req = normalizeRequest(request);
+  const statusColors: Record<string, unknown> = { NOVA: rgb(0.45, 0.52, 0.57), AGENDADA: rgb(0.08, 0.48, 0.72), REALIZADA: rgb(0.07, 0.44, 0.22), CANCELADA: rgb(0.75, 0.18, 0.18) };
+  const startPage = () => {
+    const created = output.addPage(pageSize);
+    const top = drawProntuarioHeader(created, req.protocol, statusLabels[req.status] || req.status || "Sem status", statusColors[req.status] || statusColors.NOVA, ctx, "", docTitle, pdfText(subtitle));
+    return { created, top: drawProntuarioSectionTitle(created, section, top - 4, ctx) - 10 };
+  };
+  let pageNumber = 1;
+  let { created: page, top: y } = startPage();
+  if (!blocks.length) page.drawText(pdfText(emptyText), { x: margin, y, size: 9, font, color: colors.muted });
+  for (const block of blocks) {
+    const lines = wrapPdfText(pdfText(block.text), 100);
+    const height = (block.heading ? 13 : 0) + lines.length * 11 + 8;
+    if (y - height < margin + 40) {
+      drawRequestPdfFooter(page, PROCESS_REPORT_FOOTER, `Página ${pageNumber}`, ctx);
+      pageNumber += 1;
+      ({ created: page, top: y } = startPage());
+    }
+    if (block.heading) {
+      page.drawText(pdfText(block.heading), { x: margin, y, size: 9, font: bold, color: colors.ink });
+      y -= 13;
+    }
+    lines.forEach((line) => {
+      page.drawText(line, { x: margin + 10, y, size: 8.5, font, color: colors.muted });
+      y -= 11;
+    });
+    y -= 8;
+  }
+  drawRequestPdfFooter(page, PROCESS_REPORT_FOOTER, `Página ${pageNumber}`, ctx);
+}
+
+// The whole process in one PDF: its request document, the tramitação, every attachment the tutor sent and, when one was issued, the
+// prescription. An attachment that cannot be shown becomes a page that says so, never a failure of the report.
+async function generateProcessReportPdf(request: AnyRecord = {}, requestDocumentKind = "request") {
+  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
+  const output = await PDFDocument.create();
+  const req = normalizeRequest(request);
+  const workflow: AnyRecord = req.workflowData || req.workflow_data || {};
+  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
+  try {
+    const requestDocument = await prepareProcessDocumentPreview({ kind: requestDocumentKind }, request);
+    await appendPdfDataUrl(output, requestDocument.dataUrl);
+  } catch (error) {
+    console.warn("Aviso: documento do processo ignorado no relatório:", error);
+    await appendUnsupportedAttachmentPage(output, { title: "Documento do processo", fileName: `Não foi possível gerar o documento do processo ${request.protocol || ""}`.trim(), StandardFonts, rgb });
+  }
+
+  await appendProcessTextPages(output, request, {
+    docTitle: "TRAMITAÇÃO DO PROCESSO",
+    subtitle: `Protocolo: #${req.protocol || "-"}`,
+    section: "REGISTROS",
+    blocks: historyBlocks(req.rawHistory, (status) => statusLabels[status] || status, formatDateTime),
+    emptyText: "Nenhuma tramitação registrada para este processo.",
+  });
+
+  for (const attachment of getUserUploadedProcessDocuments(request.documents)) {
+    const dataUrl = getDocumentPreviewSource(attachment);
+    const mimeType = attachment.fileType || attachment.type || attachment.mimeType || getDataUrlMimeType(dataUrl);
+    try {
+      if (dataUrl && mimeType === "application/pdf") {
+        await appendPdfDataUrl(output, dataUrl);
+        continue;
+      }
+      if (dataUrl && mimeType?.startsWith("image/")) {
+        await appendImageDataUrl(output, dataUrl, mimeType);
+        continue;
+      }
+    } catch (error) {
+      console.warn("Aviso: anexo sem prévia no relatório do processo:", error);
+    }
+    await appendUnsupportedAttachmentPage(output, { title: attachment.documentName || "Documento anexado", fileName: attachment.fileName || "Arquivo sem prévia", StandardFonts, rgb });
+  }
+
+  const prescription = prescriptionBlocks(workflow.attendancePrescription);
+  if (prescription.length) {
+    await appendProcessTextPages(output, request, {
+      docTitle: "RECEITA VETERINÁRIA",
+      subtitle: [`Protocolo: #${req.protocol || "-"}`, animal.name && `Animal: ${animal.name}`].filter(Boolean).join("  ·  "),
+      section: "PRESCRIÇÃO",
+      blocks: prescription,
+      emptyText: "",
+    });
+  }
+
+  return {
+    fileName: `Relatório ${request.protocol || ""}.pdf`.trim(),
+    dataUrl: uint8ArrayToDataUrl(await output.save(), "application/pdf"),
+  };
+}
 
 async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord) {
   if (item.kind === "request") {
