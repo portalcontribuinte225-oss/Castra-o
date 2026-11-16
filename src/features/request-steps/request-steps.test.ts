@@ -36,10 +36,16 @@ describe("getVisibleSteps", () => {
     ]);
   });
 
-  it("uses the fixed internal steps regardless of configs and skipTutor", () => {
+  it("uses the fixed internal steps regardless of the agenda and documents configs and of skipTutor", () => {
     expect(
-      steps({ internal: true, skipTutor: true, configs: [{ stepTutor: false, stepAgenda: false, stepDocuments: false }] }),
+      steps({ internal: true, skipTutor: true, configs: [{ stepAgenda: false, stepDocuments: false }] }),
     ).toEqual([RequestStep.TUTOR, RequestStep.ANIMAL, RequestStep.SCHEDULE]);
+  });
+
+  it("takes the tutor step away from the internal form only when a config disallows it, as an animal without a tutor does", () => {
+    expect(steps({ internal: true, skipTutor: false, configs: [{ stepTutor: false }] })).toEqual([RequestStep.ANIMAL, RequestStep.SCHEDULE]);
+    expect(steps({ internal: true, skipTutor: false, configs: [{ stepTutor: true }] })).toEqual([RequestStep.TUTOR, RequestStep.ANIMAL, RequestStep.SCHEDULE]);
+    expect(steps({ internal: true, skipTutor: false, configs: [null] })).toEqual([RequestStep.TUTOR, RequestStep.ANIMAL, RequestStep.SCHEDULE]);
   });
 
   it("hides a step when any config disallows it", () => {

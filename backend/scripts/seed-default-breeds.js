@@ -7,31 +7,9 @@
 // request types that link none. It runs against the database in DATABASE_URL, so check the target it prints first.
 import { pool } from "../src/db/index.js";
 import { BREEDS_CONFIG_KEY, REQUEST_TYPES_CONFIG_KEY, SPECIES_CONFIG_KEY, planBreedSeed } from "../src/services/breed-defaults.js";
+import { describeTarget, readValue, writeValue } from "./config-store.js";
 
 const apply = process.argv.includes("--apply");
-
-async function readValue(client, key, municipalityId) {
-  const { rows } = await client.query("SELECT value FROM config WHERE key=$1 AND municipality_id=$2", [key, municipalityId]);
-  return rows[0]?.value;
-}
-
-async function writeValue(client, key, municipalityId, value) {
-  await client.query(
-    `INSERT INTO config (key, municipality_id, value, updated_at) VALUES ($1, $2, $3, NOW())
-     ON CONFLICT (key, (COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid)))
-     DO UPDATE SET value=$3, updated_at=NOW()`,
-    [key, municipalityId, JSON.stringify(value)],
-  );
-}
-
-function describeTarget() {
-  try {
-    const url = new URL(process.env.DATABASE_URL);
-    return `${url.hostname}:${url.port || "(default)"}${url.pathname}`;
-  } catch {
-    return "DATABASE_URL ausente ou inválida";
-  }
-}
 
 async function main() {
   console.log(`Banco: ${describeTarget()}`);

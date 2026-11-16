@@ -108,6 +108,32 @@ test("the phone is kept only when the municipality has a phone channel, and must
   assert.equal(prepare({ workflow: followUp("(48) 99999-1234") }).workflow.followUp.phone, "");
 });
 
+const withoutTutor = { id: "stray", name: "Animal sem Tutor", active: true, stepTutor: false };
+
+test("staff may register an animal without a tutor only through an active identification type that has no tutor step", () => {
+  const user = { role: "analista" };
+  const input = (workflow, extra = {}) => ({ user, body: { requestTypeId: "surgery" }, workflow, ...extra });
+  const result = prepare(input({ identificationTypeId: "stray" }));
+  assert.equal(result.cpf, null);
+  assert.equal(result.internal, true);
+  assert.equal(result.tutorRequired, false);
+  assert.throws(() => prepare(input({ identificationTypeId: "owned" })), /CPF/);
+  assert.throws(() => prepare(input({})), /CPF/);
+  assert.equal(prepare({ ...input({ identificationTypeId: "owned" }), body: { requestTypeId: "surgery", cpf } }).cpf, cpf);
+  assert.throws(() => prepare({ ...input({ identificationTypeId: "stray" }), body: { requestTypeId: "surgery", cpf: "123" } }), /CPF/);
+});
+
+test("staff cannot use an unknown, inactive or foreign identification type, nor mix it with the animals' type, to dispense the tutor", () => {
+  const user = { role: "analista" };
+  const withSettings = (item) => ({ ...structuredClone(defaults.settings), identificationTypes: [{ id: "owned", active: true }, item] });
+  for (const item of [{ ...withoutTutor, active: false }, { ...withoutTutor, municipalityId: "municipality-b" }]) {
+    assert.throws(() => prepare({ user, body: { requestTypeId: "surgery" }, settings: withSettings(item), workflow: { identificationTypeId: "stray" } }), /identificação/);
+  }
+  assert.throws(() => prepare({ user, body: { requestTypeId: "surgery" }, workflow: { identificationTypeId: "unknown" } }), /identificação/);
+  assert.throws(() => prepare({ user, body: { requestTypeId: "surgery", animals: [{ identificationTypeId: "owned" }] }, workflow: { identificationTypeId: "stray" } }), /não corresponde/);
+  assert.throws(() => prepare({ user, body: { type: "DENUNCIA", tutor_name: "Cidadão", phone: "48999991234" }, workflow: { identificationTypeId: "stray" } }));
+});
+
 test("internal submissions preserve their contract and cannot omit CPF", () => {
   const user = { role: "analista" };
   assert.equal(prepare({ user, workflow: {} }).internal, true);

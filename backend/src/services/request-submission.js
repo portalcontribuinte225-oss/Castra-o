@@ -24,6 +24,20 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   delete nextWorkflow.notificationDispatches;
   delete nextWorkflow.notificationResults;
 
+  // The identification type the request was made with: it must be an active one of the municipality, and it is the trusted
+  // configuration that may dispense the tutor (the client cannot).
+  function selectIdentification() {
+    const identificationId = workflow.identificationTypeId;
+    const selected = identificationId
+      ? settings.identificationTypes.find((item) => activeInMunicipality(item, municipalityId) && item.id === identificationId)
+      : null;
+    if (identificationId && !selected) invalid("Tipo de identificação inválido para o município.");
+    if (Array.isArray(body.animals) && body.animals.some((animal) => animal?.identificationTypeId && animal.identificationTypeId !== identificationId)) {
+      invalid("Tipo de identificação do animal não corresponde à solicitação.");
+    }
+    return selected;
+  }
+
   let tutorRequired = true;
   if (publicProcedure) {
     const requestTypeId = body.requestTypeId;
@@ -33,24 +47,19 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
     const selectedRequestType = matches.length === 1 ? matches[0] : null;
     if ((requestTypeId || settings.requestTypes.length) && !selectedRequestType) invalid("Tipo de solicitação inválido para o município.");
 
-    const identificationId = workflow.identificationTypeId;
-    const selectedIdentification = identificationId
-      ? settings.identificationTypes.find((item) => activeInMunicipality(item, municipalityId) && item.id === identificationId)
-      : null;
-    if (identificationId && !selectedIdentification) invalid("Tipo de identificação inválido para o município.");
     if (Array.isArray(body.animals) && body.animals.some((animal) => !animal || typeof animal !== "object" || Array.isArray(animal))) {
       invalid("Dados do animal inválidos.");
     }
-    if (Array.isArray(body.animals) && body.animals.some((animal) => animal.identificationTypeId && animal.identificationTypeId !== identificationId)) {
-      invalid("Tipo de identificação do animal não corresponde à solicitação.");
-    }
+    const selectedIdentification = selectIdentification();
     tutorRequired = configsAllowStep([selectedRequestType, selectedIdentification], "stepTutor");
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   } else if (workflow.followUp !== undefined) {
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   }
+  // Staff register a tutor too, unless the identification type they chose has no Tutor step (an animal without a tutor).
+  if (internal && !isComplaint) tutorRequired = configsAllowStep([selectIdentification()], "stepTutor");
 
-  if ((hasCpfInput || tutorRequired || isComplaint || internal || user?.role === "tutor") && !isValidCpf(cleanCpf)) {
+  if ((hasCpfInput || tutorRequired || isComplaint || user?.role === "tutor") && !isValidCpf(cleanCpf)) {
     invalid(isComplaint ? "CPF válido é obrigatório para registrar a denúncia." : "Informe um CPF válido para o tutor.");
   }
   if (isComplaint) {

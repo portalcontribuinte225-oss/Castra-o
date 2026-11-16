@@ -62,7 +62,9 @@ function isAllowedByConfigs(step: RequestStep, configs: VisibleStepsInput["confi
 }
 
 export function getVisibleSteps({ internal, skipTutor, configs }: VisibleStepsInput): RequestStepItem[] {
-  if (internal) return internalStepOrder.map(toStepItem);
+  // The internal form has fixed steps; only an explicit `stepTutor: false` in the configs it is given (the identification
+  // type, for staff) takes the Tutor step away.
+  if (internal) return internalStepOrder.filter((step) => isAllowedByConfigs(step, step === RequestStep.TUTOR ? configs : [])).map(toStepItem);
 
   return publicStepOrder
     .filter((step) => !(step === RequestStep.TUTOR && skipTutor))

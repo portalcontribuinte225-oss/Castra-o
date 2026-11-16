@@ -1908,7 +1908,8 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
                 currentUser={GUEST_USER}
                 publicFlow
                 selectedMunicipalityId={selectedMunicipalityId}
-                onBack={closePublicService}
+                onBack={() => setActivePublicService("procedure_entry")}
+                backLabel="Voltar"
                 onDone={(request) => {
                   if (selectedMunicipalityId !== publicMunicipalityRef.current) return;
                   const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
@@ -2623,6 +2624,7 @@ function NewRequest({
   publicFlow = false,
   selectedMunicipalityId = "",
   onBack,
+  backLabel = "Voltar ao início",
   onDone,
   registeredContext,
   contextLoading = false,
@@ -2768,11 +2770,11 @@ function NewRequest({
     .filter((type) => type.name.trim() && type.active !== false)
     .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
   const selectedRequestType = configuredRequestTypes.find((type) => type.name === requestData.type) || null;
-  const activeIdentificationTypes = publicFlow ? getActiveIdentificationTypes(identificationTypes) : [];
+  const activeIdentificationTypes = publicFlow || internalSimple ? getActiveIdentificationTypes(identificationTypes) : [];
   const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
-  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [selectedRequestType, selectedIdentificationType] });
+  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: internalSimple ? [selectedIdentificationType] : [selectedRequestType, selectedIdentificationType] });
   const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
-  const requiresTutorIdentity = internalSimple || currentUser.role === "tutor" || configsAllowStep([selectedRequestType, selectedIdentificationType], "stepTutor");
+  const requiresTutorIdentity = internalSimple ? hasStep(RequestStep.TUTOR) : currentUser.role === "tutor" || configsAllowStep([selectedRequestType, selectedIdentificationType], "stepTutor");
   const selectedTypeDocuments = (selectedRequestType?.documents || [])
     .map((document) => resolveConfiguredDocument(document, documentTypes))
     .map(normalizeDocumentType)
@@ -3191,6 +3193,7 @@ function NewRequest({
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
+        ...(selectedIdentificationType ? { identificationTypeId: selectedIdentificationType.id } : {}),
       },
       animals: animals.map((animal, index) => ({
         ...animal,
@@ -3369,7 +3372,7 @@ function NewRequest({
           <div className="nr-topbar-stepper">{stepperNode}</div>
           {publicFlow && onBack && (
             <button className="nr-topbar-continue nr-topbar-home primary-action" type="button" onClick={onBack}>
-              Voltar ao início
+              {backLabel}
             </button>
           )}
         </div>
@@ -3972,6 +3975,7 @@ function AdminDashboard({
   requestTypes = initialRequestTypes,
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
+  identificationTypes = initialIdentificationTypes,
   breeds = initialBreeds,
   aiSettings = initialAiSettings,
   teams = initialTeams,
@@ -4228,6 +4232,7 @@ function AdminDashboard({
               onBack={() => setCreateRequestOpen(false)}
               onDone={() => setCreateRequestOpen(false)}
               requestTypes={requestTypes}
+              identificationTypes={identificationTypes}
               aiSettings={aiSettings}
               speciesOptions={speciesOptions}
               sizeOptions={sizeOptions}
