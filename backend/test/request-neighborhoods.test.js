@@ -45,7 +45,7 @@ test("animals that already exist keep their own record and are not asked again",
   assert.deepEqual(prepare([null, "text"]), [null, "text"]);
 });
 
-const settings = { requestTypes: [{ id: "castration", name: "Castração", active: true }], identificationTypes: [], neighborhoods };
+const settings = { requestTypes: [{ id: "castration", name: "Castração", active: true }], neighborhoods };
 const submit = (body) => prepareRequestSubmission({ body: { cpf: "52998224725", phone: "(48) 99999-1234", tutor_name: "Maria", workflow_data: {}, ...body }, user: null, municipalityId: MUNICIPALITY, workflow: { followUp: { enabled: false } }, settings });
 
 test("the submission carries the normalized neighborhood of each animal and refuses the request without it", () => {

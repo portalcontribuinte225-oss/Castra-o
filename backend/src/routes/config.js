@@ -6,7 +6,6 @@ import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
 import { prepareWhatsappCredentials, publicWhatsappConfig } from "../services/whatsapp-credentials.js";
 import { testProviderKey } from "./ai.js";
-import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "../services/identification-type-defaults.js";
 import { BREEDS_CONFIG_KEY } from "../services/breed-defaults.js";
 import { NEIGHBORHOODS_CONFIG_KEY, buildDefaultNeighborhoods, normalizeNeighborhoodName } from "../services/neighborhood-defaults.js";
 import { normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../../shared/document-reuse-contract.js";
@@ -15,13 +14,12 @@ import { EMAIL_SETTINGS_PERMISSION } from "../../../shared/email-contract.js";
 
 const router = Router();
 const RESERVATION_CONFIG_KEYS = new Set([
-  "castragestao:schedule-rules", "castragestao:request-types", "castragestao:document-types", IDENTIFICATION_TYPES_CONFIG_KEY,
+  "castragestao:schedule-rules", "castragestao:request-types", "castragestao:document-types",
 ]);
 
 
 // Keys that fall back to factory defaults when the municipality has no row yet.
 const DEFAULT_CONFIG_VALUE_BUILDERS = {
-  [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes,
   [BREEDS_CONFIG_KEY]: () => [],
   [NEIGHBORHOODS_CONFIG_KEY]: buildDefaultNeighborhoods,
 };
@@ -48,7 +46,6 @@ const GLOBAL_ONLY_CONFIG_KEYS = new Set([
 const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "ai",
   "castragestao:request-types",
-  IDENTIFICATION_TYPES_CONFIG_KEY,
   "whatsapp",
   "castragestao:document-types",
   "castragestao:species",

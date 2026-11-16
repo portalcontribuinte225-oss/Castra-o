@@ -81,7 +81,6 @@ export interface RegisteredRequestContext {
   animal: RegisteredAnimal;
   tutor: RegisteredTutorSnapshot;
   requestTypes: RequestConfigItem[];
-  identificationTypes: RequestConfigItem[];
   documentTypes: RequestConfigItem[];
   documents: ReusableDocumentCandidate[];
   eligibility?: { canSubmit: boolean; reason?: string };

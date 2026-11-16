@@ -4,7 +4,7 @@ import { loadRequestSettings } from "../../repositories/request-settings.js";
 import { findOwnedAnimal, listOwnedAnimals, listSourceCandidates, trustedTutorSnapshot } from "../../repositories/registered-animals.js";
 import { animalView, validUuid, requireLiveAnimal, registrationGap } from "./animal-data.js";
 import { materializeOwnRequestAnimal } from "./from-request.js";
-import { identificationForAnimal } from "./registered-request.js";
+import { tutorshipForAnimal } from "./registered-request.js";
 import { confirmAnimalMicrochip } from "./animal-transitions.js";
 import { catalogReusableDocuments, readReusableDocument } from "../documents/document-catalog.js";
 import { lockMunicipalSchedule } from "../schedule/schedule-lock.js";
@@ -48,11 +48,11 @@ export async function requestContext(req, res) {
     if (requestTypeId && !selected) throw authError(400, "Tipo de solicitação inválido.");
     let reason = animal.status === AnimalStatus.DECEASED ? "Animal em óbito não pode receber nova solicitação." : "";
     reason ||= registrationGap(animal, identity.municipalityId);
-    try { identificationForAnimal(animal, settings, identity.municipalityId); } catch (error) { reason ||= error.message; }
+    try { tutorshipForAnimal(animal, identity.municipalityId); } catch (error) { reason ||= error.message; }
     const tutor = await trustedTutorSnapshot(client, req.user, identity.municipalityId);
     const documents = selected && !reason ? await catalogReusableDocuments(client, { ...identity, animalId: animal.id, requestTypeId, settings }) : [];
     return { animal: animalView(animal, identity.municipalityId), tutor, requestTypes: settings.requestTypes,
-      identificationTypes: settings.identificationTypes, documentTypes: settings.documentTypes || [],
+      documentTypes: settings.documentTypes || [],
       documents, eligibility: { canSubmit: !reason, reason } };
   });
   res.set("Cache-Control", "no-store").json(result);

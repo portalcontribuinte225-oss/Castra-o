@@ -89,7 +89,3 @@ export function normalizeFollowUp(value, options = {}) {
   if (error) throw Object.assign(new Error(error), { status: 400 });
   return value.enabled ? { enabled: true, ...followUpContacts(value, options) } : { enabled: false, email: "", phone: "" };
 }
-
-export function configsAllowStep(configs, key) {
-  return configs.every((config) => config?.[key] !== false);
-}

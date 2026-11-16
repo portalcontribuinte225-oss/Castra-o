@@ -56,7 +56,6 @@ export const hiddenWorkflowTags = new Set(["PRESENCIAL", "MICROCHIP"]);
 
 export const initialDocumentTypes: AnyRecord[] = [];
 export const initialRequestTypes: AnyRecord[] = [];
-export const initialIdentificationTypes: AnyRecord[] = [];
 export const initialBreeds: AnyRecord[] = [];
 export const initialNeighborhoods: AnyRecord[] = [];
 export const initialSpecies: AnyRecord[] = [];
@@ -104,7 +103,6 @@ export const initialWhatsappSettings: AnyRecord = {
 
 export const CONFIG_KEYS = {
   requestTypes: "castragestao:request-types",
-  identificationTypes: "castragestao:identification-types",
   documentTypes: "castragestao:document-types",
   species: "castragestao:species",
   sizes: "castragestao:sizes",

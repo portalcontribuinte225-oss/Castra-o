@@ -74,7 +74,6 @@ import {
   initialBreeds,
   initialNeighborhoods,
   initialDocumentTypes,
-  initialIdentificationTypes,
   initialMunicipalities,
   initialRequestTypes,
   initialScheduleDays,
@@ -181,7 +180,6 @@ import { MunicipalityAddressFields } from "./features/municipality-form/municipa
 import { emptyMunicipalityForm, formFromMunicipality, formatMunicipalityAddress, municipalityContactIssue } from "./features/municipality-form/municipality-address";
 import type { MunicipalityForm } from "./features/municipality-form/municipality-address";
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
-import { IdentificationTypesConfig } from "./features/identification-types/identification-types-config";
 import { RequestStep, requestSteps } from "./features/request-steps/request-steps";
 import { availableFollowUpContacts, buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./features/request-follow-up/follow-up";
 import type { FollowUpValue } from "./features/request-follow-up/follow-up";
@@ -192,7 +190,7 @@ import { MUNICIPALITY_OPTION } from "./features/registered-animals/use-request-o
 import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
 import type { NotificationResult } from "./features/notifications/notification-results";
 import { REJECTION_REASONS } from "../shared/notification-contract.js";
-import { AnimalTutorship } from "../shared/request-tutorship-contract.js";
+import { AnimalTutorship, tutorshipRequiresTutor } from "../shared/request-tutorship-contract.js";
 import { historyBlocks, prescriptionBlocks } from "./features/process-report/process-report";
 import type { ReportBlock } from "./features/process-report/process-report";
 import { useSession } from "./features/tutor-access/use-session";
@@ -222,7 +220,7 @@ import { bindProcedureIntent } from "./features/registered-animals/procedure-int
 import type { ProcedureIntent } from "./features/registered-animals/procedure-intent";
 import type { ReusableDocumentCandidate } from "./features/registered-animals/registered-animal-types";
 import { buildRequestPayload } from "./features/registered-animals/request-payload";
-import { animalForRequest, pickReusableDocuments, resolveRegisteredIdentificationType } from "./features/registered-animals/registered-request-data";
+import { animalForRequest, pickReusableDocuments } from "./features/registered-animals/registered-request-data";
 import { RegisteredRequestSelection } from "./features/registered-animals/registered-request-selection";
 import { ReusableDocumentChoices } from "./features/registered-animals/reusable-document-choices";
 import { ReusableDocumentPreview } from "./features/registered-animals/reusable-document-preview";
@@ -256,7 +254,6 @@ const menu = [
 const environmentConfigTabs: ConfigTabItem[] = [
   { id: "agenda", label: "Agenda" },
   { id: "requests", label: "Tipo de Solicitação" },
-  { id: "identification", label: "Tipo de Identificação" },
   { id: "sizes", label: "Portes" },
   { id: "species", label: "Espécies" },
   { id: "breeds", label: "Raças" },
@@ -368,7 +365,7 @@ export default function App() {
   return <SessionBoundary session={{ ...session, accept, logout }}
     renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact setActive={() => {}} />}
       renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} publicFlow selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} municipality={input.options[MUNICIPALITY_OPTION]} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
-        requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} identificationTypes={input.context?.identificationTypes || input.options[CONFIG_KEYS.identificationTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
+        requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
     />}
     renderWorkspace={(user) => <ApplicationWorkspace key={user?.id || "public"} currentUser={user} setCurrentUser={accept} onProcedureIntent={setProcedureIntent} />} />;
 }
@@ -383,7 +380,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [documentTypes, setDocumentTypes] = useState([]);
   const [speciesOptions, setSpeciesOptions] = useState([]);
   const [sizeOptions, setSizeOptions] = useState([]);
-  const [identificationTypes, setIdentificationTypes] = useState([]);
   const [breeds, setBreeds] = useState([]);
   const [neighborhoods, setNeighborhoods] = useState([]);
   const [municipalities, setMunicipalities] = useState(initialMunicipalities);
@@ -510,7 +506,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           setDocumentTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.documentTypes], municipality)));
           setSpeciesOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.species], municipality)));
           setSizeOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.sizes], municipality)));
-          setIdentificationTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.identificationTypes], municipality)));
           setBreeds(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.breeds], municipality)));
           setNeighborhoods(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.neighborhoods], municipality)));
           setTeams({
@@ -545,7 +540,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
       [CONFIG_KEYS.documentTypes, setDocumentTypes],
       [CONFIG_KEYS.species, setSpeciesOptions],
       [CONFIG_KEYS.sizes, setSizeOptions],
-      [CONFIG_KEYS.identificationTypes, setIdentificationTypes],
       [CONFIG_KEYS.breeds, setBreeds],
       [CONFIG_KEYS.neighborhoods, setNeighborhoods],
       [CONFIG_KEYS.teams, setTeams],
@@ -570,7 +564,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.documentTypes]) api.setConfig(CONFIG_KEYS.documentTypes, documentTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, documentTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
-  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.identificationTypes]) api.setConfig(CONFIG_KEYS.identificationTypes, identificationTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, identificationTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.breeds]) api.setConfig(CONFIG_KEYS.breeds, breeds).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, breeds]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.neighborhoods]) api.setConfig(CONFIG_KEYS.neighborhoods, neighborhoods).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, neighborhoods]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
@@ -748,7 +741,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           documentTypes={documentTypes}
           speciesOptions={speciesOptions}
           sizeOptions={sizeOptions}
-          identificationTypes={identificationTypes}
           breeds={breeds}
           neighborhoods={neighborhoods}
           aiSettings={aiSettings}
@@ -786,7 +778,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const scopedDocumentTypes = filterByMunicipalityScope(documentTypes, scopedMunicipalityId);
   const scopedSpeciesOptions = filterByMunicipalityScope(speciesOptions, scopedMunicipalityId);
   const scopedSizeOptions = filterByMunicipalityScope(sizeOptions, scopedMunicipalityId);
-  const scopedIdentificationTypes = filterByMunicipalityScope(identificationTypes, scopedMunicipalityId);
   const scopedBreeds = filterByMunicipalityScope(breeds, scopedMunicipalityId);
   const scopedNeighborhoods = filterByMunicipalityScope(neighborhoods, scopedMunicipalityId);
   const scopedScheduleRules = filterByMunicipalityScope(scheduleRules, scopedMunicipalityId);
@@ -1055,8 +1046,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           setSpeciesOptions={setSpeciesOptions}
           sizeOptions={scopedSizeOptions}
           setSizeOptions={setSizeOptions}
-          identificationTypes={scopedIdentificationTypes}
-          setIdentificationTypes={setIdentificationTypes}
           breeds={scopedBreeds}
           setBreeds={setBreeds}
           neighborhoods={scopedNeighborhoods}
@@ -1694,7 +1683,7 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], identificationTypes = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
   const [authEntryError, setAuthEntryError] = useState("");
   const [activePublicService, setActivePublicService] = useState<string | null>(null);
@@ -1706,7 +1695,6 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
   const [publicServiceDocumentTypes, setPublicServiceDocumentTypes] = useState(documentTypes);
   const [publicServiceSpeciesOptions, setPublicServiceSpeciesOptions] = useState(speciesOptions);
   const [publicServiceSizeOptions, setPublicServiceSizeOptions] = useState(sizeOptions);
-  const [publicServiceIdentificationTypes, setPublicServiceIdentificationTypes] = useState(identificationTypes);
   const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
   const [publicServiceNeighborhoods, setPublicServiceNeighborhoods] = useState(neighborhoods);
   const adoptionSectionRef = useRef(null);
@@ -1721,10 +1709,9 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
     setPublicServiceDocumentTypes(documentTypes);
     setPublicServiceSpeciesOptions(speciesOptions);
     setPublicServiceSizeOptions(sizeOptions);
-    setPublicServiceIdentificationTypes(identificationTypes);
     setPublicServiceBreeds(breeds);
     setPublicServiceNeighborhoods(neighborhoods);
-  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, identificationTypes, breeds, neighborhoods]);
+  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, breeds, neighborhoods]);
 
   useEffect(() => {
     if (!selectedMunicipalityId) return;
@@ -1736,7 +1723,6 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
     api.getConfig(CONFIG_KEYS.documentTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceDocumentTypes(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSpeciesOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSizeOptions(value); }).catch(() => {});
-    api.getConfig(CONFIG_KEYS.identificationTypes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceIdentificationTypes(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.breeds, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceBreeds(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.neighborhoods, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceNeighborhoods(value); }).catch(() => {});
   }, [selectedMunicipalityId]);
@@ -1890,7 +1876,6 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
                 aiSettings={aiSettings}
                 speciesOptions={publicServiceSpeciesOptions}
                 sizeOptions={publicServiceSizeOptions}
-                identificationTypes={publicServiceIdentificationTypes}
                 breeds={publicServiceBreeds}
                 neighborhoods={publicServiceNeighborhoods}
                 initialType={procedurePrefill?.requestType || ""}
@@ -2604,7 +2589,6 @@ function NewRequest({
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
   documentTypes = initialDocumentTypes,
-  identificationTypes = initialIdentificationTypes,
   breeds = initialBreeds,
   neighborhoods = initialNeighborhoods,
   initialSchedule = "",
@@ -2730,13 +2714,11 @@ function NewRequest({
   const declaration = renderDeclaration({ municipalityName: municipality?.name, departmentName: municipality?.department_name, charged: selectedRequestTypes.some(isRequestTypeCharged) });
   // Without request types configured there is nothing to choose, so the animals go without procedures, as before.
   const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
-  // The identification type of a registered animal is still checked against the configuration, until the configuration goes.
-  const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : null;
   // Whoever is a tutor already (the account, or a registered animal) is not asked whether the animal has one: the answer is "with tutor".
   const tutorshipFixed = registered || currentUser.role === "tutor";
   const tutorship = registeredContext ? (registeredContext.animal.identificationTypeId || AnimalTutorship.WITH_TUTOR)
     : currentUser.role === "tutor" ? AnimalTutorship.WITH_TUTOR : requestData.identificationTypeId;
-  const requiresTutorIdentity = currentUser.role === "tutor" || tutorship !== AnimalTutorship.WITHOUT_TUTOR;
+  const requiresTutorIdentity = currentUser.role === "tutor" || tutorshipRequiresTutor(tutorship);
   const showsTutorFields = tutorship === AnimalTutorship.WITH_TUTOR && !tutorKnown;
   const withoutTutor = tutorship === AnimalTutorship.WITHOUT_TUTOR && !tutorKnown;
   const reachableContacts = availableFollowUpContacts(tutorContacts, followUpPolicy.phoneEnabled);
@@ -2849,7 +2831,7 @@ function NewRequest({
     if (animalPhotoLoading) issues.push("Aguarde a leitura da foto do animal.");
     if (!tutorshipFixed && !tutorship) issues.push("Informe se o animal tem tutor ou responsável.");
     const filledAnimals = animals.length > 0 ? animals : [{}];
-    if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) issues.push(registeredContext.eligibility?.reason || "Aguarde a validação do cadastro ou procure o atendimento.");
+    if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false)) issues.push(registeredContext.eligibility?.reason || "Aguarde a validação do cadastro ou procure o atendimento.");
 
     // The term and the required documents are the public form's only; everything else is asked of both forms.
     if (!internalSimple && !accepted) issues.push("Leia e aceite a declaração para encerrar o cadastro.");
@@ -2895,7 +2877,7 @@ function NewRequest({
     }
 
     if (step === RequestStep.ANIMAL) {
-      if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) return [true];
+      if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false)) return [true];
       return animals
         .flatMap((animal) => [
           needsProcedure(animal, hasConfiguredTypes),
@@ -3445,7 +3427,7 @@ function NewRequest({
               <button
                 className="nr-topbar-continue primary-action"
                 type="button"
-                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false || !selectedIdentificationType || selectedIdentificationType.active === false)) || (followUp.enabled && (!followUpPolicy.ready || noticesIssues.length > 0))}
+                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false)) || (followUp.enabled && (!followUpPolicy.ready || noticesIssues.length > 0))}
                 onClick={submit}
               >
                 {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
@@ -3607,7 +3589,6 @@ function AdminDashboard({
   requestTypes = initialRequestTypes,
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
-  identificationTypes = initialIdentificationTypes,
   breeds = initialBreeds,
   neighborhoods = initialNeighborhoods,
   refreshRequests,
@@ -3877,7 +3858,6 @@ function AdminDashboard({
                 onBack={closeCreateRequest}
                 onDone={setCreatedRequest}
                 requestTypes={requestTypes}
-                identificationTypes={identificationTypes}
                 aiSettings={aiSettings}
                 speciesOptions={speciesOptions}
                 sizeOptions={sizeOptions}
@@ -5966,8 +5946,6 @@ function ConfigView({
   setSpeciesOptions,
   sizeOptions = initialSizes,
   setSizeOptions,
-  identificationTypes = initialIdentificationTypes,
-  setIdentificationTypes,
   breeds = initialBreeds,
   setBreeds,
   neighborhoods = initialNeighborhoods,
@@ -6505,11 +6483,6 @@ function ConfigView({
       setSizeOptions?.((current) => mergeScopedConfigItems(
         current,
         scopeConfigItems(createdConfigs[CONFIG_KEYS.sizes], createdMunicipalityScope),
-        created.id,
-      ));
-      setIdentificationTypes?.((current) => mergeScopedConfigItems(
-        current,
-        scopeConfigItems(createdConfigs[CONFIG_KEYS.identificationTypes], createdMunicipalityScope),
         created.id,
       ));
       setBreeds?.((current) => mergeScopedConfigItems(
@@ -7492,10 +7465,6 @@ function ConfigView({
             ))}
           </div>
         </div>
-      )}
-
-      {configArea === "environment" && configTab === "identification" && (
-        <IdentificationTypesConfig items={identificationTypes} setItems={setIdentificationTypes} municipalityScopeId={configMunicipalityScopeId} />
       )}
 
       {configArea === "environment" && configTab === "agenda" && (

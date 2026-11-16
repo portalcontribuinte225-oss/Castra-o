@@ -119,7 +119,7 @@ router.post("/", optionalAuth, async (req, res) => {
     await client.query("BEGIN");
     await lockMunicipalSchedule(client, municipalityId);
     const settings = await loadRequestSettings(municipalityId, client);
-    body = await prepareRegisteredRequest(client, { body, user: req.user, municipalityId, settings });
+    body = await prepareRegisteredRequest(client, { body, user: req.user, municipalityId });
     const { cpf, workflow: submittedWorkflow, requestType, animals: procedureAnimals, internal, tutorRequired } = prepareRequestSubmission({
       body, user: req.user, municipalityId,
       workflow: parseJsonObject(body.workflow_data || body.workflowData), settings,

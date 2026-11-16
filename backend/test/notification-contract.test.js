@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import * as notificationContract from "../../shared/notification-contract.js";
 import {
-  normalizeFollowUp, validateFollowUp, configsAllowStep, NotificationEvent, OTHER_REJECTION_REASON, REJECTED_CANCEL_REASON, REJECTION_REASONS, rejectionReasonText,
+  normalizeFollowUp, validateFollowUp, NotificationEvent, OTHER_REJECTION_REASON, REJECTED_CANCEL_REASON, REJECTION_REASONS, rejectionReasonText,
 } from "../../shared/notification-contract.js";
 
 test("follow-up requires a real boolean and valid required e-mail", () => {
@@ -56,12 +56,6 @@ test("the tutor is told the reason the staff chose, never the internal note, and
   assert.equal(rejectionReasonText({ rejectionReason: "x".repeat(200) }).length, 60);
   assert.ok(REJECTION_REASONS.includes(OTHER_REJECTION_REASON));
   assert.equal(new Set(REJECTION_REASONS).size, REJECTION_REASONS.length);
-});
-
-test("step configuration shares the explicit-false combination rule", () => {
-  assert.equal(configsAllowStep([null, {}, { stepTutor: true }], "stepTutor"), true);
-  assert.equal(configsAllowStep([{ stepTutor: true }, { stepTutor: false }], "stepTutor"), false);
-  assert.equal(configsAllowStep([], "stepTutor"), true);
 });
 
 test("accepting the follow-up needs at least one contact that can be reached: an e-mail, or a mobile when there is a phone channel", () => {

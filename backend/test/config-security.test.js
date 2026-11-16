@@ -132,7 +132,7 @@ test("the retired auth delivery, notification, contract and SMS keys are no long
 
 test("tutors and operational users cannot write flow or channel configuration", async (t) => {
   const { request, calls } = await fixture(t);
-  const keys = ["whatsapp", "castragestao:request-types", "castragestao:identification-types"];
+  const keys = ["whatsapp", "castragestao:request-types"];
   for (const role of ["tutor", "analista", "servidor_publico", "ong", "protetor"]) {
     for (const key of keys) {
       const response = await request(`/config/${key}`, { method: "PUT", user: { ...ADMIN, role }, body: {} });
@@ -157,7 +157,7 @@ test("municipal administrators cannot redirect config writes to another municipa
 
 test("global administrators must select a municipality for restricted configuration", async (t) => {
   const { request, calls } = await fixture(t);
-  for (const key of ["whatsapp", "castragestao:request-types", "castragestao:identification-types"]) {
+  for (const key of ["whatsapp", "castragestao:request-types"]) {
     assert.equal((await request(`/config/${key}`, { method: "PUT", user: { role: "master" }, body: {} })).status, 400);
   }
   assert.equal(calls.length, 0);
@@ -217,4 +217,15 @@ test("WhatsApp test requires valid phone and does not expose provider error data
   assert.equal(response.body.providerResponse, undefined);
   assert.equal(JSON.stringify(response.body).includes("private-provider-details"), false);
   assert.equal(JSON.stringify(response.body).includes("private-token"), false);
+});
+
+test("the identification types are not a configuration any more: nobody reads or writes them", async (t) => {
+  const { request, calls } = await fixture(t);
+  const key = "castragestao:identification-types";
+  assert.equal((await request(`/config/${key}`)).status, 404);
+  for (const user of [ADMIN, { ...ADMIN, role: "master" }]) {
+    assert.equal((await request(`/config/${key}`, { user })).status, 404);
+    assert.equal((await request(`/config/${key}`, { method: "PUT", user, body: [{ id: "animal_sem_tutor", stepTutor: false }] })).status, 403);
+  }
+  assert.equal(calls.length, 0);
 });

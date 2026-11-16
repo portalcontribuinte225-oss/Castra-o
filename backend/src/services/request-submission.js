@@ -1,4 +1,5 @@
-import { configsAllowStep, normalizeFollowUp } from "../../../shared/notification-contract.js";
+import { normalizeFollowUp } from "../../../shared/notification-contract.js";
+import { AnimalTutorship, isAnimalTutorship, tutorshipRequiresTutor } from "../../../shared/request-tutorship-contract.js";
 import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../shared/phone-contract.js";
 import { isInternalUser } from "../tenant.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
@@ -9,7 +10,7 @@ function invalid(message) {
   throw Object.assign(new Error(message), { status: 400 });
 }
 
-// Only trusted configuration may dispense identity; origin/skipTutor sent by the client cannot.
+// Only the answer to "does the animal have a tutor?" may dispense the tutor's identity; origin, skipTutor and stepTutor sent by the client cannot.
 export function prepareRequestSubmission({ body, user, municipalityId, workflow, settings }) {
   const requestType = body.request_type ?? body.requestType ?? body.requestTypeId ?? body.type;
   const isComplaint = requestType === "DENUNCIA";
@@ -27,18 +28,15 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   delete nextWorkflow.notificationDispatches;
   delete nextWorkflow.notificationResults;
 
-  // The identification type the request was made with: it must be an active one of the municipality, and it is the trusted
-  // configuration that may dispense the tutor (the client cannot).
-  function selectIdentification() {
-    const identificationId = workflow.identificationTypeId;
-    const selected = identificationId
-      ? settings.identificationTypes.find((item) => activeInMunicipality(item, municipalityId) && item.id === identificationId)
-      : null;
-    if (identificationId && !selected) invalid("Tipo de identificação inválido para o município.");
-    if (Array.isArray(body.animals) && body.animals.some((animal) => animal?.identificationTypeId && animal.identificationTypeId !== identificationId)) {
+  // The answer to "does the animal have a tutor?": one of the two values of AnimalTutorship, and no answer means with a tutor. It is the
+  // only thing that dispenses the tutor, and the animals of the request have to say the same.
+  function selectTutorship() {
+    const answer = workflow.identificationTypeId || AnimalTutorship.WITH_TUTOR;
+    if (!isAnimalTutorship(answer)) invalid("Tipo de identificação inválido.");
+    if (Array.isArray(body.animals) && body.animals.some((animal) => animal?.identificationTypeId && animal.identificationTypeId !== workflow.identificationTypeId)) {
       invalid("Tipo de identificação do animal não corresponde à solicitação.");
     }
-    return selected;
+    return answer;
   }
 
   // A request made the old way has one type for the whole request, found by id or by name.
@@ -59,15 +57,13 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
     if (Array.isArray(body.animals) && body.animals.some((animal) => !animal || typeof animal !== "object" || Array.isArray(animal))) {
       invalid("Dados do animal inválidos.");
     }
-    const selectedIdentification = selectIdentification();
-    tutorRequired = configsAllowStep([selectedIdentification], "stepTutor");
+    tutorRequired = tutorshipRequiresTutor(selectTutorship());
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   } else if (workflow.followUp !== undefined) {
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   }
-  // Staff register a tutor too, unless the identification type they chose has no Tutor step (an animal without a tutor); the request
-  // types never dispense it.
-  if (internal && !isComplaint) tutorRequired = configsAllowStep([selectIdentification()], "stepTutor");
+  // Staff register a tutor too, unless they answer that the animal has none; the request types never dispense it.
+  if (internal && !isComplaint) tutorRequired = tutorshipRequiresTutor(selectTutorship());
 
   if ((hasCpfInput || tutorRequired || isComplaint || user?.role === "tutor") && !isValidCpf(cleanCpf)) {
     invalid(isComplaint ? "CPF válido é obrigatório para registrar a denúncia." : "Informe um CPF válido para o tutor.");

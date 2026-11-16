@@ -3,16 +3,16 @@ import assert from "node:assert/strict";
 import { prepareRequestSubmission, mergeProtectedWorkflow } from "../src/services/request-submission.js";
 import { loadRequestSettings } from "../src/repositories/request-settings.js";
 import { SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
+import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 
 const cpf = "52998224725";
 const phone = "(48) 99999-1234";
 const municipalityId = "municipality-a";
 const defaults = {
   body: { requestTypeId: "surgery", cpf, phone }, municipalityId,
-  workflow: { identificationTypeId: "owned", followUp: { enabled: false } },
+  workflow: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } },
   settings: {
     requestTypes: [{ id: "surgery", name: "Cirurgia", active: true }],
-    identificationTypes: [{ id: "owned", active: true }, { id: "stray", active: true, stepTutor: false }],
     phoneEnabled: false,
   },
 };
@@ -21,22 +21,21 @@ function prepare(overrides = {}) {
   return prepareRequestSubmission({ ...structuredClone(defaults), ...overrides });
 }
 
-test("configured tutor omission accepts no CPF and normalizes an explicit refusal", () => {
-  const result = prepare({ body: { requestTypeId: "surgery" }, workflow: { identificationTypeId: "stray", followUp: { enabled: false, email: "discard@example.com" } } });
+test("an animal without a tutor accepts no CPF, and an explicit refusal of the notices is normalized", () => {
+  const result = prepare({ body: { requestTypeId: "surgery" }, workflow: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false, email: "discard@example.com" } } });
   assert.equal(result.cpf, null);
   assert.deepEqual(result.workflow.followUp, { enabled: false, email: "", phone: "" });
 });
 
-test("only the identification type can dispense the tutor: the toggle of the request type never does", () => {
+test("only the answer about the tutor can dispense it: the toggles of the request type never do", () => {
   for (const stepTutor of [true, false, undefined]) {
-    for (const identificationTutor of [true, false, undefined]) {
-      const input = structuredClone(defaults);
-      input.body.cpf = "";
-      input.settings.requestTypes[0].stepTutor = stepTutor;
-      input.settings.identificationTypes[0].stepTutor = identificationTutor;
-      if (identificationTutor === false) assert.equal(prepareRequestSubmission(input).cpf, null);
-      else assert.throws(() => prepareRequestSubmission(input), /CPF/);
-    }
+    const asked = structuredClone(defaults);
+    asked.body.cpf = "";
+    asked.settings.requestTypes[0].stepTutor = stepTutor;
+    assert.throws(() => prepareRequestSubmission(asked), /CPF/);
+    const noTutor = structuredClone(asked);
+    noTutor.workflow.identificationTypeId = AnimalTutorship.WITHOUT_TUTOR;
+    assert.equal(prepareRequestSubmission(noTutor).cpf, null);
   }
 });
 
@@ -48,18 +47,14 @@ test("origin and skipped profile screens cannot dispense required tutor identity
 
 test("supplied invalid CPF is rejected even for a tutorless flow", () => {
   for (const invalidCpf of ["12345678901", "not-a-cpf", "11111111111", 0]) {
-    assert.throws(() => prepare({ body: { requestTypeId: "surgery", cpf: invalidCpf }, workflow: { ...defaults.workflow, identificationTypeId: "stray" } }), /CPF/);
+    assert.throws(() => prepare({ body: { requestTypeId: "surgery", cpf: invalidCpf }, workflow: { ...defaults.workflow, identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }), /CPF/);
   }
 });
 
-test("missing, unknown, inactive and foreign identification do not provide a bypass", () => {
-  for (const identificationTypeId of [undefined, "unknown"]) {
-    assert.throws(() => prepare({ body: { requestTypeId: "surgery" }, workflow: { ...defaults.workflow, identificationTypeId } }));
-  }
-  for (const extra of [{ active: false }, { municipalityId: "municipality-b" }]) {
-    const settings = structuredClone(defaults.settings);
-    Object.assign(settings.identificationTypes[1], extra);
-    assert.throws(() => prepare({ body: { requestTypeId: "surgery" }, settings, workflow: { ...defaults.workflow, identificationTypeId: "stray" } }), /identificação/);
+test("no answer about the tutor means with a tutor, and an answer that is not one of the two is refused", () => {
+  assert.throws(() => prepare({ body: { requestTypeId: "surgery" }, workflow: { ...defaults.workflow, identificationTypeId: undefined } }), /CPF/);
+  for (const identificationTypeId of ["unknown", "owned", "stray", "with_tutor", "ANIMAL_SEM_TUTOR", " animal_sem_tutor"]) {
+    assert.throws(() => prepare({ body: { requestTypeId: "surgery" }, workflow: { ...defaults.workflow, identificationTypeId } }), /identificação/, identificationTypeId);
   }
 });
 
@@ -69,23 +64,22 @@ test("request types are checked within the selected municipality", () => {
     Object.assign(settings.requestTypes[0], extra, { stepTutor: false });
     assert.throws(() => prepare({ body: { requestTypeId: "surgery" }, settings }), /solicitação/);
   }
-  assert.throws(() => prepare({ body: { type: "unknown" }, workflow: { ...defaults.workflow, identificationTypeId: "stray" } }), /solicitação/);
+  assert.throws(() => prepare({ body: { type: "unknown" }, workflow: { ...defaults.workflow, identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }), /solicitação/);
 });
 
-test("authenticated tutors retain identity requirements even in a tutorless configuration", () => {
-  assert.throws(() => prepare({ user: { role: "tutor", profileComplete: true }, body: { requestTypeId: "surgery" }, workflow: { ...defaults.workflow, identificationTypeId: "stray" } }), /CPF/);
+test("authenticated tutors retain identity requirements even when the animal is said to have no tutor", () => {
+  assert.throws(() => prepare({ user: { role: "tutor", profileComplete: true }, body: { requestTypeId: "surgery" }, workflow: { ...defaults.workflow, identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }), /CPF/);
 });
 
 test("identification must agree across animals and the request", () => {
-  assert.throws(() => prepare({ body: { requestTypeId: "surgery", animals: [{ identificationTypeId: "stray" }] } }), /não corresponde/);
+  assert.throws(() => prepare({ body: { requestTypeId: "surgery", animals: [{ identificationTypeId: AnimalTutorship.WITHOUT_TUTOR }] } }), /não corresponde/);
   assert.throws(() => prepare({ body: { requestTypeId: "surgery", animals: [null] } }), /animal inválidos/);
 });
 
-test("malformed stored configuration items cannot bypass identity validation", () => {
+test("malformed stored request types cannot bypass the validation", () => {
   const settings = structuredClone(defaults.settings);
   settings.requestTypes = [null, "invalid"];
-  settings.identificationTypes = [null, [], ...settings.identificationTypes];
-  assert.throws(() => prepare({ settings, body: { type: "unknown" }, workflow: { ...defaults.workflow, identificationTypeId: "stray" } }), /solicitação/);
+  assert.throws(() => prepare({ settings, body: { type: "unknown" }, workflow: { ...defaults.workflow, identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }), /solicitação/);
 });
 
 test("every new public procedure requires an explicit follow-up answer", () => {
@@ -109,30 +103,24 @@ test("the phone is kept only when the municipality has a phone channel, and must
   assert.equal(prepare({ workflow: followUp("(48) 99999-1234") }).workflow.followUp.phone, "");
 });
 
-const withoutTutor = { id: "stray", name: "Animal sem Tutor", active: true, stepTutor: false };
-
-test("staff may register an animal without a tutor only through an active identification type that has no tutor step", () => {
+test("staff may register an animal without a tutor only by saying that it has none", () => {
   const user = { role: "analista" };
   const input = (workflow, extra = {}) => ({ user, body: { requestTypeId: "surgery" }, workflow, ...extra });
-  const result = prepare(input({ identificationTypeId: "stray" }));
+  const result = prepare(input({ identificationTypeId: AnimalTutorship.WITHOUT_TUTOR }));
   assert.equal(result.cpf, null);
   assert.equal(result.internal, true);
   assert.equal(result.tutorRequired, false);
-  assert.throws(() => prepare(input({ identificationTypeId: "owned" })), /CPF/);
+  assert.throws(() => prepare(input({ identificationTypeId: AnimalTutorship.WITH_TUTOR })), /CPF/);
   assert.throws(() => prepare(input({})), /CPF/);
-  assert.equal(prepare({ ...input({ identificationTypeId: "owned" }), body: { requestTypeId: "surgery", cpf, phone } }).cpf, cpf);
-  assert.throws(() => prepare({ ...input({ identificationTypeId: "stray" }), body: { requestTypeId: "surgery", cpf: "123" } }), /CPF/);
+  assert.equal(prepare({ ...input({ identificationTypeId: AnimalTutorship.WITH_TUTOR }), body: { requestTypeId: "surgery", cpf, phone } }).cpf, cpf);
+  assert.throws(() => prepare({ ...input({ identificationTypeId: AnimalTutorship.WITHOUT_TUTOR }), body: { requestTypeId: "surgery", cpf: "123" } }), /CPF/);
 });
 
-test("staff cannot use an unknown, inactive or foreign identification type, nor mix it with the animals' type, to dispense the tutor", () => {
+test("staff cannot use an unknown answer, nor mix it with the animals' answer, to dispense the tutor", () => {
   const user = { role: "analista" };
-  const withSettings = (item) => ({ ...structuredClone(defaults.settings), identificationTypes: [{ id: "owned", active: true }, item] });
-  for (const item of [{ ...withoutTutor, active: false }, { ...withoutTutor, municipalityId: "municipality-b" }]) {
-    assert.throws(() => prepare({ user, body: { requestTypeId: "surgery" }, settings: withSettings(item), workflow: { identificationTypeId: "stray" } }), /identificação/);
-  }
   assert.throws(() => prepare({ user, body: { requestTypeId: "surgery" }, workflow: { identificationTypeId: "unknown" } }), /identificação/);
-  assert.throws(() => prepare({ user, body: { requestTypeId: "surgery", animals: [{ identificationTypeId: "owned" }] }, workflow: { identificationTypeId: "stray" } }), /não corresponde/);
-  assert.throws(() => prepare({ user, body: { type: "DENUNCIA", tutor_name: "Cidadão", phone: "48999991234" }, workflow: { identificationTypeId: "stray" } }));
+  assert.throws(() => prepare({ user, body: { requestTypeId: "surgery", animals: [{ identificationTypeId: AnimalTutorship.WITH_TUTOR }] }, workflow: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }), /não corresponde/);
+  assert.throws(() => prepare({ user, body: { type: "DENUNCIA", tutor_name: "Cidadão", phone: "48999991234" }, workflow: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }));
 });
 
 test("internal submissions preserve their contract and cannot omit CPF", () => {
@@ -167,12 +155,13 @@ test("settings repository scopes every config lookup to an active municipality a
     return { rows: [{ municipality_id: municipalityId, key: null, value: null }] };
   } };
   const settings = await loadRequestSettings(municipalityId, database);
-  assert.equal(settings.identificationTypes[0].stepTutor, true);
+  assert.equal("identificationTypes" in settings, false, "the identification types are not part of the settings any more");
   assert.equal(settings.phoneEnabled, false);
   assert.equal("whatsappEnabled" in settings || "notifications" in settings, false);
   assert.equal(asked.includes("whatsapp") && asked.includes("sms_quota"), true);
   assert.equal(asked.includes(SMS_CONFIG_KEY), false, "a municipal SMS row is never read");
   assert.equal(asked.includes("castragestao:notifications"), false);
+  assert.equal(asked.includes("castragestao:identification-types"), false, "the answer about the tutor is not configured");
   await assert.rejects(loadRequestSettings(municipalityId, { query: async () => ({ rows: [] }) }), /Município/);
 });
 
@@ -206,7 +195,7 @@ const procedureSettings = (extra = {}) => ({
   ...extra,
 });
 const bairro = { neighborhood: "Centro" };
-const procedureInput = (animals, extra = {}) => ({ body: { animals }, settings: procedureSettings(), workflow: { identificationTypeId: "owned", followUp: { enabled: false } }, ...extra });
+const procedureInput = (animals, extra = {}) => ({ body: { animals }, settings: procedureSettings(), workflow: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } }, ...extra });
 
 test("with procedures per animal the request type is derived from them, whole, and the animals come back normalized", () => {
   const animals = [{ name: "Rex", ...bairro, requestTypeIds: ["microchip", "castration"] }, { name: "Mia", ...bairro, requestTypeIds: ["castration", "castration"] }];
@@ -221,7 +210,7 @@ test("with procedures per animal the request type is derived from them, whole, a
 test("the single type, the type text and the derived workflow keys a client sends are ignored when procedures are present", () => {
   const animals = [{ ...bairro, requestTypeIds: ["microchip"] }];
   const result = prepare({ ...procedureInput(animals, { body: { animals, cpf, phone, requestTypeId: "castration", type: "Castração", request_type: "Castração" } }),
-    workflow: { identificationTypeId: "owned", followUp: { enabled: false }, requestTypeIds: ["castration"], requestTypeNames: ["Forjado"], requestTypeId: "castration" } });
+    workflow: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false }, requestTypeIds: ["castration"], requestTypeNames: ["Forjado"], requestTypeId: "castration" } });
   assert.equal(result.requestType, "Microchipagem");
   assert.deepEqual(result.workflow.requestTypeIds, ["microchip"]);
   assert.deepEqual(result.workflow.requestTypeNames, ["Microchipagem"]);
@@ -230,7 +219,7 @@ test("the single type, the type text and the derived workflow keys a client send
 
 test("an old-style request keeps working, and its forged derived workflow keys are dropped", () => {
   const result = prepare({ body: { requestTypeId: "castration", cpf, phone, animals: [{ name: "Rex" }] }, settings: procedureSettings(),
-    workflow: { identificationTypeId: "owned", followUp: { enabled: false }, requestTypeIds: ["no-tutor"], requestTypeNames: ["Forjado"] } });
+    workflow: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false }, requestTypeIds: ["no-tutor"], requestTypeNames: ["Forjado"] } });
   assert.equal(result.requestType, "castration");
   assert.equal(result.animals, undefined);
   assert.equal(Object.hasOwn(result.workflow, "requestTypeIds"), false);
@@ -238,19 +227,19 @@ test("an old-style request keeps working, and its forged derived workflow keys a
   assert.throws(() => prepare({ ...procedureInput([{ name: "Rex" }]), body: { requestTypeId: "unknown", cpf, animals: [{ name: "Rex" }] } }), /solicitação/);
 });
 
-test("the tutor step is dispensed only by the identification type, never by a procedure", () => {
-  const stray = { id: "stray", active: true, stepTutor: false };
-  const settings = procedureSettings({ identificationTypes: [{ id: "owned", active: true }, stray] });
+test("the tutor is dispensed only by the answer about the tutor, never by a procedure", () => {
+  const { WITH_TUTOR, WITHOUT_TUTOR } = AnimalTutorship;
+  const settings = procedureSettings();
   const run = (animals, identificationTypeId, body = {}) => prepare({ body: { animals, ...body }, settings, workflow: { identificationTypeId, followUp: { enabled: false } } });
   const noTutor = [{ ...bairro, requestTypeIds: ["no-tutor"] }, { ...bairro, requestTypeIds: ["no-tutor-too"] }];
   const needsTutor = [{ ...bairro, requestTypeIds: ["castration"] }, { ...bairro, requestTypeIds: ["microchip"] }];
-  assert.throws(() => run(noTutor, "owned"), /CPF/, "a procedure whose type has no tutor step does not dispense it");
-  assert.throws(() => run([...noTutor, ...needsTutor], "owned"), /CPF/);
-  assert.throws(() => run([{ ...bairro, requestTypeIds: ["castration", "no-tutor"] }], "owned"), /CPF/);
-  assert.deepEqual([run(noTutor, "stray").tutorRequired, run(noTutor, "stray").cpf], [false, null]);
-  assert.equal(run(needsTutor, "stray").tutorRequired, false, "the identification type alone may dispense it");
-  assert.throws(() => run(needsTutor, "owned"), /CPF/);
-  assert.equal(run(needsTutor, "owned", { cpf, phone }).tutorRequired, true);
+  assert.throws(() => run(noTutor, WITH_TUTOR), /CPF/, "a procedure whose type has no tutor step does not dispense it");
+  assert.throws(() => run([...noTutor, ...needsTutor], WITH_TUTOR), /CPF/);
+  assert.throws(() => run([{ ...bairro, requestTypeIds: ["castration", "no-tutor"] }], WITH_TUTOR), /CPF/);
+  assert.deepEqual([run(noTutor, WITHOUT_TUTOR).tutorRequired, run(noTutor, WITHOUT_TUTOR).cpf], [false, null]);
+  assert.equal(run(needsTutor, WITHOUT_TUTOR).tutorRequired, false, "the answer alone may dispense it");
+  assert.throws(() => run(needsTutor, WITH_TUTOR), /CPF/);
+  assert.equal(run(needsTutor, WITH_TUTOR, { cpf, phone }).tutorRequired, true);
 });
 
 test("a request with procedures refuses unknown, switched-off or missing ones for public and staff alike", () => {
@@ -264,14 +253,13 @@ test("a request with procedures refuses unknown, switched-off or missing ones fo
   }
 });
 
-test("staff also get the derived type, and still need a CPF unless the identification type has no tutor step", () => {
+test("staff also get the derived type, and still need a CPF unless they say that the animal has no tutor", () => {
   const staff = { role: "analista" };
   const animals = [{ ...bairro, requestTypeIds: ["microchip"] }, { ...bairro, requestTypeIds: ["castration"] }];
   assert.throws(() => prepare(procedureInput(animals, { user: staff })), /CPF/);
   const withCpf = prepare(procedureInput(animals, { user: staff, body: { animals, cpf, phone } }));
   assert.deepEqual([withCpf.internal, withCpf.requestType, withCpf.tutorRequired], [true, "Microchipagem, Castração", true]);
-  const settings = procedureSettings({ identificationTypes: [{ id: "stray", active: true, stepTutor: false }] });
-  const stray = prepare({ body: { animals }, user: staff, settings, workflow: { identificationTypeId: "stray" } });
+  const stray = prepare({ body: { animals }, user: staff, settings: procedureSettings(), workflow: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } });
   assert.deepEqual([stray.cpf, stray.tutorRequired, stray.requestType], [null, false, "Microchipagem, Castração"]);
 });
 
@@ -303,7 +291,7 @@ test("the mobile is not asked of a logged tutor (the profile has it), a tutorles
   const { phone: _omitted, ...withoutPhone } = defaults.body;
   assert.equal(prepare({ user: { role: "tutor", profileComplete: true }, body: withoutPhone }).cpf, cpf);
   for (const user of [undefined, { role: "analista" }]) {
-    assert.equal(prepare({ user, body: { requestTypeId: "surgery" }, workflow: { identificationTypeId: "stray", followUp: { enabled: false } } }).cpf, null);
+    assert.equal(prepare({ user, body: { requestTypeId: "surgery" }, workflow: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false } } }).cpf, null);
   }
   const complaint = { request_type: "DENUNCIA", cpf, tutor_name: "Cidadão" };
   assert.throws(() => prepare({ body: complaint, workflow: {} }), /telefone/);

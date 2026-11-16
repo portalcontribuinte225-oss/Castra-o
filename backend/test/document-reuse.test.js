@@ -20,7 +20,7 @@ const STAFF = { id: "reviewer-1", role: "analista", municipality_id: MUNICIPALIT
 const PDF = `data:application/pdf;base64,${Buffer.from("%PDF-1.4\ntest document\n").toString("base64")}`;
 const definition = (overrides = {}) => canonicalDocumentDefinition({ id: "identity", name: "Identidade", reuseScope: "tutor", required: true, ...overrides });
 const settingsFor = (documents = [definition()]) => ({ documentTypes: documents,
-  requestTypes: [{ id: "procedure", name: "CASTRACAO", documents: documents.map(({ id }) => ({ id })) }], identificationTypes: [] });
+  requestTypes: [{ id: "procedure", name: "CASTRACAO", documents: documents.map(({ id }) => ({ id })) }] });
 function received(documentDefinition = definition(), extra = {}) {
   return createReceivedDocument({ documentId: documentDefinition.id, dataUrl: PDF, fileName: "original.pdf", ...extra }, documentDefinition,
     { requestId: "original", ownerUserId: OWNER, municipalityId: MUNICIPALITY, animalIds: [ANIMAL], now: NOW });

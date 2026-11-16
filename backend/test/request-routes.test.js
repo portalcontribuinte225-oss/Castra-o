@@ -5,6 +5,7 @@ import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
+import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { EMAIL_ACTIVE_USES_CONFIG_KEY } from "../../shared/email-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { assertInsertShape } from "./fixtures/insert-shape.js";
@@ -25,7 +26,7 @@ function procedureBody(overrides = {}) {
     // The agenda is a fixed step: a public procedure always comes with the date it chose.
     preferredSchedule: FUTURE_DATE,
     animals: [{ species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida" }],
-    workflow_data: { identificationTypeId: "without_tutor", followUp: { enabled: false } }, ...overrides,
+    workflow_data: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false } }, ...overrides,
   };
 }
 
@@ -38,13 +39,9 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
   const createdUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
-    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, stepTutor: true, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] },
-      { id: "microchip", name: "Microchipagem", active: true, stepTutor: true, documents: [] }]],
+    ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] },
+      { id: "microchip", name: "Microchipagem", active: true, documents: [] }]],
     ["castragestao:document-types", requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : []],
-    ["castragestao:identification-types", [
-      { id: "with_tutor", name: "Com tutor", active: true, stepTutor: true },
-      { id: "without_tutor", name: "Sem tutor", active: true, stepTutor: false },
-    ]],
     // The municipality turned the confirmation e-mail on, but the platform has no account yet: a confirmed notice is reported
     // as not configured, which leaves a result and a history entry without any transport.
     [EMAIL_ACTIVE_USES_CONFIG_KEY, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true } }], ["whatsapp", { active: false }],
@@ -197,9 +194,9 @@ function pendingRequest(followUp = { enabled: false, email: "", phone: "" }) {
 
 test("public POST rejects omitted preference and CPF required by configured Tutor step", async (t) => {
   const { request, row } = await fixture(t);
-  const missingPreference = await request({ body: procedureBody({ workflow_data: { identificationTypeId: "without_tutor" } }) });
+  const missingPreference = await request({ body: procedureBody({ workflow_data: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }) });
   assert.equal(missingPreference.status, 400);
-  const missingCpf = await request({ body: procedureBody({ workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
+  const missingCpf = await request({ body: procedureBody({ workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(missingCpf.status, 400);
   assert.equal(row(), null);
 });
@@ -227,7 +224,7 @@ test("forged origin, skipTutor and stepTutor flags cannot dispense CPF", async (
   const { request, row } = await fixture(t);
   const response = await request({ body: procedureBody({
     origin: "INTERNA", skipTutor: true, stepTutor: false,
-    workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false }, skipTutor: true },
+    workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false }, skipTutor: true },
   }) });
   assert.equal(response.status, 400);
   assert.equal(row(), null);
@@ -244,7 +241,7 @@ test("unknown request types and authenticated tutor identity cannot use no-Tutor
 test("explicit refusal is persisted independently from cadastral contact and strips forged delivery metadata", async (t) => {
   const { request, row } = await fixture(t);
   const response = await request({ body: procedureBody({ tutor_email: "registered@example.test", workflow_data: {
-    identificationTypeId: "without_tutor", followUp: { enabled: false, email: "stale@example.test", phone: "48999991234" },
+    identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false, email: "stale@example.test", phone: "48999991234" },
     notificationResults: [{ status: "sent" }], notificationDispatches: { fake: true },
   } }) });
   assert.equal(response.status, 201);
@@ -264,7 +261,7 @@ test("municipal POST cannot override the authenticated municipality", async (t) 
 
 test("new public tutor enrollment returns one ephemeral credential outside the persisted request", async (t) => {
   const { request, row, users, profiles } = await fixture(t);
-  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(response.status, 201);
   const password = response.body.enrollment.temporaryPassword;
   assert.equal(response.cacheControl, "no-store");
@@ -279,7 +276,7 @@ test("new public tutor enrollment returns one ephemeral credential outside the p
 
 test("repeated anonymous CPF never resets an existing account or returns its credential", async (t) => {
   const { request, row, users } = await fixture(t);
-  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
+  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } });
   const first = await request({ body });
   const storedHash = [...users.values()][0].password;
   const second = await request({ body });
@@ -293,7 +290,7 @@ test("repeated anonymous CPF never resets an existing account or returns its cre
 
 test("concurrent initial submissions create one municipal account and reveal only the newly created credential", async (t) => {
   const { request, users, profiles, stats } = await fixture(t);
-  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } });
+  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } });
   const results = await Promise.all([request({ body }), request({ body })]);
   assert.ok(results.every((result) => result.status === 201));
   assert.equal(results.filter((result) => result.body.enrollment?.temporaryPassword).length, 1);
@@ -306,7 +303,7 @@ test("concurrent initial submissions create one municipal account and reveal onl
 
 test("failed request insert rolls back both new account and profile", async (t) => {
   const { request, users, profiles, stats } = await fixture(t, { failRequestInsert: true });
-  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: "with_tutor", followUp: { enabled: false } } }) });
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(response.status, 500);
   assert.equal(users.size, 0);
   assert.equal(profiles.size, 0);

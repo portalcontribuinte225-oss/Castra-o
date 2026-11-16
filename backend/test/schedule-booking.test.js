@@ -6,7 +6,7 @@ import { lockMunicipalSchedule } from "../src/services/schedule/schedule-lock.js
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
 const day = { id: "day-a", date: "20/12/2026", active: true, slots: [{ time: "08:00", vacancies: 1 }], location_name: "Local A" };
-function body() { return { type: "Castração", requestTypeId: "castration", animals: [{}], preferredSchedule: day.date, workflow_data: { identificationTypeId: "owned", scheduleOccurrenceKey: "day:day-a", scheduleSlotTime: "08:00" } }; }
+function body() { return { type: "Castração", requestTypeId: "castration", animals: [{}], preferredSchedule: day.date, workflow_data: { scheduleOccurrenceKey: "day:day-a", scheduleSlotTime: "08:00" } }; }
 const now = new Date("2026-11-13T15:00:00Z");
 
 test("schedule dates reject impossible values and ranges bound recurrence expansion", () => {
@@ -87,7 +87,7 @@ test("reducing day vacancies updates slots and excess legacy bookings cannot lea
 });
 test("internal unscheduled registration is allowed while public missing agenda is rejected", async()=>{
   const client={query(){throw new Error("Unscheduled registration must not query capacity");}};
-  const input={...body(),preferredSchedule:"",workflow_data:{identificationTypeId:"owned"}};
+  const input={...body(),preferredSchedule:"",workflow_data:{}};
   const registered=await reserveRequestSchedule(client,{body:input,municipalityId:MUNICIPALITY,user:{role:"analista"},now});
   assert.equal(registered.schedule_date,null);
   await assert.rejects(reserveRequestSchedule(client,{body:input,municipalityId:MUNICIPALITY,user:{role:"tutor"},now}),{status:400});
@@ -98,4 +98,6 @@ test("changing the procedures of a booked request counts as a booking change", (
   const before = { request_type: "Castração", animals: [{}], workflow_data: {} };
   assert.equal(bookingChanged(before, { ...before, request_type: "Castração, Microchipagem" }), true);
   assert.equal(bookingChanged(before, { ...before }), false);
+  const answered = (identificationTypeId) => ({ ...before, workflow_data: { identificationTypeId } });
+  assert.equal(bookingChanged(answered("animal_com_tutor"), answered("animal_sem_tutor")), false, "the answer about the tutor has nothing to do with the booking");
 });

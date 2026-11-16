@@ -22,7 +22,6 @@ const settings = () => ({
     { id: "vaccine", name: "Vacinação antirrábica", documents: [{ id: "vaccine-card" }, { id: "extra", name: "Extra", required: true }, { id: "residence" }] },
     { id: "microchip", name: "Microchipagem", documents: [] },
   ],
-  identificationTypes: [],
 });
 const animals = (...idLists) => idLists.map((requestTypeIds) => ({ requestTypeIds }));
 const ids = (definitions) => definitions.map(({ id }) => id);

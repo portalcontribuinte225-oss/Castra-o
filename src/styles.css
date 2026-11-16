@@ -7897,52 +7897,6 @@ main {
   padding-inline: 22px;
 }
 
-.request-type-steps-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 0 0;
-  border: 0;
-  border-top: 1px solid #eef2f6;
-  border-radius: 0;
-  background: transparent;
-}
-
-
-.request-type-steps-label {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-
-.request-type-steps-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-
-.request-type-step-toggle {
-  align-items: flex-start;
-}
-
-
-.request-type-step-toggle-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-
-.request-type-step-toggle-text small {
-  font-weight: 400;
-  color: #64748b;
-  font-size: 0.76rem;
-}
-
 
 .config-modal.process-work-modal {
   width: min(1420px, calc(100vw - 12px));
@@ -16590,7 +16544,7 @@ form textarea:focus,
 }
 
 
-.modal-backdrop :is(.field > span, .field-label, .billing-method-field > span, .request-type-steps-label) {
+.modal-backdrop :is(.field > span, .field-label, .billing-method-field > span) {
   color: #66758a;
   font-size: 0.66rem;
   font-weight: 800;
@@ -24324,7 +24278,6 @@ textarea::placeholder,
 .irm-section-label,
 .irm-subsection-label,
 .document-button-field > span,
-.request-type-steps-label,
 .adoption-form-modal .field > span,
 .adoption-form-modal .compact-choice-field > span,
 .modal-backdrop .adoption-form-modal .field > span,

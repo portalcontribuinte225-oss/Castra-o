@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerRequestAnimals, prepareRegisteredRequest } from "../src/services/registered-animals/registered-request.js";
+import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { materializeOwnRequestAnimal } from "../src/services/registered-animals/from-request.js";
 import { animalFingerprint } from "../src/services/registered-animals/animal-data.js";
 import { confirmAnimalMicrochip, applyAnimalRequestTransition } from "../src/services/registered-animals/animal-transitions.js";
@@ -40,15 +41,15 @@ test("unclaimed request creates animals and municipal records without inventing 
 
 test("existing animal request rehydrates immutable identity and rejects lost ownership or death", async () => {
   const db = registeredAnimalDatabase(); const original = await seed(db); const id = original.animals[0].id;
-  const settings = { identificationTypes: [{ id: "animal_com_tutor", active: true }] };
-  const body = await prepareRegisteredRequest(db, { body: { animals: [{ id, name: "Forged" }], cpf: "another-cpf", workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY, settings });
+  const body = await prepareRegisteredRequest(db, { body: { animals: [{ id, name: "Forged" }], cpf: "another-cpf", workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY });
   assert.equal(body.animals[0].name, "Animal 0"); assert.equal(body.cpf, "52998224725"); assert.equal(body.tutor_name, "Tutor Atual");
+  assert.equal(body.workflow_data.identificationTypeId, AnimalTutorship.WITH_TUTOR, "the request carries the answer the animal was made with");
   assert.match(db.calls.find(({ sql }) => sql.includes("SELECT a.* FROM animals a")).sql, /FOR UPDATE OF a/);
-  await assert.rejects(prepareRegisteredRequest(db, { body, user: tutor, municipalityId: OTHER, settings }), { status: 404 });
+  await assert.rejects(prepareRegisteredRequest(db, { body, user: tutor, municipalityId: OTHER }), { status: 404 });
   db.owners[0].active = false;
-  await assert.rejects(prepareRegisteredRequest(db, { body, user: tutor, municipalityId: MUNICIPALITY, settings }), { status: 404 });
+  await assert.rejects(prepareRegisteredRequest(db, { body, user: tutor, municipalityId: MUNICIPALITY }), { status: 404 });
   db.owners[0].active = true; db.animals.get(id).status = "OBITO";
-  await assert.rejects(prepareRegisteredRequest(db, { body, user: tutor, municipalityId: MUNICIPALITY, settings }), { status: 409 });
+  await assert.rejects(prepareRegisteredRequest(db, { body, user: tutor, municipalityId: MUNICIPALITY }), { status: 409 });
 });
 
 test("from-request conversion preserves stable fingerprint and is idempotent after UUID is added", async () => {
@@ -128,7 +129,17 @@ test("readonly incomplete registration stays incomplete and cannot bypass server
   const db = registeredAnimalDatabase(); const request = await seed(db); const row = db.animals.get(request.animal_id);
   delete row.metadata.registration.breedType;
   await assert.rejects(prepareRegisteredRequest(db, { body: { animals: [{ id: row.id, breedType: "Definida" }] }, user: tutor,
-    municipalityId: MUNICIPALITY, settings: { identificationTypes: [{ id: "animal_com_tutor", active: true }] } }), { status: 409 });
+    municipalityId: MUNICIPALITY }), { status: 409 });
+});
+
+test("an animal whose answer about the tutor is not one of the two needs the staff's review, and is never given another", async () => {
+  const db = registeredAnimalDatabase(); const original = await seed(db); const id = original.animals[0].id;
+  const row = db.animals.get(id);
+  row.metadata.identificationTypes = { ...(row.metadata.identificationTypes || {}), [MUNICIPALITY]: "legacy_type" };
+  await assert.rejects(prepareRegisteredRequest(db, { body: { animals: [{ id }], workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY }), { status: 409, message: /identificação/ });
+  row.metadata.identificationTypes[MUNICIPALITY] = AnimalTutorship.WITHOUT_TUTOR;
+  const prepared = await prepareRegisteredRequest(db, { body: { animals: [{ id }], workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY });
+  assert.equal(prepared.workflow_data.identificationTypeId, AnimalTutorship.WITHOUT_TUTOR);
 });
 
 test("death applies to all UUIDs once and complaints never write surgical records", async () => {

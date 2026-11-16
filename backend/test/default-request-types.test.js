@@ -59,3 +59,8 @@ test("the new types are linked only to the default breeds the municipality has, 
   assert.equal(planDefaultRequestTypes({ requestTypes: undefined }).types.length, 5, "a municipality with no stored list receives all five");
   assert.equal(planDefaultRequestTypes({ requestTypes: null, breedIds: undefined }).types.length, 5);
 });
+
+test("a new municipality gets no identification types: the answer about the tutor is not configured", () => {
+  const configs = buildMunicipalityDefaultConfigs({ id: "11111111-1111-4111-8111-111111111111" });
+  assert.equal(Object.keys(configs).some((key) => /identification/i.test(key)), false);
+});

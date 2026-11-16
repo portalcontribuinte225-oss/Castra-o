@@ -51,7 +51,7 @@ export async function reserveRequestSchedule(client, { body, municipalityId, use
 export function bookingChanged(previous, next) {
   const before = previous.workflow_data || {}, after = next.workflow_data || {};
   return previous.schedule_date !== next.schedule_date
-    || previous.request_type !== next.request_type || before.identificationTypeId !== after.identificationTypeId
+    || previous.request_type !== next.request_type
     || before.scheduleOccurrenceKey !== after.scheduleOccurrenceKey
     || (before.scheduleSlotTime || before.scheduleTime) !== (after.scheduleSlotTime || after.scheduleTime)
     || before.scheduleTime !== after.scheduleTime

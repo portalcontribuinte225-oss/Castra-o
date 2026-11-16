@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { CONFIG_KEYS } from "../../domain";
 
-const optionKeys = [CONFIG_KEYS.requestTypes, CONFIG_KEYS.identificationTypes, CONFIG_KEYS.documentTypes, CONFIG_KEYS.species, CONFIG_KEYS.sizes, CONFIG_KEYS.breeds, CONFIG_KEYS.neighborhoods, "ai"];
+const optionKeys = [CONFIG_KEYS.requestTypes, CONFIG_KEYS.documentTypes, CONFIG_KEYS.species, CONFIG_KEYS.sizes, CONFIG_KEYS.breeds, CONFIG_KEYS.neighborhoods, "ai"];
 
 // The municipality's own record (its name and department), which the declaration of the request names. Without it the declaration
 // still reads well ("a Prefeitura"), so it never keeps the form from opening.

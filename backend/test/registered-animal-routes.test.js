@@ -6,6 +6,7 @@ import { pool } from "../src/db/index.js";
 import { issueSession } from "../src/services/auth/auth-session.js";
 import { animalFingerprint } from "../src/services/registered-animals/animal-data.js";
 import { registerRequestAnimals } from "../src/services/registered-animals/registered-request.js";
+import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { sessionUser, registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { registeredAnimalDatabase, ANIMAL_TEST_MUNICIPALITY as MUNICIPALITY, ANIMAL_TEST_OTHER as OTHER,
   ANIMAL_TEST_USER as USER, ANIMAL_TEST_REQUEST as REQUEST } from "./fixtures/registered-animal-db.js";
@@ -14,13 +15,13 @@ const clientFetch = globalThis.fetch;
 const tutor = { id: USER, role: "tutor", municipalityId: MUNICIPALITY };
 const animalData = { name: "Animal próprio", species: "Cão", sex: "Fêmea", size: "Pequeno", breedType: "Indefinida", microchip: "declared123" };
 
-async function fixture(t, { registered = true, inactiveIdentification = false } = {}) {
+async function fixture(t, { registered = true, unknownTutorship = false } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
   process.env.JWT_SECRET = "registered-animal-route-tests-only";
   const db = registeredAnimalDatabase(); const sessions = new Map();
   db.profiles.set(USER, { name: "Tutor atual", cpf: "52998224725", email: "own@example.test", municipality_id: MUNICIPALITY });
   const source = { id: REQUEST, tutor_id: USER, municipality_id: MUNICIPALITY, tutor_name: "Tutor", cpf: "52998224725",
-    request_type: "PROCEDIMENTO", animals: [{ ...animalData }], workflow_data: { identificationTypeId: "animal_com_tutor" } };
+    request_type: "PROCEDIMENTO", animals: [{ ...animalData }], workflow_data: { identificationTypeId: unknownTutorship ? "legacy_type" : AnimalTutorship.WITH_TUTOR } };
   db.requests.set(REQUEST, source);
   if (registered) await registerRequestAnimals(db, { body: source, request: source, user: tutor, tutorId: USER, municipalityId: MUNICIPALITY });
   const id = source.animal_id;
@@ -33,7 +34,6 @@ async function fixture(t, { registered = true, inactiveIdentification = false } 
       db.calls.push({ sql, values });
       return { rows: [
         { key: "castragestao:request-types", value: [{ id: "procedure", name: "Procedimento", active: true }] },
-        { key: "castragestao:identification-types", value: [{ id: "animal_com_tutor", active: !inactiveIdentification }] },
       ] };
     }
     if (sql.includes("a.id::text > $3")) {
@@ -100,12 +100,12 @@ test("mine is tutor-only, server scoped and returns lightweight whitelisted card
   assert.ok(db.calls.every(({ sql }) => !sql.startsWith("INSERT") && !sql.startsWith("UPDATE")));
 });
 
-test("context returns persisted identity and blocks inactive identification without fallback", async (t) => {
-  const { request, id } = await fixture(t, { inactiveIdentification: true });
+test("context returns persisted identity and blocks an animal whose answer about the tutor is unknown, without fallback", async (t) => {
+  const { request, id } = await fixture(t, { unknownTutorship: true });
   const result = await request(`/${id}/request-context`);
   assert.equal(result.status, 200); assert.equal(result.body.tutor.cpf, "52998224725"); assert.equal(result.body.tutor.name, "Tutor atual");
-  assert.equal(result.body.eligibility.canSubmit, false); assert.deepEqual(result.body.documents, []);
-  assert.equal(result.body.animal.identificationTypeId, "animal_com_tutor"); assert.equal(result.body.identificationTypes[0].active, false);
+  assert.equal(result.body.eligibility.canSubmit, false); assert.match(result.body.eligibility.reason, /identificação/); assert.deepEqual(result.body.documents, []);
+  assert.equal(result.body.animal.identificationTypeId, "legacy_type"); assert.equal(result.body.identificationTypes, undefined);
 });
 
 test("former owner and another municipality lose context and preview without disclosing content", async (t) => {

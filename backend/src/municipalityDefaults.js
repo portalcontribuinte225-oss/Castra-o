@@ -1,5 +1,4 @@
 import { DEFAULT_MINIMUM_CONFIDENCE } from "./routes/ai.js";
-import { IDENTIFICATION_TYPES_CONFIG_KEY, buildDefaultIdentificationTypes } from "./services/identification-type-defaults.js";
 import { BREEDS_CONFIG_KEY, buildDefaultBreeds } from "./services/breed-defaults.js";
 import { REQUEST_TYPES_CONFIG_KEY, buildDefaultRequestTypes } from "./services/request-type-defaults.js";
 import { IntegrationConfigItem } from "../../shared/config-permission-contract.js";
@@ -109,7 +108,6 @@ export function buildMunicipalityDefaultConfigs(municipality = {}, defaultUser =
       },
     ],
     [REQUEST_TYPES_CONFIG_KEY]: buildDefaultRequestTypes(breedIds),
-    [IDENTIFICATION_TYPES_CONFIG_KEY]: buildDefaultIdentificationTypes(),
     "castragestao:species": [
       { id: "canino", name: "Canino", active: true },
       { id: "felino", name: "Felino", active: true },
