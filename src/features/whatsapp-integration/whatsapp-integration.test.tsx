@@ -2,12 +2,11 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { whatsappFieldLabels } from "../../../shared/whatsapp-templates-contract.js";
+import { useMessageContract } from "../message-contract/use-message-contract";
 import { useWhatsappCredentials } from "./use-whatsapp-credentials";
-import { useWhatsappQuota } from "./use-whatsapp-quota";
 import { useWhatsappTemplates } from "./use-whatsapp-templates";
 import { WhatsappCredentials } from "./whatsapp-credentials";
 import { WhatsappIntegrationTab } from "./whatsapp-integration-tab";
-import { WhatsappQuota } from "./whatsapp-quota";
 import { WhatsappTemplatesPanel } from "./whatsapp-templates-panel";
 import { WhatsappTemplatesTable } from "./whatsapp-templates-table";
 import { WhatsappVariablesList } from "./whatsapp-variables-list";
@@ -16,7 +15,7 @@ import type { WhatsappTemplateList, WhatsappTemplateRow } from "./whatsapp-integ
 
 vi.mock("./use-whatsapp-templates", () => ({ useWhatsappTemplates: vi.fn() }));
 vi.mock("./use-whatsapp-credentials", () => ({ useWhatsappCredentials: vi.fn() }));
-vi.mock("./use-whatsapp-quota", () => ({ useWhatsappQuota: vi.fn() }));
+vi.mock("../message-contract/use-message-contract", () => ({ useMessageContract: vi.fn() }));
 
 const row = (overrides: Partial<WhatsappTemplateRow> = {}): WhatsappTemplateRow => ({
   name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "APPROVED", category: "UTILITY", label: "Agendamento confirmado",
@@ -32,15 +31,19 @@ const credentialsState = {
   testPhone: "", setTestPhone: noop, testStatus: "", testing: false, hasCredentials: true, isActive: true, canSync: true, idsChanged: false,
   confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, toggleActive: noop, removeToken: noop, sendTest: noop,
 };
-const quotaState = {
-  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "", live: { plan: 500, used: 12, active: true, contractEnd: "2026-12-31" },
+const contractState = {
+  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
+  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true },
   confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop,
 };
+const tab = (props: Partial<React.ComponentProps<typeof WhatsappIntegrationTab>> = {}) => renderToStaticMarkup(
+  <WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} canEditContract {...props} />,
+);
 
 beforeEach(() => {
   vi.mocked(useWhatsappTemplates).mockReturnValue(templatesState);
   vi.mocked(useWhatsappCredentials).mockReturnValue(credentialsState);
-  vi.mocked(useWhatsappQuota).mockReturnValue(quotaState);
+  vi.mocked(useMessageContract).mockReturnValue(contractState);
 });
 
 describe("template display helpers", () => {
@@ -233,42 +236,16 @@ describe("access token", () => {
   });
 });
 
-describe("contract and quota", () => {
-  const quota = (extra = {}) => renderToStaticMarkup(<WhatsappQuota municipalityId="municipality-a" quota={{ ...quotaState, ...extra }} />);
-
-  it("puts the contract actions beside the save button, without an actions legend, using the standard buttons", () => {
-    const html = quota();
-    expect(html).not.toContain("Ações");
-    expect(html).not.toContain("whatsapp-section-heading");
-    const row = html.slice(html.indexOf("whatsapp-save-row"), html.indexOf("whatsapp-note"));
-    expect(row.indexOf("Salvar cota")).toBeGreaterThan(-1);
-    expect(row.indexOf("Encerrar contrato")).toBeGreaterThan(row.indexOf("Salvar cota"));
-    expect(row.indexOf("Zerar cota do mês")).toBeGreaterThan(row.indexOf("Encerrar contrato"));
-    expect(row).toContain('class="ghost-button danger-action"');
-    expect(row).toContain('class="ghost-button"');
-    expect(html).not.toMatch(/whatsapp-btn|whatsapp-confirm|whatsapp-actions-row/);
-  });
-
-  it("asks for confirmation in the same line before ending the contract", () => {
-    const html = quota({ confirmingEnd: true });
-    expect(html).toContain("Encerrar contrato hoje (");
-    expect(html).toContain("Confirmar");
-    expect(html).toContain("Cancelar");
-    expect(html).not.toContain("Zerar cota do mês");
-    expect(html.indexOf("Confirmar")).toBeGreaterThan(html.indexOf("Salvar cota"));
-  });
-});
-
 describe("integration tab", () => {
   it("orders the screen: status, credentials with the test, templates, then contract and quota last", () => {
-    const html = renderToStaticMarkup(<WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} />);
+    const html = tab();
     const order = ["whatsapp-statusbar", "Credenciais", "Teste de envio", "Templates da Meta", "Variáveis existentes no sistema", "Contrato e cota"].map((text) => html.indexOf(text));
     expect(order.every((position) => position >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
   it("keeps the credentials fields, drops the retired template and language fields, and shows the quota summary", () => {
-    const html = renderToStaticMarkup(<WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} />);
+    const html = tab();
     for (const label of ["ID da conta do WhatsApp Business (WABA)", "ID do número remetente", "Token de acesso", "Remover token", "Enviar teste", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).toContain(label);
     for (const retired of ["Template de confirmação", "Idioma", "Variáveis do template", "var-chip", "Vincular", "Mensagens de acesso e segurança por WhatsApp"]) expect(html).not.toContain(retired);
     expect(html).toContain("12/500");
@@ -276,18 +253,26 @@ describe("integration tab", () => {
     expect(html).toContain("EAAFAKE0");
   });
 
+  it("counts the messages at the top for who only reads the contract, and offers the form only to who edits it", () => {
+    const viewer = tab({ canEditContract: false });
+    expect(viewer).toContain("whatsapp-statusbar"); expect(viewer).toContain("12/500"); expect(viewer).toContain("Contrato vigente");
+    for (const hidden of ["Contrato e cota", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(viewer).not.toContain(hidden);
+    expect(viewer).toContain("EAAFAKE0");
+    expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("whatsapp", "municipality-a");
+  });
+
   it("asks for a municipality before anything else and hides the status bar", () => {
-    const html = renderToStaticMarkup(<WhatsappIntegrationTab municipalityId="" readOnly={false} />);
+    const html = tab({ municipalityId: "" });
     expect(html).not.toContain("whatsapp-statusbar");
     expect(html).toContain("Selecione um município");
     expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(3);
   });
 
   it("passes the synchronization permission from the credentials to the templates hook", () => {
-    renderToStaticMarkup(<WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} />);
+    tab();
     expect(vi.mocked(useWhatsappTemplates)).toHaveBeenLastCalledWith("municipality-a", true);
     vi.mocked(useWhatsappCredentials).mockReturnValue({ ...credentialsState, canSync: false });
-    renderToStaticMarkup(<WhatsappIntegrationTab municipalityId="municipality-a" readOnly={false} />);
+    tab();
     expect(vi.mocked(useWhatsappTemplates)).toHaveBeenLastCalledWith("municipality-a", false);
   });
 });

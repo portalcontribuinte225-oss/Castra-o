@@ -114,7 +114,6 @@ export const CONFIG_KEYS = {
   scheduleRules: "castragestao:schedule-rules",
   permissionGroups: "permission_groups",
   whatsapp: "whatsapp",
-  whatsappQuota: "whatsapp_quota",
 };
 
 export const CONFIG_KEYS_LIST = Object.values(CONFIG_KEYS);

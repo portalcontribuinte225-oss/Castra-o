@@ -159,7 +159,9 @@ test("settings repository scopes every config lookup to an active municipality a
   const database = { query: async (sql, parameters) => {
     assert.match(sql, /m\.id = \$1 AND m\.active = TRUE/);
     assert.match(sql, /c\.municipality_id = m\.id/);
+    assert.match(sql, /c\.municipality_id IS NULL AND c\.key = \$3/, "the SMS account is the one platform value read");
     assert.equal(parameters[0], municipalityId);
+    assert.equal(parameters[2], SMS_CONFIG_KEY);
     asked.push(...parameters[1]);
     return { rows: [{ municipality_id: municipalityId, key: null, value: null }] };
   } };
@@ -167,17 +169,21 @@ test("settings repository scopes every config lookup to an active municipality a
   assert.equal(settings.identificationTypes[0].stepTutor, true);
   assert.equal(settings.phoneEnabled, false);
   assert.equal("whatsappEnabled" in settings || "notifications" in settings, false);
-  assert.equal(asked.includes("whatsapp") && asked.includes(SMS_CONFIG_KEY), true);
+  assert.equal(asked.includes("whatsapp") && asked.includes("sms_quota"), true);
+  assert.equal(asked.includes(SMS_CONFIG_KEY), false, "a municipal SMS row is never read");
   assert.equal(asked.includes("castragestao:notifications"), false);
   await assert.rejects(loadRequestSettings(municipalityId, { query: async () => ({ rows: [] }) }), /Município/);
 });
 
-test("the phone is asked as soon as WhatsApp or SMS is active, and only when one really is", async () => {
+test("the phone is asked as soon as WhatsApp is active or SMS can reach the municipality, and only when one really can", async () => {
   const withConfig = (config) => ({ query: async () => ({ rows: [{ municipality_id: municipalityId, key: null, value: null },
     ...Object.entries(config).map(([key, value]) => ({ municipality_id: municipalityId, key, value }))] }) });
   const phoneEnabled = async (config) => (await loadRequestSettings(municipalityId, withConfig(config))).phoneEnabled;
   assert.equal(await phoneEnabled({ whatsapp: { active: true } }), true);
-  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true } }), true);
+  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10 } }), true);
+  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true } }), false, "the channel is on but the municipality has no SMS contract");
+  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, contractEnd: "2020-01-01" } }), false, "the contract ended");
+  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: false }, sms_quota: { plan: 10 } }), false, "the contract alone does not turn the channel on");
   assert.equal(await phoneEnabled({ whatsapp: { active: true }, [SMS_CONFIG_KEY]: { active: false } }), true);
   assert.equal(await phoneEnabled({ whatsapp: { active: false }, [SMS_CONFIG_KEY]: { active: false } }), false);
   assert.equal(await phoneEnabled({ whatsapp: { active: "true" }, [SMS_CONFIG_KEY]: { hasToken: true } }), false);

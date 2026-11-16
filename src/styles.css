@@ -4261,33 +4261,6 @@ main {
 }
 
 
-.topbar-whatsapp-quota {
-  min-height: 40px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 11px;
-  border: 1px solid #bbf7d0;
-  border-radius: 12px;
-  background: #f0fdf4;
-  color: #166534;
-  font-size: 0.82rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-
-.topbar-whatsapp-quota svg {
-  color: #16a34a;
-}
-
-
-.topbar-whatsapp-quota strong {
-  color: #166534;
-  font-size: 0.92rem;
-}
-
-
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -20015,8 +19988,7 @@ main {
 .topbar-context-chip,
 .topbar-search,
 .topbar-municipality-filter,
-.icon-button,
-.topbar-whatsapp-quota {
+.icon-button {
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-lg);
   background: #ffffff;
@@ -23217,7 +23189,6 @@ h6,
 .topbar-search,
 .topbar-municipality-filter,
 .icon-button,
-.topbar-whatsapp-quota,
 .panel,
 .metric-card,
 .summary-card,
@@ -23657,7 +23628,6 @@ main,
 .topbar-search,
 .topbar-municipality-filter,
 .icon-button,
-.topbar-whatsapp-quota,
 .sidebar .brand,
 .sidebar-user-card {
   border-color: var(--chrome-border) !important;

@@ -1,6 +1,10 @@
 import React from "react";
 import { PanelHeader } from "../../components/ui";
 import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
+import { NotificationChannel } from "../../../shared/notification-contract.js";
+import { MessageContractForm } from "../message-contract/message-contract-form";
+import { MessageContractStatus } from "../message-contract/message-contract-status";
+import { useMessageContract } from "../message-contract/use-message-contract";
 import { EmailCredentials } from "./email-credentials";
 import { EmailTemplatesTable } from "./email-templates-table";
 import { useEmailAccount } from "./use-email-account";
@@ -12,10 +16,12 @@ const brasaoText: Record<string, string> = {
   [EmailBrasaoStatus.NO_PUBLIC_URL]: "o endereço público do sistema ainda não foi configurado pelo master ⚠",
 };
 
-// E-mail tab: the master sets the platform account and the template ids; each municipality only turns its messages on or off.
-export function EmailIntegrationTab({ municipalityId, master, canManage }: { municipalityId: string; master: boolean; canManage: boolean }) {
+// E-mail tab: the master sets the platform account and the template ids; each municipality turns its messages on or off, and the global
+// administration sets the contract of messages the municipality has.
+export function EmailIntegrationTab({ municipalityId, master, canManage, canEditContract }: { municipalityId: string; master: boolean; canManage: boolean; canEditContract: boolean }) {
   const email = useEmailSettings(municipalityId, master, canManage);
   const account = useEmailAccount(email.settings?.account ?? null, municipalityId, email.apply);
+  const contract = useMessageContract(NotificationChannel.EMAIL, canManage ? municipalityId : "");
   if (!canManage) return <p role="status">Configuração de e-mail restrita à administração.</p>;
   if (!municipalityId && !master) return <p>Selecione um município para configurar o e-mail.</p>;
   const { settings } = email;
@@ -23,6 +29,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage }: { mun
   return (
     <div className="config-panel wide">
       <PanelHeader title="E-mail" />
+      {municipalityId && settings && <MessageContractStatus active={settings.configured} live={contract.live} />}
       <div className="whatsapp-integration">
         {master && settings && <EmailCredentials account={settings.account} state={account} />}
         <section className="whatsapp-section">
@@ -52,6 +59,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage }: { mun
           )}
           {master && settings && <button type="button" className="primary-action" disabled={!email.dirty || email.saving} onClick={email.saveTemplates}>{email.saving ? "Salvando..." : "Salvar templates"}</button>}
         </section>
+        {canEditContract && settings && <MessageContractForm municipalityId={municipalityId} contract={contract} />}
       </div>
     </div>
   );

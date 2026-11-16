@@ -11,8 +11,6 @@ import { BREEDS_CONFIG_KEY } from "../services/breed-defaults.js";
 import { NEIGHBORHOODS_CONFIG_KEY, buildDefaultNeighborhoods, normalizeNeighborhoodName } from "../services/neighborhood-defaults.js";
 import { normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../../shared/document-reuse-contract.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
-import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
-import { getPublicSmsConfig, getSmsIntegrationSettings, saveSmsIntegrationSettings } from "../services/sms-integration-settings.js";
 import { EMAIL_SETTINGS_PERMISSION } from "../../../shared/email-contract.js";
 
 const router = Router();
@@ -33,7 +31,6 @@ const DEFAULT_CONFIG_VALUE_BUILDERS = {
 const SENSITIVE_CONFIG_KEYS = new Set([
   "castragestao:teams",
   "permission_groups",
-  "whatsapp_quota",
 ]);
 
 // Keys cujas alterações são registradas em audit_logs (nunca inclui o valor de secrets).
@@ -53,7 +50,6 @@ const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "castragestao:request-types",
   IDENTIFICATION_TYPES_CONFIG_KEY,
   "whatsapp",
-  "whatsapp_quota",
   "castragestao:document-types",
   "castragestao:species",
   "castragestao:sizes",
@@ -62,7 +58,6 @@ const MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS = new Set([
   "castragestao:teams",
   "castragestao:schedule-rules",
   "permission_groups",
-  SMS_CONFIG_KEY,
 ]);
 
 const MUNICIPAL_ONLY_CONFIG_KEYS = new Set(MUNICIPAL_ADMIN_WRITE_CONFIG_KEYS);
@@ -187,11 +182,6 @@ router.get("/:key", optionalAuth, async (req, res) => {
     : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: [key] };
 
   try {
-    // As WhatsApp does, SMS tells a visitor only whether the channel is on; the administration reads the whole screen.
-    if (key === SMS_CONFIG_KEY) {
-      const administrator = Boolean(req.user) && (isGlobalUser(req.user) || isMunicipalAdmin(req.user));
-      return res.set("Cache-Control", "no-store").json(administrator ? await getSmsIntegrationSettings(municipalityId) : await getPublicSmsConfig(municipalityId));
-    }
     const { rows } = await pool.query(query.text, query.values);
     if (!rows[0]) {
       const buildDefault = DEFAULT_CONFIG_VALUE_BUILDERS[key];
@@ -199,7 +189,6 @@ router.get("/:key", optionalAuth, async (req, res) => {
     }
     res.json(publicConfigValue(key, rows[0].value, req.user));
   } catch (err) {
-    if (key === SMS_CONFIG_KEY) return res.set("Cache-Control", "no-store").status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível consultar a configuração de SMS." });
     res.status(500).json({ error: err.message });
   }
 });
@@ -229,17 +218,6 @@ router.put("/:key", auth, async (req, res) => {
   const documentPolicyError = validateDocumentPolicies(key, req.body);
   if (documentPolicyError) return res.status(400).json({ error: documentPolicyError });
 
-  // SMS validates remotely before opening its optimistic, tenant-scoped write transaction.
-  if (key === SMS_CONFIG_KEY) {
-    try {
-      const result = await saveSmsIntegrationSettings({ municipalityId, input: req.body, actor: req.user });
-      return res.set("Cache-Control", "no-store").json(result);
-    } catch (error) {
-      return res.set("Cache-Control", "no-store").status(error.status || 500).json({ error: error.status ? error.message : "Não foi possível salvar a configuração de SMS.",
-        ...(error.status && error.code ? { code: error.code } : {}) });
-    }
-  }
-
   // Valida estrutura para chaves críticas de permissão
   if (key === "permission_groups") {
     const validationError = validatePermissionGroups(req.body);
@@ -257,7 +235,7 @@ router.put("/:key", auth, async (req, res) => {
   const client = await pool.connect();
   let writeTransaction = false;
   try {
-    if (key === "whatsapp_quota" || RESERVATION_CONFIG_KEYS.has(key)) {
+    if (RESERVATION_CONFIG_KEYS.has(key)) {
       await client.query("BEGIN");
       writeTransaction = true;
     }
@@ -325,32 +303,21 @@ router.put("/:key", auth, async (req, res) => {
 function publicConfigValue(key, value = {}, viewer = null) {
   if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
   if (key === "whatsapp") return publicWhatsappConfig(value, Boolean(viewer) && isInternalUser(viewer));
-  if (!["ai", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
-  if (key === "whatsapp_quota") return value;
+  if (key !== "ai" || !value || typeof value !== "object") return value;
   const apiKey = String(value.apiKey || "").trim();
   return { ...value, apiKey: "", hasApiKey: Boolean(apiKey) };
 }
 
 async function prepareConfigValue(key, value = {}, municipalityId = null, client) {
   if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
-  if (!["ai", "whatsapp", "whatsapp_quota"].includes(key) || !value || typeof value !== "object") return value;
+  if (!["ai", "whatsapp"].includes(key) || !value || typeof value !== "object") return value;
   const query = municipalityId
     ? { text: "SELECT value FROM config WHERE key=$1 AND municipality_id=$2", values: [key, municipalityId] }
     : { text: "SELECT value FROM config WHERE key=$1 AND municipality_id IS NULL", values: [key] };
-  if (key === "whatsapp_quota") query.text += " FOR UPDATE";
   const db = client || pool;
   const { rows } = await db.query(query.text, query.values);
   const current = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
   if (key === "whatsapp") return prepareWhatsappCredentials(current, value);
-  if (key === "whatsapp_quota") {
-    return {
-      plan: Number(value.plan) || current.plan || 0,
-      contractStart: value.contractStart || current.contractStart || "",
-      contractEnd: value.contractEnd || current.contractEnd || "",
-      currentPeriodStart: current.currentPeriodStart || "",
-      currentPeriodUsed: current.currentPeriodUsed || 0,
-    };
-  }
   const nextApiKey = String(value.apiKey || "").trim();
   const resolvedApiKey = value.clearApiKey ? "" : nextApiKey || decryptSecret(current.apiKey || "");
   const { clearApiKey, ...rest } = value;

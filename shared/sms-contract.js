@@ -2,6 +2,7 @@ import { secretPreview } from "./secret-preview-contract.js";
 import { getSmsUse, smsUses } from "./sms-uses-contract.js";
 import { isUseOn, normalizeUseSwitches } from "./use-switches-contract.js";
 
+// The platform's SMS account: one row with no municipality, which only the master changes.
 export const SMS_CONFIG_KEY = "castragestao:sms";
 // Per municipality: which SMS messages the municipality turned on.
 export const SMS_ACTIVE_USES_CONFIG_KEY = "sms_active_uses";

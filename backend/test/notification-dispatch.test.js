@@ -22,7 +22,7 @@ function fixture() {
       return active[event] ? { ok: true, template: { name: active[event], language: "pt_BR" } } : { ok: false, code: DeliveryCode.NOT_CONFIGURED };
     },
     markTemplateStatus: async (...args) => { calls.push(["mark", ...args]); },
-    consumeQuota: async (municipalityId) => { calls.push(["quota", municipalityId]); return { allowed: true }; },
+    consumeQuota: async (channel, municipalityId) => { calls.push(["quota", channel, municipalityId]); return { allowed: true }; },
     sendWhatsapp: async (settings, phone, components) => { calls.push(["whatsapp", settings, phone, components]); return { status: DeliveryStatus.SENT }; },
     resolveEmailTemplate: async ({ municipalityId, use }) => { calls.push(["emailTemplate", municipalityId, use]); return { ok: true, templateId: `email_${use}` }; },
     loadEmailIdentity: async (municipalityId) => { calls.push(["identity", municipalityId]); return { municipality_name: "Test Town" }; },
@@ -35,6 +35,7 @@ function fixture() {
 const texts = (components) => components[0].parameters.map(({ text }) => text);
 const sent = (event, channel) => ({ event, channel, status: DeliveryStatus.SENT });
 const ran = (f, kind) => f.calls.some(([name]) => name === kind);
+const spent = (f, channel) => f.calls.some(([name, spentChannel]) => name === "quota" && spentChannel === channel);
 const SCHEDULE_CONFIRMED = NotificationEvent.SCHEDULE_CONFIRMED;
 const smsOff = { status: DeliveryStatus.SKIPPED, code: DeliveryCode.CHANNEL_DISABLED };
 
@@ -49,7 +50,7 @@ test("a notice goes out by every channel the municipality uses, each on its own,
   assert.equal(email.templateId, `email_${SCHEDULE_CONFIRMED}`);
   assert.deepEqual(email.identityParams, { municipality_name: "Test Town" });
   assert.equal(f.calls.find(([kind]) => kind === "whatsapp")[2], "48999999999");
-  assert.deepEqual(f.calls.find(([kind]) => kind === "quota"), ["quota", "municipality-a"]);
+  assert.deepEqual(f.calls.filter(([kind]) => kind === "quota"), [["quota", NotificationChannel.EMAIL, "municipality-a"], ["quota", NotificationChannel.WHATSAPP, "municipality-a"]]);
   assert.deepEqual(f.calls.find(([kind]) => kind === "template"), ["template", "municipality-a", SCHEDULE_CONFIRMED]);
 });
 
@@ -96,7 +97,8 @@ test("a notice only some channels use is sent by those: only e-mail, only SMS, o
 test("without a phone informed only the e-mail is tried", async () => {
   const f = fixture(); f.request.workflow_data.followUp.phone = "";
   assert.deepEqual(await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies), [sent(SCHEDULE_CONFIRMED, NotificationChannel.EMAIL)]);
-  assert.equal(["whatsapp", "quota", "template", "sms"].some((kind) => ran(f, kind)), false);
+  assert.equal(["whatsapp", "template", "sms"].some((kind) => ran(f, kind)), false);
+  assert.deepEqual(f.calls.filter(([kind]) => kind === "quota"), [["quota", NotificationChannel.EMAIL, "municipality-a"]]);
 });
 
 test("an e-mail use turned on without its template is reported, while the other channels still go out", async () => {
@@ -151,7 +153,7 @@ test("a WhatsApp that is active but cannot send is reported, and the other chann
   for (const scenario of ["phone", "quota", "template", "credentials"]) {
     const f = fixture();
     if (scenario === "phone") f.request.workflow_data.followUp.phone = "123";
-    if (scenario === "quota") f.dependencies.consumeQuota = async () => ({ allowed: false, reason: "private" });
+    if (scenario === "quota") f.dependencies.consumeQuota = async (channel) => ({ allowed: channel !== NotificationChannel.WHATSAPP, reason: "private" });
     if (scenario === "template") f.dependencies.resolveTemplate = async () => ({ ok: false, code: DeliveryCode.TEMPLATE_UNAVAILABLE });
     if (scenario === "credentials") f.dependencies.loadWhatsappConfig = async () => ({ active: true });
     const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
@@ -159,7 +161,7 @@ test("a WhatsApp that is active but cannot send is reported, and the other chann
     assert.equal(whatsapp.status, DeliveryStatus.SKIPPED, scenario);
     assert.equal(results.find(({ channel }) => channel === NotificationChannel.EMAIL).status, DeliveryStatus.SENT, scenario);
     assert.equal(ran(f, "whatsapp"), false, scenario);
-    if (scenario !== "quota") assert.equal(ran(f, "quota"), false, scenario);
+    if (scenario !== "quota") assert.equal(spent(f, NotificationChannel.WHATSAPP), false, scenario);
   }
 });
 
@@ -172,7 +174,7 @@ test("a municipality without its own credentials never sends by WhatsApp, even w
     f.dependencies.loadWhatsappConfig = async () => ({ active: true });
     const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
     assert.equal(results[1].code, DeliveryCode.NOT_CONFIGURED);
-    assert.equal(ran(f, "whatsapp") || ran(f, "quota"), false);
+    assert.equal(ran(f, "whatsapp") || spent(f, NotificationChannel.WHATSAPP), false);
   } finally {
     for (const [key, value] of [["WHATSAPP_TOKEN", previous.token], ["WHATSAPP_PHONE_NUMBER_ID", previous.number]]) {
       if (value === undefined) delete process.env[key]; else process.env[key] = value;
@@ -187,7 +189,17 @@ test("an unusable active WhatsApp template is blocked before quota and does not 
   assert.equal(results[0].status, DeliveryStatus.SENT);
   assert.equal(results[1].code, DeliveryCode.TEMPLATE_UNAVAILABLE);
   assert.equal(results[2].status, DeliveryStatus.SENT);
-  assert.equal(ran(f, "quota") || ran(f, "whatsapp"), false);
+  assert.equal(spent(f, NotificationChannel.WHATSAPP) || ran(f, "whatsapp"), false);
+});
+
+test("an e-mail without contract or balance is reported as quota unavailable and never sent, while the other channels still go out", async () => {
+  const f = fixture();
+  f.dependencies.consumeQuota = async (channel, municipalityId) => { f.calls.push(["quota", channel, municipalityId]); return { allowed: channel !== NotificationChannel.EMAIL, reason: "private" }; };
+  const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
+  assert.deepEqual(results[0], { event: SCHEDULE_CONFIRMED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SKIPPED, code: DeliveryCode.QUOTA_UNAVAILABLE, reason: results[0].reason });
+  assert.doesNotMatch(JSON.stringify(results), /private/);
+  assert.equal(ran(f, "email"), false);
+  assert.deepEqual(results.slice(1).map(({ channel, status }) => [channel, status]), [[NotificationChannel.WHATSAPP, DeliveryStatus.SENT], [NotificationChannel.SMS, DeliveryStatus.SENT]]);
 });
 
 test("a provider template error is reported safely and updates the cached status", async () => {

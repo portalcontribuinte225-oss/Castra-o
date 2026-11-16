@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api";
-import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
 
 interface PolicyState {
   municipalityId: string;
@@ -9,11 +8,12 @@ interface PolicyState {
   phoneEnabled: boolean;
 }
 
-// E-mail is always asked; the phone is asked as soon as the municipality can reach it, by WhatsApp or by SMS.
-export async function loadFollowUpPolicy(municipalityId: string, readConfig = api.getConfig) {
+// E-mail is always asked; the phone is asked as soon as the municipality can reach it, by WhatsApp or by SMS (the platform's channel is on
+// and the municipality has a contract).
+export async function loadFollowUpPolicy(municipalityId: string, readConfig = api.getConfig, readSmsAvailability = api.getSmsAvailability) {
   const [whatsapp, sms] = await Promise.all([
     readConfig("whatsapp", municipalityId),
-    readConfig(SMS_CONFIG_KEY, municipalityId),
+    readSmsAvailability(municipalityId),
   ]);
   return { phoneEnabled: whatsapp?.active === true || sms?.active === true };
 }

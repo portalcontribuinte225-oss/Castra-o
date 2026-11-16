@@ -9,7 +9,7 @@ import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateCo
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
 import { sendResolvedTemplate } from "../whatsapp-template-sender.js";
-import { checkAndConsumeQuota } from "../whatsappQuota.js";
+import { checkAndConsumeQuota } from "../message-quota.js";
 import { deliveryFailure, knownDeliveryCode } from "../notifications/delivery-result.js";
 import { isGlobalUser } from "../../tenant.js";
 import { sendSmsUse } from "../sms-integration-settings.js";
@@ -74,7 +74,7 @@ async function tryWhatsapp(input, dependencies) {
   }
   const resolved = await dependencies.resolveTemplate(input.municipalityId, input.purpose);
   if (!resolved.ok) return unavailable(input.purpose, channel, resolved.code);
-  if (!(await dependencies.consumeQuota(input.municipalityId)).allowed) return unavailable(input.purpose, channel, DeliveryCode.QUOTA_UNAVAILABLE);
+  if (!(await dependencies.consumeQuota(channel, input.municipalityId)).allowed) return unavailable(input.purpose, channel, DeliveryCode.QUOTA_UNAVAILABLE);
   if (isRecoveryExpired(input)) return unavailable(input.purpose, channel, DeliveryCode.PREPARATION_FAILED);
   const sent = await sendResolvedTemplate(
     { municipalityId: input.municipalityId, runtime, template: resolved.template, phone: input.phone, components: whatsappComponents(input) }, dependencies,
@@ -82,13 +82,16 @@ async function tryWhatsapp(input, dependencies) {
   return safeResult(input.purpose, channel, sent);
 }
 
-// `platform` is the staff recovery with no municipality: it uses the platform template and has no municipal switch.
+// `platform` is the staff recovery with no municipality: it uses the platform template, has no municipal switch and spends no contract.
 async function tryEmail(input, dependencies, { platform = false } = {}) {
   const municipalityId = platform ? null : input.municipalityId;
   const resolved = await dependencies.resolveEmailTemplate({ municipalityId, use: input.purpose });
   if (!resolved.ok) return unavailable(input.purpose, NotificationChannel.EMAIL, resolved.code);
   if (isRecoveryExpired(input)) return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.PREPARATION_FAILED);
   const identity = await dependencies.loadEmailIdentity(municipalityId);
+  if (municipalityId && !(await dependencies.consumeQuota(NotificationChannel.EMAIL, municipalityId)).allowed) {
+    return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.QUOTA_UNAVAILABLE);
+  }
   const sent = await dependencies.sendEmail({ toEmail: input.email, templateId: resolved.templateId, templateParams: { ...emailParameters(input), ...identity },
     ...(input.purpose === AuthPurpose.PASSWORD_RESET ? { expiresAt: input.expiresAt } : {}) });
   return safeResult(input.purpose, NotificationChannel.EMAIL, sent);

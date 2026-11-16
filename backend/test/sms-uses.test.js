@@ -5,17 +5,17 @@ import { SmsUseKind, getSmsUse, smsUses } from "../../shared/sms-uses-contract.j
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
 import { isSmsUseOn, listSmsUses, loadActiveSmsUses, setSmsUseActive } from "../src/services/sms-uses.js";
-import { saveSmsIntegrationSettings } from "../src/services/sms-integration-settings.js";
+import { saveSmsAccount } from "../src/services/sms-integration-settings.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
 
 const RESET = AuthPurpose.PASSWORD_RESET;
 const CONFIRMED = NotificationEvent.SCHEDULE_CONFIRMED;
 const COMPLETED = NotificationEvent.COMPLETED;
-const ACTOR = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY };
+const ACTOR = { id: "33333333-3333-4333-8333-333333333333", role: "master", municipalityId: null };
 const TOKEN = "production-test-token";
 const keyOf = (municipalityId) => `${SMS_ACTIVE_USES_CONFIG_KEY}:${municipalityId}`;
 
-// A database with the SMS channel already active for the first municipality, unless told otherwise.
+// A database with the platform's SMS channel already active, unless told otherwise.
 async function fixture(t, { active = true } = {}) {
   const previous = { cipher: process.env.CONFIG_ENCRYPTION_KEY, jwt: process.env.JWT_SECRET };
   process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 19).toString("base64"); process.env.JWT_SECRET = "sms-uses-test-secret";
@@ -24,7 +24,7 @@ async function fixture(t, { active = true } = {}) {
     if (previous.jwt === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous.jwt;
   });
   const database = smsSettingsDatabase();
-  const save = (input) => saveSmsIntegrationSettings({ municipalityId: MUNICIPALITY, actor: ACTOR, input },
+  const save = (input) => saveSmsAccount({ actor: ACTOR, input },
     { database, now: () => new Date("2026-11-13T12:00:00Z"), queryBalance: async () => ({ valid: true, balance: { credits: 0, sms: 0 } }) });
   if (active) await save({ token: TOKEN, active: true });
   return { database, save };
@@ -75,9 +75,9 @@ test("a municipality starts with the defaults, and the switches of one never sho
   assert.deepEqual(await loadActiveSmsUses(MUNICIPALITY, database), { [CONFIRMED]: true, [RESET]: false });
 });
 
-test("a message can only be turned on while the SMS channel is active; turning it off is always allowed and is remembered", async (t) => {
+test("a message can only be turned on while the platform's SMS channel is active; turning it off is always allowed and is remembered", async (t) => {
   const { database } = await fixture(t, { active: false });
-  await assert.rejects(setSmsUseActive({ municipalityId: MUNICIPALITY, use: CONFIRMED, active: true, database }), { status: 400, message: /Ative o SMS/ });
+  await assert.rejects(setSmsUseActive({ municipalityId: MUNICIPALITY, use: CONFIRMED, active: true, database }), { status: 400, message: /não está ativo na plataforma/ });
   assert.equal(database.configs.has(keyOf(MUNICIPALITY)), false);
   await setSmsUseActive({ municipalityId: MUNICIPALITY, use: RESET, active: false, database });
   assert.deepEqual(database.configs.get(keyOf(MUNICIPALITY)), { active: { [RESET]: false } });

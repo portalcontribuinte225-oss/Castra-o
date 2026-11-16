@@ -7,13 +7,13 @@ import type { SmsUseRow } from "./sms-types";
 interface Props {
   rows: SmsUseRow[];
   municipalityName: string;
-  // A message only goes out while the channel is active, so the switches stay locked until it is.
+  // A message only goes out while the platform's channel is active, so the switches stay locked until it is.
   channelActive: boolean;
   busy: boolean;
   onToggle: (key: string, active: boolean) => void;
 }
 
-const LOCK_REASON = "Ative o SMS para ligar as mensagens.";
+const LOCK_REASON = "O SMS precisa estar ativo na plataforma para ligar as mensagens.";
 // The documents message has one text for each result of the analysis; only one of them is sent.
 const OUTCOME_LABELS: Record<string, string> = { [DocumentsOutcome.APPROVED]: "Documentos aprovados", [DocumentsOutcome.REJECTED]: "Documentos não aprovados" };
 

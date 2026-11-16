@@ -1,11 +1,10 @@
 import React from "react";
 import { Field } from "../../components/ui";
-import type { useWhatsappQuota } from "./use-whatsapp-quota";
+import type { MessageContract } from "./use-message-contract";
 
-type Quota = ReturnType<typeof useWhatsappQuota>;
-
-export function WhatsappQuota({ municipalityId, quota }: { municipalityId: string; quota: Quota }) {
-  const { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed } = quota;
+// The contract of one channel as the global administration edits it: the monthly limit and the dates, ending it today or starting the month over.
+export function MessageContractForm({ municipalityId, contract }: { municipalityId: string; contract: MessageContract }) {
+  const { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed } = contract;
   const patch = (changes: Record<string, string>) => setSettings((current) => ({ ...current, ...changes }));
   const saved = saveStatus.includes("sucesso") || saveStatus.includes("zerada") || saveStatus.includes("encerrado");
   return (

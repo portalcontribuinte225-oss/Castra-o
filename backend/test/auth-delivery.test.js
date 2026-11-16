@@ -15,7 +15,7 @@ function fixture() {
     loadWhatsappConfig: async (id) => { calls.push(["whatsappConfig", id]); return { active: true, accessToken: "private", phoneNumberId: "number" }; },
     resolveTemplate: async (id, purpose) => { calls.push(["template", id, purpose]); return { ok: true, template: { name: `whatsapp_${purpose}`, language: "pt_BR" } }; },
     markTemplateStatus: async (...args) => { calls.push(["mark", ...args]); },
-    consumeQuota: async (id) => { calls.push(["quota", id]); return { allowed: true }; },
+    consumeQuota: async (channel, id) => { calls.push(["quota", channel, id]); return { allowed: true }; },
     sendWhatsapp: async (...args) => { calls.push(["whatsapp", ...args]); return { status: DeliveryStatus.SENT }; },
     resolveEmailTemplate: async ({ municipalityId, use }) => {
       calls.push(["emailTemplate", municipalityId, use]);
@@ -71,8 +71,22 @@ test("recovery requires an explicit channel and never uses operational followUp"
 test("new e-mail verification cannot be redirected to a phone or old contact", async () => {
   const f = fixture();
   await deliverAuthMessage({ ...f.input, purpose: AuthPurpose.VERIFY_EMAIL, email: "new@example.test", emailVerified: false }, f.dependencies);
-  assert.equal(f.calls.some(([type]) => type === "whatsapp" || type === "quota"), false);
+  assert.equal(f.calls.some(([type]) => type === "whatsapp"), false);
+  assert.deepEqual(f.calls.filter(([type]) => type === "quota"), [["quota", NotificationChannel.EMAIL, "municipality-a"]]);
   assert.equal(f.calls.find(([type]) => type === "email")[1].toEmail, "new@example.test");
+});
+
+test("an e-mail spends the municipality's e-mail contract and is not sent when there is none, while the platform staff recovery spends nothing", async () => {
+  const blocked = fixture();
+  blocked.dependencies.consumeQuota = async (channel, id) => { blocked.calls.push(["quota", channel, id]); return { allowed: false, reason: "private" }; };
+  const results = await deliverAuthMessage({ ...blocked.input, channel: NotificationChannel.EMAIL }, blocked.dependencies);
+  assert.deepEqual([results[0].channel, results[0].status, results[0].code], [NotificationChannel.EMAIL, DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE]);
+  assert.equal(blocked.calls.some(([type]) => type === "email"), false);
+  assert.doesNotMatch(JSON.stringify(results), /private|012345/);
+  const staff = fixture();
+  const sent = await deliverAuthMessage({ ...staff.input, channel: NotificationChannel.EMAIL, municipalityId: null, user: { name: "Staff", role: "master" } }, staff.dependencies);
+  assert.equal(sent[0].status, DeliveryStatus.SENT);
+  assert.equal(staff.calls.some(([type]) => type === "quota"), false);
 });
 
 test("new phone verification cannot fall back to e-mail when WhatsApp is off and SMS is not used", async () => {
@@ -296,7 +310,7 @@ test("request tracking codes go only to the destination the use case matched, wi
   assert.equal(sent.toEmail, "citizen@example.test");
   assert.equal(sent.templateId, "email_request_tracking");
   assert.equal(sent.templateParams.code, "123456");
-  assert.equal(f.calls.some(([type]) => type === "whatsapp" || type === "quota"), false);
+  assert.equal(f.calls.some(([type, channel]) => type === "whatsapp" || (type === "quota" && channel !== NotificationChannel.EMAIL)), false);
 
   const phone = await deliverAuthMessage({ ...base, email: "", phone: "48999991234" }, f.dependencies);
   assert.deepEqual(phone, [{ purpose: AuthPurpose.REQUEST_TRACKING, channel: NotificationChannel.WHATSAPP, status: DeliveryStatus.SENT }]);

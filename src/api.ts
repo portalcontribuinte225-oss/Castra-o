@@ -4,6 +4,8 @@ import type { AuthChallenge, AuthRequestOptions, EnrollmentCredential, RecoveryC
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
 import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAnimalRequest } from "./features/animal-services/animal-service-types";
 import type { TrackedRequest, TrackingSession, TrackingStartBody } from "./features/request-tracking/tracking-types";
+import type { MessageQuotaInput, MessageQuotaStatus } from "./features/message-contract/message-contract-types";
+import type { SmsAccountInput } from "./features/sms/sms-types";
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
 import type { EmailAccountInput, EmailSettings } from "./features/email/email-integration-types";
 
@@ -142,8 +144,11 @@ export const api = {
   saveEmailAccount: (body: EmailAccountInput, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/account?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/account", body),
   saveEmailTemplates: (templates: Record<string, string>, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/templates?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/templates", { templates }),
   setEmailUseActive: (municipalityId: string, use: string, active: boolean): Promise<EmailSettings> => request("PUT", `/email/templates/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
-  testSmsConnection: (body: { municipalityId: string; token?: string }) => request("POST", "/sms/test-connection", body),
-  sendSmsTest: (body: { municipalityId: string; phone: string }) => request("POST", "/sms/test-message", body),
+  getSmsSettings: (municipalityId = ""): Promise<unknown> => request("GET", municipalityId ? `/sms/settings?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/settings"),
+  saveSmsAccount: (body: SmsAccountInput, municipalityId = ""): Promise<unknown> => request("PUT", municipalityId ? `/sms/account?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/account", body),
+  getSmsAvailability: (municipalityId: string): Promise<{ active?: boolean } | null> => request("GET", `/sms/availability?municipalityId=${encodeURIComponent(municipalityId)}`),
+  testSmsConnection: (body: { token?: string }) => request("POST", "/sms/test-connection", body),
+  sendSmsTest: (municipalityId: string, phone: string) => request("POST", municipalityId ? `/sms/test-message?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/test-message", { phone }),
   setSmsUseActive: (municipalityId: string, use: string, active: boolean) => request("PUT", `/sms/uses/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   setConfig: (key, value, municipalityId = "") => request(
     "PUT",
@@ -158,8 +163,9 @@ export const api = {
 
   validateDocument: (body) => request("POST", "/ai/validate", body),
 
-  getWhatsappQuotaStatus: (municipalityId: string) => request("GET", `/whatsapp/quota-status?municipalityId=${encodeURIComponent(municipalityId)}`),
-  resetWhatsappQuota: (municipalityId: string) => request("POST", "/whatsapp/reset-quota", { municipalityId }),
+  getMessageQuota: (channel: string, municipalityId: string): Promise<MessageQuotaStatus | null> => request("GET", `/message-quota/${channel}?municipalityId=${encodeURIComponent(municipalityId)}`),
+  saveMessageQuota: (channel: string, municipalityId: string, body: MessageQuotaInput): Promise<MessageQuotaStatus | null> => request("PUT", `/message-quota/${channel}?municipalityId=${encodeURIComponent(municipalityId)}`, body),
+  resetMessageQuota: (channel: string, municipalityId: string): Promise<MessageQuotaStatus | null> => request("POST", `/message-quota/${channel}/reset?municipalityId=${encodeURIComponent(municipalityId)}`),
   sendWhatsappTest: (municipalityId: string, phone: string) => request("POST", "/whatsapp/test", { municipalityId, phone }),
   getWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("GET", `/whatsapp/templates?municipalityId=${encodeURIComponent(municipalityId)}`),
   syncWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("POST", "/whatsapp/templates/sync", { municipalityId }),

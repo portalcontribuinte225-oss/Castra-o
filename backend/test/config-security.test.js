@@ -14,7 +14,7 @@ const ALLOWED_LOCKS = [`schedule:${MUNICIPALITY_ID}`];
 const TEST_SECRET = "notification-route-tests-only";
 const clientFetch = globalThis.fetch;
 
-async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
+async function fixture(t) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = TEST_SECRET;
   const store = new Map();
@@ -35,12 +35,10 @@ async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
     }
     if (sql.includes("SELECT value FROM config")) {
       if (sql.includes("FOR UPDATE")) assert.equal(transactionStarted, true, "Locked rows must be read inside a transaction");
-      if (values[0] === "whatsapp_quota" && sql.includes("FOR UPDATE")) await beforeQuotaLock?.(store);
       const value = store.get(`${values[0]}:${values[1]}`);
       return { rows: value === undefined ? [] : [{ value }] };
     }
     if (sql.includes("INSERT INTO config")) {
-      if (failConfigWrite) throw new Error("Simulated config write failure");
       const value = JSON.parse(values[2]);
       store.set(`${values[0]}:${values[1]}`, value);
       return { rows: [{ key: values[0], municipality_id: values[1], value }] };
@@ -75,7 +73,7 @@ async function fixture(t, { beforeQuotaLock, failConfigWrite = false } = {}) {
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
     });
-    return { status: response.status, headers: response.headers, body: await response.json() };
+    return { status: response.status, headers: response.headers, body: await response.json().catch(() => null) };
   }
   return { request, store, calls };
 }
@@ -112,7 +110,7 @@ test("request type document policy is validated and normalized without removing 
 test("tutors cannot read internal config or write any known or unknown key", async (t) => {
   const { request, calls } = await fixture(t);
   const user = { ...ADMIN, role: "tutor" };
-  for (const key of ["castragestao:teams", "permission_groups", "whatsapp_quota"]) {
+  for (const key of ["castragestao:teams", "permission_groups"]) {
     assert.equal((await request(`/config/${key}`, { user })).status, 403);
   }
   for (const key of ["castragestao:teams", "permission_groups", "castragestao:species", "new_unregistered_key"]) {
@@ -121,10 +119,10 @@ test("tutors cannot read internal config or write any known or unknown key", asy
   assert.equal(calls.length, 0);
 });
 
-test("the retired auth delivery and notification keys are no longer served or writable", async (t) => {
+test("the retired auth delivery, notification, contract and SMS keys are no longer served or writable", async (t) => {
   const { request, calls, store } = await fixture(t);
   store.set(`castragestao:notifications:${MUNICIPALITY_ID}`, { multiChannel: true });
-  for (const key of ["castragestao:auth-delivery", "castragestao:notifications"]) {
+  for (const key of ["castragestao:auth-delivery", "castragestao:notifications", "whatsapp_quota", "sms_quota", "email_quota", SMS_CONFIG_KEY]) {
     assert.equal((await request(`/config/${key}?municipalityId=${MUNICIPALITY_ID}`)).status, 404, key);
     assert.equal((await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: { multiChannel: true } })).status, 403, key);
   }
@@ -133,7 +131,7 @@ test("the retired auth delivery and notification keys are no longer served or wr
 
 test("tutors and operational users cannot write flow or channel configuration", async (t) => {
   const { request, calls } = await fixture(t);
-  const keys = [SMS_CONFIG_KEY, "whatsapp", "whatsapp_quota", "castragestao:request-types", "castragestao:identification-types"];
+  const keys = ["whatsapp", "castragestao:request-types", "castragestao:identification-types"];
   for (const role of ["tutor", "analista", "servidor_publico", "ong", "protetor"]) {
     for (const key of keys) {
       const response = await request(`/config/${key}`, { method: "PUT", user: { ...ADMIN, role }, body: {} });
@@ -158,7 +156,7 @@ test("municipal administrators cannot redirect config writes to another municipa
 
 test("global administrators must select a municipality for restricted configuration", async (t) => {
   const { request, calls } = await fixture(t);
-  for (const key of [SMS_CONFIG_KEY, "whatsapp", "whatsapp_quota", "castragestao:request-types", "castragestao:identification-types"]) {
+  for (const key of ["whatsapp", "castragestao:request-types", "castragestao:identification-types"]) {
     assert.equal((await request(`/config/${key}`, { method: "PUT", user: { role: "master" }, body: {} })).status, 400);
   }
   assert.equal(calls.length, 0);
@@ -169,95 +167,30 @@ test("global administrators must select a municipality for restricted configurat
   assert.equal(response.body.municipality_id, OTHER_MUNICIPALITY_ID);
 });
 
-test("quota status denies external roles and scopes internal readers despite query override", async (t) => {
+test("the WhatsApp quota is no longer served or reset through the configuration or WhatsApp routes", async (t) => {
   const { request, calls } = await fixture(t);
-  for (const role of ["tutor", "ong", "protetor"]) {
-    const denied = await request(`/whatsapp/quota-status?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: { ...ADMIN, role } });
-    assert.equal(denied.status, 403);
+  for (const user of [ADMIN, { ...ADMIN, role: "master" }]) {
+    assert.equal((await request(`/whatsapp/quota-status?municipalityId=${MUNICIPALITY_ID}`, { user })).status, 404);
+    assert.equal((await request("/whatsapp/reset-quota", { method: "POST", user, body: {} })).status, 404);
   }
   assert.equal(calls.length, 0);
-  const response = await request(`/whatsapp/quota-status?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: { ...ADMIN, role: "analista" } });
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls[0].values, ["whatsapp_quota", MUNICIPALITY_ID]);
 });
 
-test("quota configuration is never publicly readable and excludes external roles", async (t) => {
-  const { request, calls } = await fixture(t);
-  const path = `/config/whatsapp_quota?municipalityId=${OTHER_MUNICIPALITY_ID}`;
-  assert.equal((await request(path)).status, 401);
-  for (const role of ["tutor", "ong", "protetor"]) {
-    assert.equal((await request(path, { user: { ...ADMIN, role } })).status, 403);
-  }
-  assert.equal(calls.length, 0);
-  const response = await request(path, { user: { ...ADMIN, role: "servidor_publico" } });
-  assert.equal(response.status, 200);
-  assert.deepEqual(calls[0].values, ["whatsapp_quota", MUNICIPALITY_ID]);
-});
-
-test("quota reset and WhatsApp tests require an administrator", async (t) => {
+test("WhatsApp tests require an administrator", async (t) => {
   const { request, calls } = await fixture(t);
   for (const role of ["tutor", "analista", "servidor_publico"]) {
-    for (const path of ["/whatsapp/reset-quota", "/whatsapp/test"]) {
-      assert.equal((await request(path, { method: "POST", user: { ...ADMIN, role }, body: { municipalityId: OTHER_MUNICIPALITY_ID, phone: "48999991234" } })).status, 403);
-    }
+    assert.equal((await request("/whatsapp/test", { method: "POST", user: { ...ADMIN, role }, body: { municipalityId: OTHER_MUNICIPALITY_ID, phone: "48999991234" } })).status, 403);
   }
   assert.equal(calls.length, 0);
 });
 
-test("municipal WhatsApp reset/test operations ignore forged municipality identifiers", async (t) => {
+test("municipal WhatsApp tests ignore forged municipality identifiers", async (t) => {
   const { request, calls, store } = await fixture(t);
   store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: false });
-  assert.equal((await request("/whatsapp/reset-quota", { method: "POST", user: ADMIN, body: { municipalityId: OTHER_MUNICIPALITY_ID } })).status, 200);
   const response = await request("/whatsapp/test", { method: "POST", user: ADMIN, body: { municipalityId: OTHER_MUNICIPALITY_ID, phone: "48999991234" } });
   assert.equal(response.status, 200);
   assert.equal(response.body.status, "skipped");
   assert.equal(calls.filter(({ values }) => values.length).every(({ values }) => values[1] === MUNICIPALITY_ID), true);
-});
-
-test("quota settings lock the latest usage before saving contract changes", async (t) => {
-  const key = `whatsapp_quota:${MUNICIPALITY_ID}`;
-  const { request, calls, store } = await fixture(t, {
-    beforeQuotaLock: (values) => values.set(key, { ...values.get(key), currentPeriodUsed: 8 }),
-  });
-  store.set(key, { plan: 100, currentPeriodUsed: 7, currentPeriodStart: "2026-11", contractStart: "2026-01-01", contractEnd: "2026-12-31" });
-  const response = await request("/config/whatsapp_quota", {
-    method: "PUT", user: ADMIN, body: { plan: 200, currentPeriodUsed: 0, currentPeriodStart: "forged" },
-  });
-  assert.equal(response.status, 200);
-  assert.equal(store.get(key).plan, 200);
-  assert.equal(store.get(key).currentPeriodUsed, 8);
-  assert.equal(store.get(key).currentPeriodStart, "2026-11");
-  assert.equal(calls[0].sql, "BEGIN");
-  assert.match(calls[1].sql, /SELECT value FROM config.*FOR UPDATE$/);
-  assert.match(calls[2].sql, /INSERT INTO config/);
-  assert.match(calls[3].sql, /INSERT INTO audit_logs/);
-  assert.equal(calls[4].sql, "COMMIT");
-});
-
-test("explicit quota reset serializes the read and preserves the latest contract", async (t) => {
-  const key = `whatsapp_quota:${MUNICIPALITY_ID}`;
-  const { request, calls, store } = await fixture(t, {
-    beforeQuotaLock: (values) => values.set(key, { ...values.get(key), plan: 250, contractEnd: "2027-12-31" }),
-  });
-  store.set(key, { plan: 100, currentPeriodUsed: 50, currentPeriodStart: "2026-11", contractEnd: "2026-12-31" });
-  const response = await request("/whatsapp/reset-quota", { method: "POST", user: ADMIN, body: {} });
-  assert.equal(response.status, 200);
-  assert.deepEqual(store.get(key), { plan: 250, currentPeriodUsed: 0, currentPeriodStart: "", contractEnd: "2027-12-31" });
-  assert.equal(calls[0].sql, "BEGIN");
-  assert.match(calls[1].sql, /SELECT value FROM config.*FOR UPDATE$/);
-  assert.match(calls[2].sql, /INSERT INTO config/);
-  assert.equal(calls[3].sql, "COMMIT");
-});
-
-test("quota setting and reset transactions rollback failed writes", async (t) => {
-  const { request, calls } = await fixture(t, { failConfigWrite: true });
-  for (const path of ["/config/whatsapp_quota", "/whatsapp/reset-quota"]) {
-    const response = await request(path, { method: path.startsWith("/config") ? "PUT" : "POST", user: ADMIN, body: { plan: 100 } });
-    assert.equal(response.status, 500);
-  }
-  assert.equal(calls.filter(({ sql }) => sql === "BEGIN").length, 2);
-  assert.equal(calls.filter(({ sql }) => sql === "ROLLBACK").length, 2);
-  assert.equal(calls.some(({ sql }) => sql === "COMMIT"), false);
 });
 
 test("WhatsApp test requires valid phone and does not expose provider error data", async (t) => {

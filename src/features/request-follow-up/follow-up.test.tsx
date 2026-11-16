@@ -1,7 +1,6 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
 import { buildFollowUpPayload, emptyFollowUp, getFollowUpIssues, maskFollowUpEmail, maskFollowUpPhone } from "./follow-up";
 import { FollowUpStep } from "./follow-up-step";
 import { FollowUpSummary } from "./follow-up-summary";
@@ -59,19 +58,23 @@ describe("follow-up preference", () => {
 });
 
 describe("municipal follow-up policy", () => {
-  it("asks for a phone when WhatsApp or SMS is active in the selected municipality", async () => {
-    // A has only WhatsApp, B has only SMS, C has neither.
-    const read = vi.fn(async (key: string, municipalityId: string) => ({ active: municipalityId === (key === SMS_CONFIG_KEY ? "municipality-b" : "municipality-a") }));
-    expect(await loadFollowUpPolicy("municipality-a", read)).toEqual({ phoneEnabled: true });
-    expect(await loadFollowUpPolicy("municipality-b", read)).toEqual({ phoneEnabled: true });
-    expect(await loadFollowUpPolicy("municipality-c", read)).toEqual({ phoneEnabled: false });
-    expect(read).toHaveBeenCalledWith("whatsapp", "municipality-c");
-    expect(read).toHaveBeenCalledWith(SMS_CONFIG_KEY, "municipality-c");
-    expect(read.mock.calls.map(([key]) => key)).not.toContain("castragestao:notifications");
+  it("asks for a phone when WhatsApp is active or SMS can reach the selected municipality", async () => {
+    // A has only WhatsApp, B has only SMS (the platform's channel with a contract), C has neither.
+    const readConfig = vi.fn(async (_key: string, municipalityId: string) => ({ active: municipalityId === "municipality-a" }));
+    const readSms = vi.fn(async (municipalityId: string) => ({ active: municipalityId === "municipality-b" }));
+    expect(await loadFollowUpPolicy("municipality-a", readConfig, readSms)).toEqual({ phoneEnabled: true });
+    expect(await loadFollowUpPolicy("municipality-b", readConfig, readSms)).toEqual({ phoneEnabled: true });
+    expect(await loadFollowUpPolicy("municipality-c", readConfig, readSms)).toEqual({ phoneEnabled: false });
+    expect(readConfig).toHaveBeenCalledWith("whatsapp", "municipality-c");
+    expect(readSms).toHaveBeenCalledWith("municipality-c");
+    expect(readConfig.mock.calls.map(([key]) => key)).toEqual(["whatsapp", "whatsapp", "whatsapp"]);
   });
 
   it("does not turn missing configuration or errors into an enabled phone", async () => {
-    expect(await loadFollowUpPolicy("municipality-a", vi.fn(async () => null))).toEqual({ phoneEnabled: false });
-    await expect(loadFollowUpPolicy("municipality-a", vi.fn(async () => { throw new Error("offline"); }))).rejects.toThrow();
+    const none = vi.fn(async () => null);
+    expect(await loadFollowUpPolicy("municipality-a", none, none)).toEqual({ phoneEnabled: false });
+    const offline = vi.fn(async () => { throw new Error("offline"); });
+    await expect(loadFollowUpPolicy("municipality-a", offline, none)).rejects.toThrow();
+    await expect(loadFollowUpPolicy("municipality-a", none, offline)).rejects.toThrow();
   });
 });

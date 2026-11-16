@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
 import { emailUses } from "../../../shared/email-uses-contract.js";
+import { useMessageContract } from "../message-contract/use-message-contract";
 import { EmailIntegrationTab } from "./email-integration-tab";
 import type { EmailAccountView, EmailSettings, EmailUseRow } from "./email-integration-types";
 import { useEmailAccount } from "./use-email-account";
@@ -10,6 +11,7 @@ import { useEmailSettings } from "./use-email-settings";
 
 vi.mock("./use-email-settings", () => ({ useEmailSettings: vi.fn() }));
 vi.mock("./use-email-account", () => ({ useEmailAccount: vi.fn() }));
+vi.mock("../message-contract/use-message-contract", () => ({ useMessageContract: vi.fn() }));
 
 const noop = vi.fn();
 const account: EmailAccountView = { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", hasPrivateKey: true, privateKeyPreview: "PRIVATE0" };
@@ -31,14 +33,53 @@ const accountState = (overrides = {}) => ({
   saving: false, changed: false, fieldsChanged: false, confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, removeKey: noop, ...overrides,
 });
 
+const contractState = {
+  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
+  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true },
+  confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop,
+};
 const tab = (props: Partial<React.ComponentProps<typeof EmailIntegrationTab>> = {}) => renderToStaticMarkup(
-  <EmailIntegrationTab municipalityId="municipality-a" master canManage {...props} />,
+  <EmailIntegrationTab municipalityId="municipality-a" master canManage canEditContract {...props} />,
 );
 const on = (html: string) => (html.match(/aria-checked="true"/g) || []).length;
 
 beforeEach(() => {
   vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf()));
   vi.mocked(useEmailAccount).mockReturnValue(accountState());
+  vi.mocked(useMessageContract).mockReturnValue(contractState);
+});
+
+describe("e-mail contract", () => {
+  it("counts the messages of the contract at the top, whether the account is configured or not", () => {
+    const html = tab({ master: false, canEditContract: false });
+    expect(html).toContain("whatsapp-statusbar"); expect(html).toContain("12/500"); expect(html).toContain("Contrato vigente"); expect(html).toContain("Ativo");
+    expect(html.indexOf("whatsapp-statusbar")).toBeLessThan(html.indexOf("Templates"));
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ configured: false })));
+    expect(tab()).toContain("Inativo");
+  });
+
+  it("offers the contract form only to who edits it, after the templates", () => {
+    const viewer = tab({ master: false, canEditContract: false });
+    for (const hidden of ["Contrato e cota", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(viewer).not.toContain(hidden);
+    const editor = tab();
+    for (const shown of ["Contrato e cota", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(editor).toContain(shown);
+    expect(editor.indexOf("Templates")).toBeLessThan(editor.indexOf("Contrato e cota"));
+  });
+
+  it("reads the contract of the e-mail channel for the municipality, and for none while the viewer cannot manage", () => {
+    tab();
+    expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("email", "municipality-a");
+    tab({ canManage: false });
+    expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("email", "");
+  });
+
+  it("shows neither the counter nor the form while the screen is not loaded or no municipality is chosen", () => {
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(null));
+    expect(tab()).not.toContain("whatsapp-statusbar");
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf()));
+    const noMunicipality = tab({ municipalityId: "" });
+    expect(noMunicipality).not.toContain("whatsapp-statusbar");
+  });
 });
 
 describe("e-mail tab for the master", () => {

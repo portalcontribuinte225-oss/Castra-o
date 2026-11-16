@@ -397,7 +397,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem("castragestao:globalMunicipalityFilterId") || "");
   const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
-  const [topbarWhatsappQuota, setTopbarWhatsappQuota] = useState<AnyRecord | null>(null);
   const [configMenuOpen, setConfigMenuOpen] = useState(false);
   const [tenantConfigReady, setTenantConfigReady] = useState(false);
   const [loadedConfigKeys, setLoadedConfigKeys] = useState({});
@@ -407,9 +406,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
 
   const selected = requests.find((request) => request.id === selectedId) || requests[0] || null;
   const metrics = useMemo(() => buildMetrics(requests), [requests]);
-  const quotaMunicipalityId = currentUser
-    ? (isGlobalRole(currentUser.role) ? globalMunicipalityFilterId : currentUser.municipalityId || "")
-    : "";
 
   useEffect(() => {
     api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
@@ -632,34 +628,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
       .then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal)))
       .catch(console.error);
   }, [selectedMunicipalityId, currentUser]);
-
-  useEffect(() => {
-    if (!currentUser || !quotaMunicipalityId) {
-      setTopbarWhatsappQuota(null);
-      return;
-    }
-    let activeRequest = true;
-    api.getConfig(CONFIG_KEYS.whatsappQuota, quotaMunicipalityId)
-      .then((quota) => {
-        if (!activeRequest || !quota?.plan) {
-          if (activeRequest) setTopbarWhatsappQuota(null);
-          return;
-        }
-        const period = getCurrentMonthKey();
-        const used = quota.currentPeriodStart === period ? Number(quota.currentPeriodUsed || 0) : 0;
-        setTopbarWhatsappQuota({
-          ...quota,
-          used,
-          remaining: Math.max(0, Number(quota.plan || 0) - used),
-        });
-      })
-      .catch(() => {
-        if (activeRequest) setTopbarWhatsappQuota(null);
-      });
-    return () => {
-      activeRequest = false;
-    };
-  }, [currentUser?.id, quotaMunicipalityId]);
 
   async function patchRequest(requestId, patch, historyNote = "") {
     try {
@@ -1059,16 +1027,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                 placeholder="Protocolo, CPF, tutor, microchip..."
               />
             </label>
-            {topbarWhatsappQuota && (
-              <div
-                className="topbar-whatsapp-quota"
-                title={`${topbarWhatsappQuota.remaining} de ${topbarWhatsappQuota.plan} mensagens WhatsApp restantes neste mês`}
-                aria-label={`${topbarWhatsappQuota.remaining} mensagens WhatsApp restantes neste mês`}
-              >
-                <MessageCircle size={18} />
-                <strong>{topbarWhatsappQuota.remaining}</strong>
-              </div>
-            )}
             <button className="icon-button" aria-label="Notificações">
               <Bell size={20} />
             </button>
@@ -1197,11 +1155,6 @@ function getUserSectorNames(user: AnyRecord = {}, sectors = []) {
 function getMunicipalityLabel(municipalityId = "", municipalities = []) {
   const municipality = municipalities.find((item) => item.id === municipalityId);
   return municipality ? [municipality.name, municipality.state].filter(Boolean).join("/") : "Sem município";
-}
-
-function getCurrentMonthKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
 function defaultMunicipalityUserToTeamUser(user: AnyRecord = {}, municipalityId = "") {
@@ -7602,9 +7555,9 @@ function ConfigView({
         );
       })()}
 
-      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))} />}
+      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes(EMAIL_SETTINGS_PERMISSION)))} canEditContract={isGlobalRole(currentUser?.role)} />}
 
-      {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))} />}
+      {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canEditContract={isGlobalRole(currentUser?.role)} canManage={canManageAiSettings(currentUser?.role) && (!canUseConfigPermissions || Boolean(configCurrentPermissionGroup?.allowedConfigItems?.includes("sms_settings")))} />}
 
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
         <div className="config-panel wide">
@@ -8205,7 +8158,7 @@ function ConfigView({
       )}
 
       {configArea === "integrations" && configTab === "whatsapp" && (
-        <WhatsappIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} />
+        <WhatsappIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canManageAiSettings(currentUser?.role)} canEditContract={isGlobalRole(currentUser?.role)} />
       )}
 
       {configArea === "environment" && configTab === "documents" && (

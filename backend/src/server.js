@@ -18,6 +18,7 @@ import whatsappRoutes from "./routes/whatsapp.js";
 import whatsappTemplateRoutes from "./routes/whatsapp-templates.js";
 import smsRoutes from "./routes/sms.js";
 import emailRoutes from "./routes/email.js";
+import messageQuotaRoutes from "./routes/message-quota.js";
 import municipalityBrasaoRoutes from "./routes/municipality-brasao.js";
 import requestTrackingRoutes from "./routes/request-tracking.js";
 
@@ -44,6 +45,7 @@ app.use("/api/whatsapp", whatsappRoutes);
 app.use("/api/whatsapp", whatsappTemplateRoutes);
 app.use("/api/sms", smsRoutes);
 app.use("/api/email", emailRoutes);
+app.use("/api/message-quota", messageQuotaRoutes);
 app.use("/api/public/municipalities", municipalityBrasaoRoutes);
 app.use("/api/request-tracking", requestTrackingRoutes);
 

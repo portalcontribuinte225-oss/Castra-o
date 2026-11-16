@@ -6,7 +6,7 @@ import { NotificationChannel } from "../../shared/notification-contract.js";
 import { createRecoveryToken, readRecoveryToken, matchesRecoveryUser, recoveryDestination, recoveryOptionId } from "../src/services/auth/recovery-token.js";
 import { getRecoveryOptions } from "../src/services/auth/recovery-channels.js";
 import { pool } from "../src/db/index.js";
-import { saveSmsIntegrationSettings } from "../src/services/sms-integration-settings.js";
+import { saveSmsAccount } from "../src/services/sms-integration-settings.js";
 import { SMS_ACTIVE_USES_CONFIG_KEY } from "../../shared/sms-contract.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY } from "./fixtures/sms-settings-db.js";
 import { authHttpFixture, authUser, AUTH_TEST_MUNICIPALITY as MUNICIPALITY, AUTH_TEST_OTHER_MUNICIPALITY as OTHER } from "./fixtures/auth-http.js";
@@ -47,11 +47,14 @@ test("availability lists unverified cadastral contacts only with active configur
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, loadWhatsapp: async () => ({ active: false }),
     smsAvailable: async () => ({ available: false }) })).map(item => item.channel), [NotificationChannel.EMAIL]);
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, resolveEmail: async () => ({ ok: false }) })).map(item => item.channel), [NotificationChannel.WHATSAPP, NotificationChannel.SMS]);
-  assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, quotaAvailable: async () => false })).map(item => item.channel), [NotificationChannel.EMAIL, NotificationChannel.SMS]);
+  assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, quotaAvailable: async (channel) => channel !== NotificationChannel.WHATSAPP })).map(item => item.channel), [NotificationChannel.EMAIL, NotificationChannel.SMS]);
+  assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, quotaAvailable: async (channel) => channel !== NotificationChannel.EMAIL })).map(item => item.channel), [NotificationChannel.WHATSAPP, NotificationChannel.SMS]);
+  const staff = authUser({ municipality_id: null, role: "master", email: "staff@example.test" });
+  assert.deepEqual((await getRecoveryOptions(staff, "handle", { ...deps, quotaAvailable: async () => false })).map(item => item.channel), [NotificationChannel.EMAIL], "platform staff recover by e-mail with no contract");
   assert.deepEqual((await getRecoveryOptions(user, "handle", { ...deps, resolveTemplate: async () => ({ ok: false }) })).map(item => item.channel), [NotificationChannel.EMAIL, NotificationChannel.SMS]);
 });
 
-test("SMS is offered in recovery only while the channel is usable and the password-recovery message is on for the municipality", async (t) => {
+test("SMS is offered in recovery only while the channel is usable, the municipality has room in its contract and the password-recovery message is on", async (t) => {
   secret(t);
   const previous = process.env.CONFIG_ENCRYPTION_KEY;
   process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 21).toString("base64");
@@ -61,15 +64,20 @@ test("SMS is offered in recovery only while the channel is usable and the passwo
   const channels = async () => (await getRecoveryOptions(user, "handle", { database, resolveEmail: async () => ({ ok: false }), loadWhatsapp: async () => ({ active: false }) }))
     .map(({ channel }) => channel);
   assert.deepEqual(await channels(), [], "no SMS account saved");
-  await saveSmsIntegrationSettings({ municipalityId: SMS_TEST_MUNICIPALITY, actor: { id: user.id }, input: { token: "production-test-token", active: true } },
+  await saveSmsAccount({ actor: { id: user.id }, input: { token: "production-test-token", active: true } },
     { database, queryBalance: async () => ({ valid: true, balance: { credits: 0, sms: 0 } }) });
+  assert.deepEqual(await channels(), [], "the municipality has no SMS contract");
+  database.setContract(SMS_TEST_MUNICIPALITY, { plan: 1 });
   assert.deepEqual(await channels(), [NotificationChannel.SMS], "password recovery is on by default");
   const uses = `${SMS_ACTIVE_USES_CONFIG_KEY}:${SMS_TEST_MUNICIPALITY}`;
   database.configs.set(uses, { active: { [AuthPurpose.PASSWORD_RESET]: false, schedule_confirmed: true } });
   assert.deepEqual(await channels(), [], "the municipality turned the recovery message off");
   database.configs.set(uses, { active: { [AuthPurpose.PASSWORD_RESET]: true } });
   assert.deepEqual(await channels(), [NotificationChannel.SMS]);
-  await saveSmsIntegrationSettings({ municipalityId: SMS_TEST_MUNICIPALITY, actor: { id: user.id }, input: { active: false } }, { database });
+  database.setContract(SMS_TEST_MUNICIPALITY, { plan: 1, contractEnd: "2020-01-01" });
+  assert.deepEqual(await channels(), [], "the contract ended");
+  database.setContract(SMS_TEST_MUNICIPALITY, { plan: 1 });
+  await saveSmsAccount({ actor: { id: user.id }, input: { active: false } }, { database });
   assert.deepEqual(await channels(), [], "the channel is off");
 });
 

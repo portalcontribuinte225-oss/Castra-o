@@ -4,7 +4,7 @@ import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateCo
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
 import { sendResolvedTemplate } from "../whatsapp-template-sender.js";
-import { checkAndConsumeQuota } from "../whatsappQuota.js";
+import { checkAndConsumeQuota } from "../message-quota.js";
 import { sendNotificationEmail } from "../email.js";
 import { loadEmailIdentityParams } from "../email-identity.js";
 import { resolveEmailTemplate } from "../email-templates.js";
@@ -40,7 +40,7 @@ async function deliverWhatsapp({ event, request, phone, runtime, template }, dep
   const channel = NotificationChannel.WHATSAPP;
   const content = buildNotificationMessage(event, request);
   const components = buildBodyComponents(getWhatsappUse(event).fields, { ...request, notification_message: content.message });
-  const quota = await dependencies.consumeQuota(request.municipality_id);
+  const quota = await dependencies.consumeQuota(channel, request.municipality_id);
   if (!quota.allowed) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE) };
   const transport = await sendResolvedTemplate({ municipalityId: request.municipality_id, runtime, template, phone, components }, dependencies);
   return sanitizedTransportResult(event, channel, transport);
@@ -83,13 +83,16 @@ async function tryEmail({ event, request, followUp }, dependencies) {
   const resolved = await dependencies.resolveEmailTemplate({ municipalityId: request.municipality_id, use: event });
   if (!resolved.ok && resolved.code === DeliveryCode.CHANNEL_DISABLED) return null;
   if (!resolved.ok) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, resolved.code) };
+  const identityParams = await dependencies.loadEmailIdentity(request.municipality_id);
+  const quota = await dependencies.consumeQuota(channel, request.municipality_id);
+  if (!quota.allowed) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE) };
   const transport = await dependencies.sendEmail({
     toEmail: followUp.email,
     toName: request.tutor_name,
     event,
     request,
     templateId: resolved.templateId,
-    identityParams: await dependencies.loadEmailIdentity(request.municipality_id),
+    identityParams,
   });
   return sanitizedTransportResult(event, channel, transport);
 }

@@ -21,7 +21,7 @@ function testText({ sent, reason, detail, providerMessageId }: SmsTestOutcome) {
   return `Teste enviado ao provedor${providerMessageId ? ` (código ${providerMessageId})` : ""}. Confira se chegou ao celular: a entrega depende da operadora.`;
 }
 
-// The municipality's own SMSMais account: its token is shown by its start, and the channel is switched on here.
+// The platform's SMSMais account, which only the master sees: its token is shown by its start, and the channel is switched on here for every municipality.
 export function SmsCredentials({ state }: { state: SmsState }) {
   const { config, token, connection, confirmingRemoval } = state;
   const busy = state.loading || state.saving || state.testing || state.sendingTest;
@@ -46,7 +46,7 @@ export function SmsCredentials({ state }: { state: SmsState }) {
         onSave={state.saveToken}
         saveDisabled={busy || !token || secureStorageUnavailable}
         removeLabel="Remover token"
-        removeNote="Remover o token? O SMS será desativado."
+        removeNote="Remover o token? O SMS será desativado para todos os municípios."
         confirming={confirmingRemoval}
         onConfirmingChange={state.setConfirmingRemoval}
         onRemove={state.removeToken}

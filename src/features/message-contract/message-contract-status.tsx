@@ -1,20 +1,20 @@
 import React from "react";
-import type { AnyRecord } from "../../types";
+import type { MessageQuotaStatus } from "./message-contract-types";
 
 interface Props {
-  isActive: boolean;
-  live: AnyRecord | null;
-  contractEnd: string;
+  // Whether the channel is on: the connection of the municipality for WhatsApp, the platform's account for SMS and e-mail.
+  active: boolean;
+  live: MessageQuotaStatus | null;
 }
 
-export function WhatsappStatusBar({ isActive, live, contractEnd }: Props) {
-  const end = live?.contractEnd || contractEnd;
-  const endLabel = end ? new Date(end + "T00:00:00").toLocaleDateString("pt-BR") : null;
+// The line at the top of a channel's tab: whether it is on, how many messages the month has used and until when the contract goes.
+export function MessageContractStatus({ active, live }: Props) {
+  const endLabel = live?.contractEnd ? new Date(`${live.contractEnd}T00:00:00`).toLocaleDateString("pt-BR") : null;
   return (
     <div className="whatsapp-statusbar">
-      <span className={`whatsapp-dot ${isActive ? "whatsapp-dot--on" : "whatsapp-dot--off"}`} />
-      <span className={`whatsapp-statusbar-state ${isActive ? "whatsapp-status-ok" : "whatsapp-status-err"}`}>
-        {isActive ? "Ativo" : "Inativo"}
+      <span className={`whatsapp-dot ${active ? "whatsapp-dot--on" : "whatsapp-dot--off"}`} />
+      <span className={`whatsapp-statusbar-state ${active ? "whatsapp-status-ok" : "whatsapp-status-err"}`}>
+        {active ? "Ativo" : "Inativo"}
       </span>
       {live?.plan ? (
         <>

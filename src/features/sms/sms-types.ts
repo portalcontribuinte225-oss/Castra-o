@@ -8,6 +8,8 @@ export interface SmsUseRow {
   active: boolean;
 }
 
+// What the screen reads. The master reads the platform's account; the municipal administration only whether the channel is on
+// (the account fields come empty), plus the municipality's name and messages.
 export interface SmsConfig {
   provider: typeof SmsProvider.SMSMAIS;
   active: boolean;
@@ -20,6 +22,13 @@ export interface SmsConfig {
   secureStorageAvailable?: boolean;
   municipalityName: string;
   uses: SmsUseRow[];
+}
+
+// What the master saves in the platform's account: the token, its removal or the channel switch.
+export interface SmsAccountInput {
+  active?: boolean;
+  token?: string;
+  clearToken?: boolean;
 }
 
 export interface SmsConnectionResult {
@@ -65,9 +74,9 @@ export interface SmsSettingsState {
 }
 
 export interface SmsSettingsApi {
-  getConfig: (key: string, municipalityId: string) => Promise<unknown>;
-  setConfig: (key: string, value: { active?: boolean; token?: string; clearToken?: boolean }, municipalityId: string) => Promise<{ value?: unknown }>;
-  testSmsConnection: (body: { municipalityId: string; token?: string }) => Promise<SmsConnectionResult>;
+  getSmsSettings: (municipalityId: string) => Promise<unknown>;
+  saveSmsAccount: (input: SmsAccountInput, municipalityId: string) => Promise<unknown>;
+  testSmsConnection: (body: { token?: string }) => Promise<SmsConnectionResult>;
   setSmsUseActive: (municipalityId: string, use: string, active: boolean) => Promise<unknown>;
-  sendSmsTest: (body: { municipalityId: string; phone: string }) => Promise<SmsTestAnswer>;
+  sendSmsTest: (municipalityId: string, phone: string) => Promise<SmsTestAnswer>;
 }

@@ -14,12 +14,13 @@ export const AUTH_TEST_PASSWORD = "current password for tests";
 const hash = await bcrypt.hash(AUTH_TEST_PASSWORD, 4);
 const clientFetch = globalThis.fetch;
 
-// A configured platform e-mail account and one template per use, so the e-mail path of the auth routes can run end to end.
+// A configured platform e-mail account, one template per use and an e-mail contract for the test municipality, so the e-mail path of the auth routes can run end to end.
 function emailConfigs() {
   const templates = Object.fromEntries(Object.values(AuthPurpose).map((purpose) => [purpose, `test-${purpose}`]));
   return {
     "email_account:null": { serviceId: "test-service", publicKey: "test-public", privateKey: "", privateKeyPreview: "", publicUrl: "" },
     "email_templates:null": { templates },
+    [`email_quota:${AUTH_TEST_MUNICIPALITY}`]: { plan: 1000 },
   };
 }
 
@@ -148,6 +149,8 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
         return { rows: [] };
       }
       if (sql.includes("INSERT INTO audit_logs")) { if (failAudit) throw new Error("Simulated required audit failure"); return { rows: [] }; }
+      if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
+      if (sql.includes("INSERT INTO config")) { storedConfigs[`${values[0]}:${values[1]}`] = JSON.parse(values[2]); return { rows: [] }; }
       if (sql.startsWith("SELECT value FROM config")) return { rows: storedConfigs[`${values[0]}:${values[1]}`] ? [{ value: storedConfigs[`${values[0]}:${values[1]}`] }] : [] };
       if (sql.includes("FROM municipalities WHERE id = $1")) return { rows: [{ id: values[0], name: "Test City", department_name: "Test Department", contact: "", email: "", address: "", updated_at: new Date(0), has_brasao: false }] };
       throw new Error(`Unhandled auth fixture SQL: ${sql}`);
