@@ -259,10 +259,25 @@ test("legacy reschedule uses the reschedule template, not the confirmation one",
   assert.equal(f.calls.find(([kind]) => kind === "whatsapp")[1].templateName, "castracao_reagendamento");
 });
 
+test("a rejection reaches every channel in use with its reason, and never the staff's internal note", async () => {
+  const f = fixture();
+  const event = NotificationEvent.REQUEST_REJECTED;
+  f.active[event] = "castracao_indeferimento";
+  f.request.workflow_data = { ...f.request.workflow_data, rejectionReason: "Tutor não localizado", rejectionNote: "private staff note" };
+  const results = await dispatchNotification({ event, request: f.request }, f.dependencies);
+  assert.deepEqual(results, [sent(event, NotificationChannel.EMAIL), sent(event, NotificationChannel.WHATSAPP), sent(event, NotificationChannel.SMS)]);
+  const whatsapp = f.calls.find(([kind]) => kind === "whatsapp");
+  assert.equal(whatsapp[1].templateName, "castracao_indeferimento");
+  assert.deepEqual(texts(whatsapp[3]), ["123/2026", "Solicitação 123/2026: indeferida. Motivo: Tutor não localizado. Para mais informações, procure o atendimento do município."]);
+  const sms = f.calls.find(([kind]) => kind === "sms")[1];
+  assert.deepEqual([sms.use, sms.phone, sms.data.reason, sms.data.protocol], [event, "48999999999", "Tutor não localizado", "123/2026"]);
+  assert.doesNotMatch(JSON.stringify([whatsapp, sms]), /private staff note/);
+});
+
 test("legacy requests preserve WhatsApp-only agenda behavior, never e-mail nor SMS", async () => {
   const f = fixture();
   f.request.workflow_data = {};
-  for (const event of [NotificationEvent.COMPLETED, NotificationEvent.DOCUMENTS_REVIEWED, NotificationEvent.NO_SHOW]) {
+  for (const event of [NotificationEvent.COMPLETED, NotificationEvent.DOCUMENTS_REVIEWED, NotificationEvent.NO_SHOW, NotificationEvent.REQUEST_REJECTED]) {
     assert.deepEqual(await dispatchNotification({ event, request: f.request, legacy: true }, f.dependencies), []);
   }
   f.dependencies.sendWhatsapp = async () => ({ status: DeliveryStatus.FAILED });

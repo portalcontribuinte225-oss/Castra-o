@@ -22,11 +22,11 @@ function configured(extra = {}) {
   } });
 }
 
-test("there are ten uses, five notices and five access messages, and phone confirmation is not one of them", () => {
-  assert.equal(emailUses.length, 10);
-  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 5);
+test("there are eleven uses, six notices and five access messages, and phone confirmation is not one of them", () => {
+  assert.equal(emailUses.length, 11);
+  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 6);
   assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.ACCESS).length, 5);
-  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 10);
+  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 11);
   for (const event of Object.values(NotificationEvent)) assert.ok(getEmailUse(event), event);
   assert.equal(getEmailUse(AuthPurpose.VERIFY_PHONE), null);
   assert.deepEqual(emailUses.filter(({ defaultActive }) => defaultActive).map(({ key }) => key), [RESET]);
@@ -42,7 +42,7 @@ test("every use carries the recipient and the municipality identity, and only ag
   for (const use of emailUses) assert.equal(use.variables.includes("schedule_date"), schedule.includes(use.key), use.key);
   assert.ok(getEmailUse(NotificationEvent.DOCUMENTS_REVIEWED).variables.includes("documents_result"));
   assert.ok(getEmailUse(AuthPurpose.CONTACT_CHANGED).variables.includes("changed_fields"));
-  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 5), ["Agendamento confirmado", "Agendamento reagendado", "Não comparecimento", "Documentos analisados", "Atendimento concluído"]);
+  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 6), ["Agendamento confirmado", "Agendamento reagendado", "Não comparecimento", "Documentos analisados", "Atendimento concluído", "Solicitação indeferida"]);
   assert.ok(getEmailUse(RESET).variables.includes("codigo_recuperacao"));
   assert.ok(getEmailUse(AuthPurpose.INITIAL_PASSWORD).variables.includes("temporary_password"));
 });
@@ -60,7 +60,7 @@ test("the master sees ids and variables; a municipal viewer only learns which us
   const database = configured({ [`${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`]: { active: { [CONFIRMED]: true } } });
   const master = await listEmailUses({ account, municipalityId: MUNICIPALITY, master: true, database });
   const municipal = await listEmailUses({ account, municipalityId: MUNICIPALITY, master: false, database });
-  assert.equal(master.length, 10);
+  assert.equal(master.length, 11);
   assert.equal(master.find(({ key }) => key === RESET).templateId, "tpl_reset");
   assert.ok(master.find(({ key }) => key === RESET).variables.includes("code"));
   for (const row of municipal) assert.equal(Object.hasOwn(row, "templateId") || Object.hasOwn(row, "variables"), false);

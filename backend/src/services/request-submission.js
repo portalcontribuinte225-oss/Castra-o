@@ -64,8 +64,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   } else if (workflow.followUp !== undefined) {
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   }
-  // Staff register a tutor too, unless the identification type they chose has no Tutor step (an animal without a tutor).
-  if (internal && !isComplaint) tutorRequired = configsAllowStep([selectIdentification()], "stepTutor");
+  // Staff register a tutor too, unless the request types of the animals or the identification type they chose have no Tutor step (an
+  // animal without a tutor).
+  if (internal && !isComplaint) tutorRequired = configsAllowStep([...(procedures?.types || []), selectIdentification()], "stepTutor");
 
   if ((hasCpfInput || tutorRequired || isComplaint || user?.role === "tutor") && !isValidCpf(cleanCpf)) {
     invalid(isComplaint ? "CPF válido é obrigatório para registrar a denúncia." : "Informe um CPF válido para o tutor.");

@@ -1,4 +1,4 @@
-import { DocumentsOutcome, NotificationEvent, documentsOutcome } from "../../../../shared/notification-contract.js";
+import { DocumentsOutcome, NotificationEvent, documentsOutcome, rejectionReasonText } from "../../../../shared/notification-contract.js";
 import { EmailVariable, getEmailUse } from "../../../../shared/email-uses-contract.js";
 import { formatScheduleDate } from "./notification-message.js";
 
@@ -20,6 +20,10 @@ const texts = Object.freeze({
   [NotificationEvent.SCHEDULE_CHANGED]: (request, protocol) => `A data do seu agendamento para castração sofreu uma alteração. Seu atendimento foi reagendado para o dia ${visit(request)}. Protocolo: ${protocol}.`,
   [NotificationEvent.NO_SHOW]: (request, protocol) => `Identificamos que você não compareceu ao agendamento de castração do dia ${formatScheduleDate(request.schedule_date || "")}. Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`,
   [NotificationEvent.DOCUMENTS_REVIEWED]: (request, protocol) => documentsTexts[documentsOutcome(request.documents)](protocol),
+  [NotificationEvent.REQUEST_REJECTED]: (request, protocol) => {
+    const reason = rejectionReasonText(request.workflow_data || request.workflowData);
+    return `Sua solicitação foi indeferida.${reason ? ` Motivo: ${reason}.` : ""} Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`;
+  },
   [NotificationEvent.COMPLETED]: (_request, protocol) => `Seu atendimento de castração foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: ${protocol}.`,
 });
 

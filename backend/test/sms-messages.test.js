@@ -7,7 +7,7 @@ import { DocumentsOutcome, NotificationEvent } from "../../shared/notification-c
 
 const CODE_USES = [AuthPurpose.PASSWORD_RESET, AuthPurpose.VERIFY_PHONE, AuthPurpose.REQUEST_TRACKING];
 const BASIC = /^[ -~]+$/;
-const full = { municipality: "Criciúma", protocol: "123/2026", date: "20/11/2026", time: "09:00", location: "Unidade Veterinária Municipal", code: "123456", minutes: "10", fields: "e-mail", outcome: DocumentsOutcome.APPROVED };
+const full = { municipality: "Criciúma", protocol: "123/2026", date: "20/11/2026", time: "09:00", location: "Unidade Veterinária Municipal", code: "123456", minutes: "10", fields: "e-mail", outcome: DocumentsOutcome.APPROVED, reason: "Documentação incompleta" };
 
 test("accents are removed and anything outside the basic SMS alphabet becomes a space", () => {
   assert.equal(toSmsText("Criciúma São José — ação"), "Criciuma Sao Jose acao");
@@ -21,7 +21,7 @@ test("accents are removed and anything outside the basic SMS alphabet becomes a 
 });
 
 test("every use has a fixed text in plain ASCII that fits one SMS and starts with the municipality", () => {
-  assert.equal(smsUses.length, 9);
+  assert.equal(smsUses.length, 10);
   for (const { key } of smsUses) {
     const text = buildSmsText(key, full);
     assert.match(text, BASIC, key);
@@ -39,6 +39,8 @@ test("the texts are the agreed ones", () => {
   assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CHANGED, full), "Criciuma: seu atendimento foi reagendado para 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.NO_SHOW, full), "Criciuma: voce nao compareceu ao agendamento de castracao de 20/11/2026. Fale com nossa equipe. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.COMPLETED, full), "Criciuma: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, full), "Criciuma: sua solicitacao foi indeferida (Documentacao incompleta). Fale com nossa equipe. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, { ...full, reason: "" }), "Criciuma: sua solicitacao foi indeferida. Fale com nossa equipe. Protocolo: 123/2026.");
   assert.equal(buildSmsText(AuthPurpose.CONTACT_CHANGED, full), "Criciuma: seus dados foram atualizados (e-mail). Se nao foi voce, fale com nossa equipe.");
 });
 
@@ -50,7 +52,7 @@ test("the documents text follows the outcome: approved unless one document was r
 
 test("the worst case still fits: long municipality, protocol, date, time and location are cut to make room", () => {
   const huge = { municipality: "Município de São José dos Campos do Norte ".repeat(5), protocol: "P".repeat(100), date: "D".repeat(100),
-    time: "T".repeat(100), location: "Unidade Veterinária Municipal de Atendimento ".repeat(20), code: "123456", minutes: "1".repeat(50), fields: "e-mail".repeat(20) };
+    time: "T".repeat(100), location: "Unidade Veterinária Municipal de Atendimento ".repeat(20), reason: "Documentação incompleta ".repeat(20), code: "123456", minutes: "1".repeat(50), fields: "e-mail".repeat(20) };
   for (const { key } of smsUses) {
     const text = buildSmsText(key, huge);
     assert.match(text, BASIC, key);
@@ -87,7 +89,7 @@ test("without a municipality name the text still starts with a neutral one, and 
 
 test("the screen shows each message as it goes out, with the data in braces: filling them in gives exactly the text that is sent", () => {
   const filled = { "{protocolo}": "123/2026", "{data}": "20/11/2026", "{horario}": "09:00", "{unidade}": "Unidade Veterinaria Municipal",
-    "{codigo}": "123456", "{minutos}": "10", "{campos_alterados}": "e-mail" };
+    "{codigo}": "123456", "{minutos}": "10", "{campos_alterados}": "e-mail", "{motivo}": "Documentacao incompleta" };
   for (const { key } of smsUses) {
     const shown = smsTexts(key, "Criciúma");
     assert.ok(shown.length > 0, key);

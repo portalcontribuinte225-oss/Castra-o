@@ -192,7 +192,7 @@ import type { FollowUpValue } from "./features/request-follow-up/follow-up";
 import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-policy";
 import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
 import type { NotificationResult } from "./features/notifications/notification-results";
-import { configsAllowStep } from "../shared/notification-contract.js";
+import { REJECTION_REASONS, configsAllowStep } from "../shared/notification-contract.js";
 import { useSession } from "./features/tutor-access/use-session";
 import { AuthEntry } from "./features/tutor-access/auth-entry";
 import { AuthEntryOrigin, authEntryKey, createAuthEntryContext } from "./features/tutor-access/auth-entry-context";
@@ -2753,7 +2753,7 @@ function NewRequest({
   const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
   const activeIdentificationTypes = publicFlow || internalSimple ? getActiveIdentificationTypes(identificationTypes) : [];
   const selectedIdentificationType = registeredContext ? resolveRegisteredIdentificationType(identificationTypes, registeredContext.animal) : resolveSelectedIdentificationType(activeIdentificationTypes, requestData.identificationTypeId);
-  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: internalSimple ? [selectedIdentificationType] : [...selectedRequestTypes, selectedIdentificationType] });
+  const formSteps = getVisibleSteps({ internal: internalSimple, skipTutor: skipTutorStep, configs: [...selectedRequestTypes, selectedIdentificationType] });
   const hasStep = (step: RequestStep) => formSteps.some((item) => item.step === step);
   const requiresTutorIdentity = internalSimple ? hasStep(RequestStep.TUTOR) : currentUser.role === "tutor" || configsAllowStep([...selectedRequestTypes, selectedIdentificationType], "stepTutor");
   const selectedTypeDocuments = mergeProcedureDocuments(selectedRequestTypes.map((type) => (type.documents || [])
@@ -4145,15 +4145,6 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
 
   const anexos: AttachmentRow[] = [requerimento, ...(animalPhotoRow ? [animalPhotoRow] : []), ...requiredRows, ...extraDocs];
 
-  const rejectionReasons = [
-    "Documentação incompleta",
-    "Animal inelegível",
-    "Fora da área de atendimento",
-    "Solicitação duplicada",
-    "Tutor não localizado",
-    "Outro",
-  ];
-
   const principalAnimal = normalizedRequest.animals?.[0] || {};
   const wf = normalizedRequest.workflowData || normalizedRequest.workflow_data || {};
   const [animalData, setAnimalData] = useState({
@@ -4646,7 +4637,7 @@ export function RequestPreviewModal({ request, readOnly = true, neighborhoods = 
                   <span>Motivo</span>
                   <select value={rejectData.category} onChange={(e) => setRejectData((d) => ({ ...d, category: e.target.value }))}>
                     <option value="">Selecione o motivo...</option>
-                    {rejectionReasons.map((r) => <option key={r} value={r}>{r}</option>)}
+                    {REJECTION_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </label>
                 <label className="field">

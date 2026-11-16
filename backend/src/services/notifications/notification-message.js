@@ -1,4 +1,4 @@
-import { NotificationEvent } from "../../../../shared/notification-contract.js";
+import { NotificationEvent, rejectionReasonText } from "../../../../shared/notification-contract.js";
 
 export const notificationEventLabels = Object.freeze({
   [NotificationEvent.SCHEDULE_CONFIRMED]: "Agendamento confirmado",
@@ -6,6 +6,7 @@ export const notificationEventLabels = Object.freeze({
   [NotificationEvent.NO_SHOW]: "Não comparecimento",
   [NotificationEvent.DOCUMENTS_REVIEWED]: "Documentos conferidos",
   [NotificationEvent.COMPLETED]: "Atendimento concluído",
+  [NotificationEvent.REQUEST_REJECTED]: "Solicitação indeferida",
 });
 
 export function formatScheduleDate(rawDate = "") {
@@ -22,12 +23,15 @@ export function buildNotificationMessage(event, request) {
   const documents = Array.isArray(request.documents) ? request.documents : [];
   const approved = documents.filter((document) => document?.status === "approved").length;
   const rejected = documents.filter((document) => document?.status === "rejected").length;
+  const reason = rejectionReasonText(workflow);
+  const isRejection = event === NotificationEvent.REQUEST_REJECTED;
   const documentSummary = event === NotificationEvent.DOCUMENTS_REVIEWED
     ? ` Aprovados: ${approved}. Precisam de correção: ${rejected}.` : "";
+  const rejectionSummary = isRejection && reason ? ` Motivo: ${reason}.` : "";
   return {
     subject: notificationEventLabels[event] || "Atualização da solicitação",
     message: schedule
       ? `Solicitação ${protocol}: ${notificationEventLabels[event].toLowerCase()}. Data: ${date}${time ? `, ${time}` : ""}${location ? `. Local: ${location}` : ""}.`
-      : `Solicitação ${protocol}: ${notificationEventLabels[event] || "há uma atualização"}.${documentSummary} Para mais informações, procure o atendimento do município.`,
+      : `Solicitação ${protocol}: ${isRejection ? "indeferida" : notificationEventLabels[event] || "há uma atualização"}.${documentSummary}${rejectionSummary} Para mais informações, procure o atendimento do município.`,
   };
 }

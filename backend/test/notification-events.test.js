@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { selectNotificationEvents } from "../src/services/notifications/notification-events.js";
-import { NO_SHOW_CANCEL_REASON, NotificationEvent } from "../../shared/notification-contract.js";
+import { NO_SHOW_CANCEL_REASON, NotificationEvent, REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
 
 test("confirmation and completion only notify on transitions", () => {
   assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, { status: "AGENDADA" }), [NotificationEvent.SCHEDULE_CONFIRMED]);
@@ -19,6 +19,15 @@ test("only a no-show of a scheduled request notifies; any other cancellation, or
   assert.deepEqual(selectNotificationEvents({ status: "CANCELADA" }, { status: "CANCELADA", notes: "updated" }), []);
   assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, { status: "CANCELADA" }), []);
   assert.deepEqual(selectNotificationEvents({ status: "REALIZADA" }, { status: "CANCELADA" }), []);
+});
+
+test("a rejection notifies once, whether the request was new or scheduled; another cancellation or a later edit does not", () => {
+  const rejected = { status: "CANCELADA", workflow_data: { cancelReason: REJECTED_CANCEL_REASON } };
+  assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, rejected), [NotificationEvent.REQUEST_REJECTED]);
+  assert.deepEqual(selectNotificationEvents({ status: "AGENDADA" }, rejected), [NotificationEvent.REQUEST_REJECTED]);
+  assert.deepEqual(selectNotificationEvents(rejected, { ...rejected, notes: "updated" }), []);
+  assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, { status: "CANCELADA", workflow_data: { cancelReason: "Cancelado" } }), []);
+  assert.deepEqual(selectNotificationEvents({ status: "NOVA" }, { status: "NOVA", workflow_data: { cancelReason: REJECTED_CANCEL_REASON } }), []);
 });
 
 test("real schedule changes include date, time and place, but not assignment or notes", () => {

@@ -1,4 +1,4 @@
-import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, documentsOutcome } from "../../../../shared/notification-contract.js";
+import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, documentsOutcome, rejectionReasonText } from "../../../../shared/notification-contract.js";
 import { getWhatsappUse, WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
@@ -106,6 +106,7 @@ function smsNoticeData(event, request) {
     time: field(WhatsappTemplateField.SCHEDULE_TIME),
     location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
     ...(event === NotificationEvent.DOCUMENTS_REVIEWED ? { outcome: documentsOutcome(request.documents) } : {}),
+    ...(event === NotificationEvent.REQUEST_REJECTED ? { reason: rejectionReasonText(request.workflow_data || request.workflowData) } : {}),
   };
 }
 

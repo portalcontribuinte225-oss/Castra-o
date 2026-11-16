@@ -16,6 +16,7 @@ export const smsUses = Object.freeze([
   smsUse(NotificationEvent.NO_SHOW, SmsUseKind.NOTICE, "Não comparecimento"),
   smsUse(NotificationEvent.DOCUMENTS_REVIEWED, SmsUseKind.NOTICE, "Documentos analisados"),
   smsUse(NotificationEvent.COMPLETED, SmsUseKind.NOTICE, "Atendimento concluído"),
+  smsUse(NotificationEvent.REQUEST_REJECTED, SmsUseKind.NOTICE, "Solicitação indeferida"),
   smsUse(AuthPurpose.PASSWORD_RESET, SmsUseKind.ACCESS, "Recuperação de senha", true),
   smsUse(AuthPurpose.VERIFY_PHONE, SmsUseKind.ACCESS, "Confirmação de telefone"),
   smsUse(AuthPurpose.REQUEST_TRACKING, SmsUseKind.ACCESS, "Acompanhamento de solicitação"),

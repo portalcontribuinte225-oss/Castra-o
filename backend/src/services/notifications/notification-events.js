@@ -1,4 +1,4 @@
-import { NO_SHOW_CANCEL_REASON, NotificationEvent } from "../../../../shared/notification-contract.js";
+import { NO_SHOW_CANCEL_REASON, NotificationEvent, REJECTED_CANCEL_REASON } from "../../../../shared/notification-contract.js";
 
 function workflow(request) {
   return request.workflow_data || request.workflowData || {};
@@ -36,6 +36,7 @@ export function selectNotificationEvents(before, after) {
     else if (scheduleSignature(before) !== scheduleSignature(after)) events.push(NotificationEvent.SCHEDULE_CHANGED);
   }
   if (before.status === "AGENDADA" && after.status === "CANCELADA" && workflow(after).cancelReason === NO_SHOW_CANCEL_REASON) events.push(NotificationEvent.NO_SHOW);
+  if (before.status !== "CANCELADA" && after.status === "CANCELADA" && workflow(after).cancelReason === REJECTED_CANCEL_REASON) events.push(NotificationEvent.REQUEST_REJECTED);
   if (hasDocumentDecisionChange(before, after)) events.push(NotificationEvent.DOCUMENTS_REVIEWED);
   if (after.status === "REALIZADA" && before.status !== "REALIZADA") events.push(NotificationEvent.COMPLETED);
   return events;

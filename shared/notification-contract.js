@@ -6,10 +6,32 @@ export const NotificationEvent = Object.freeze({
   NO_SHOW: "no_show",
   DOCUMENTS_REVIEWED: "documents_reviewed",
   COMPLETED: "completed",
+  REQUEST_REJECTED: "request_rejected",
 });
 
 // The reason the staff screen stores when the tutor did not come to a scheduled visit; it is what tells a no-show from any other cancellation.
 export const NO_SHOW_CANCEL_REASON = "Não compareceu";
+
+// What the staff screen stores when a request is rejected: the cancel reason that tells a rejection from any other cancellation, and the
+// reason chosen in the list (`rejectionReason`).
+export const REJECTED_CANCEL_REASON = "Indeferido";
+export const OTHER_REJECTION_REASON = "Outro";
+export const REJECTION_REASONS = Object.freeze([
+  "Documentação incompleta",
+  "Animal inelegível",
+  "Fora da área de atendimento",
+  "Solicitação duplicada",
+  "Tutor não localizado",
+  OTHER_REJECTION_REASON,
+]);
+const MAX_REJECTION_REASON = 60;
+
+// The reason the tutor is told: the one the staff chose, unless it says nothing ("Outro", or the bare "Indeferido" kept when none was
+// given). The staff's internal note is never shared.
+export function rejectionReasonText(workflow) {
+  const reason = typeof workflow?.rejectionReason === "string" ? workflow.rejectionReason.replace(/\s+/g, " ").trim() : "";
+  return reason && reason !== OTHER_REJECTION_REASON && reason !== REJECTED_CANCEL_REASON ? reason.slice(0, MAX_REJECTION_REASON).trim() : "";
+}
 
 // What the analysis of the documents ended in: rejected as soon as one document was rejected, approved otherwise.
 export const DocumentsOutcome = Object.freeze({ APPROVED: "approved", REJECTED: "rejected" });

@@ -321,3 +321,14 @@ test("the follow-up needs at least one contact, and an internal request carries 
   assert.deepEqual(only({ phone: "(48) 99999-1234" }, { user: { role: "analista" } }), { enabled: true, email: "", phone: "48999991234" });
   assert.equal(prepare({ user: { role: "analista" }, workflow: {} }).workflow.followUp, undefined, "the internal request may still go without the answer");
 });
+
+test("the staff's request needs no tutor either when the request types of its animals have no tutor step, as in the public form", () => {
+  const user = { role: "analista" };
+  const asked = (...ids) => procedureInput([{ ...bairro, requestTypeIds: ids }], { user });
+  for (const ids of [["no-tutor"], ["no-tutor", "no-tutor-too"]]) {
+    const result = prepare(asked(...ids));
+    assert.deepEqual([result.cpf, result.internal, result.tutorRequired], [null, true, false], ids.join());
+  }
+  assert.throws(() => prepare(asked("castration")), /CPF/);
+  assert.equal(prepare(asked("castration", "no-tutor")).tutorRequired, false, "one type without the step is enough, as the toggles combine everywhere");
+});

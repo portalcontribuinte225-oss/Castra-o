@@ -61,6 +61,7 @@ export const emailUses = Object.freeze([
   emailUse(NotificationEvent.NO_SHOW, EmailUseKind.NOTICE, "Não comparecimento", { variables: noticeVariables, requestFields: noShowFields }),
   emailUse(NotificationEvent.DOCUMENTS_REVIEWED, EmailUseKind.NOTICE, "Documentos analisados", { variables: [...noticeVariables, variable.DOCUMENTS_RESULT] }),
   emailUse(NotificationEvent.COMPLETED, EmailUseKind.NOTICE, "Atendimento concluído", { variables: noticeVariables }),
+  emailUse(NotificationEvent.REQUEST_REJECTED, EmailUseKind.NOTICE, "Solicitação indeferida", { variables: noticeVariables }),
   emailUse(AuthPurpose.INITIAL_PASSWORD, EmailUseKind.ACCESS, "Senha inicial", { variables: [variable.TEMPORARY_PASSWORD, variable.PURPOSE] }),
   emailUse(AuthPurpose.PASSWORD_RESET, EmailUseKind.ACCESS, "Recuperação de senha", { variables: codeVariables, defaultActive: true }),
   emailUse(AuthPurpose.VERIFY_EMAIL, EmailUseKind.ACCESS, "Confirmação de e-mail", { variables: codeVariables }),

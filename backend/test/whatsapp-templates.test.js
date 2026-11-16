@@ -76,6 +76,7 @@ test("each agenda and completion notice is recognized with the number of variabl
     [cancellation(), NotificationEvent.NO_SHOW],
     [entry("castracao_documentos_conferidos", { bodyVariables: 2 }), NotificationEvent.DOCUMENTS_REVIEWED],
     [entry("castracao_atendimento_concluido", { bodyVariables: 2 }), NotificationEvent.COMPLETED],
+    [entry("castracao_indeferimento", { bodyVariables: 2 }), NotificationEvent.REQUEST_REJECTED],
     [cancellation({ name: "castracao_cancelamento_v2" }), NotificationEvent.NO_SHOW],
   ];
   for (const [template, event] of cases) assert.deepEqual(recognizeWhatsappTemplate(template), { uses: [event], reason: "" }, template.name);

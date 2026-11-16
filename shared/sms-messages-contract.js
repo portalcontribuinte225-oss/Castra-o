@@ -11,7 +11,9 @@ const MAX_TIME = 16;
 const MAX_MINUTES = 3;
 const MAX_LOCATION = 60;
 const MAX_FIELDS = 40;
+const MAX_REASON = 40;
 const PLACE_SEPARATOR = " na ";
+const REASON_WRAP = " ()";
 
 // Keeps only plain ASCII characters that the basic SMS alphabet has too; everything else becomes a space.
 export function toSmsText(value) {
@@ -26,7 +28,8 @@ export function toSmsText(value) {
 const clip = (value, max) => toSmsText(value).slice(0, max).trim();
 
 // The texts are fixed, shortened from the full messages so each fits in one SMS. `place` is the schedule location already
-// prefixed with its separator, or empty. The analysis of the documents has one text for each outcome.
+// prefixed with its separator, or empty; `cause` is the reason of a rejection already in parentheses, or empty. The analysis of the
+// documents has one text for each outcome.
 const documentsTexts = Object.freeze({
   [DocumentsOutcome.APPROVED]: (d) => `${d.town}: seus documentos foram aprovados e a solicitacao segue para as proximas etapas. Protocolo: ${d.protocol}.`,
   [DocumentsOutcome.REJECTED]: (d) => `${d.town}: seus documentos nao foram aprovados. Acesse a solicitacao para ver o motivo. Protocolo: ${d.protocol}.`,
@@ -38,6 +41,7 @@ const templates = Object.freeze({
   [NotificationEvent.NO_SHOW]: (d) => `${d.town}: voce nao compareceu ao agendamento de castracao de ${d.date}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,
   [NotificationEvent.DOCUMENTS_REVIEWED]: (d) => documentsTexts[d.outcome](d),
   [NotificationEvent.COMPLETED]: (d) => `${d.town}: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.REQUEST_REJECTED]: (d) => `${d.town}: sua solicitacao foi indeferida${d.cause}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,
   [AuthPurpose.PASSWORD_RESET]: (d) => `${d.town}: recebemos um pedido para redefinir sua senha. Codigo: ${d.code}. Valido por ${d.minutes} minutos. Nao compartilhe.`,
   [AuthPurpose.VERIFY_PHONE]: (d) => `${d.town}: para confirmar seu telefone, informe o codigo ${d.code}. Valido por ${d.minutes} minutos. Nao compartilhe.`,
   [AuthPurpose.REQUEST_TRACKING]: (d) => `${d.town}: para consultar sua solicitacao, use o codigo ${d.code}. Valido por ${d.minutes} minutos. Nao compartilhe.`,
@@ -59,9 +63,11 @@ export function buildSmsText(use, data = {}) {
     fields: clip(data.fields, MAX_FIELDS) || "contato",
     outcome: data.outcome === DocumentsOutcome.REJECTED ? DocumentsOutcome.REJECTED : DocumentsOutcome.APPROVED,
   };
-  const room = SMS_MAX_LENGTH - template({ ...fields, place: "" }).length - PLACE_SEPARATOR.length;
-  const location = room > 0 ? clip(data.location, MAX_LOCATION).slice(0, room).trim() : "";
-  return toSmsText(template({ ...fields, place: location ? `${PLACE_SEPARATOR}${location}` : "" }));
+  const bare = template({ ...fields, place: "", cause: "" }).length;
+  const room = (separatorLength) => SMS_MAX_LENGTH - bare - separatorLength;
+  const location = room(PLACE_SEPARATOR.length) > 0 ? clip(data.location, MAX_LOCATION).slice(0, room(PLACE_SEPARATOR.length)).trim() : "";
+  const reason = room(REASON_WRAP.length) > 0 ? clip(data.reason, MAX_REASON).slice(0, room(REASON_WRAP.length)).trim() : "";
+  return toSmsText(template({ ...fields, place: location ? `${PLACE_SEPARATOR}${location}` : "", cause: reason ? ` (${reason})` : "" }));
 }
 
 // The fixed text of the test the administrator sends from the screen to a phone of their choice.
@@ -77,7 +83,7 @@ export function smsTexts(use, municipality = "Municipio") {
   if (!template) return [];
   const data = {
     town: clip(municipality, MAX_MUNICIPALITY) || "Prefeitura", protocol: "{protocolo}", date: "{data}", time: "{horario}",
-    place: `${PLACE_SEPARATOR}{unidade}`, code: "{codigo}", minutes: "{minutos}", fields: "{campos_alterados}",
+    place: `${PLACE_SEPARATOR}{unidade}`, cause: " ({motivo})", code: "{codigo}", minutes: "{minutos}", fields: "{campos_alterados}",
   };
   const outcomes = use === NotificationEvent.DOCUMENTS_REVIEWED ? Object.values(DocumentsOutcome) : [null];
   return outcomes.map((outcome) => ({ outcome, text: template({ ...data, outcome }) }));

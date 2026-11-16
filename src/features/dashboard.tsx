@@ -24,6 +24,7 @@ import {
   requestHasTag,
   requestTypeLabel,
 } from "../domain";
+import { REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
 import { escapeHtml, normalizeText } from "../utils";
 import { countBy, countByMany, getRequestClosedByName, getRequestTypeNames, getRequestUserName, parseAnyDate, topItems } from "../analytics";
 
@@ -107,7 +108,7 @@ export function DashboardView({
     const archived = filteredRequests.filter((request) => request.status === "REALIZADA" || request.status === "CANCELADA").length;
     const rejected = filteredRequests.filter((request) => {
       const cancelReason = (request.workflow_data || request.workflowData || {}).cancelReason || "";
-      return request.status === "CANCELADA" && cancelReason === "Indeferido";
+      return request.status === "CANCELADA" && cancelReason === REJECTED_CANCEL_REASON;
     }).length;
     const attendanceBase = completed + canceled;
     const attendanceRate = pct(completed, attendanceBase);

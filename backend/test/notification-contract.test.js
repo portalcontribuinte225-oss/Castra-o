@@ -1,7 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as notificationContract from "../../shared/notification-contract.js";
-import { normalizeFollowUp, validateFollowUp, configsAllowStep, NotificationEvent } from "../../shared/notification-contract.js";
+import {
+  normalizeFollowUp, validateFollowUp, configsAllowStep, NotificationEvent, OTHER_REJECTION_REASON, REJECTED_CANCEL_REASON, REJECTION_REASONS, rejectionReasonText,
+} from "../../shared/notification-contract.js";
 
 test("follow-up requires a real boolean and valid required e-mail", () => {
   for (const input of [undefined, null, [], {}, { enabled: "false" }, { enabled: true }, { enabled: true, email: "bad" }]) {
@@ -40,7 +42,20 @@ test("the old channel option and its configuration no longer exist in the contra
 test("the no-show event exists next to the other agenda events, and the old cancellation is gone", () => {
   assert.equal(NotificationEvent.NO_SHOW, "no_show");
   assert.equal("SCHEDULE_CANCELLED" in NotificationEvent, false);
-  assert.equal(Object.values(NotificationEvent).length, 5);
+  assert.equal(NotificationEvent.REQUEST_REJECTED, "request_rejected");
+  assert.equal(Object.values(NotificationEvent).length, 6);
+});
+
+test("the tutor is told the reason the staff chose, never the internal note, and nothing when the reason says nothing", () => {
+  assert.equal(rejectionReasonText({ rejectionReason: "Documentação incompleta", rejectionNote: "internal note" }), "Documentação incompleta");
+  for (const workflow of [undefined, null, {}, { rejectionReason: "" }, { rejectionReason: "   " }, { rejectionReason: OTHER_REJECTION_REASON },
+    { rejectionReason: REJECTED_CANCEL_REASON }, { rejectionReason: 7 }, { rejectionNote: "internal note" }]) {
+    assert.equal(rejectionReasonText(workflow), "", JSON.stringify(workflow));
+  }
+  assert.equal(rejectionReasonText({ rejectionReason: "  two   words \n" }), "two words");
+  assert.equal(rejectionReasonText({ rejectionReason: "x".repeat(200) }).length, 60);
+  assert.ok(REJECTION_REASONS.includes(OTHER_REJECTION_REASON));
+  assert.equal(new Set(REJECTION_REASONS).size, REJECTION_REASONS.length);
 });
 
 test("step configuration shares the explicit-false combination rule", () => {

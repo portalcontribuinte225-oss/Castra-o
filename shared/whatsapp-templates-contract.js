@@ -63,6 +63,7 @@ export const whatsappUses = Object.freeze([
   notice(NotificationEvent.NO_SHOW, "Não comparecimento", "cancelamento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
   notice(NotificationEvent.DOCUMENTS_REVIEWED, "Documentos conferidos", "documentos_conferidos", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   notice(NotificationEvent.COMPLETED, "Atendimento concluído", "atendimento_concluido", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
+  notice(NotificationEvent.REQUEST_REJECTED, "Solicitação indeferida", "indeferimento", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   access(AuthPurpose.PASSWORD_RESET, "Recuperação de senha", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
   access(AuthPurpose.VERIFY_PHONE, "Confirmação de telefone", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
   access(AuthPurpose.REQUEST_TRACKING, "Acompanhamento de solicitação", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),

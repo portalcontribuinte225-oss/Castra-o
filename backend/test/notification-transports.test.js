@@ -112,6 +112,7 @@ test("every notice carries its full text, the new subject and, for the no-show, 
     [NotificationEvent.SCHEDULE_CONFIRMED]: ["Agendamento confirmado", "Seu agendamento para castração foi confirmado! Esperamos você no dia 20/11/2026, às 09:15, na Centro. Protocolo: 1/2026."],
     [NotificationEvent.NO_SHOW]: ["Não comparecimento", "Identificamos que você não compareceu ao agendamento de castração do dia 20/11/2026. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
     [NotificationEvent.COMPLETED]: ["Atendimento concluído", "Seu atendimento de castração foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: 1/2026."],
+    [NotificationEvent.REQUEST_REJECTED]: ["Solicitação indeferida", "Sua solicitação foi indeferida. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
   };
   for (const [event, [subject, message]] of Object.entries(expected)) {
     await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event, request }, async ({ templateParams }) => {
@@ -209,4 +210,14 @@ test("agenda notices carry date, time and place as separate variables next to th
       assert.equal(templateParams.to_name, "Solicitante");
       return { status: DeliveryStatus.SENT };
     });
+});
+
+test("the rejection e-mail tells the reason the staff chose and nothing of the internal note", async () => {
+  const request = { protocol: "1/2026", workflow_data: { rejectionReason: "Fora da área de atendimento", rejectionNote: "private staff note" } };
+  await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event: NotificationEvent.REQUEST_REJECTED, request }, async ({ templateParams }) => {
+    assert.equal(templateParams.subject, "Solicitação indeferida");
+    assert.equal(templateParams.message, "Sua solicitação foi indeferida. Motivo: Fora da área de atendimento. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026.");
+    assert.doesNotMatch(JSON.stringify(templateParams), /private staff note/);
+    return { status: DeliveryStatus.SENT };
+  });
 });

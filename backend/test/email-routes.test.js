@@ -85,7 +85,7 @@ test("a municipal administrator reads only the municipal view: no account, no id
   assert.equal(response.body.municipal, true);
   assert.equal(response.body.configured, true);
   assert.deepEqual(response.body.identity, { name: "Test Town", departmentName: "", brasao: "missing" });
-  assert.equal(response.body.uses.length, 10);
+  assert.equal(response.body.uses.length, 11);
   for (const row of response.body.uses) assert.equal(Object.hasOwn(row, "templateId") || Object.hasOwn(row, "variables"), false);
   assert.equal(JSON.stringify(response.body).includes("tpl_"), false);
   assert.equal(database.calls.filter(({ sql }) => sql.includes("SELECT value FROM config")).every(({ values }) => values[1] === MUNICIPALITY || values[1] === null), true);

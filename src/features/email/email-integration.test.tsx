@@ -15,9 +15,9 @@ vi.mock("../message-contract/use-message-contract", () => ({ useMessageContract:
 
 const noop = vi.fn();
 const account: EmailAccountView = { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", hasPrivateKey: true, privateKeyPreview: "PRIVATE0" };
-// Three uses are configured (ids set by the master) and two of those are on; the other seven have no template yet.
+// Three uses are configured (ids set by the master) and two of those are on; the other eight have no template yet.
 const rows = (master: boolean): EmailUseRow[] => emailUses.map((use, index) => ({
-  key: use.key, kind: use.kind, label: use.label, configured: index < 3, active: index < 2 || index === 9,
+  key: use.key, kind: use.kind, label: use.label, configured: index < 3, active: index < 2 || index === emailUses.length - 1,
   ...(master ? { variables: [...use.variables], templateId: index < 3 ? `tpl_${index}` : "" } : {}),
 }));
 const settingsOf = (overrides: Partial<EmailSettings> = {}, master = true): EmailSettings => ({
@@ -95,11 +95,11 @@ describe("e-mail contract", () => {
 });
 
 describe("e-mail tab for the master", () => {
-  it("shows the platform credentials and one table of ten messages without group titles", () => {
+  it("shows the platform credentials and one table of eleven messages without group titles", () => {
     const html = tab();
     for (const label of ["ID do serviço (Service ID)", "Chave pública (Public Key)", "Endereço público do sistema", "Chave privada (Private Key)", "Salvar templates", "Variáveis"]) expect(html).toContain(label);
     expect(html).toContain("Allow EmailJS API for non-browser applications");
-    expect(html.match(/<tr>/g)).toHaveLength(11);
+    expect(html.match(/<tr>/g)).toHaveLength(12);
     for (const use of emailUses) expect(html).toContain(use.label);
     expect(html).not.toContain("Confirmação de telefone");
     expect(html).not.toContain("Avisos da solicitação");
@@ -163,15 +163,15 @@ describe("e-mail tab for a municipal viewer", () => {
     for (const hidden of ["Credenciais", "Service ID", "Private Key", "Salvar templates", "Variáveis", "tpl_0", "Cole o ID aqui"]) expect(html).not.toContain(hidden);
     expect(html).toContain("<th>Template</th>");
     expect(html.match(/Configurado/g)).toHaveLength(3);
-    expect(html.match(/Sem template/g)).toHaveLength(7);
+    expect(html.match(/Sem template/g)).toHaveLength(8);
     expect(html).toContain("<th>Ativo</th>");
   });
 
   it("shows a switch per message, on only when it is both active and configured, and locks the unconfigured ones", () => {
     const html = tab({ master: false });
-    expect(html.match(/role="switch"/g)).toHaveLength(10);
+    expect(html.match(/role="switch"/g)).toHaveLength(11);
     expect(on(html)).toBe(2);
-    expect(html.match(/aria-label="Liga quando o master configurar o template\."/g)).toHaveLength(7);
+    expect(html.match(/aria-label="Liga quando o master configurar o template\."/g)).toHaveLength(8);
     expect((html.match(/whatsapp-switch whatsapp-switch--on/g) || []).length).toBe(2);
   });
 

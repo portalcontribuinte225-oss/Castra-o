@@ -4,7 +4,7 @@ import { mergeTags, normalizeRequest } from "../domain";
 import { getNotificationNotice } from "./notifications/notification-results";
 import type { NotificationResult } from "./notifications/notification-results";
 import { normalizeText } from "../utils";
-import { NO_SHOW_CANCEL_REASON } from "../../shared/notification-contract.js";
+import { NO_SHOW_CANCEL_REASON, REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
 
 export function canEditRequests(role = ""): boolean {
   return ["master", "suporte", "admin_municipal", "analista", "servidor_publico"].includes(normalizeText(role));
@@ -156,13 +156,14 @@ export function useRequestActions({
     const note = String(data.note || "").trim();
     const patch = {
       status: "CANCELADA",
-      rejectionReason: data.category || note || "Indeferido",
+      rejectionReason: data.category || note || REJECTED_CANCEL_REASON,
       rejectionNote: note,
-      workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Indeferido" },
+      workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: REJECTED_CANCEL_REASON },
     };
     try {
-      await patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
+      const updated = await patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
       showToast("Processo indeferido", "warning");
+      showNotificationNotice(updated);
       setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
     } catch (failure) { showToast(failure?.message || "Erro ao indeferir processo", "error"); }
   }
