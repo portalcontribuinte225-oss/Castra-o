@@ -1,7 +1,7 @@
 import { AuthAudience } from "../../../shared/auth-contract.js";
 import type { AuthAudienceValue } from "./auth-types";
 
-export enum AuthEntryOrigin { STAFF = "staff-entry", REGISTERED_ANIMAL = "registered-animal", ENROLLMENT = "enrollment" }
+export enum AuthEntryOrigin { STAFF = "staff-entry", REGISTERED_ANIMAL = "registered-animal", REQUEST_ACCESS = "request-access" }
 export interface AuthEntryContext { origin: AuthEntryOrigin; audience: AuthAudienceValue; municipalityId: string }
 
 export function createAuthEntryContext(origin: AuthEntryOrigin, municipalityId: string): AuthEntryContext | null {

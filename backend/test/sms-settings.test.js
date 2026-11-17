@@ -201,7 +201,7 @@ test("an unknown message, a missing municipality, a record nobody validated and 
   let sends = 0; const failing = { status: DeliveryStatus.FAILED, code: DeliveryCode.INSUFFICIENT_BALANCE };
   const deps = { database: f.database, sendMessage: async () => { sends += 1; return failing; } };
   const base = { phone: "48999991234", data: { code: "123456", minutes: "10" } };
-  for (const input of [{ ...base, municipalityId: MUNICIPALITY, use: "unknown" }, { ...base, municipalityId: MUNICIPALITY, use: AuthPurpose.INITIAL_PASSWORD },
+  for (const input of [{ ...base, municipalityId: MUNICIPALITY, use: "unknown" }, { ...base, municipalityId: MUNICIPALITY, use: "initial_password" },
     { ...base, municipalityId: null, use: AuthPurpose.PASSWORD_RESET }]) {
     const result = await sendSmsUse(input, deps); assert.deepEqual([result.status, result.code], [DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED]);
   }

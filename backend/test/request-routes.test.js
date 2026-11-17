@@ -30,13 +30,11 @@ function procedureBody(overrides = {}) {
   };
 }
 
-async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false, requiredDocument = false } = {}) {
+async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false, requiredDocument = false, registeredNotice = false } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
   const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0 };
   const sessionUsers = new Map();
-  const tutorProfiles = new Map();
-  const createdUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
     ["castragestao:request-types", [{ id: "castration", name: "Castração", active: true, documents: requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : [] },
@@ -44,7 +42,8 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
     ["castragestao:document-types", requiredDocument ? [{ id: "identity", name: "Documento de identidade", required: true, active: true }] : []],
     // The municipality turned the confirmation e-mail on, but the platform has no account yet: a confirmed notice is reported
     // as not configured, which leaves a result and a history entry without any transport.
-    [EMAIL_ACTIVE_USES_CONFIG_KEY, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true } }], ["whatsapp", { active: false }],
+    [EMAIL_ACTIVE_USES_CONFIG_KEY, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true, ...(registeredNotice ? { [NotificationEvent.REQUEST_REGISTERED]: true } : {}) } }],
+    ["whatsapp", { active: false }],
   ]);
   const lockTails = new Map();
   function acquireLock(key = "request-row") {
@@ -57,7 +56,6 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
   function connection(source) {
     const unlocks = [];
     const heldKeys = new Set();
-    const created = [];
     return {
       async query(sql, values = []) {
         const session = resolveTestSession(sql, values, sessionUsers);
@@ -65,33 +63,15 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
         stats.calls.push({ sql, values, source });
         if (sql === "BEGIN") return { rows: [] };
         if (sql === "COMMIT" || sql === "ROLLBACK") {
-          if (sql === "ROLLBACK") for (const id of created) {
-            createdUsers.delete(id);
-            for (const [key, profile] of tutorProfiles) if (profile.user_id === id) tutorProfiles.delete(key);
-          }
           unlocks.reverse().forEach((unlock) => unlock()); unlocks.length = 0; heldKeys.clear();
           return { rows: [] };
         }
         if (sql.includes("INSERT INTO auth_rate_limits")) return { rows: [{ attempts: 1 }] };
         if (sql.includes("DELETE FROM auth_rate_limits")) return { rows: [] };
         if (sql.includes("pg_advisory_xact_lock")) { if (!heldKeys.has(values[0])) { unlocks.push(await acquireLock(values[0])); heldKeys.add(values[0]); } return { rows: [] }; }
-        if (sql.startsWith("SELECT user_id FROM tutor_profiles")) {
-          const profile = tutorProfiles.get(`${values[0]}:${values[1]}`);
-          return { rows: profile ? [profile] : [] };
-        }
         if (sql.startsWith("SELECT cpf FROM tutor_profiles")) {
           const user = sessionUsers.get(values[0]);
           return { rows: user?.municipality_id === values[1] && user.cpf ? [{ cpf: user.cpf }] : [] };
-        }
-        if (sql.includes("INSERT INTO users")) {
-          const id = "55555555-5555-4555-8555-555555555555";
-          createdUsers.set(id, { id, name: values[0], password: values[1], municipality_id: values[2] });
-          created.push(id);
-          return { rows: [{ id }] };
-        }
-        if (sql.startsWith("INSERT INTO tutor_profiles")) {
-          tutorProfiles.set(`${values[1]}:${values[2]}`, { user_id: values[0], cpf: values[2] });
-          return { rows: [] };
         }
         if (sql.includes("FROM municipalities m LEFT JOIN config")) {
           return { rows: [...configuration].map(([key, value]) => ({ key, value: clone(value), municipality_id: values[0] })) };
@@ -185,7 +165,13 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
     });
     return { status: response.status, body: await response.json().catch(() => null), cacheControl: response.headers.get("cache-control") };
   }
-  return { request, stats, row: () => requestRow, profiles: tutorProfiles, users: createdUsers };
+  return { request, stats, row: () => requestRow };
+}
+
+// The registered notice goes after the answer; a test that expects it waits for it here.
+async function until(condition) {
+  for (let attempt = 0; attempt < 200 && !condition(); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+  assert.ok(condition(), "the background notice did not finish");
 }
 
 function pendingRequest(followUp = { enabled: false, email: "", phone: "" }) {
@@ -209,7 +195,7 @@ test("configured no-Tutor POST saves without CPF and without any validation key"
   assert.equal(stats.calls.some(({ sql }) => sql.includes("validation_key")), false);
   assert.equal(row().origin, "PUBLICA");
   assert.equal(response.body.request.id, row().id);
-  assert.equal(response.body.enrollment, undefined);
+  assert.deepEqual(Object.keys(response.body), ["request"]);
 });
 
 test("legacy validation-key consultation routes no longer exist", async (t) => {
@@ -259,54 +245,42 @@ test("municipal POST cannot override the authenticated municipality", async (t) 
   assert.equal(row().tutor_id, null, "An attendant is not the tutor owner");
 });
 
-test("new public tutor enrollment returns one ephemeral credential outside the persisted request", async (t) => {
-  const { request, row, users, profiles } = await fixture(t);
+test("a public request with a tutor creates no account nor password, and the answer carries only the request", async (t) => {
+  const { request, row, stats } = await fixture(t);
   const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(response.status, 201);
-  const password = response.body.enrollment.temporaryPassword;
   assert.equal(response.cacheControl, "no-store");
-  assert.ok(password.length >= 15);
-  assert.equal(response.body.enrollment.cpf, VALID_CPF);
-  assert.equal(JSON.stringify(row()).includes(password), false);
-  assert.equal(JSON.stringify(response.body.request).includes(password), false);
-  assert.equal(users.size, 1);
-  assert.equal(profiles.size, 1);
-  assert.match([...users.values()][0].password, /^\$2[aby]\$/);
-});
-
-test("repeated anonymous CPF never resets an existing account or returns its credential", async (t) => {
-  const { request, row, users } = await fixture(t);
-  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } });
-  const first = await request({ body });
-  const storedHash = [...users.values()][0].password;
-  const second = await request({ body });
-  assert.equal(second.status, 201);
-  assert.equal(second.body.enrollment, undefined);
-  assert.equal(second.body.request.tutor_id, null);
+  assert.deepEqual(Object.keys(response.body), ["request"]);
+  assert.equal(row().cpf, VALID_CPF);
   assert.equal(row().tutor_id, null);
-  assert.equal([...users.values()][0].password, storedHash);
-  assert.equal(JSON.stringify(second.body).includes(first.body.enrollment.temporaryPassword), false);
+  assert.equal(stats.calls.some(({ sql }) => sql.includes("INSERT INTO users") || sql.includes("tutor_profiles")), false);
+  assert.equal(stats.calls.some(({ sql, values }) => sql.includes("pg_advisory_xact_lock") && !String(values[0]).startsWith("schedule:")), false);
 });
 
-test("concurrent initial submissions create one municipal account and reveal only the newly created credential", async (t) => {
-  const { request, users, profiles, stats } = await fixture(t);
-  const body = procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } });
-  const results = await Promise.all([request({ body }), request({ body })]);
-  assert.ok(results.every((result) => result.status === 201));
-  assert.equal(results.filter((result) => result.body.enrollment?.temporaryPassword).length, 1);
-  assert.equal(users.size, 1);
-  assert.equal(profiles.size, 1);
-  assert.equal(stats.calls.filter(({ sql }) => sql.includes("INSERT INTO users")).length, 1);
-  assert.equal(stats.calls.filter(({ sql, values }) => sql.includes("pg_advisory_xact_lock") && values[0].startsWith("tutor-enrollment:")).length, 2);
-  assert.equal(stats.calls.filter(({ sql, values }) => sql.includes("pg_advisory_xact_lock") && values[0].startsWith("schedule:")).length, 2);
+test("the registered notice goes after the answer to whoever accepted the notices, and is kept in the history", async (t) => {
+  const { request, row } = await fixture(t, { registeredNotice: true });
+  const response = await request({ body: procedureBody({ workflow_data: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: true, email: "tutor@example.test", phone: "" } } }) });
+  assert.equal(response.status, 201);
+  assert.deepEqual(response.body.request.history, [], "the answer does not wait for the notice");
+  await until(() => row().history.length > 0);
+  assert.deepEqual(row().history.map(({ notification }) => [notification.event, notification.channel, notification.status, notification.code]),
+    [[NotificationEvent.REQUEST_REGISTERED, "email", "skipped", "not_configured"]]);
+  assert.match(row().history[0].notes, /^Solicitação registrada — E-mail: não enviado\./);
 });
 
-test("failed request insert rolls back both new account and profile", async (t) => {
-  const { request, users, profiles, stats } = await fixture(t, { failRequestInsert: true });
+test("without the notices accepted the registered notice reads no channel and leaves no history", async (t) => {
+  const { request, row, stats } = await fixture(t, { registeredNotice: true });
+  assert.equal((await request({ body: procedureBody() })).status, 201);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(stats.channelReads, 0);
+  assert.deepEqual(row().history, []);
+});
+
+test("a failed request insert rolls back and answers a generic error", async (t) => {
+  const { request, stats } = await fixture(t, { failRequestInsert: true });
   const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(response.status, 500);
-  assert.equal(users.size, 0);
-  assert.equal(profiles.size, 0);
+  assert.equal(response.body.error, "Não foi possível salvar a solicitação.");
   assert.equal(stats.calls.at(-1).sql, "ROLLBACK");
 });
 

@@ -1,6 +1,6 @@
 import { DocumentsOutcome, NotificationEvent, documentsOutcome, rejectionReasonText } from "../../../../shared/notification-contract.js";
 import { EmailVariable, getEmailUse } from "../../../../shared/email-uses-contract.js";
-import { formatScheduleDate } from "./notification-message.js";
+import { formatScheduleDate, registeredNoticeText } from "./notification-message.js";
 
 // "20/11/2026, às 09:00, na Unidade": the time and the place come only when the request has them.
 function visit(request) {
@@ -16,6 +16,7 @@ const documentsTexts = Object.freeze({
 });
 
 const texts = Object.freeze({
+  [NotificationEvent.REQUEST_REGISTERED]: (request) => registeredNoticeText(request),
   [NotificationEvent.SCHEDULE_CONFIRMED]: (request, protocol) => `Seu agendamento para castração foi confirmado! Esperamos você no dia ${visit(request)}. Protocolo: ${protocol}.`,
   [NotificationEvent.SCHEDULE_CHANGED]: (request, protocol) => `A data do seu agendamento para castração sofreu uma alteração. Seu atendimento foi reagendado para o dia ${visit(request)}. Protocolo: ${protocol}.`,
   [NotificationEvent.NO_SHOW]: (request, protocol) => `Identificamos que você não compareceu ao agendamento de castração do dia ${formatScheduleDate(request.schedule_date || "")}. Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`,

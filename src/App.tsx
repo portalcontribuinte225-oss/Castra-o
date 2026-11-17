@@ -142,6 +142,7 @@ import {
   maskCpf,
   normalizeSearchKey,
   normalizeText,
+  onlyDigits,
   readFileAsDataUrl,
   uint8ArrayToDataUrl,
 } from "./utils";
@@ -174,7 +175,8 @@ import {
 } from "./features/request-procedures/request-procedures";
 import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, isRequestFeeCharged, isRequestTypeCharged, resolveRequestTypes } from "../shared/request-types-contract.js";
 import { renderDeclaration } from "../shared/request-declaration-contract.js";
-import { RequestOrigin } from "../shared/request-contract.js";
+import { isProcedureRequest, RequestOrigin } from "../shared/request-contract.js";
+import { readAccessLink } from "../shared/request-access-contract.js";
 import { RequestAcceptance, requestAcceptance } from "./features/request-document/request-acceptance";
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
@@ -206,14 +208,13 @@ import { canUseIntegration, integrationTabItems } from "./features/integrations/
 import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedule } from "./features/animal-services/animal-history";
 import type { AnimalRecord } from "./features/animal-services/animal-service-types";
 import { RequestTracking } from "./features/request-tracking/request-tracking";
+import { RequestAccess } from "./features/request-access/request-access";
 import { registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
-import { EnrollmentNotice } from "./features/tutor-access/enrollment-notice";
 import { TutorDataTab } from "./features/tutor-data/tutor-data-tab";
 
 import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./features/tutor-access/submission-envelope";
-import type { EnrollmentCredential } from "./features/tutor-access/auth-types";
 import { validateTutorName } from "./features/tutor-access/tutor-identity";
 import { SessionBoundary } from "./features/tutor-access/session-boundary";
 import { getAdoptionInterestCount } from "./features/adoption-interest-count";
@@ -394,6 +395,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(localStorage.getItem("castragestao:municipalityId") || "");
+  const [accessLink, setAccessLink] = useState(() => readAccessLink(window.location.search));
   const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem(GLOBAL_MUNICIPALITY_FILTER_KEY) || "");
   const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
@@ -408,12 +410,19 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const metrics = useMemo(() => buildMetrics(requests), [requests]);
 
   useEffect(() => {
+    if (accessLink) window.history.replaceState(window.history.state, "", window.location.pathname);
     api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
     api.getMunicipalities().then((list) => {
       const active = Array.isArray(list) ? list : [];
       setMunicipalities(active);
       if (geoTriedRef.current || !active.length) return;
       geoTriedRef.current = true;
+      const linked = accessLink?.slug ? active.find((m) => m.slug === accessLink.slug) : null;
+      if (linked) {
+        setSelectedMunicipalityId(linked.id);
+        localStorage.setItem("castragestao:municipalityId", linked.id);
+        return;
+      }
       const stored = localStorage.getItem("castragestao:municipalityId");
       if (stored && active.some((m) => m.id === stored)) {
         setSelectedMunicipalityId(stored);
@@ -637,9 +646,9 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     }
   }
 
-  async function createRequest(payload, onEnrollment?: (credential?: EnrollmentCredential) => void) {
+  async function createRequest(payload) {
     try {
-      const newRequest = await api.createRequest(buildRequestPayload(payload, currentUser), onEnrollment);
+      const newRequest = await api.createRequest(buildRequestPayload(payload, currentUser));
       registerCreatedRequest(newRequest, { openAdmin: Boolean(currentUser) });
       return newRequest;
     } catch (err) {
@@ -729,7 +738,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     return (
       <>
         <LoginView
-          onLogin={setCurrentUser}
+          onLogin={(user) => { setAccessLink(null); setCurrentUser(user); }}
+          accessLink={accessLink}
           onProcedureIntent={onProcedureIntent}
           onAccessRequest={createAccessRequest}
           adoptionAnimals={adoptionAnimals}
@@ -1222,6 +1232,9 @@ function canManagePublicAnimalFlows(role = "") {
   ].includes(normalizeText(role));
 }
 
+// Opened by the link of the notice "Solicitação registrada" or by "Criar minha senha" on the last screen of a request.
+const REQUEST_ACCESS_SERVICE = "request_access";
+
 const publicHomeServices = [
   { id: "procedure_form", label: "Solicitar procedimento", icon: ClipboardCheck },
   { id: "tracking", label: "Acompanhar solicitação", icon: Search },
@@ -1685,10 +1698,12 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
   const [authEntryError, setAuthEntryError] = useState("");
-  const [activePublicService, setActivePublicService] = useState<string | null>(null);
+  const [activePublicService, setActivePublicService] = useState<string | null>(accessLink ? REQUEST_ACCESS_SERVICE : null);
+  // What "Acessar minha solicitação" opens with: the protocol of the link, or the protocol and the CPF of the request just sent.
+  const [accessPrefill, setAccessPrefill] = useState<{ protocol: string; cpf: string } | null>(accessLink ? { protocol: accessLink.protocol, cpf: "" } : null);
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
   const [publicServiceDone, setPublicServiceDone] = useState<AnyRecord | null>(null);
   const [publicServiceScheduleDays, setPublicServiceScheduleDays] = useState(scheduleDays);
@@ -1700,10 +1715,9 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
   const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
   const [publicServiceNeighborhoods, setPublicServiceNeighborhoods] = useState(neighborhoods);
   const adoptionSectionRef = useRef(null);
-  const [enrollment, setEnrollment] = useState<EnrollmentCredential | null>(null);
   const publicMunicipalityRef = useRef(selectedMunicipalityId);
   publicMunicipalityRef.current = selectedMunicipalityId;
-  useEffect(() => { setEnrollment(null); setPublicServiceDone(null); setProcedurePrefill(null); setAuthEntry(null); setAuthEntryError(""); }, [selectedMunicipalityId]);
+  useEffect(() => { setPublicServiceDone(null); setProcedurePrefill(null); setAuthEntry(null); setAuthEntryError(""); }, [selectedMunicipalityId]);
 
   useEffect(() => {
     setPublicServiceScheduleDays(scheduleDays);
@@ -1736,7 +1750,6 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
 
   function openAuthEntry(origin: AuthEntryOrigin) {
     const context = createAuthEntryContext(origin, selectedMunicipalityId);
-    setEnrollment(null);
     if (!context || (origin !== AuthEntryOrigin.STAFF && (!activeMunicipality || activeMunicipality.active === false))) { setAuthEntryError("Selecione o município na página."); return; }
     setAuthEntryError("");
     if (origin === AuthEntryOrigin.REGISTERED_ANIMAL) onProcedureIntent({ municipalityId: selectedMunicipalityId, schedule: procedurePrefill?.schedule || "", requestTypeId: procedurePrefill?.requestType || "" });
@@ -1745,27 +1758,29 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
   }
 
   function scrollToAdoption() {
-    setEnrollment(null);
     if (activePublicService) setActivePublicService(null);
     adoptionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   function openPublicService(serviceId: string) {
-    setEnrollment(null);
     setProcedurePrefill(null);
     setPublicServiceDone(null);
     setActivePublicService(serviceId === "procedure_form" ? "procedure_entry" : serviceId);
   }
 
   function joinMutirao() {
-    setEnrollment(null);
     setProcedurePrefill(nextMutirao ? { schedule: nextMutirao.date } : null);
     setPublicServiceDone(null);
     setActivePublicService("procedure_entry");
   }
 
+  function openRequestAccess(prefill: { protocol: string; cpf: string }) {
+    setAccessPrefill(prefill);
+    setPublicServiceDone(null);
+    setActivePublicService(REQUEST_ACCESS_SERVICE);
+  }
+
   function closePublicService() {
-    setEnrollment(null);
     setActivePublicService(null);
     setProcedurePrefill(null);
     setPublicServiceDone(null);
@@ -1839,7 +1854,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
           <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
             {activePublicService !== "procedure_form" && (
               <div className="public-service-panel-header">
-                <h2>{activePublicService === "procedure_entry" ? "Solicitar procedimento" : activePublicServiceDetails?.label || "Serviço"}</h2>
+                <h2>{activePublicService === "procedure_entry" ? "Solicitar procedimento" : activePublicService === REQUEST_ACCESS_SERVICE ? "Acessar minha solicitação" : activePublicServiceDetails?.label || "Serviço"}</h2>
                 <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
               </div>
             )}
@@ -1851,16 +1866,15 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
                 createRequirement={() => createRequestPdfDataUrl(publicServiceDone, activeMunicipality)}
                 closeLabel="Voltar ao início"
                 onClose={closePublicService}
-              >
-                {(enrollment || publicServiceDone.cpf) && <EnrollmentNotice credential={enrollment} onDismiss={() => setEnrollment(null)} onLogin={() => openAuthEntry(AuthEntryOrigin.ENROLLMENT)} />}
-              </RequestDoneCard>
+                onCreatePassword={publicServiceDone.cpf && isProcedureRequest(publicServiceDone.request_type)
+                  ? () => openRequestAccess({ protocol: publicServiceDone.protocol, cpf: onlyDigits(String(publicServiceDone.cpf)) }) : undefined}
+              />
             ) : activePublicService === "procedure_entry" ? (
               <ProcedureEntry disabled={!selectedMunicipalityId} onFirst={() => setActivePublicService("procedure_form")} onRegistered={() => openAuthEntry(AuthEntryOrigin.REGISTERED_ANIMAL)} />
             ) : activePublicService === "procedure_form" ? (
               <NewRequest
                 key={`public-procedure-${selectedMunicipalityId}`}
                 createRequest={createRequest}
-                onEnrollment={(credential) => { if (selectedMunicipalityId === publicMunicipalityRef.current) setEnrollment(credential || null); }}
                 currentUser={GUEST_USER}
                 publicFlow
                 selectedMunicipalityId={selectedMunicipalityId}
@@ -1887,6 +1901,16 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
               <PublicAccessRequestInline onSubmit={onAccessRequest} municipalityId={selectedMunicipalityId} />
             ) : activePublicService === "tracking" ? (
               <RequestTracking key={selectedMunicipalityId} municipalityId={selectedMunicipalityId} />
+            ) : activePublicService === REQUEST_ACCESS_SERVICE ? (
+              <RequestAccess
+                key={`${selectedMunicipalityId}:${accessPrefill?.protocol || ""}`}
+                municipalityId={selectedMunicipalityId}
+                initialProtocol={accessPrefill?.protocol}
+                initialCpf={accessPrefill?.cpf}
+                createRequirement={(request) => createRequestPdfDataUrl(request, activeMunicipality)}
+                onSession={onLogin}
+                onLogin={() => openAuthEntry(AuthEntryOrigin.REQUEST_ACCESS)}
+              />
             ) : activePublicService === "report" ? (
               <PublicReportPanel
                 municipalityName={activeMunicipality?.name || "Sistema municipal"}
@@ -1962,7 +1986,7 @@ function LoginView({ onLogin, onProcedureIntent, onAccessRequest, adoptionAnimal
         )}
       </footer>
 
-{authEntry && <AuthEntry key={authEntryKey(authEntry)} audience={authEntry.audience} municipalityId={authEntry.municipalityId} onLogin={(user) => { setEnrollment(null); onLogin(user); }} onClose={() => { onProcedureIntent(null); setAuthEntry(null); }} />}
+{authEntry && <AuthEntry key={authEntryKey(authEntry)} audience={authEntry.audience} municipalityId={authEntry.municipalityId} onLogin={onLogin} onClose={() => { onProcedureIntent(null); setAuthEntry(null); }} />}
     </main>
   );
 }
@@ -2574,7 +2598,6 @@ function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {
 
 function NewRequest({
   createRequest,
-  onEnrollment,
   currentUser,
   compact = false,
   internalSimple = false,
@@ -3153,7 +3176,7 @@ function NewRequest({
 
   async function sendRequest(payload) {
     try {
-      const created = await createRequest(payload, onEnrollment);
+      const created = await createRequest(payload);
       const protocol = String(created?.protocol || "").trim();
       if (!protocol) {
         setSubmissionError("Não foi possível obter o protocolo. Confira o envio antes de tentar novamente.");

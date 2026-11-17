@@ -147,10 +147,7 @@ test("a phone code whose SMS is switched off or fails never reaches e-mail, and 
   }
 });
 
-test("the initial password never goes by SMS, and a changed contact is told by the phone chain with e-mail as the reserve", async () => {
-  const initial = fixture(); const initialSms = smsSent(initial); initial.dependencies.loadWhatsappConfig = async () => ({ active: false });
-  await deliverAuthMessage({ ...initial.input, purpose: AuthPurpose.INITIAL_PASSWORD, temporaryPassword: "one-time-generated-password", code: undefined, channel: undefined }, initial.dependencies);
-  assert.equal(initialSms.length, 0); assert.equal(initial.calls.some(([type]) => type === "email"), true);
+test("a changed contact is told by the phone chain with e-mail as the reserve", async () => {
   const changed = fixture(); const changedSms = smsSent(changed); changed.dependencies.loadWhatsappConfig = async () => ({ active: false });
   const results = await deliverAuthMessage({ ...changed.input, purpose: AuthPurpose.CONTACT_CHANGED, code: undefined, channel: undefined }, changed.dependencies);
   assert.equal(changedSms.length, 1); assert.equal(changedSms[0].use, AuthPurpose.CONTACT_CHANGED);
@@ -163,27 +160,6 @@ test("the initial password never goes by SMS, and a changed contact is told by t
   const params = reserve.calls.find(([type]) => type === "email")[1].templateParams;
   assert.equal(params.changed_fields, "telefone");
   assert.equal(params.message, "Seus dados cadastrais foram atualizados. Informações alteradas: telefone. Se você não reconhece essa alteração, entre em contato com nossa equipe.");
-});
-
-test("initial password may use supplied unverified contact but only its own template", async () => {
-  const f = fixture();
-  f.dependencies.loadWhatsappConfig = async () => ({ active: false });
-  const temporaryPassword = "one-time-generated-password";
-  const results = await deliverAuthMessage({ ...f.input, purpose: AuthPurpose.INITIAL_PASSWORD,
-    temporaryPassword, code: undefined, emailVerified: false, phoneVerified: false }, f.dependencies);
-  const sent = f.calls.find(([type]) => type === "email")[1];
-  assert.equal(sent.templateId, "email_initial_password");
-  assert.equal(sent.templateParams.temporary_password, temporaryPassword);
-  assert.equal(sent.templateParams.code, undefined);
-  assert.equal(JSON.stringify(results).includes(temporaryPassword), false);
-});
-
-test("a missing welcome template never borrows the reset template", async () => {
-  const f = fixture();
-  f.emailTemplates[AuthPurpose.INITIAL_PASSWORD] = "";
-  const results = await deliverAuthMessage({ ...f.input, phone: "", purpose: AuthPurpose.INITIAL_PASSWORD, temporaryPassword: "new-generated-password" }, f.dependencies);
-  assert.equal(results[0].code, DeliveryCode.NOT_CONFIGURED);
-  assert.equal(f.calls.some(([type]) => type === "email"), false);
 });
 
 test("a municipal e-mail use that is switched off is skipped with the channel-disabled code and nothing is sent", async () => {

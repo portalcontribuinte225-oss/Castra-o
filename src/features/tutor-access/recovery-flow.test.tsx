@@ -26,9 +26,9 @@ function render(state: RecoveryState, clock = { expiresIn: 600, retryIn: 60 }) {
 }
 
 describe("access entry origins", () => {
-  it("uses staff for Entrar and tutor for registered/enrolled entries, requiring town only for tutor", () => {
+  it("uses staff for Entrar and tutor for the registered animal and the request access entries, requiring town only for tutor", () => {
     expect(createAuthEntryContext(AuthEntryOrigin.STAFF, "")?.audience).toBe(AuthAudience.STAFF);
-    for (const origin of [AuthEntryOrigin.REGISTERED_ANIMAL, AuthEntryOrigin.ENROLLMENT]) {
+    for (const origin of [AuthEntryOrigin.REGISTERED_ANIMAL, AuthEntryOrigin.REQUEST_ACCESS]) {
       expect(createAuthEntryContext(origin, "")).toBeNull();
       const context = createAuthEntryContext(origin, "town-a")!;
       expect(context.audience).toBe(AuthAudience.TUTOR); expect(context.municipalityId).toBe("town-a");

@@ -21,15 +21,35 @@ describe("auth API boundaries", () => {
     expect(setItem).not.toHaveBeenCalledWith("castragestao:user", expect.anything());
   });
 
-  it("strips enrollment before returning a request and delivers the credential only via the callback", async () => {
-    const enrollment = { temporaryPassword: "one-time-secret", cpf: "12345678900", municipalityId: "municipality-a" };
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ request: { id: "request-a", protocol: "000001/2026" }, enrollment }), { status: 201 })));
-    const onEnrollment = vi.fn();
-    const row = await api.createRequest({}, onEnrollment);
+  it("returns only the request of a new submission, never a credential, and stores nothing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ request: { id: "request-a", protocol: "000001/2026", temporaryPassword: "unexpected-secret" } }), { status: 201 })));
+    const row = await api.createRequest({});
     expect(row).toEqual({ id: "request-a", protocol: "000001/2026" });
-    expect(onEnrollment).toHaveBeenCalledTimes(1);
-    expect(onEnrollment).toHaveBeenCalledWith(enrollment);
     expect(values.size).toBe(0);
+  });
+
+  it("creates the password on the first access with the short access token and keeps only the session it issues", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ token: "session-token", user: { id: "tutor-a", role: "tutor", mustChangePassword: false } }), { status: 201 }));
+    vi.stubGlobal("fetch", fetch);
+    values.set("castragestao:token", "older-session");
+    const user = await api.requestAccess.createPassword("access-token", "senha do tutor");
+    expect(user.id).toBe("tutor-a");
+    expect(String(fetch.mock.calls[0][0])).toMatch(/\/request-access\/password$/);
+    expect((fetch.mock.calls[0][1]?.headers as Record<string, string>).Authorization).toBe("Bearer access-token");
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toEqual({ password: "senha do tutor" });
+    expect([...values.entries()]).toEqual([["castragestao:token", "session-token"]]);
+  });
+
+  it("opens the request document with the access token of that call, never with the stored session", async () => {
+    const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(JSON.stringify({ request: {}, account: { exists: false } }), { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    values.set("castragestao:token", "staff-session");
+    await api.requestAccess.view("access-token");
+    await api.requestAccess.confirm("challenge/a", { code: "123456", cpf: "52998224725" });
+    expect(String(fetch.mock.calls[0][0])).toMatch(/\/request-access\/request$/);
+    expect((fetch.mock.calls[0][1]?.headers as Record<string, string>).Authorization).toBe("Bearer access-token");
+    expect(String(fetch.mock.calls[1][0])).toMatch(/\/request-access\/challenges\/challenge%2Fa\/confirm$/);
+    expect(String(fetch.mock.calls[1][0])).not.toContain("52998224725");
   });
 
   it("preserves safe HTTP status, error code and retry information", async () => {

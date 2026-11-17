@@ -30,14 +30,14 @@ async function fixture(t, { active = true } = {}) {
   return { database, save };
 }
 
-test("there are ten uses: six notices and four access messages, without the initial password or e-mail confirmation", () => {
-  assert.equal(smsUses.length, 10);
-  assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.NOTICE).length, 6);
+test("there are eleven uses: seven notices and four access messages, without the initial password or e-mail confirmation", () => {
+  assert.equal(smsUses.length, 11);
+  assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.NOTICE).length, 7);
   assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.ACCESS).length, 4);
-  assert.equal(new Set(smsUses.map(({ key }) => key)).size, 10);
+  assert.equal(new Set(smsUses.map(({ key }) => key)).size, 11);
   for (const event of Object.values(NotificationEvent)) assert.equal(getSmsUse(event)?.kind, SmsUseKind.NOTICE, event);
   for (const purpose of [RESET, AuthPurpose.VERIFY_PHONE, AuthPurpose.REQUEST_TRACKING, AuthPurpose.CONTACT_CHANGED]) assert.equal(getSmsUse(purpose)?.kind, SmsUseKind.ACCESS, purpose);
-  for (const purpose of [AuthPurpose.INITIAL_PASSWORD, AuthPurpose.VERIFY_EMAIL, "unknown", undefined]) assert.equal(getSmsUse(purpose), null, String(purpose));
+  for (const purpose of ["initial_password", AuthPurpose.VERIFY_EMAIL, "unknown", undefined]) assert.equal(getSmsUse(purpose), null, String(purpose));
   for (const use of smsUses) assert.ok(use.label && typeof use.label === "string", use.key);
 });
 
@@ -52,14 +52,14 @@ test("only password recovery starts on, and an explicit off beats that default",
 });
 
 test("stored switches keep only known uses with real booleans", () => {
-  assert.deepEqual(normalizeSmsActiveUses({ active: { [RESET]: false, [COMPLETED]: true, unknown: true, [CONFIRMED]: "yes", [AuthPurpose.INITIAL_PASSWORD]: true } }),
+  assert.deepEqual(normalizeSmsActiveUses({ active: { [RESET]: false, [COMPLETED]: true, unknown: true, [CONFIRMED]: "yes", initial_password: true } }),
     { [RESET]: false, [COMPLETED]: true });
   for (const stored of [null, undefined, [], "text", 5, { active: null }, { active: [] }]) assert.deepEqual(normalizeSmsActiveUses(stored), {}, JSON.stringify(stored));
   const rows = normalizeSmsUseRows([{ key: CONFIRMED, active: true }, { key: RESET, active: false }, { key: "unknown", active: true }, null, { key: COMPLETED, active: "yes" }]);
   assert.deepEqual(rows.map(({ key, active }) => [key, active]).filter(([, active]) => active !== false), [[CONFIRMED, true]]);
   assert.equal(rows.find(({ key }) => key === RESET).active, false);
   assert.equal(rows.find(({ key }) => key === COMPLETED).active, false);
-  assert.equal(rows.length, 10);
+  assert.equal(rows.length, 11);
 });
 
 test("a municipality starts with the defaults, and the switches of one never show in another", async (t) => {
@@ -101,7 +101,7 @@ test("turning a message on is stored for that municipality only and audited with
 
 test("the request is validated: a known use, a real boolean and an active municipality", async (t) => {
   const { database } = await fixture(t);
-  for (const body of [{ use: "unknown", active: true }, { use: AuthPurpose.INITIAL_PASSWORD, active: true }, { use: AuthPurpose.VERIFY_EMAIL, active: false },
+  for (const body of [{ use: "unknown", active: true }, { use: "initial_password", active: true }, { use: AuthPurpose.VERIFY_EMAIL, active: false },
     { use: CONFIRMED, active: "true" }, { use: CONFIRMED, active: 1 }, { use: CONFIRMED }, { active: true }, {}]) {
     await assert.rejects(setSmsUseActive({ municipalityId: MUNICIPALITY, ...body, database }), { status: 400 }, JSON.stringify(body));
   }

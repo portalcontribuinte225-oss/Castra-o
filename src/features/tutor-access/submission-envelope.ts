@@ -1,7 +1,5 @@
-import type { EnrollmentCredential } from "./auth-types";
-
 export function stripEphemeralCredentials(value: Record<string, unknown>) {
-  const { enrollment, credential, temporaryPassword, temporary_password, password, ...record } = value;
+  const { credential, temporaryPassword, temporary_password, password, ...record } = value;
   return record;
 }
 
@@ -10,9 +8,10 @@ export function stripMunicipalityBootstrap(value: Record<string, unknown>) {
   return municipality;
 }
 
-export function splitSubmissionEnvelope(value: { request: Record<string, unknown>; enrollment?: EnrollmentCredential }) {
+// The answer to a new request carries only the request.
+export function readSubmittedRequest(value: { request: Record<string, unknown> }) {
   if (!value?.request || typeof value.request !== "object" || Array.isArray(value.request)) {
     throw new Error("Resposta de solicitação inválida. Confira o protocolo antes de tentar enviar novamente.");
   }
-  return { request: stripEphemeralCredentials(value.request), enrollment: value.enrollment };
+  return stripEphemeralCredentials(value.request);
 }

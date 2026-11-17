@@ -1,7 +1,7 @@
 export const AuthAudience = Object.freeze({ TUTOR: "tutor", STAFF: "staff" });
 export const AuthErrorCode = Object.freeze({ CPF_REQUIRED: "CPF_REQUIRED", RECOVERY_OPTIONS_EXPIRED: "RECOVERY_OPTIONS_EXPIRED" });
 export const AuthPurpose = Object.freeze({
-  INITIAL_PASSWORD: "initial_password", PASSWORD_RESET: "password_reset",
+  PASSWORD_RESET: "password_reset",
   VERIFY_EMAIL: "verify_email", VERIFY_PHONE: "verify_phone", CONTACT_CHANGED: "contact_changed",
   REQUEST_TRACKING: "request_tracking",
 });

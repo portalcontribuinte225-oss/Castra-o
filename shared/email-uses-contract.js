@@ -23,7 +23,6 @@ export const EmailVariable = Object.freeze({
   VALIDITY: "validade",
   VALIDITY_MINUTES: "validity_minutes",
   PURPOSE: "purpose",
-  TEMPORARY_PASSWORD: "temporary_password",
   // "approved" or "rejected": which text the documents notice carries, so one template can say either.
   DOCUMENTS_RESULT: "documents_result",
   // The data that changed, such as "e-mail" or "telefone".
@@ -56,13 +55,13 @@ function emailUse(key, kind, label, { variables = [], requestFields = [], defaul
 // A use is one message the system can send by e-mail. Notice keys are NotificationEvent values and access keys are
 // AuthPurpose values, so they never collide. Phone confirmation has no e-mail use. Only password recovery starts on.
 export const emailUses = Object.freeze([
+  emailUse(NotificationEvent.REQUEST_REGISTERED, EmailUseKind.NOTICE, "Solicitação registrada", { variables: noticeVariables }),
   emailUse(NotificationEvent.SCHEDULE_CONFIRMED, EmailUseKind.NOTICE, "Agendamento confirmado", { variables: noticeVariables, requestFields: scheduleFields }),
   emailUse(NotificationEvent.SCHEDULE_CHANGED, EmailUseKind.NOTICE, "Agendamento reagendado", { variables: noticeVariables, requestFields: scheduleFields }),
   emailUse(NotificationEvent.NO_SHOW, EmailUseKind.NOTICE, "Não comparecimento", { variables: noticeVariables, requestFields: noShowFields }),
   emailUse(NotificationEvent.DOCUMENTS_REVIEWED, EmailUseKind.NOTICE, "Documentos analisados", { variables: [...noticeVariables, variable.DOCUMENTS_RESULT] }),
   emailUse(NotificationEvent.COMPLETED, EmailUseKind.NOTICE, "Atendimento concluído", { variables: noticeVariables }),
   emailUse(NotificationEvent.REQUEST_REJECTED, EmailUseKind.NOTICE, "Solicitação indeferida", { variables: noticeVariables }),
-  emailUse(AuthPurpose.INITIAL_PASSWORD, EmailUseKind.ACCESS, "Senha inicial", { variables: [variable.TEMPORARY_PASSWORD, variable.PURPOSE] }),
   emailUse(AuthPurpose.PASSWORD_RESET, EmailUseKind.ACCESS, "Recuperação de senha", { variables: codeVariables, defaultActive: true }),
   emailUse(AuthPurpose.VERIFY_EMAIL, EmailUseKind.ACCESS, "Confirmação de e-mail", { variables: codeVariables }),
   emailUse(AuthPurpose.REQUEST_TRACKING, EmailUseKind.ACCESS, "Acompanhamento de solicitação", { variables: codeVariables }),

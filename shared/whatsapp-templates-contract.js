@@ -39,7 +39,7 @@ export const whatsappFieldLabels = Object.freeze({
 });
 
 export const WhatsappUseKind = Object.freeze({ NOTICE: "notice", ACCESS: "access" });
-export const WhatsappAccessLayout = Object.freeze({ CODE: "code", CONTACT: "contact", PASSWORD: "password" });
+export const WhatsappAccessLayout = Object.freeze({ CODE: "code", CONTACT: "contact" });
 
 const field = WhatsappTemplateField;
 const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.PROTOCOL];
@@ -58,6 +58,7 @@ function access(key, label, groupLabel, namePart, layout, variables, nameSuffix 
 // A use is something a template can serve: a notice sent about a request or an access message.
 // Notice keys are NotificationEvent values and access keys are AuthPurpose values, so they never collide.
 export const whatsappUses = Object.freeze([
+  notice(NotificationEvent.REQUEST_REGISTERED, "Solicitação registrada", "solicitacao_registrada", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "confirmacao_agendamento", scheduleFields),
   notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "reagendamento", scheduleFields),
   notice(NotificationEvent.NO_SHOW, "Não comparecimento", "cancelamento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
@@ -68,7 +69,6 @@ export const whatsappUses = Object.freeze([
   access(AuthPurpose.VERIFY_PHONE, "Confirmação de telefone", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
   access(AuthPurpose.REQUEST_TRACKING, "Acompanhamento de solicitação", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
   access(AuthPurpose.CONTACT_CHANGED, "Contato alterado", "Contato alterado", "contato_alterado", WhatsappAccessLayout.CONTACT, [whatsappFieldLabels[field.TUTOR_NAME]]),
-  access(AuthPurpose.INITIAL_PASSWORD, "Senha inicial", "Senha inicial", "senha_inicial", WhatsappAccessLayout.PASSWORD, [whatsappFieldLabels[field.TUTOR_NAME], "Senha temporária"]),
 ]);
 
 export function getWhatsappUse(key) {

@@ -1,9 +1,10 @@
 import { AuthAudience } from "../shared/auth-contract.js";
-import { splitSubmissionEnvelope } from "./features/tutor-access/submission-envelope";
-import type { AuthChallenge, AuthRequestOptions, EnrollmentCredential, RecoveryContext } from "./features/tutor-access/auth-types";
+import { readSubmittedRequest } from "./features/tutor-access/submission-envelope";
+import type { AuthChallenge, AuthRequestOptions, RecoveryContext, SessionUser } from "./features/tutor-access/auth-types";
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
 import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAnimalRequest } from "./features/animal-services/animal-service-types";
 import type { TrackedRequest, TrackingSession, TrackingStartBody } from "./features/request-tracking/tracking-types";
+import type { AccessSession, AccessStartBody, AccessView } from "./features/request-access/access-types";
 import type { MessageQuotaInput, MessageQuotaStatus } from "./features/message-contract/message-contract-types";
 import type { SmsAccountInput } from "./features/sms/sms-types";
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
@@ -98,10 +99,8 @@ export const api = {
   },
 
   getRequests: () => request("GET", "/requests"),
-  async createRequest(body, onEnrollment?: (credential?: EnrollmentCredential) => void) {
-    const envelope = splitSubmissionEnvelope(await request("POST", "/requests", body));
-    onEnrollment?.(envelope.enrollment);
-    return envelope.request;
+  async createRequest(body) {
+    return readSubmittedRequest(await request("POST", "/requests", body));
   },
   patchRequest: (id, patch) => request("PATCH", `/requests/${id}`, patch),
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),
@@ -119,6 +118,20 @@ export const api = {
   startRequestTracking: (body: TrackingStartBody, options?: AuthRequestOptions): Promise<AuthChallenge> => request("POST", "/request-tracking/challenges", body, "json", options),
   confirmRequestTracking: (challengeId: string, code: string, options?: AuthRequestOptions): Promise<TrackingSession> => request("POST", `/request-tracking/challenges/${encodeURIComponent(challengeId)}/confirm`, { code }, "json", options),
   getTrackedRequest: (token: string, options?: AuthRequestOptions): Promise<{ request: TrackedRequest }> => request("GET", "/request-tracking/request", undefined, "json", { ...options, bearerToken: token }),
+
+  requestAccess: {
+    start: (body: AccessStartBody, options?: AuthRequestOptions): Promise<AuthChallenge> => request("POST", "/request-access/challenges", body, "json", options),
+    confirm: (challengeId: string, body: { code: string; cpf: string }, options?: AuthRequestOptions): Promise<AccessSession> => request("POST", `/request-access/challenges/${encodeURIComponent(challengeId)}/confirm`, body, "json", options),
+    view: (token: string, options?: AuthRequestOptions): Promise<AccessView> => request("GET", "/request-access/request", undefined, "json", { ...options, bearerToken: token }),
+    // The tutor's account is born here and signs in at once, as a login does.
+    async createPassword(token: string, password: string, options?: AuthRequestOptions): Promise<SessionUser> {
+      const version = ++sessionMutationVersion;
+      const data = await request("POST", "/request-access/password", { password }, "json", { ...options, bearerToken: token });
+      if (version !== sessionMutationVersion || options?.signal?.aborted || options?.isCurrent?.() === false) throw new DOMException("Operação encerrada.", "AbortError");
+      localStorage.setItem("castragestao:token", data.token);
+      return data.user;
+    },
+  },
 
   getAdoptions: (municipalityId?: string) => request("GET", municipalityId ? `/adoptions?municipalityId=${encodeURIComponent(municipalityId)}` : "/adoptions"),
   createAdoption: (body) => request("POST", "/adoptions", body),

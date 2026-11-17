@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import { AuthAudience, AuthPurpose, validateNewPassword } from "../../shared/auth-contract.js";
 import { issueSession, verifySession } from "../src/services/auth/auth-session.js";
-import { enrollTutorForRequest } from "../src/services/auth/tutor-enrollment.js";
+import { resolveRequestTutor } from "../src/services/auth/request-tutor.js";
 import { createChallenge, consumeChallenge } from "../src/repositories/auth-challenges.js";
 import { consumeAuthLimit, allowAuthAttempt } from "../src/repositories/auth-limits.js";
 import { authRequestContext } from "../src/services/auth/session-handlers.js";
@@ -69,100 +69,30 @@ test("identifier normalization does not interpret email digits as CPF and malfor
   assert.deepEqual(queries[0].values, [MUNICIPALITY, "", "52998224725@example.test"]);
 });
 
-function enrollmentStore() {
-  const profiles = new Map();
-  const users = new Map();
-  let tail = Promise.resolve();
+function profileClient(profiles) {
   const calls = [];
-  async function run(input) {
-    let unlock;
-    const client = { query: async (sql, values) => {
-      calls.push({ sql, values });
-      if (sql.startsWith("INSERT INTO auth_rate_limits")) return { rows: [{ attempts: 1 }] };
-      if (sql.startsWith("DELETE FROM auth_rate_limits")) return { rows: [] };
-      if (sql.includes("pg_advisory_xact_lock")) {
-        const previous = tail;
-        const held = new Promise((resolve) => { unlock = resolve; });
-        tail = previous.then(() => held);
-        await previous;
-        return { rows: [] };
-      }
-      if (sql.startsWith("SELECT user_id FROM tutor_profiles")) {
-        const profile = profiles.get(`${values[0]}:${values[1]}`);
-        return { rows: profile ? [{ user_id: profile.user_id }] : [] };
-      }
-      if (sql.startsWith("SELECT cpf FROM tutor_profiles")) {
-        const profile = [...profiles.values()].find((row) => row.user_id === values[0] && row.municipality_id === values[1]);
-        return { rows: profile ? [{ cpf: profile.cpf }] : [] };
-      }
-      if (sql.includes("INSERT INTO users")) {
-        const id = randomUUID(); users.set(id, { id, name: values[0], password: values[1], municipality_id: values[2], email: null });
-        return { rows: [{ id }] };
-      }
-      if (sql.includes("INSERT INTO tutor_profiles")) {
-        profiles.set(`${values[1]}:${values[2]}`, { user_id: values[0], municipality_id: values[1], cpf: values[2], email: values[3], phone: values[4] });
-        return { rows: [] };
-      }
-      throw new Error("Unexpected enrollment SQL");
-    } };
-    try { return await enrollTutorForRequest(client, input); }
-    finally { unlock?.(); }
-  }
-  return { run, profiles, users, calls };
+  return { calls, query: async (sql, values) => {
+    calls.push({ sql, values });
+    if (sql.startsWith("SELECT cpf FROM tutor_profiles")) {
+      const profile = profiles.find((row) => row.user_id === values[0] && row.municipality_id === values[1]);
+      return { rows: profile ? [{ cpf: profile.cpf }] : [] };
+    }
+    throw new Error("Unexpected SQL");
+  } };
 }
 
-const enrollmentInput = (overrides = {}) => ({ body: { cpf: CPF, tutor_name: "Tutor Test" },
-  workflow: { followUp: { enabled: false } }, municipalityId: MUNICIPALITY, tutorRequired: true, ...overrides });
-
-test("concurrent municipal enrollment shows one password and a repeat never claims the existing account", async (t) => {
-  useSecret(t);
-  const store = enrollmentStore();
-  const results = await Promise.all([store.run(enrollmentInput()), store.run(enrollmentInput())]);
-  assert.equal(results.filter((result) => result.enrollment).length, 1);
-  assert.equal(results.filter((result) => result.tutorId === null).length, 1);
-  assert.equal(store.users.size, 1);
-  const created = results.find((result) => result.enrollment);
-  assert.equal(await bcrypt.compare(created.enrollment.temporaryPassword, store.users.get(created.tutorId).password), true);
-  assert.equal(JSON.stringify([...store.users.values()]).includes(created.enrollment.temporaryPassword), false);
-  assert.equal((await store.run(enrollmentInput({ municipalityId: OTHER_MUNICIPALITY }))).enrollment.cpf, CPF);
-  assert.equal(store.users.size, 2);
-});
-
-test("no-Tutor and internal residual fields create no identity; own authenticated tutor must match profile CPF", async (t) => {
-  useSecret(t);
-  const store = enrollmentStore();
-  assert.deepEqual(await store.run(enrollmentInput({ tutorRequired: false })), { tutorId: null });
-  assert.deepEqual(await store.run(enrollmentInput({ user: { id: randomUUID(), role: "analista" } })), { tutorId: null });
-  assert.equal(store.calls.length, 0);
-  await assert.rejects(store.run(enrollmentInput({ body: { cpf: CPF, tutor_name: "" } })), { status: 400 });
-  const created = await store.run(enrollmentInput());
-  assert.deepEqual(await store.run(enrollmentInput({ user: { id: created.tutorId, role: AuthAudience.TUTOR } })), { tutorId: created.tutorId });
-  await assert.rejects(store.run(enrollmentInput({ body: { cpf: "11111111111" }, user: { id: created.tutorId, role: AuthAudience.TUTOR } })), { status: 403 });
-});
-
-test("new enrollment saves unverified contacts without fictitious login email or verification flags", async (t) => {
-  useSecret(t);
-  const store = enrollmentStore();
-  const created = await store.run(enrollmentInput({ workflow: { followUp: { enabled: true, email: "family@example.test", phone: "48999991234" } } }));
-  const profile = store.profiles.get(`${MUNICIPALITY}:${CPF}`);
-  assert.equal(store.users.get(created.tutorId).email, null);
-  assert.equal(profile.email, "family@example.test");
-  assert.equal(profile.email_verified_at, undefined);
-  assert.equal(profile.phone_verified_at, undefined);
-});
-
-test("initial cadastral contacts persist independently of operational follow-up and repeats cannot replace them", async (t) => {
-  useSecret(t);
-  const store = enrollmentStore();
-  await store.run(enrollmentInput({ body: { cpf: CPF, tutor_name: "Tutor Test", tutor_email: " Family@Example.test ", phone: "(48) 99999-1234" } }));
-  const profile = store.profiles.get(`${MUNICIPALITY}:${CPF}`);
-  assert.equal(profile.email, "family@example.test");
-  assert.equal(profile.phone, "48999991234");
-  await store.run(enrollmentInput({ body: { cpf: CPF, tutor_name: "Changed", tutor_email: "attacker@example.test", phone: "11999998888" } }));
-  assert.equal(profile.email, "family@example.test");
-  assert.equal(profile.phone, "48999991234");
-  await store.run(enrollmentInput({ municipalityId: OTHER_MUNICIPALITY, body: { cpf: CPF, tutor_name: "Tutor Test", tutorEmail: "alias@example.test" } }));
-  assert.equal(store.profiles.get(`${OTHER_MUNICIPALITY}:${CPF}`).email, "alias@example.test");
+test("sending a request creates no account: only a logged tutor links it, with the CPF of their own profile", async () => {
+  const tutorId = randomUUID();
+  const client = profileClient([{ user_id: tutorId, municipality_id: MUNICIPALITY, cpf: CPF }]);
+  for (const user of [undefined, null, { id: randomUUID(), role: "analista" }, { id: randomUUID(), role: "admin_municipal" }]) {
+    assert.equal(await resolveRequestTutor(client, { cpf: CPF, municipalityId: MUNICIPALITY, user }), null);
+  }
+  assert.equal(client.calls.length, 0, "without a logged tutor nothing is read nor written");
+  const tutor = { id: tutorId, role: AuthAudience.TUTOR };
+  assert.equal(await resolveRequestTutor(client, { cpf: "529.982.247-25", municipalityId: MUNICIPALITY, user: tutor }), tutorId);
+  await assert.rejects(resolveRequestTutor(client, { cpf: "16899535009", municipalityId: MUNICIPALITY, user: tutor }), { status: 403 });
+  await assert.rejects(resolveRequestTutor(client, { cpf: CPF, municipalityId: OTHER_MUNICIPALITY, user: tutor }), { status: 403 });
+  assert.equal(client.calls.every(({ sql }) => sql.startsWith("SELECT cpf FROM tutor_profiles")), true);
 });
 
 function challengeStore() {

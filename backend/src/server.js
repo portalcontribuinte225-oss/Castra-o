@@ -21,6 +21,7 @@ import emailRoutes from "./routes/email.js";
 import messageQuotaRoutes from "./routes/message-quota.js";
 import municipalityBrasaoRoutes from "./routes/municipality-brasao.js";
 import requestTrackingRoutes from "./routes/request-tracking.js";
+import requestAccessRoutes from "./routes/request-access.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -48,6 +49,7 @@ app.use("/api/email", emailRoutes);
 app.use("/api/message-quota", messageQuotaRoutes);
 app.use("/api/public/municipalities", municipalityBrasaoRoutes);
 app.use("/api/request-tracking", requestTrackingRoutes);
+app.use("/api/request-access", requestAccessRoutes);
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/assets", express.static(path.join(distPath, "assets"), {

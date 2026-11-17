@@ -3,8 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { AuthAudience, validateNewPassword } from "../../../shared/auth-contract.js";
 import { SessionBoundary } from "./session-boundary";
-import { EnrollmentNotice } from "./enrollment-notice";
-import { splitSubmissionEnvelope, stripEphemeralCredentials, stripMunicipalityBootstrap } from "./submission-envelope";
+import { readSubmittedRequest, stripEphemeralCredentials, stripMunicipalityBootstrap } from "./submission-envelope";
 import { validateTutorName } from "./tutor-identity";
 import { AuthEntry } from "./auth-entry";
 import type { SessionUser } from "./auth-types";
@@ -50,33 +49,18 @@ describe("session boundaries", () => {
 });
 
 describe("credential isolation", () => {
-  it("keeps the one-time credential outside the request used by global state and PDFs", () => {
-    const enrollment = { temporaryPassword: "one-time-secret", cpf: "12345678900", municipalityId: "municipality-a" };
-    const split = splitSubmissionEnvelope({ request: { id: "request-a", enrollment, temporaryPassword: "unexpected-secret" }, enrollment });
-    expect(split.enrollment).toBe(enrollment);
-    expect(split.request).toEqual({ id: "request-a" });
-    expect(JSON.stringify(split.request)).not.toContain("secret");
+  it("keeps any credential outside the request used by global state and PDFs", () => {
+    const request = readSubmittedRequest({ request: { id: "request-a", temporaryPassword: "unexpected-secret", credential: { temporaryPassword: "secret" } } });
+    expect(request).toEqual({ id: "request-a" });
+    expect(JSON.stringify(request)).not.toContain("secret");
     expect(stripEphemeralCredentials({ id: "access-a", credential: { temporaryPassword: "secret" }, temporary_password: "secret", password: "secret" })).toEqual({ id: "access-a" });
-  });
-
-  it("cannot recover an existing account password from a response without enrollment", () => {
-    const split = splitSubmissionEnvelope({ request: { id: "request-a" } });
-    expect(split.enrollment).toBeUndefined();
-    const html = renderToStaticMarkup(<EnrollmentNotice onDismiss={() => {}} onLogin={() => {}} />);
-    expect(html).toContain("Se você já possui acesso");
-    expect(html).not.toContain("Senha inicial:");
+    expect(() => readSubmittedRequest({ request: null as unknown as Record<string, unknown> })).toThrow("Resposta de solicitação inválida");
   });
 
   it("removes municipality-bootstrap credentials before a failed-refresh fallback stores the row", () => {
     const row = stripMunicipalityBootstrap({ id: "municipality-a", name: "Município A", active: true, defaultUser: { email: "admin@example.com", temporaryPassword: "bootstrap-secret" }, credential: { temporaryPassword: "bootstrap-secret" }, defaultSector: { id: "sector-a" } });
     expect(row).toEqual({ id: "municipality-a", name: "Município A", active: true });
     expect(JSON.stringify(row)).not.toContain("bootstrap-secret");
-  });
-
-  it("shows a newly issued password only in the explicit conclusion component", () => {
-    const html = renderToStaticMarkup(<EnrollmentNotice credential={{ temporaryPassword: "one-time-secret", cpf: "12345678900", municipalityId: "municipality-a" }} onDismiss={() => {}} onLogin={() => {}} />);
-    expect(html).toContain("one-time-secret"); expect(html).toContain("somente nesta conclusão"); expect(html).toContain("ocultar senha");
-    expect(html).toContain("envio ao contato não foi confirmado");
   });
 });
 

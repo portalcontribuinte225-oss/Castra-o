@@ -1,6 +1,7 @@
 import { MOBILE_PHONE_MESSAGE, isMobilePhone, onlyPhoneDigits } from "./phone-contract.js";
 
 export const NotificationEvent = Object.freeze({
+  REQUEST_REGISTERED: "request_registered",
   SCHEDULE_CONFIRMED: "schedule_confirmed",
   SCHEDULE_CHANGED: "schedule_changed",
   NO_SHOW: "no_show",

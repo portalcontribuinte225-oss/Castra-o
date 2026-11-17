@@ -41,7 +41,6 @@ function changedFieldsText(input) {
 
 function emailParameters(input) {
   const common = { [EmailVariable.TO_NAME]: input.user?.name || "Tutor", [EmailVariable.PURPOSE]: input.purpose };
-  if (input.purpose === AuthPurpose.INITIAL_PASSWORD) return { ...common, [EmailVariable.TEMPORARY_PASSWORD]: input.temporaryPassword };
   if (input.purpose === AuthPurpose.CONTACT_CHANGED) {
     const changed = changedFieldsText(input);
     return { ...common, [EmailVariable.CHANGED_FIELDS]: changed,
@@ -51,9 +50,6 @@ function emailParameters(input) {
 }
 
 function whatsappComponents(input) {
-  if (input.purpose === AuthPurpose.INITIAL_PASSWORD) {
-    return [{ type: "body", parameters: [input.user?.name || "Tutor", input.temporaryPassword].map((text) => ({ type: "text", text })) }];
-  }
   if (input.purpose === AuthPurpose.CONTACT_CHANGED) {
     return [{ type: "body", parameters: [{ type: "text", text: input.user?.name || "Tutor" }] }];
   }
@@ -139,17 +135,16 @@ export async function deliverAuthMessage(input, overrides = {}) {
   if (!Object.values(AuthPurpose).includes(purpose) || (!input.municipalityId && !globalStaffReset)) return [];
   if (purpose === AuthPurpose.PASSWORD_RESET) return deliverRecoveryChannel(input, dependencies, globalStaffReset);
   const requiresCode = isVerification(purpose) || purpose === AuthPurpose.PASSWORD_RESET || purpose === AuthPurpose.REQUEST_TRACKING;
-  if ((requiresCode && !/^\d{6}$/.test(input.code || ""))
-    || (purpose === AuthPurpose.INITIAL_PASSWORD && (typeof input.temporaryPassword !== "string" || input.temporaryPassword.length < 15))) {
+  if (requiresCode && !/^\d{6}$/.test(input.code || "")) {
     return [{ purpose, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }];
   }
-  const initial = purpose === AuthPurpose.INITIAL_PASSWORD;
-  // The tracking use case matched this destination against the request's follow-up contact before calling.
+  // The request code goes to a contact the use case already matched against the request: the follow-up contact for tracking,
+  // the tutor's contact for "Acessar minha solicitação".
   const matched = purpose === AuthPurpose.REQUEST_TRACKING;
   const emailAllowed = purpose !== AuthPurpose.VERIFY_PHONE && Boolean(input.email)
-    && (initial || matched || purpose === AuthPurpose.VERIFY_EMAIL || input.emailVerified === true);
+    && (matched || purpose === AuthPurpose.VERIFY_EMAIL || input.emailVerified === true);
   const phoneAllowed = !globalStaffReset && purpose !== AuthPurpose.VERIFY_EMAIL && Boolean(input.phone)
-    && (initial || matched || purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
+    && (matched || purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
   if (!emailAllowed && !phoneAllowed) return [];
   const results = [];
   if (phoneAllowed) {

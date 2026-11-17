@@ -51,13 +51,6 @@ export interface RecoveryContext {
   municipalityId: string;
 }
 
-export interface EnrollmentCredential {
-  temporaryPassword: string;
-  cpf: string;
-  municipalityId: string;
-  delivery?: { status?: string; reason?: string } | Array<{ status?: string; reason?: string }>;
-}
-
 export interface TutorProfile {
   id: string;
   name: string;

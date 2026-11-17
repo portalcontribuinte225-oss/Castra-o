@@ -25212,25 +25212,6 @@ small,
   margin: 0;
 }
 
-.tutor-enrollment {
-  margin: 16px 0;
-  padding: 20px;
-  border: 1px solid #a9d7be;
-  border-radius: 12px;
-  background: #f0f9f4;
-}
-
-.tutor-initial-password {
-  display: inline-block;
-  padding: 10px;
-  font-size: 1.05rem;
-  overflow-wrap: anywhere;
-  user-select: all;
-  background: #fff;
-  border: 1px solid #c8dfd1;
-  border-radius: 8px;
-}
-
 
 .procedure-entry-options,
 .registered-animal-grid {

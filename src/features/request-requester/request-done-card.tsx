@@ -1,7 +1,6 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { FollowUpSummary } from "../request-follow-up/follow-up-summary";
+import { useRequirementDownload } from "./use-requirement-download";
 
 interface RequestDoneCardProps {
   protocol: string;
@@ -10,31 +9,13 @@ interface RequestDoneCardProps {
   createRequirement: () => Promise<string>;
   closeLabel: string;
   onClose: () => void;
-  // What only some places have to say here (the access of a tutor that was just registered).
-  children?: ReactNode;
+  // Only where the tutor has no password yet (the public form with a tutor): opens "Acessar minha solicitação".
+  onCreatePassword?: () => void;
 }
 
 // The last screen of a request, for the public page and for the staff's modal: the protocol, the notices and the request document.
-export function RequestDoneCard({ protocol, followUp, createRequirement, closeLabel, onClose, children }: RequestDoneCardProps) {
-  const [downloading, setDownloading] = useState(false);
-  const [error, setError] = useState("");
-
-  async function download() {
-    if (downloading) return;
-    setDownloading(true);
-    setError("");
-    try {
-      const anchor = window.document.createElement("a");
-      anchor.href = await createRequirement();
-      anchor.download = `Requerimento ${protocol}.pdf`.trim();
-      anchor.click();
-    } catch (failure) {
-      console.error("Erro ao gerar requerimento:", failure);
-      setError("Não foi possível gerar o requerimento agora. Tente novamente em instantes.");
-    } finally {
-      setDownloading(false);
-    }
-  }
+export function RequestDoneCard({ protocol, followUp, createRequirement, closeLabel, onClose, onCreatePassword }: RequestDoneCardProps) {
+  const requirement = useRequirementDownload(createRequirement, protocol);
 
   return (
     <div className="public-inline-success public-service-success-card">
@@ -43,14 +24,14 @@ export function RequestDoneCard({ protocol, followUp, createRequirement, closeLa
       <p>Ela está em análise.</p>
       <p>Protocolo oficial: <strong>{protocol}</strong></p>
       <FollowUpSummary value={followUp} />
-      {children}
       <div className="public-service-success-actions">
         <button className="primary-action" type="button" onClick={onClose}>{closeLabel}</button>
-        <button className="ghost-button" type="button" onClick={download} disabled={downloading}>
-          {downloading ? "Gerando..." : "Baixar requerimento"}
+        <button className="ghost-button" type="button" onClick={requirement.download} disabled={requirement.downloading}>
+          {requirement.downloading ? "Gerando..." : "Baixar requerimento"}
         </button>
+        {onCreatePassword && <button className="ghost-button" type="button" onClick={onCreatePassword}>Criar minha senha</button>}
       </div>
-      {error && <p className="form-error">{error}</p>}
+      {requirement.error && <p className="form-error">{requirement.error}</p>}
     </div>
   );
 }

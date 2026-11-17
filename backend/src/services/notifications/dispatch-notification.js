@@ -97,7 +97,8 @@ async function tryEmail({ event, request, followUp }, dependencies) {
   return sanitizedTransportResult(event, channel, transport);
 }
 
-// Only the request fields the schedule, the protocol and the result of the documents need; the same safe whitelist the other channels use.
+// Only the request fields the schedule, the protocol, the result of the documents and the access link need; the same safe whitelist the
+// other channels use.
 function smsNoticeData(event, request) {
   const field = (name) => resolveWhatsappField(name, request);
   return {
@@ -107,6 +108,7 @@ function smsNoticeData(event, request) {
     location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
     ...(event === NotificationEvent.DOCUMENTS_REVIEWED ? { outcome: documentsOutcome(request.documents) } : {}),
     ...(event === NotificationEvent.REQUEST_REJECTED ? { reason: rejectionReasonText(request.workflow_data || request.workflowData) } : {}),
+    ...(event === NotificationEvent.REQUEST_REGISTERED ? { scheduled: Boolean(request.schedule_date), link: request.access_link?.url || "" } : {}),
   };
 }
 

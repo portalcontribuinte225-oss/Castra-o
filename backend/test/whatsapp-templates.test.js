@@ -109,10 +109,12 @@ test("an authentication template with the copy-code button serves the three code
   assert.match(recognizeWhatsappTemplate(authentication({ bodyVariables: 2 })).reason, /esperado é 1/);
 });
 
-test("contact-changed and initial-password templates are recognized by their own variable counts", () => {
+test("contact-changed and registered-request templates are recognized by their own variable counts, and the initial password is gone", () => {
   assert.deepEqual(recognizeWhatsappTemplate(entry("castracao_contato_alterado", { bodyVariables: 1 })).uses, [AuthPurpose.CONTACT_CHANGED]);
-  assert.deepEqual(recognizeWhatsappTemplate(entry("castracao_senha_inicial", { bodyVariables: 2 })).uses, [AuthPurpose.INITIAL_PASSWORD]);
-  assert.match(recognizeWhatsappTemplate(entry("castracao_senha_inicial", { bodyVariables: 1 })).reason, /esperado é 2/);
+  assert.deepEqual(recognizeWhatsappTemplate(entry("castracao_solicitacao_registrada", { bodyVariables: 2 })).uses, [NotificationEvent.REQUEST_REGISTERED]);
+  assert.match(recognizeWhatsappTemplate(entry("castracao_solicitacao_registrada", { bodyVariables: 1 })).reason, /esperado é 2/);
+  assert.deepEqual(getWhatsappUse(NotificationEvent.REQUEST_REGISTERED).fields, ["protocol", "notification_message"]);
+  assert.deepEqual(recognizeWhatsappTemplate(entry("castracao_senha_inicial", { bodyVariables: 2 })).uses, []);
 });
 
 test("only approved templates that keep their structure are usable for a use", () => {

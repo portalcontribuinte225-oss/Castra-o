@@ -43,7 +43,8 @@ test("the no-show event exists next to the other agenda events, and the old canc
   assert.equal(NotificationEvent.NO_SHOW, "no_show");
   assert.equal("SCHEDULE_CANCELLED" in NotificationEvent, false);
   assert.equal(NotificationEvent.REQUEST_REJECTED, "request_rejected");
-  assert.equal(Object.values(NotificationEvent).length, 6);
+  assert.equal(NotificationEvent.REQUEST_REGISTERED, "request_registered");
+  assert.equal(Object.values(NotificationEvent).length, 7);
 });
 
 test("the tutor is told the reason the staff chose, never the internal note, and nothing when the reason says nothing", () => {

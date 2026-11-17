@@ -28,11 +28,12 @@ describe("the last screen of a request", () => {
     expect(markup()).not.toContain("avisos");
   });
 
-  it("shows what only some places have to say, between the notices and the buttons", () => {
-    const html = markup({ followUp: { enabled: false }, children: <p>Acesso do tutor</p> });
-    expect(html.indexOf("Você escolheu")).toBeLessThan(html.indexOf("Acesso do tutor"));
-    expect(html.indexOf("Acesso do tutor")).toBeLessThan(html.indexOf("Baixar requerimento"));
-    expect(markup()).not.toContain("Acesso do tutor");
+  it("offers to create the password only where it is given, after the request document, and never shows a password", () => {
+    const html = markup({ onCreatePassword: noop });
+    expect(html).toMatch(/class="ghost-button"[^>]*>Criar minha senha</);
+    expect(html.indexOf("Baixar requerimento")).toBeLessThan(html.indexOf("Criar minha senha"));
+    expect(markup()).not.toContain("Criar minha senha");
+    expect(html).not.toMatch(/Senha inicial|senha temporária/i);
   });
 
   it("starts without an error and with the download ready", () => {

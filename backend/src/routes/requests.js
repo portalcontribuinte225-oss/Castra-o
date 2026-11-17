@@ -8,9 +8,8 @@ import { loadRequestSettings, loadDocumentReviewSettings } from "../repositories
 import { prepareRequestSubmission, mergeProtectedWorkflow } from "../services/request-submission.js";
 import { updateRequestProcedures } from "../services/request-procedures.js";
 import { notifyRequestChanges } from "../services/request-change-notifications.js";
-import { enrollTutorForRequest } from "../services/auth/tutor-enrollment.js";
-import { deliverAuthMessage } from "../services/auth/auth-message-delivery.js";
-import { AuthPurpose } from "../../../shared/auth-contract.js";
+import { notifyRequestRegistered } from "../services/notify-request-registered.js";
+import { resolveRequestTutor } from "../services/auth/request-tutor.js";
 import { validateRequestAnimalLink } from "../services/request-animal-link.js";
 import { prepareRegisteredRequest, registerRequestAnimals } from "../services/registered-animals/registered-request.js";
 import { applyAnimalRequestTransition } from "../services/registered-animals/animal-transitions.js";
@@ -91,6 +90,14 @@ function validateTags(value) {
   return parseJsonArray(value).every((tag) => ALLOWED_REQUEST_TAGS.has(tag));
 }
 
+// The notices sent about a request are kept in its history, after the request itself was saved.
+function appendRequestHistory(entries, id, municipalityId) {
+  return pool.query(
+    "UPDATE requests SET history = COALESCE(history, '[]'::jsonb) || $1::jsonb WHERE id = $2 AND municipality_id = $3",
+    [JSON.stringify(entries), id, municipalityId],
+  );
+}
+
 router.get("/", auth, async (req, res) => {
   try {
     const query = req.user.role === "tutor"
@@ -120,7 +127,7 @@ router.post("/", optionalAuth, async (req, res) => {
     await lockMunicipalSchedule(client, municipalityId);
     const settings = await loadRequestSettings(municipalityId, client);
     body = await prepareRegisteredRequest(client, { body, user: req.user, municipalityId });
-    const { cpf, workflow: submittedWorkflow, requestType, animals: procedureAnimals, internal, tutorRequired } = prepareRequestSubmission({
+    const { cpf, workflow: submittedWorkflow, requestType, animals: procedureAnimals, internal } = prepareRequestSubmission({
       body, user: req.user, municipalityId,
       workflow: parseJsonObject(body.workflow_data || body.workflowData), settings,
     });
@@ -134,10 +141,8 @@ router.post("/", optionalAuth, async (req, res) => {
       if (selectedType) workflow.requestTypeId = selectedType.id;
       else delete workflow.requestTypeId;
     }
-    const { tutorId, enrollment } = await enrollTutorForRequest(client, {
-      body: { ...body, cpf }, workflow, municipalityId, user: req.user, ip: req.ip,
-      tutorRequired: tutorRequired && !internal && requestType !== "DENUNCIA",
-    });
+    // No account is made here: the tutor creates the password on the first access, with a code sent to the request's contact.
+    const tutorId = await resolveRequestTutor(client, { cpf, municipalityId, user: req.user });
     const protocol = await nextProtocol(client);
     const requestId = crypto.randomUUID();
     const animals = Array.isArray(body.animals) ? body.animals : [];
@@ -248,21 +253,10 @@ router.post("/", optionalAuth, async (req, res) => {
     committed = true;
     client.release();
     released = true;
-    if (enrollment) {
-      try {
-        enrollment.delivery = await deliverAuthMessage({
-          purpose: AuthPurpose.INITIAL_PASSWORD, municipalityId,
-          user: { name: rows[0].tutor_name },
-          email: workflow.followUp?.enabled ? workflow.followUp.email : "",
-          phone: workflow.followUp?.enabled ? workflow.followUp.phone : "",
-          temporaryPassword: enrollment.temporaryPassword,
-        });
-      } catch {
-        enrollment.delivery = [{ status: DeliveryStatus.FAILED, reason: "Acesso criado; não foi possível enviar a senha inicial." }];
-      }
-    }
     res.set("Cache-Control", "no-store");
-    res.status(201).json({ request: rows[0], ...(enrollment ? { enrollment } : {}) });
+    res.status(201).json({ request: rows[0] });
+    // After the answer, so the notice never delays the request nor undoes it.
+    notifyRequestRegistered(rows[0], { appendHistory: appendRequestHistory }).catch(() => {});
   } catch (err) {
     if (client && !committed) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar a solicitação." });
@@ -471,12 +465,7 @@ router.patch("/:id", auth, async (req, res) => {
     savedRequest = rows[0];
     client.release();
     released = true;
-    rows[0].notificationResults = await notifyRequestChanges(existingRows[0], rows[0], {
-      appendHistory: (entries, id, municipalityId) => pool.query(
-        "UPDATE requests SET history = COALESCE(history, '[]'::jsonb) || $1::jsonb WHERE id = $2 AND municipality_id = $3",
-        [JSON.stringify(entries), id, municipalityId],
-      ),
-    });
+    rows[0].notificationResults = await notifyRequestChanges(existingRows[0], rows[0], { appendHistory: appendRequestHistory });
     res.json(decorateRequestDocuments(rows[0], settings));
   } catch (err) {
     if (committed) return res.json({ ...savedRequest, notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });

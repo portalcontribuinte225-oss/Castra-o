@@ -97,12 +97,12 @@ test("the master saves and reads the platform account, the municipal administrat
   const saved = await saveAccount({ active: true, token: TOKEN }, `?municipalityId=${OTHER}`);
   assert.equal(saved.status, 200); assert.equal(saved.cache, "no-store");
   assert.deepEqual([saved.body.active, saved.body.tokenValid, saved.body.environment, saved.body.hasToken, saved.body.tokenPreview], [true, true, "production", true, TOKEN.slice(0, 8)]);
-  assert.equal(saved.body.municipalityName, "Other Town"); assert.equal(saved.body.uses.length, 10);
+  assert.equal(saved.body.municipalityName, "Other Town"); assert.equal(saved.body.uses.length, 11);
   assert.equal(db.state.account.active, true); assert.equal(remoteCalls.length, 1);
   const own = await request(`/sms/settings?municipalityId=${OTHER}`);
   assert.equal(own.status, 200); assert.equal(own.cache, "no-store");
   assert.deepEqual([own.body.active, own.body.hasToken, own.body.tokenPreview, own.body.environment, own.body.tokenValid], [true, false, "", null, false]);
-  assert.equal(own.body.municipalityName, "Test Town"); assert.equal(own.body.uses.length, 10);
+  assert.equal(own.body.municipalityName, "Test Town"); assert.equal(own.body.uses.length, 11);
   const master = await request("/sms/settings", { user: MASTER });
   assert.equal(master.status, 200); assert.deepEqual([master.body.hasToken, master.body.tokenPreview, master.body.municipalityName], [true, TOKEN.slice(0, 8), ""]);
   const support = await request(`/sms/settings?municipalityId=${OTHER}`, { user: SUPPORT });
@@ -156,7 +156,7 @@ test("an administrator switches a message for their own municipality only and ge
 
 test("a message switch is validated, and a global user must choose an active municipality", async (t) => {
   const { request, db } = await fixture(t);
-  for (const body of [{ use: "unknown", active: true }, { use: AuthPurpose.INITIAL_PASSWORD, active: true }, { use: AuthPurpose.PASSWORD_RESET, active: "true" },
+  for (const body of [{ use: "unknown", active: true }, { use: "initial_password", active: true }, { use: AuthPurpose.PASSWORD_RESET, active: "true" },
     { use: AuthPurpose.PASSWORD_RESET }, {}]) {
     assert.equal((await request("/sms/uses/active", { method: "PUT", body })).status, 400, JSON.stringify(body));
   }

@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
+import { createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import { validateNewPassword } from "../../../../shared/auth-contract.js";
 
 export function authError(status, message, code) {
@@ -23,7 +23,6 @@ export function requireNewPassword(value) {
   return value;
 }
 
-export function temporaryPassword() { return randomBytes(18).toString("base64url"); }
 export function verificationCode() { return String(randomInt(100000, 1000000)); }
 export function maskEmail(value = "") {
   const [local, domain] = String(value || "").split("@");

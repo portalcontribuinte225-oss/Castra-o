@@ -8,9 +8,10 @@ function smsUse(key, kind, label, defaultActive = false) {
 }
 
 // A use is one message the system can send by SMS. Notice keys are NotificationEvent values and access keys are AuthPurpose
-// values, so they never collide. E-mail confirmation and the initial password have no SMS use: the initial password is a
-// secret that already shows on screen. Only password recovery starts on, as it already worked once the channel was active.
+// values, so they never collide. E-mail confirmation has no SMS use. Only password recovery starts on, as it already worked once the
+// channel was active.
 export const smsUses = Object.freeze([
+  smsUse(NotificationEvent.REQUEST_REGISTERED, SmsUseKind.NOTICE, "Solicitação registrada"),
   smsUse(NotificationEvent.SCHEDULE_CONFIRMED, SmsUseKind.NOTICE, "Agendamento confirmado"),
   smsUse(NotificationEvent.SCHEDULE_CHANGED, SmsUseKind.NOTICE, "Agendamento reagendado"),
   smsUse(NotificationEvent.NO_SHOW, SmsUseKind.NOTICE, "Não comparecimento"),

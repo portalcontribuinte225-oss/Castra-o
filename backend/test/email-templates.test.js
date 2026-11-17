@@ -22,10 +22,11 @@ function configured(extra = {}) {
   } });
 }
 
-test("there are eleven uses, six notices and five access messages, and phone confirmation is not one of them", () => {
+test("there are eleven uses, seven notices and four access messages; neither phone confirmation nor the initial password is one of them", () => {
   assert.equal(emailUses.length, 11);
-  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 6);
-  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.ACCESS).length, 5);
+  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 7);
+  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.ACCESS).length, 4);
+  assert.equal(getEmailUse("initial_password"), null);
   assert.equal(new Set(emailUses.map(({ key }) => key)).size, 11);
   for (const event of Object.values(NotificationEvent)) assert.ok(getEmailUse(event), event);
   assert.equal(getEmailUse(AuthPurpose.VERIFY_PHONE), null);
@@ -42,9 +43,9 @@ test("every use carries the recipient and the municipality identity, and only ag
   for (const use of emailUses) assert.equal(use.variables.includes("schedule_date"), schedule.includes(use.key), use.key);
   assert.ok(getEmailUse(NotificationEvent.DOCUMENTS_REVIEWED).variables.includes("documents_result"));
   assert.ok(getEmailUse(AuthPurpose.CONTACT_CHANGED).variables.includes("changed_fields"));
-  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 6), ["Agendamento confirmado", "Agendamento reagendado", "Não comparecimento", "Documentos analisados", "Atendimento concluído", "Solicitação indeferida"]);
+  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 7), ["Solicitação registrada", "Agendamento confirmado", "Agendamento reagendado", "Não comparecimento", "Documentos analisados", "Atendimento concluído", "Solicitação indeferida"]);
   assert.ok(getEmailUse(RESET).variables.includes("codigo_recuperacao"));
-  assert.ok(getEmailUse(AuthPurpose.INITIAL_PASSWORD).variables.includes("temporary_password"));
+  assert.equal(emailUses.some(({ variables }) => variables.includes("temporary_password")), false);
 });
 
 test("stored templates and switches keep only known uses, and an explicit false survives the password default", () => {
