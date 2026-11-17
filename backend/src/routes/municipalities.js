@@ -2,7 +2,8 @@ import { Router } from "express";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
-import { auth } from "../middleware/auth.js";
+import { auth, requireConfigItem } from "../middleware/auth.js";
+import { GENERAL_DATA_CONFIG_ITEM } from "../../../shared/config-permission-contract.js";
 import { MUNICIPALITY_ADMIN_ROLE, isGlobalUser } from "../tenant.js";
 import { upsertMunicipalityDefaultConfigs } from "../municipalityDefaults.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
@@ -187,12 +188,12 @@ router.post("/", auth, async (req, res) => {
 
 // ── Atualização de município ──────────────────────────────────────────────
 
-// Non-global authenticated users can edit only contact/branding data for their
-// own municipality. Tenant identity and activation fields remain master/support-only.
+// Non-global staff can edit only contact/branding data for their own municipality, and only with the "Dados Gerais" item of their
+// permission group (a user with no group falls back to the manager role). Tenant identity and activation fields remain master/support-only.
 const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "contact", "email", "address", "address_number", "address_complement", "neighborhood", "cep", "department_name"];
 const MUNICIPALITY_GLOBAL_EDIT_FIELDS = ["name", "state", "active", ...MUNICIPALITY_SELF_EDIT_FIELDS];
 
-router.patch("/:id", auth, async (req, res) => {
+router.patch("/:id", auth, requireConfigItem(GENERAL_DATA_CONFIG_ITEM), async (req, res) => {
   const isGlobal = isGlobalUser(req.user);
   const ownMunicipalityId = req.user?.municipalityId || req.user?.municipality_id || null;
   if (!isGlobal && ownMunicipalityId !== req.params.id) {

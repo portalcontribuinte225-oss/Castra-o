@@ -18,7 +18,7 @@ import { prepareRequestDocuments, assertMaterializedRequestSize } from "../servi
 import { applyDocumentReviews, decorateRequestDocuments } from "../services/documents/document-reviews.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { reserveRequestSchedule, bookingChanged } from "../services/schedule/schedule-booking.js";
-import { isProcedureRequest, RequestStatus } from "../../../shared/request-contract.js";
+import { isProcedureRequest, RequestOrigin, RequestStatus } from "../../../shared/request-contract.js";
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(Object.values(RequestStatus));
@@ -230,7 +230,7 @@ router.post("/", optionalAuth, async (req, res) => {
         JSON.stringify(workflow),
         pick(body.latitude, body.lat) || null,
         pick(body.longitude, body.lng) || null,
-        internal ? "INTERNA" : "PUBLICA",
+        internal ? RequestOrigin.INTERNAL : RequestOrigin.PUBLIC,
         Boolean(body.is_confidential || body.isConfidential),
         requestId,
       ]
@@ -421,7 +421,7 @@ router.patch("/:id", auth, async (req, res) => {
     if (bookingChanged(existingRows[0], nextRequest)) {
       nextRequest = await reserveRequestSchedule(client, {
         body: nextRequest, user: req.user,
-        internal: existingRows[0].origin === "INTERNA", municipalityId: existingRows[0].municipality_id, excludeId: req.params.id,
+        internal: existingRows[0].origin === RequestOrigin.INTERNAL, municipalityId: existingRows[0].municipality_id, excludeId: req.params.id,
       });
       nextWorkflow = nextRequest.workflow_data;
       for (const key of ["schedule_date", "schedule_location_name", "schedule_address", "schedule_address_url", "schedule_municipality"]) {

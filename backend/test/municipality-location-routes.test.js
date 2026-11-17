@@ -10,9 +10,11 @@ const OTHER = "33333333-3333-4333-8333-333333333333";
 const MASTER = "22222222-2222-4222-8222-222222222222";
 const ADMIN = "44444444-4444-4444-8444-444444444444";
 const ANALYST = "55555555-5555-4555-8555-555555555555";
+const TUTOR = "66666666-6666-4666-8666-666666666666";
 const location = { contact: "(48) 99999-0000", cep: "88820-000", address: "Rua das Flores", addressNumber: "100", addressComplement: "Sala 2", neighborhood: "Centro" };
 
-async function fixture(t) {
+// `config` answers the reads of the team and of the permission groups (key -> value); with none, nobody has a group.
+async function fixture(t, { config = {} } = {}) {
   const prior = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, initial: process.env.DEFAULT_MUNICIPALITY_ADMIN_PASSWORD };
   process.env.JWT_SECRET = "municipality-location-test-only";
   process.env.DEFAULT_MUNICIPALITY_ADMIN_PASSWORD = "test-only-initial-password";
@@ -21,11 +23,13 @@ async function fixture(t) {
     master: registerTestSession(users, { id: MASTER, role: "master" }),
     admin: registerTestSession(users, { id: ADMIN, role: "admin_municipal", municipalityId: MUNICIPALITY }),
     analyst: registerTestSession(users, { id: ANALYST, role: "analista", municipalityId: MUNICIPALITY }),
+    tutor: registerTestSession(users, { id: TUTOR, role: "tutor", municipalityId: MUNICIPALITY }),
   };
   const calls = [];
   const query = async (sql, values = []) => {
     const session = resolveTestSession(sql, values, users);
     if (session) return session;
+    if (sql.includes("FROM config WHERE key=$1")) return { rows: values[0] in config ? [{ value: config[values[0]] }] : [] };
     calls.push({ sql, values });
     if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [] };
     if (sql.includes("INSERT INTO municipalities")) return { rows: [{ id: MUNICIPALITY, name: "Test Town", slug: "test-town", state: "SC" }] };
@@ -97,4 +101,20 @@ test("the support also edits the name and the state, and a partial update touche
   assert.match(update.sql, /name = \$1, state = \$2, neighborhood = \$3/);
   assert.deepEqual(update.values.slice(0, 3), ["Renamed", "RS", "Centro"]);
   assert.doesNotMatch(update.sql, /contact|cep|address =/);
+});
+
+test("only staff with the Dados Gerais item edit the data of the municipality: not a tutor, not an analyst without it", async (t) => {
+  const { calls, tokens, send } = await fixture(t);
+  for (const token of [tokens.tutor, tokens.analyst]) assert.equal((await send("PATCH", `/${MUNICIPALITY}`, token, location)).status, 403);
+  assert.equal(calls.some(({ sql }) => sql.startsWith("UPDATE municipalities")), false);
+});
+
+test("the permission group decides: the item lets an analyst edit, and its absence stops even the manager", async (t) => {
+  const groups = [{ id: "editors", active: true, allowedConfigItems: ["municipalities"] }, { id: "limited", active: true, allowedConfigItems: ["environment"] }];
+  const team = { users: [{ id: ANALYST, permissionGroupId: "editors" }, { id: ADMIN, permissionGroupId: "limited" }] };
+  const { calls, tokens, send } = await fixture(t, { config: { "castragestao:teams": team, permission_groups: groups } });
+  assert.equal((await send("PATCH", `/${MUNICIPALITY}`, tokens.analyst, location)).status, 200);
+  assert.equal((await send("PATCH", `/${MUNICIPALITY}`, tokens.admin, location)).status, 403);
+  assert.equal(calls.filter(({ sql }) => sql.startsWith("UPDATE municipalities")).length, 1);
+  assert.equal((await send("PATCH", `/${OTHER}`, tokens.analyst, location)).status, 403, "the item never reaches another municipality");
 });

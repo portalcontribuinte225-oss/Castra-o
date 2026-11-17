@@ -9,6 +9,10 @@ export const IntegrationConfigItem = Object.freeze({
   EMAIL: EMAIL_SETTINGS_PERMISSION,
 });
 
+// The item of a permission group that opens "Dados Gerais", where the contact, the address, the department and the coat of arms of the
+// municipality are edited.
+export const GENERAL_DATA_CONFIG_ITEM = "municipalities";
+
 export const CHANNEL_CONFIG_ITEMS = Object.freeze({
   [NotificationChannel.WHATSAPP]: IntegrationConfigItem.WHATSAPP,
   [NotificationChannel.SMS]: IntegrationConfigItem.SMS,

@@ -5,6 +5,7 @@ import { PasswordChangeForm } from "./password-change-form";
 import type { SessionUser } from "./auth-types";
 import { RegisteredAnimalsView } from "../registered-animals/registered-animals-view";
 import { RegisteredRequestWorkspace } from "../registered-animals/registered-request-workspace";
+import type { RequirementBuilder } from "../registered-animals/registered-request-workspace";
 import type { TutorRequestFormInput } from "../registered-animals/registered-request-workspace";
 import type { ProcedureIntent } from "../registered-animals/procedure-intent";
 import { AnimalServiceWorkspace } from "../animal-services/animal-service-workspace";
@@ -30,7 +31,7 @@ function useTutorRequests(enabled: boolean) {
   return { requests, loading, error, retry: () => setAttempt((current) => current + 1) };
 }
 
-export function TutorArea({ user, intent, onIntentConsumed, onSession, onLogout, renderRequests, renderForm, downloadRecordPdf }: { user: SessionUser; intent?: ProcedureIntent | null; onIntentConsumed: () => void; onSession: (user: SessionUser) => void; onLogout: () => void; renderRequests: (requests: unknown[]) => React.ReactNode; renderForm: (input: TutorRequestFormInput) => React.ReactNode; downloadRecordPdf: (record: AnimalRecord) => Promise<void> }) {
+export function TutorArea({ user, intent, onIntentConsumed, onSession, onLogout, renderRequests, renderForm, downloadRecordPdf, createRequirement }: { user: SessionUser; intent?: ProcedureIntent | null; onIntentConsumed: () => void; onSession: (user: SessionUser) => void; onLogout: () => void; renderRequests: (requests: unknown[]) => React.ReactNode; renderForm: (input: TutorRequestFormInput) => React.ReactNode; downloadRecordPdf: (record: AnimalRecord) => Promise<void>; createRequirement: RequirementBuilder }) {
   const [tab, setTab] = useState(intent ? TutorAreaTab.ANIMALS : TutorAreaTab.REQUESTS);
   const [animalId, setAnimalId] = useState<string | undefined>();
   const [serviceSelection, setServiceSelection] = useState<AnimalServiceSelection | null>(null);
@@ -46,7 +47,7 @@ export function TutorArea({ user, intent, onIntentConsumed, onSession, onLogout,
     <nav className="tutor-access-nav" aria-label="Área do tutor"><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.ANIMALS ? "page" : undefined} onClick={() => setTab(TutorAreaTab.ANIMALS)}>Meus animais</button><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.REQUESTS ? "page" : undefined} onClick={() => setTab(TutorAreaTab.REQUESTS)}>Minhas solicitações</button><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.PROFILE ? "page" : undefined} onClick={() => setTab(TutorAreaTab.PROFILE)}>Meu perfil</button><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.PASSWORD ? "page" : undefined} onClick={() => { setTab(TutorAreaTab.PASSWORD); setPasswordChanged(false); }}>Alterar senha</button></nav>
     {tab === TutorAreaTab.ANIMALS && <RegisteredAnimalsView key={listVersion} onSelect={openForm} onNew={() => openForm()} onService={openService} />}
     {tab === TutorAreaTab.SERVICE && serviceSelection && <AnimalServiceWorkspace selection={serviceSelection} onBack={() => setTab(TutorAreaTab.ANIMALS)} downloadRecordPdf={downloadRecordPdf} />}
-    {tab === TutorAreaTab.FORM && <RegisteredRequestWorkspace key={animalId || "new"} animalId={animalId} municipalityId={user.municipalityId || ""} intent={intent || null} renderForm={renderForm} onBack={() => setTab(TutorAreaTab.ANIMALS)} onComplete={() => { onIntentConsumed(); setListVersion((current) => current + 1); state.retry(); }} />}
+    {tab === TutorAreaTab.FORM && <RegisteredRequestWorkspace key={animalId || "new"} animalId={animalId} municipalityId={user.municipalityId || ""} intent={intent || null} renderForm={renderForm} createRequirement={createRequirement} onBack={() => setTab(TutorAreaTab.ANIMALS)} onComplete={() => { onIntentConsumed(); setListVersion((current) => current + 1); state.retry(); }} />}
     {tab === TutorAreaTab.PROFILE && <TutorProfileView />}
     {tab === TutorAreaTab.PASSWORD && <div className="panel"><PasswordChangeForm onChanged={(nextUser) => { onSession(nextUser); setPasswordChanged(true); setTab(TutorAreaTab.REQUESTS); }} onCancel={() => setTab(TutorAreaTab.REQUESTS)} /></div>}
     {tab === TutorAreaTab.REQUESTS && <>{passwordChanged && <p role="status">Senha alterada. As sessões anteriores foram encerradas.</p>}{state.loading ? <p role="status">Carregando suas solicitações...</p> : state.error ? <div><p className="form-error" role="alert">{state.error}</p><button type="button" className="ghost-button" onClick={state.retry}>Tentar novamente</button></div> : state.requests.length ? renderRequests(state.requests) : <section className="panel"><h2>Minhas solicitações</h2><p>Nenhuma solicitação vinculada a este acesso.</p></section>}</>}

@@ -40,7 +40,7 @@ describe("registered procedure entry", () => {
   it("opens the animal area without rendering requests or an administrative workspace for the intent", () => {
     const requests = vi.fn(() => <p>history</p>);
     const form = vi.fn(() => null);
-    const html = renderToStaticMarkup(<TutorArea user={user} intent={{ municipalityId: "town-a" }} onIntentConsumed={() => {}} onSession={() => {}} onLogout={() => {}} renderRequests={requests} renderForm={form} downloadRecordPdf={async () => {}} />);
+    const html = renderToStaticMarkup(<TutorArea user={user} intent={{ municipalityId: "town-a" }} onIntentConsumed={() => {}} onSession={() => {}} onLogout={() => {}} renderRequests={requests} renderForm={form} downloadRecordPdf={async () => {}} createRequirement={async () => ""} />);
     expect(html).toContain("Meus animais"); expect(html).toContain("Cadastrar outro animal");
     expect(requests).not.toHaveBeenCalled(); expect(form).not.toHaveBeenCalled();
   });

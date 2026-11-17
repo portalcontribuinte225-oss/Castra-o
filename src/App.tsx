@@ -174,6 +174,8 @@ import {
 } from "./features/request-procedures/request-procedures";
 import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, isRequestFeeCharged, isRequestTypeCharged, resolveRequestTypes } from "../shared/request-types-contract.js";
 import { renderDeclaration } from "../shared/request-declaration-contract.js";
+import { RequestOrigin } from "../shared/request-contract.js";
+import { RequestAcceptance, requestAcceptance } from "./features/request-document/request-acceptance";
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
 import { MunicipalityAddressFields } from "./features/municipality-form/municipality-address-fields";
@@ -363,7 +365,7 @@ export default function App() {
   const logout = useCallback(() => { setProcedureIntent(null); session.logout(); }, [session.logout]);
   useEffect(() => { if (session.ready && !session.user) setProcedureIntent((current) => current?.ownerId ? null : current); }, [session.ready, session.user]);
   return <SessionBoundary session={{ ...session, accept, logout }}
-    renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact setActive={() => {}} />}
+    renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} createRequirement={createRequestPdfDataUrl} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact setActive={() => {}} />}
       renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} publicFlow selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} municipality={input.options[MUNICIPALITY_OPTION]} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
         requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
     />}
@@ -3080,7 +3082,7 @@ function NewRequest({
     try {
       // The staff and the public send the same request; each adds only what is its own: the notes and the origin, or the term.
       const own = internalSimple
-        ? { notes: sent.notes || "", signedAt: "", tags: [], origin: "INTERNA" }
+        ? { notes: sent.notes || "", signedAt: "", tags: [], origin: RequestOrigin.INTERNAL }
         : { declarationAccepted: accepted, signedAt: new Date().toISOString() };
       await sendRequest({ ...(await buildRequestSubmission()), ...own });
     } finally {
@@ -3882,7 +3884,7 @@ type AttachmentRow = AnyRecord & { id: string; document?: AnyRecord };
 
 export function RequestPreviewModal({ request, readOnly = true, neighborhoods = [], onTutorSaved, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
   const normalizedRequest = normalizeRequest(request);
-  const isInternal = normalizedRequest.origin === "INTERNA" || normalizedRequest.origin === "BALCAO";
+  const isInternal = normalizedRequest.origin === RequestOrigin.INTERNAL;
   // The municipality of the request, whose name and department the request document and the declaration carry.
   const requestMunicipality = municipalities.find((item) => item.id === normalizedRequest.municipalityId) || null;
   const [previewAttachment, setPreviewAttachment] = useState(null);
@@ -9975,7 +9977,10 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}, municipality: An
   const req = normalizeRequest(request);
   const workflowData = req.workflowData || req.workflow_data || {};
   const animals = Array.isArray(req.animals) ? req.animals : [];
-  const signedAt = req.signedAt || req.signed_at || req.createdAt || req.created_at || new Date().toISOString();
+  // The public form records an electronic acceptance; a request made at the counter is registered by the staff and signed on paper.
+  const acceptance = requestAcceptance(req);
+  const acceptedAt = acceptance.at || new Date().toISOString();
+  const electronic = acceptance.kind === RequestAcceptance.ELECTRONIC;
   const scheduleAddress = [
     req.scheduleLocationName || req.locationName,
     req.scheduleAddress || req.schedule_address,
@@ -10091,14 +10096,14 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}, municipality: An
   page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
   y -= 14;
 
-  y = drawProntuarioSectionTitle(page1, "PROTOCOLO E ACEITE", y, ctx);
+  y = drawProntuarioSectionTitle(page1, electronic ? "PROTOCOLO E ACEITE" : "PROTOCOLO E REGISTRO", y, ctx);
   y -= 8;
   page1.drawText("PROTOCOLO", { x: margin + 9, y, size: 7, font: bold, color: colors.muted });
   y -= 18;
   page1.drawText(pdfText(`#${req.protocol || "-"}`), { x: margin + 9, y, size: 18, font: bold, color: colors.blue });
   y -= 14;
   page1.drawText(
-    pdfText(`Aceite eletrônico registrado em ${formatDateTime(signedAt)}`),
+    pdfText(`${electronic ? "Aceite eletrônico registrado em" : "Registrado no atendimento em"} ${formatDateTime(acceptedAt)}`),
     { x: margin + 9, y, size: 8, font, color: colors.muted }
   );
   drawRequestPdfFooter(page1, "Requerimento municipal", "Página 1 de 2", ctx);
@@ -10143,16 +10148,33 @@ async function createRequestPdfDataUrl(request: AnyRecord = {}, municipality: An
   page2.drawLine({ start: { x: margin, y: y2 }, end: { x: margin + contentW, y: y2 }, thickness: 0.4, color: colors.line });
   y2 -= 16;
 
-  y2 = drawProntuarioSectionTitle(page2, "ACEITE ELETRÔNICO DO TUTOR", y2, ctx);
-  y2 -= 6;
-  drawProntuarioFields(page2, [
-    [
-      { label: "ACEITE REGISTRADO POR", value: req.tutor || "-" },
-      { label: "CPF", value: req.cpf || "-" },
-      { label: "DATA / HORA", value: formatDateTime(signedAt) },
-      { label: "MÉTODO", value: "Li e aceito" },
-    ],
-  ], y2, ctx);
+  if (electronic) {
+    y2 = drawProntuarioSectionTitle(page2, "ACEITE ELETRÔNICO DO TUTOR", y2, ctx);
+    y2 -= 6;
+    drawProntuarioFields(page2, [
+      [
+        { label: "ACEITE REGISTRADO POR", value: req.tutor || "-" },
+        { label: "CPF", value: req.cpf || "-" },
+        { label: "DATA / HORA", value: formatDateTime(acceptedAt) },
+        { label: "MÉTODO", value: "Li e aceito" },
+      ],
+    ], y2, ctx);
+  } else {
+    // No term is accepted on the screen at the counter: the tutor signs the printed declaration.
+    y2 = drawProntuarioSectionTitle(page2, "ASSINATURA DO TUTOR", y2, ctx);
+    y2 -= 6;
+    y2 = drawProntuarioFields(page2, [
+      [
+        { label: "NOME", value: req.tutor || "-" },
+        { label: "CPF", value: req.cpf || "-" },
+        { label: "REGISTRADO NO ATENDIMENTO EM", value: formatDateTime(acceptedAt) },
+      ],
+    ], y2, ctx);
+    y2 -= 36;
+    page2.drawLine({ start: { x: margin + 9, y: y2 }, end: { x: margin + 289, y: y2 }, thickness: 0.6, color: colors.ink });
+    y2 -= 12;
+    page2.drawText(pdfText("Assinatura do tutor ou responsável"), { x: margin + 9, y: y2, size: 8, font, color: colors.muted });
+  }
   drawRequestPdfFooter(page2, "Requerimento municipal", "Página 2 de 2", ctx);
 
   return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");

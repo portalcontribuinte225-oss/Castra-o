@@ -1,7 +1,7 @@
 import type { AnyRecord } from "./types";
 import { maskCpf, maskName } from "./utils";
 import { normalizeDocumentReusePolicy } from "../shared/document-reuse-contract.js";
-import { RequestKind, RequestStatus } from "../shared/request-contract.js";
+import { RequestKind, RequestOrigin, RequestStatus } from "../shared/request-contract.js";
 import { animalRequestTypeIds } from "../shared/request-types-contract.js";
 
 export const statuses = [
@@ -432,7 +432,7 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     ...request,
     status,
     tags,
-    origin: request.origin || "PUBLICA",
+    origin: request.origin || RequestOrigin.PUBLIC,
     rescheduleCount,
     protocol: request.protocol || String(request.id || "").slice(0, 8).toUpperCase() || "SEM-ID",
     signatureDataUrl: request.signatureDataUrl || request.signature_data_url || "",
