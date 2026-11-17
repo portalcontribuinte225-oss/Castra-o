@@ -39,11 +39,11 @@ export function TutorStepFields({ data, nameInvalid, nameIssue, cpfInvalid, neig
     <>
       <div className="form-sub-card">
         <span className="form-sub-card-title">Responsável</span>
-        <div className={`access-field${nameInvalid ? " is-invalid" : ""}`} data-label="Nome completo">
-          <input type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={data.tutor} onChange={(event) => onField("tutor", event.target.value)} aria-invalid={nameInvalid} />
-          {nameInvalid && <small className="field-error-message">{nameIssue}</small>}
-        </div>
         <div className="two-column-fields">
+          <div className={`access-field${nameInvalid ? " is-invalid" : ""}`} data-label="Nome completo">
+            <input type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={data.tutor} onChange={(event) => onField("tutor", event.target.value)} aria-invalid={nameInvalid} />
+            {nameInvalid && <small className="field-error-message">{nameIssue}</small>}
+          </div>
           <div className={`access-field${cpfInvalid ? " is-invalid" : ""}`} data-label="CPF">
             <input type="text" placeholder="000.000.000-00" value={data.cpf} onChange={(event) => onMaskedField("cpf", event.target.value)} aria-invalid={cpfInvalid} />
             {cpfInvalid && <small className="field-error-message">Informe um CPF válido.</small>}

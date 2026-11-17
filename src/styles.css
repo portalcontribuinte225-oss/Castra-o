@@ -6248,7 +6248,6 @@ main {
   gap: 2px;
   padding: 6px 8px;
   min-height: 42px;
-  white-space: nowrap;
 }
 
 
@@ -13004,12 +13003,6 @@ body * {
 
 .internal-request-modal .single-request-form .animal-form .animal-choice-grid.two-col {
   grid-template-columns: minmax(0, 1fr) minmax(250px, 0.9fr);
-}
-
-
-.internal-request-modal .internal-microchip-row {
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 10px 14px;
 }
 
 
@@ -24717,7 +24710,7 @@ small,
 
 /* Internal request registration mirrors the public layout with neutral system colors. */
 .internal-request-modal {
-  width: min(860px, calc(100vw - 40px)) !important;
+  width: min(1100px, calc(100vw - 40px)) !important;
 }
 
 .internal-request-modal .nr-shell--internal {
