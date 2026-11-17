@@ -1353,7 +1353,7 @@ function PublicSchedulePicker({
   return (
     <section className="panel public-schedule-picker">
       {title && <span className="form-sub-card-title">{title}</span>}
-      {hint && <p className="muted">{hint}</p>}
+      {hint && <p className="form-hint">{hint}</p>}
       <div className="sched-month-selector">
         <button
           type="button"
@@ -3418,7 +3418,7 @@ function NewRequest({
 
                   {!internalSimple && <div className="doc-declaration">
                     <p>
-                      <strong>Declaração de responsabilidade</strong>{" · "}
+                      <span>Declaração de responsabilidade</span>{" · "}
                       <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler</button>
                     </p>
                     <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>

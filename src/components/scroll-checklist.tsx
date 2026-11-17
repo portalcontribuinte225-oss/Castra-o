@@ -53,7 +53,7 @@ export function ScrollChecklist({ legend, hint = "", required = false, groups, s
   return (
     <fieldset className={`scroll-checklist${invalid ? " is-invalid" : ""}`}>
       <legend>{legend}{required && <span className="required-asterisk">*</span>}</legend>
-      {hint && <small className="muted">{hint}</small>}
+      {hint && <small className="form-hint">{hint}</small>}
       {total > CHECKLIST_SEARCH_THRESHOLD && (
         <input
           className="scroll-checklist-search"

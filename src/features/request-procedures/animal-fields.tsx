@@ -60,7 +60,7 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
           </div>
         </div>
         <NeighborhoodField label="Em que bairro ele vive?" placeholder="Ex.: Centro" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
-        <small className="muted">Usamos o bairro para organizar os atendimentos da região.</small>
+        <small className="form-hint">Usamos o bairro para organizar os atendimentos da região.</small>
         {internal && (
           <div className="internal-microchip-row">
             <div className="access-field" data-label="Microchip">
@@ -89,7 +89,7 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
       </div>
       <div className="form-sub-card">
         <span className="form-sub-card-title">Saúde e cuidados</span>
-        <small className="muted">Responda como souber; tudo bem não ter certeza.</small>
+        <small className="form-hint">Responda como souber; tudo bem não ter certeza.</small>
         <div className="health-grid">
           <YesNoToggleField label="Já tomou vermífugo?" value={animal.dewormed} onChange={(value) => onChange("dewormed", value)} />
           <YesNoToggleField label="As vacinas estão em dia?" value={animal.vaccinated} onChange={(value) => onChange("vaccinated", value)} />

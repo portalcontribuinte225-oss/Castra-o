@@ -3534,7 +3534,7 @@ button:disabled {
   border-radius: 10px;
   background: #f8fafc;
   color: #1d4ed8;
-  font-size: 0.9rem;
+  font-size: var(--type-size-body);
   font-weight: 600;
   padding: 8px 14px;
   cursor: pointer;
@@ -5532,7 +5532,7 @@ main {
 
 .doc-photo-placeholder span {
   font-size: 0.9rem;
-  font-weight: 600;
+  font-weight: var(--type-weight-label);
   color: #64748b;
 }
 
@@ -5635,8 +5635,8 @@ main {
 
 
 .doc-row-info strong {
-  font-size: 0.88rem;
-  font-weight: 700;
+  font-size: var(--type-size-body);
+  font-weight: var(--type-weight-label);
   color: var(--ink);
 }
 
@@ -5648,7 +5648,7 @@ main {
 
 
 .doc-row-info small {
-  font-size: 0.76rem;
+  font-size: var(--type-size-detail);
   color: #64748b;
   white-space: nowrap;
   overflow: hidden;
@@ -5848,8 +5848,8 @@ main {
   padding: 12px 16px;
   background: #fff;
   cursor: pointer;
-  font-size: 0.88rem;
-  font-weight: 600;
+  font-size: var(--type-size-body);
+  font-weight: var(--type-weight-body);
   color: var(--ink);
 }
 
@@ -5946,9 +5946,9 @@ main {
 
 
 .single-request-form .animal-form .compact-choice-field > span {
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
+  font-size: var(--type-size-label);
+  font-weight: var(--type-weight-label);
+  text-transform: none;
   letter-spacing: 0.05em;
   color: #64748b;
   text-align: left;
@@ -5963,7 +5963,7 @@ main {
 .single-request-form .animal-form .compact-choice-field button {
   min-height: 36px;
   border-radius: 8px;
-  font-size: 0.83rem;
+  font-size: var(--type-size-label);
   font-weight: 600;
   border: 1.5px solid #e2e8f0;
   background: #f8fafc;
@@ -6179,7 +6179,7 @@ main {
   border-radius: 12px;
   background: transparent;
   color: #2563eb;
-  font-size: 0.88rem;
+  font-size: var(--type-size-body);
   font-weight: 600;
   padding: 11px;
   cursor: pointer;
@@ -6254,7 +6254,7 @@ main {
 
 .compact-choice-field button small {
   color: var(--muted);
-  font-size: 0.56rem;
+  font-size: var(--type-size-detail);
   font-weight: 600;
   line-height: 1;
 }
@@ -17101,7 +17101,7 @@ form textarea:focus,
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.06em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 
@@ -17124,13 +17124,14 @@ form textarea:focus,
 
 .nr-shell .calendar-day-button strong {
   color: #64748b;
-  font-size: 0.92rem;
+  font-size: var(--type-size-option);
+  font-weight: var(--type-weight-strong);
 }
 
 
 .nr-shell .calendar-day-button small {
   color: #64748b;
-  font-size: 0.66rem;
+  font-size: var(--type-size-detail);
   line-height: 1.15;
 }
 
@@ -17175,7 +17176,7 @@ form textarea:focus,
 
 
 .nr-shell--public .calendar-day-button.has-vacancy strong {
-  color: #0f172a;
+  color: var(--type-color-primary);
 }
 
 
@@ -17194,7 +17195,7 @@ form textarea:focus,
 
 
 .nr-shell--public .calendar-day-button.selected strong {
-  color: #0f172a;
+  color: var(--type-color-primary);
 }
 
 
@@ -17213,14 +17214,14 @@ form textarea:focus,
 
 .nr-shell--public .calendar-day-button:disabled strong,
 .nr-shell--public .calendar-day-button:disabled small {
-  color: #94a3b8;
+  color: var(--type-color-disabled);
 }
 
 
 .nr-shell--public .calendar-weekdays span {
-  color: #64748b;
-  font-size: 0.7rem;
-  font-weight: 700;
+  color: var(--type-color-secondary);
+  font-size: var(--type-size-label);
+  font-weight: var(--type-weight-label);
   letter-spacing: 0.04em;
 }
 
@@ -20364,7 +20365,7 @@ form textarea:focus,
 .nr-shell--public .anm-type-label,
 .nr-shell--public .compact-choice-field > span,
 .nr-shell--public .access-field[data-label]::before {
-  color: #64748b;
+  color: var(--type-color-secondary);
 }
 
 /* .access-field[data-label]::before (~L16704, base) usa font-weight:800/0.66rem —
@@ -20372,7 +20373,7 @@ form textarea:focus,
    correta) e mais pesado que o mockup (700). Alinha as duas para ficarem consistentes. */
 .nr-shell--public .access-field[data-label]::before,
 .nr-shell--public .anm-type-label {
-  font-size: 0.72rem;
+  font-size: var(--type-size-label);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -20388,18 +20389,18 @@ form textarea:focus,
 /* Título do card (ex.: "Tipo e identificação") vira texto grande e escuro, como no mockup —
    não a legenda pequena/uppercase usada pelos cards genéricos do resto do app. */
 .nr-shell--public .form-sub-card-title {
-  font-size: 0.94rem;
-  font-weight: 700;
+  font-size: var(--type-size-title);
+  font-weight: var(--type-weight-strong);
   text-transform: none;
   letter-spacing: normal;
-  color: #0f172a;
+  color: var(--type-color-primary);
   padding-bottom: 0;
   border-bottom: none;
 }
 
 
 .nr-shell--public .single-request-form .animal-form .compact-choice-field > span {
-  color: #64748b;
+  color: var(--type-color-secondary);
 }
 
 
@@ -20463,9 +20464,9 @@ form textarea:focus,
 
 
 .nr-shell--public .yes-no-toggle-field > span {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: #0f172a;
+  font-size: var(--type-size-label);
+  font-weight: var(--type-weight-label);
+  color: var(--type-color-secondary);
 }
 
 
@@ -20484,8 +20485,8 @@ form textarea:focus,
   background: transparent;
   padding: 0;
   color: #0f172a;
-  font-size: 0.8rem;
-  font-weight: 600;
+  font-size: var(--type-size-label);
+  font-weight: var(--type-weight-label);
 }
 
 
@@ -20545,11 +20546,11 @@ form textarea:focus,
 
 /* Faixa de peso do porte (ex: "0–5 kg"), mostrada como legenda abaixo do nome do porte. */
 .nr-shell--public .compact-choice-field button small {
-  color: #64748b;
+  color: var(--type-color-muted);
 }
 
 .nr-shell--public .compact-choice-field button.selected small {
-  color: #0f172a;
+  color: var(--type-color-primary);
 }
 
 
@@ -20640,6 +20641,7 @@ form textarea:focus,
 
 .nr-shell--public .inline-link-button {
   color: #2563eb;
+  font-size: var(--type-size-body);
 }
 
 
@@ -20721,11 +20723,11 @@ form textarea:focus,
 }
 
 .nr-shell--public .doc-row-hint {
-  color: #64748b;
+  color: var(--type-color-muted);
 }
 
 .nr-shell--public .doc-row-info strong {
-  color: #0f172a;
+  color: var(--type-color-primary);
 }
 
 .nr-shell--public .doc-row-msg {
@@ -20745,7 +20747,7 @@ form textarea:focus,
 }
 
 .nr-shell--public .doc-photo-placeholder span {
-  color: #0f172a;
+  color: var(--type-color-primary);
 }
 
 .nr-shell--public .doc-photo-placeholder small {
@@ -21303,14 +21305,14 @@ form textarea:focus,
 .public-service-panel .nr-step-circle {
   width: 22px;
   height: 22px;
-  font-size: 0.7rem;
+  font-size: var(--type-size-detail);
   flex: 0 0 auto;
 }
 
 .public-service-panel .nr-step-label {
   display: inline;
-  font-size: 0.72rem;
-  font-weight: 800;
+  font-size: var(--type-size-label);
+  font-weight: var(--type-weight-label);
   letter-spacing: 0;
 }
 .public-service-panel .nr-step:disabled {
@@ -21391,11 +21393,11 @@ form textarea:focus,
 }
 
 .nr-shell .doc-photo-zone--compact .doc-photo-placeholder span {
-  font-size: 0.78rem;
+  font-size: var(--type-size-body);
 }
 
 .nr-shell .doc-photo-zone--compact .doc-photo-placeholder small {
-  font-size: 0.68rem;
+  font-size: var(--type-size-detail);
 }
 
 .nr-shell .documents-main-column,
@@ -21424,8 +21426,8 @@ form textarea:focus,
   margin: 0;
   padding: 0;
   border: 0;
-  color: #475569;
-  font-size: 0.78rem;
+  color: var(--type-color-secondary);
+  font-size: var(--type-size-body);
   line-height: 1.45;
 }
 
@@ -24199,6 +24201,30 @@ main,
   --type-weight-card-title: 600;
   --type-weight-page-title: 700;
   --type-weight-number: 700;
+  /* The type scale of the request form: title, option, text, label and detail, and the colors of its text. */
+  --type-weight-strong: 600;
+  --type-size-title: 1rem;
+  --type-size-option: 0.9375rem;
+  --type-size-body: 0.875rem;
+  --type-size-label: 0.8125rem;
+  --type-size-detail: 0.75rem;
+  --type-color-primary: #0f172a;
+  --type-color-secondary: #475569;
+  --type-color-muted: #64748b;
+  --type-color-disabled: #94a3b8;
+}
+
+/* A short line of help under a field or a title. */
+.form-hint {
+  margin: 0;
+  color: var(--type-color-muted);
+  font-size: var(--type-size-detail);
+}
+
+/* The answer chosen, in the line that replaces a question once answered; and the step the person is in. */
+.choice-answer strong,
+.public-service-panel .nr-step--current .nr-step-label {
+  font-weight: var(--type-weight-strong);
 }
 
 body,
@@ -25123,6 +25149,7 @@ small,
   border-radius: 12px;
   background: #fff6e5;
   color: #78561d;
+  font-size: var(--type-size-body);
 }
 
 /* -- PASSO "VOCÊ": as perguntas em cards (como solicitar, tutor, avisos), a linha da resposta com "Alterar" e o que cada resposta abre
@@ -25135,9 +25162,9 @@ small,
 
 .choice-question-title {
   margin: 0;
-  color: var(--ink);
-  font-size: 1rem;
-  font-weight: 700;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-title);
+  font-weight: var(--type-weight-strong);
 }
 
 .choice-card-grid {
@@ -25161,13 +25188,14 @@ small,
 }
 
 .choice-card strong {
-  color: var(--ink);
-  font-size: 1.05rem;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-option);
+  font-weight: var(--type-weight-strong);
 }
 
 .choice-card span {
-  color: var(--muted);
-  font-size: 0.9rem;
+  color: var(--type-color-secondary);
+  font-size: var(--type-size-body);
   line-height: 1.5;
 }
 
@@ -25210,8 +25238,8 @@ small,
 }
 
 .choice-answer span {
-  color: #475569;
-  font-size: 0.88rem;
+  color: var(--type-color-secondary);
+  font-size: var(--type-size-body);
 }
 
 .nr-shell .requester-reveal {
@@ -25222,8 +25250,9 @@ small,
 
 .public-schedule-picker .schedule-chosen {
   margin: 12px 0 0;
-  color: var(--ink);
-  font-weight: 600;
+  color: var(--type-color-primary);
+  font-weight: var(--type-weight-label);
+  font-size: var(--type-size-body);
 }
 
 @keyframes requester-reveal {
@@ -25453,9 +25482,9 @@ small,
 .scroll-checklist > legend {
   margin-bottom: 4px;
   padding: 0;
-  color: var(--muted);
-  font-size: 0.84rem;
-  font-weight: 600;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-title);
+  font-weight: var(--type-weight-strong);
 }
 
 .scroll-checklist-search {
@@ -25501,8 +25530,8 @@ small,
   gap: 10px;
   min-height: 40px;
   padding: 8px 12px;
-  color: var(--ink);
-  font-size: 0.9rem;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
   cursor: pointer;
 }
 
@@ -25524,8 +25553,8 @@ small,
 
 .scroll-checklist-detail {
   flex: 0 0 auto;
-  color: #64748b;
-  font-size: 0.8rem;
+  color: var(--type-color-muted);
+  font-size: var(--type-size-detail);
 }
 
 .scroll-checklist-empty {
