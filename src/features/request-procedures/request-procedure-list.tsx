@@ -15,7 +15,8 @@ export function RequestProcedureList({ types, selectedIds, onChange, invalid = f
   const items = types.filter((type) => type.id).map((type) => ({ id: type.id, label: type.name, detail: requestTypeFeeLabel(type) }));
   return (
     <ScrollChecklist
-      legend="Procedimentos"
+      legend="O que ele precisa?"
+      hint="Pode marcar mais de um."
       required
       groups={[{ id: "procedures", items }]}
       selectedIds={selectedIds}

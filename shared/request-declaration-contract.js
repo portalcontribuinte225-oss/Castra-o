@@ -11,9 +11,6 @@ const MAX_NAME_LENGTH = 120;
 const NAMELESS_MUNICIPALITY = "município";
 const NAMELESS_DEPARTMENT = "a Prefeitura";
 
-// The line the screen shows next to the acceptance.
-export const DECLARATION_SUMMARY = "O tutor declara ciência dos cuidados pré e pós-cirúrgicos e autoriza o registro do procedimento.";
-
 // `onlyWhenCharged`: the clause is about the fee, so it only applies to a request with a procedure that is charged.
 const DECLARATION_ITEMS = Object.freeze([
   { text: "A total responsabilidade pela realização da captura e acondicionamento dos animais até a condução para o centro de castração onde serão realizados os procedimentos operatórios de castração." },
@@ -53,7 +50,6 @@ export function renderDeclaration({ municipalityName = "", departmentName = "", 
   // One pass over the text: what a name contains is never read as another variable.
   const fill = (text) => text.replace(/\{(\w+)\}/g, (match, name) => (Object.hasOwn(values, name) ? values[name] : match));
   return {
-    summary: DECLARATION_SUMMARY,
     items: DECLARATION_ITEMS.filter((item) => !item.onlyWhenCharged || charged).map((item) => fill(item.text)),
     recommendations: [...RECOMMENDATION_ITEMS],
   };

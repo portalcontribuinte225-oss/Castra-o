@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { DECLARATION_SUMMARY, DeclarationVariable, declarationVariables, renderDeclaration } from "../../shared/request-declaration-contract.js";
+import { DeclarationVariable, declarationVariables, renderDeclaration } from "../../shared/request-declaration-contract.js";
 
 const town = { municipalityName: "Test Town", departmentName: "Animal Department" };
 const farmers = /agricultores/;
@@ -53,10 +53,10 @@ test("a very long name is cut, so one clause cannot take the whole page", () => 
   assert.equal(text.includes("D".repeat(121)), false);
 });
 
-test("the summary and the recommendations are the same for every municipality, and a copy that can be changed without harm", () => {
+test("the recommendations are the same for every municipality, and a copy that can be changed without harm", () => {
   const first = renderDeclaration({ municipalityName: "A" });
   const second = renderDeclaration({ municipalityName: "B", charged: true });
-  assert.equal(first.summary, DECLARATION_SUMMARY);
+  assert.equal("summary" in first, false, "the screen names the declaration and links to it, with no summary of its own");
   assert.deepEqual(first.recommendations, second.recommendations);
   assert.equal(first.recommendations.length, 3);
   first.items.push("changed"); first.recommendations.push("changed");

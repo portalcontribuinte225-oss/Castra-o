@@ -76,7 +76,7 @@ describe("ScrollChecklist", () => {
 describe("RequestProcedureList", () => {
   it("lists the municipality's types with their fee and marks the chosen ones", () => {
     const html = renderToStaticMarkup(<RequestProcedureList types={types} selectedIds={["castration", "vaccine"]} onChange={noop} />);
-    expect(html).toContain("Procedimentos");
+    expect(html).toContain("O que ele precisa?"); expect(html).toContain("Pode marcar mais de um.");
     for (const type of types) expect(html).toContain(type.name);
     expect(html).toContain("R$ 15,00");
     expect(html.match(/Gratuito/g)).toHaveLength(2);
@@ -156,7 +156,7 @@ describe("AnimalFields", () => {
 
   it("asks for the species, sex, breed, size, name, coat, age and the health of the animal", () => {
     const html = renderToStaticMarkup(<AnimalFields {...props} />);
-    for (const label of ["Identificação do animal", "Espécie", "Sexo", "Raça", "Porte", "Nome", "Pelagem", "Idade", "Saúde e cuidados", "Vermifugado", "Vacinas em dia", "Histórico de doenças"]) {
+    for (const label of ["Como ele é?", "Espécie", "Sexo", "Tem raça definida?", "Sem raça definida", "Com raça definida", "Qual o porte?", "Como ele se chama?", "Cor da pelagem", "Idade aproximada", "Em que bairro ele vive?", "Saúde e cuidados", "Já tomou vermífugo?", "As vacinas estão em dia?", "Já teve alguma doença?", "Come só ração?"]) {
       expect(html).toContain(label);
     }
     expect(html).not.toContain("Microchipado");
@@ -171,11 +171,11 @@ describe("AnimalFields", () => {
   });
 
   it("asks for the neighborhood of the animal: a select of the registered ones, or text while there are none", () => {
-    expect(renderToStaticMarkup(<AnimalFields {...props} />)).toContain("Bairro onde o animal vive");
+    expect(renderToStaticMarkup(<AnimalFields {...props} />)).toContain("Ex.: Centro");
     const withNames = renderToStaticMarkup(<AnimalFields {...props} neighborhoodNames={["Centro", "Pinheirinho"]} />);
     expect(withNames).toContain("Selecione o bairro");
     expect(withNames).toContain("Pinheirinho");
-    expect(withNames).not.toContain("Bairro onde o animal vive");
+    expect(withNames).not.toContain("Ex.: Centro");
     expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted />)).toContain("is-invalid");
     expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={{ ...props.animal, neighborhood: "Centro" }} />)).not.toContain("is-invalid");
   });

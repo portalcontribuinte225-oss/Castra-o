@@ -1301,6 +1301,7 @@ function PublicSchedulePicker({
   onSelect,
   pendingReservation = null,
   title = "",
+  hint = "",
 }) {
   const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
@@ -1322,6 +1323,8 @@ function PublicSchedulePicker({
   });
   const scheduleMonths = buildScheduleMonths(scheduleWithUsage);
   const activeScheduleMonth = scheduleMonths[scheduleMonthIndex] || "";
+  const chosenDay = scheduleWithUsage.find((day) => day.date === selectedDate && (!selectedOccurrenceKey || day.occurrenceKey === selectedOccurrenceKey));
+  const chosenTime = chosenDay ? chosenDay.offeredSlot?.time || chosenDay.startTime || "" : "";
   const scheduleByDate = new Map();
   scheduleWithUsage.forEach((day) => {
     const previous = scheduleByDate.get(day.date);
@@ -1350,6 +1353,7 @@ function PublicSchedulePicker({
   return (
     <section className="panel public-schedule-picker">
       {title && <span className="form-sub-card-title">{title}</span>}
+      {hint && <p className="muted">{hint}</p>}
       <div className="sched-month-selector">
         <button
           type="button"
@@ -1395,12 +1399,13 @@ function PublicSchedulePicker({
                 onClick={() => onSelect(day.date, day.occurrenceKey || "")}
               >
                 <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
-                <small>{!day.available ? "Sem agenda" : day.isPast ? "Passado" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} - ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
+                <small>{!day.available ? "Sem atendimento" : day.isPast ? "Já passou" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} · ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
                 {day.kind === "Mutirao" && <em>Mutirão</em>}
               </ScheduleDayButton>
             )
         )}
       </div>
+      {chosenDay && <p className="schedule-chosen" role="status">Você escolheu {new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date(parseScheduleDate(chosenDay.date)))}{chosenTime ? `, às ${chosenTime}` : ""}.</p>}
       {selectedDate && scheduleWithUsage.filter((day) => day.date === selectedDate).length > 1 && <div className="schedule-occurrence-options" role="group" aria-label="Local e horário"><p>Escolha o local desta data:</p>{scheduleWithUsage.filter((day) => day.date === selectedDate).map((day) => <button type="button" key={day.occurrenceKey || day.id} className={selectedOccurrenceKey === day.occurrenceKey ? "primary-action" : "ghost-button"} disabled={!day.hasEnoughVacancies || day.isPast} onClick={() => onSelect(day.date, day.occurrenceKey || "")}>{day.locationName || "Local de atendimento"} · {day.offeredSlot?.time || day.startTime} · {Math.max(day.vacancies - (day.used - (selectedOccurrenceKey === day.occurrenceKey ? requiredVacancies : 0)), 0)} vagas</button>)}</div>}
     </section>
   );
@@ -2858,7 +2863,7 @@ function NewRequest({
     const issues = [];
     if (animalPhotoLoading) issues.push("Aguarde a leitura da foto do animal.");
     if (onRegisteredAnimal && !firstRequest) issues.push("Informe como deseja solicitar.");
-    if (!tutorshipFixed && !tutorship) issues.push("Informe se o animal tem tutor ou responsável.");
+    if (!tutorshipFixed && !tutorship) issues.push("Informe se o animal tem alguém que cuida dele.");
     if (followUp.enabled === null) issues.push("Informe se quer acompanhar a solicitação.");
     const filledAnimals = animals.length > 0 ? animals : [{}];
     if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false)) issues.push(registeredContext.eligibility?.reason || "Aguarde a validação do cadastro ou procure o atendimento.");
@@ -3279,7 +3284,7 @@ function NewRequest({
             />
           </FormSection>}
 
-          {formStep === RequestStep.ANIMAL && <FormSection title="Dados do animal">
+          {formStep === RequestStep.ANIMAL && <FormSection title="Agora, conte sobre o animal">
             {registeredContext ? <><RegisteredRequestSelection context={registeredContext} selectedType={selectedRequestTypes[0]?.name || ""} onSelectType={selectRegisteredProcedure} />{contextLoading && <p role="status">Atualizando os requisitos do procedimento...</p>}</> : <>
             {animals.map((animal, index) => {
               const header = animalHeader(animal, index);
@@ -3341,7 +3346,8 @@ function NewRequest({
               selectedOccurrenceKey={requestData.scheduleOccurrenceKey}
               pendingReservation={{ date: requestData.schedule, count: animals.length }}
               onSelect={(date, occurrenceKey) => setRequestData((current) => ({ ...current, schedule: date, scheduleOccurrenceKey: occurrenceKey }))}
-              title="Escolha data e horário"
+              title="Escolha o melhor dia para o atendimento"
+              hint="Os dias em destaque têm vagas. Toque em um para escolher."
             />
             {internalSimple && (
               <label className="field internal-notes-field">
@@ -3355,11 +3361,11 @@ function NewRequest({
             )}
           </FormSection>}
 
-          {formStep === RequestStep.DOCUMENTS && <FormSection title={internalSimple ? "Documentos" : "Documentos e termo"}>
+          {formStep === RequestStep.DOCUMENTS && <FormSection title={internalSimple ? "Documentos" : "Quase lá! Faltam só os documentos"}>
             <div className="form-sub-card documents-step-card">
               <div className="documents-step-header">
-                <span className="form-sub-card-title">{internalSimple ? "Documentos" : "Documentos e termo"}</span>
-                <small>{internalSimple ? "Anexe os comprovantes do tutor. Os pendentes ficam para conferência da equipe." : "Anexe os comprovantes solicitados e confirme a declaração."}</small>
+                <span className="form-sub-card-title">{internalSimple ? "Documentos" : "Quase lá! Faltam só os documentos"}</span>
+                {internalSimple && <small>Anexe os comprovantes do tutor. Os pendentes ficam para conferência da equipe.</small>}
               </div>
 
               <div className="documents-step-grid">
@@ -3412,13 +3418,13 @@ function NewRequest({
 
                   {!internalSimple && <div className="doc-declaration">
                     <p>
-                      {declaration.summary}{" "}
-                      <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler declaração completa</button>
+                      <strong>Declaração de responsabilidade</strong>{" · "}
+                      <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler</button>
                     </p>
                     <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
                       <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
                       <span className="doc-check-box" />
-                      <span>Li e concordo com os termos<span className="required-asterisk">*</span></span>
+                      <span>Li e concordo<span className="required-asterisk">*</span></span>
                     </label>
                   </div>}
                 </div>
@@ -3440,10 +3446,10 @@ function NewRequest({
             {formStep === RequestStep.ANIMAL && !registered && (
               <>
                 <button className="anm-add-btn" type="button" onClick={addAnimal}>
-                  Adicionar animal
+                  + Adicionar outro animal
                 </button>
                 <button className="anm-add-btn" type="button" onClick={duplicatePreviousAnimal}>
-                  Duplicar o anterior
+                  Repetir os dados do anterior
                 </button>
               </>
             )}
@@ -8656,15 +8662,15 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
     approved: aiActive ? "Aprovado pela análise" : "Aprovado",
     attached: documentUsesAi ? "Conferência manual" : "Anexado",
     rejected: aiActive ? "Recusado pela análise" : "Recusado",
-  }[upload?.status] || "Aguardando arquivo");
+  }[upload?.status] || "Não anexado");
   const publicMessage = needsReplacement
-    ? "Este arquivo não parece ser o documento solicitado. Anexe o comprovante correto para continuar."
+    ? "Não parece ser este documento. Envie de novo."
     : upload?.status === "attached"
-    ? documentUsesAi ? "Arquivo recebido para conferência da nossa equipe." : "Arquivo anexado."
+    ? documentUsesAi ? "Recebido. Nossa equipe vai conferir." : ""
     : upload?.status === "approved"
-    ? "Documento confirmado automaticamente."
+    ? "Documento confirmado."
     : upload?.status === "rejected"
-    ? "Documento recusado: não atende aos critérios solicitados. Anexe o arquivo correto."
+    ? "Não atende ao que foi pedido. Envie de novo."
     : upload?.message;
 
   const statusIcon = needsReplacement ? <AlertCircle size={16} className="doc-status-icon is-err" /> : ({

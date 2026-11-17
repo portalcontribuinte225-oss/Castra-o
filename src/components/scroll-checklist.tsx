@@ -31,6 +31,8 @@ export function filterChecklistGroups(groups: ChecklistGroup[], query: string): 
 
 interface ScrollChecklistProps {
   legend: string;
+  // A short line under the title, such as "Pode marcar mais de um."
+  hint?: string;
   required?: boolean;
   groups: ChecklistGroup[];
   selectedIds: string[];
@@ -42,7 +44,7 @@ interface ScrollChecklistProps {
 
 // A fixed-height box with its own scroll: one checkbox row per item, optionally grouped, with a search field when the list is long.
 // The ids come back in the order they were chosen.
-export function ScrollChecklist({ legend, required = false, groups, selectedIds, onChange, invalid = false, errorText = "", emptyText }: ScrollChecklistProps) {
+export function ScrollChecklist({ legend, hint = "", required = false, groups, selectedIds, onChange, invalid = false, errorText = "", emptyText }: ScrollChecklistProps) {
   const [query, setQuery] = useState("");
   const total = groups.reduce((sum, group) => sum + group.items.length, 0);
   if (total === 0) return <p className="scroll-checklist-empty" role="status">{emptyText}</p>;
@@ -51,6 +53,7 @@ export function ScrollChecklist({ legend, required = false, groups, selectedIds,
   return (
     <fieldset className={`scroll-checklist${invalid ? " is-invalid" : ""}`}>
       <legend>{legend}{required && <span className="required-asterisk">*</span>}</legend>
+      {hint && <small className="muted">{hint}</small>}
       {total > CHECKLIST_SEARCH_THRESHOLD && (
         <input
           className="scroll-checklist-search"

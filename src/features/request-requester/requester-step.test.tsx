@@ -28,7 +28,7 @@ describe("how the person wants to request, on the public form", () => {
     expect(markup).toContain("Como deseja solicitar?");
     expect(markup).toContain("Primeira solicitação"); expect(markup).toContain("Animal já cadastrado");
     expect(markup).toContain('class="choice-card"'); expect(markup).not.toMatch(chosen);
-    expect(markup).not.toContain("Esse animal tem tutor");
+    expect(markup).not.toContain("Esse animal tem alguém");
     expect(markup).not.toContain("compact-choice-field");
   });
 
@@ -41,12 +41,12 @@ describe("how the person wants to request, on the public form", () => {
     const markup = html(entry(true));
     expect(markup).toContain("Como deseja solicitar? <strong>Primeira solicitação</strong>"); expect(markup).toContain("Alterar");
     expect(markup).not.toContain("Animal já cadastrado");
-    expect(markup.indexOf("Como deseja solicitar?")).toBeLessThan(markup.indexOf("Esse animal tem tutor ou responsável?"));
+    expect(markup.indexOf("Como deseja solicitar?")).toBeLessThan(markup.indexOf("Esse animal tem alguém que cuida dele?"));
   });
 
   it("is not asked at the counter", () => {
     expect(html()).not.toContain("Como deseja solicitar?");
-    expect(html()).toContain("Esse animal tem tutor ou responsável?");
+    expect(html()).toContain("Esse animal tem alguém que cuida dele?");
   });
 });
 
@@ -65,13 +65,13 @@ describe("the question about the tutor", () => {
 
   it("shrinks to one line once answered, with a way to change the answer", () => {
     const markup = html({ tutorship: AnimalTutorship.WITHOUT_TUTOR });
-    expect(markup).toContain("Esse animal tem tutor ou responsável? <strong>Não tem tutor</strong>"); expect(markup).toContain("Alterar");
+    expect(markup).toContain("Esse animal tem alguém que cuida dele? <strong>Não tem tutor</strong>"); expect(markup).toContain("Alterar");
     expect(markup).not.toContain("Sim, tem tutor");
   });
 
   it("is not asked of a tutor that is already known: the account or the registered animal answer it", () => {
     const markup = html({ tutorship: AnimalTutorship.WITH_TUTOR, tutorshipFixed: true });
-    expect(markup).not.toContain("Esse animal tem tutor");
+    expect(markup).not.toContain("Esse animal tem alguém");
     expect(markup).toContain("Responsável");
   });
 });
@@ -94,9 +94,9 @@ describe("with a tutor", () => {
 
   it("names the channels the notices will use once the tutor types them", () => {
     const both = html({ tutorship: AnimalTutorship.WITH_TUTOR, ...withContacts() });
-    expect(both).toContain("Avisamos o registro, a data e as mudanças da solicitação por e-mail e celular."); expect(both).not.toMatch(yesDisabled);
-    expect(html({ tutorship: AnimalTutorship.WITH_TUTOR, ...withContacts({ email: "", phone: typed.phone }) })).toContain("por celular.");
-    expect(html({ tutorship: AnimalTutorship.WITH_TUTOR, ...withContacts(typed, { policy: { ...props.policy, phoneEnabled: false } }) })).toContain("por e-mail.");
+    expect(both).toContain("Se aceitar, você fica por dentro de tudo por e-mail e celular: confirmação ou mudança do agendamento, análise dos documentos e o resultado da sua solicitação."); expect(both).not.toMatch(yesDisabled);
+    expect(html({ tutorship: AnimalTutorship.WITH_TUTOR, ...withContacts({ email: "", phone: typed.phone }) })).toContain("por dentro de tudo por celular:");
+    expect(html({ tutorship: AnimalTutorship.WITH_TUTOR, ...withContacts(typed, { policy: { ...props.policy, phoneEnabled: false } }) })).toContain("por dentro de tudo por e-mail:");
   });
 
   it("shrinks the answer to a line, and tells what is missing when a yes has no contact left", () => {
@@ -127,7 +127,8 @@ describe("without a tutor", () => {
   it("asks only whether the person wants the notices, with nothing marked and yes available", () => {
     expect(markup).toContain("Quer acompanhar esta solicitação?");
     expect(markup).toContain("Sim, quero"); expect(markup).toContain("Não precisa");
-    expect(markup).toContain("Avisamos o registro, a data e as mudanças da solicitação.");
+    expect(markup).toContain("Se aceitar, você fica por dentro de tudo: confirmação ou mudança do agendamento");
+    expect(markup).toContain("Se preferir não receber avisos, é só guardar o protocolo e consultar sua solicitação quando quiser.");
     expect(markup).not.toMatch(chosen); expect(markup).not.toMatch(yesDisabled);
     for (const hidden of ["Responsável</span>", "Endereço", "Contato", 'type="email"', 'type="tel"', "CPF"]) expect(markup, hidden).not.toContain(hidden);
   });
@@ -160,8 +161,8 @@ describe("a tutor that is already known", () => {
     expect(markup).toContain("Seus contatos");
     expect(markup).toContain("t*****@example.com"); expect(markup).toContain("(48) *****-1234");
     expect(markup).not.toContain("tutor@example.com"); expect(markup).not.toContain("99999-1234");
-    expect(markup).toContain("por e-mail e celular."); expect(markup).toContain("Quer acompanhar esta solicitação?");
-    for (const hidden of ["Esse animal tem tutor", "Como deseja solicitar", "Responsável</span>", 'type="email"', 'type="tel"']) expect(markup, hidden).not.toContain(hidden);
+    expect(markup).toContain("por dentro de tudo por e-mail e celular:"); expect(markup).toContain("Quer acompanhar esta solicitação?");
+    for (const hidden of ["Esse animal tem alguém", "Como deseja solicitar", "Responsável</span>", 'type="email"', 'type="tel"']) expect(markup, hidden).not.toContain(hidden);
   });
 
   it("cannot say yes when the registration has no contact that receives notices", () => {

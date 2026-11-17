@@ -2042,9 +2042,9 @@ button:disabled {
 
 .access-field input:focus,
 .access-field textarea:focus {
-  border-color: #1f8a5f;
+  border-color: #2563eb;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.12);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 
@@ -3669,8 +3669,8 @@ button:disabled {
 
 
 .calendar-day-button.has-vacancy {
-  background: rgba(31, 138, 95, 0.08);
-  border-color: #1f8a5f;
+  background: rgba(37, 99, 235, 0.08);
+  border-color: #2563eb;
 }
 
 
@@ -3692,7 +3692,7 @@ button:disabled {
 
 
 .calendar-day-button.has-vacancy small {
-  color: #1f8a5f;
+  color: #2563eb;
 }
 
 
@@ -3721,15 +3721,15 @@ button:disabled {
 
 
 .calendar-day-button.selected {
-  background: #eaf3ee;
-  border-color: #1f8a5f;
-  box-shadow: inset 0 0 0 1px #1f8a5f, 0 10px 22px rgba(31, 138, 95, 0.16);
+  background: #eff6ff;
+  border-color: #2563eb;
+  box-shadow: inset 0 0 0 1px #2563eb, 0 10px 22px rgba(37, 99, 235, 0.16);
 }
 
 
 .calendar-day-button:not(:disabled):hover {
   transform: translateY(-1px);
-  border-color: #1f8a5f;
+  border-color: #2563eb;
   box-shadow: 0 12px 24px rgba(15, 47, 44, 0.08);
 }
 
@@ -12457,7 +12457,7 @@ body * {
 
 
 .internal-request-modal .nr-step--done {
-  background: #ecfdf5;
+  background: #eff6ff;
 }
 
 
@@ -12651,7 +12651,7 @@ body * {
 
 
 .internal-request-modal .calendar-day-button.has-vacancy {
-  background: #ecfdf5;
+  background: #eff6ff;
 }
 
 
@@ -14814,7 +14814,7 @@ body * {
   .public-form-page:not(.public-form-page--consultation) .nr-step--done {
     background: transparent;
     box-shadow: none;
-    border-bottom-color: #1f8a5f;
+    border-bottom-color: #2563eb;
   }
 
 
@@ -16225,7 +16225,7 @@ form textarea:focus,
   padding: 0;
   background: transparent;
   box-shadow: none;
-  color: #1f8a5f;
+  color: #2563eb;
 }
 
 
@@ -16257,7 +16257,7 @@ form textarea:focus,
 
 .nr-step--current .nr-step-circle,
 .nr-step--done .nr-step-circle {
-  background: #1f8a5f;
+  background: #2563eb;
   color: #ffffff;
 }
 
@@ -16769,9 +16769,9 @@ form textarea:focus,
 
 .access-modal .access-field input:focus,
 .access-modal .access-field textarea:focus {
-  border-color: #1f8a5f;
+  border-color: #2563eb;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.12);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
 }
 
 .access-modal .access-field:focus-within {
@@ -16910,7 +16910,7 @@ form textarea:focus,
 
 .public-form-page:not(.public-form-page--consultation) .nr-step--current,
 .public-form-page:not(.public-form-page--consultation) .nr-step--done {
-  border-bottom-color: #1f8a5f;
+  border-bottom-color: #2563eb;
 }
 
 
@@ -17180,16 +17180,16 @@ form textarea:focus,
 
 
 .nr-shell--public .calendar-day-button.has-vacancy small {
-  color: #1f8a5f;
+  color: #2563eb;
   font-weight: 700;
 }
 
 
-/* Selecionado: mockup usa fundo verde-claro + borda verde, não preenchimento
+/* Selecionado: fundo azul-claro + borda azul, não preenchimento
    sólido com texto branco. */
 .nr-shell--public .calendar-day-button.selected {
-  border-color: #1f8a5f;
-  background: #eaf3ee;
+  border-color: #2563eb;
+  background: #eff6ff;
 }
 
 
@@ -17199,7 +17199,7 @@ form textarea:focus,
 
 
 .nr-shell--public .calendar-day-button.selected small {
-  color: #1f8a5f;
+  color: #2563eb;
   font-weight: 700;
 }
 
@@ -20436,9 +20436,9 @@ form textarea:focus,
 .nr-shell--public .anm-type-card.is-selected,
 .nr-shell--public .compact-choice-field button.selected,
 .nr-shell--public .single-request-form .animal-form .compact-choice-field button.selected {
-  border-color: #1f8a5f !important;
-  background: #eaf3ee !important;
-  color: #11684d !important;
+  border-color: #2563eb !important;
+  background: #eff6ff !important;
+  color: #1d4ed8 !important;
   box-shadow: none !important;
 }
 
@@ -20508,16 +20508,16 @@ form textarea:focus,
 
 
 .nr-shell--public .yes-no-toggle-field input:checked + .toggle-track {
-  background: #1f8a5f;
+  background: #2563eb;
 }
 
 
 /* "Adicionar outro animal": .nr-shell .anm-add-btn (~L16887) o deixa azul sólido preenchido —
    esta sobrepõe para o tracejado verde do mockup. */
 .nr-shell--public .anm-add-btn {
-  border: 1.5px dashed #1f8a5f;
-  background: #eaf3ee;
-  color: #1f8a5f;
+  border: 1.5px dashed #2563eb;
+  background: #eff6ff;
+  color: #2563eb;
   box-shadow: none;
 }
 
@@ -20561,9 +20561,9 @@ form textarea:focus,
 
 
 .nr-shell--public .access-field input:focus {
-  border-color: #1f8a5f;
+  border-color: #2563eb;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.1);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 
@@ -20633,13 +20633,13 @@ form textarea:focus,
 
 
 .nr-shell--public .doc-accept-check input:checked ~ .doc-check-box {
-  background: #1f8a5f;
-  border-color: #1f8a5f;
+  background: #2563eb;
+  border-color: #2563eb;
 }
 
 
 .nr-shell--public .inline-link-button {
-  color: #1f8a5f;
+  color: #2563eb;
 }
 
 
@@ -20658,12 +20658,12 @@ form textarea:focus,
 
 
 .nr-shell--public .sched-month-trigger:hover {
-  background: #eaf3ee;
+  background: #eff6ff;
 }
 
 
 .nr-shell--public .sched-month-trigger svg:first-child {
-  color: #1f8a5f;
+  color: #2563eb;
 }
 
 
@@ -20685,16 +20685,16 @@ form textarea:focus,
 
 .nr-shell--public .sched-month-tab:hover {
   border-color: #bfe0cf;
-  background: #eaf3ee;
-  color: #1f8a5f;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 
 .nr-shell--public .sched-month-tab.is-active {
-  border-color: #1f8a5f;
-  background: #eaf3ee;
-  color: #1f8a5f;
-  box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.1);
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 
@@ -20706,8 +20706,8 @@ form textarea:focus,
 
 .nr-shell--public .doc-attach-btn {
   border-color: #dbe5f1;
-  background: #eaf3ee;
-  color: #1f8a5f;
+  background: #eff6ff;
+  color: #2563eb;
 }
 
 
@@ -20733,7 +20733,7 @@ form textarea:focus,
 }
 
 .nr-shell--public .doc-photo-zone:hover {
-  border-color: #1f8a5f;
+  border-color: #2563eb;
 }
 
 .nr-shell--public .doc-photo-placeholder {
@@ -20755,7 +20755,7 @@ form textarea:focus,
 
 .nr-shell--public .doc-attach-btn:hover {
   background: #dff0e6;
-  border-color: #1f8a5f;
+  border-color: #2563eb;
 }
 
 
@@ -21276,22 +21276,22 @@ form textarea:focus,
 }
 
 .public-service-panel .nr-step:hover:not(:disabled) {
-  border-color: rgba(31, 138, 95, 0.18);
-  background: rgba(31, 138, 95, 0.07);
-  color: #11684d;
+  border-color: rgba(37, 99, 235, 0.18);
+  background: rgba(37, 99, 235, 0.07);
+  color: #1d4ed8;
 }
 
 .public-service-panel .nr-step:focus-visible {
-  outline: 3px solid rgba(31, 138, 95, 0.22);
+  outline: 3px solid rgba(37, 99, 235, 0.22);
   outline-offset: 3px;
 }
 
 .public-service-panel .nr-step--current {
-  color: #11684d;
+  color: #1d4ed8;
 }
 
 .public-service-panel .nr-step--done {
-  color: #1f8a5f;
+  color: #2563eb;
 }
 
 .public-service-panel .nr-step--invalid {
@@ -21337,7 +21337,7 @@ form textarea:focus,
 }
 
 .public-service-panel .nr-step--done + .nr-step-connector {
-  background: rgba(31, 138, 95, 0.18);
+  background: rgba(37, 99, 235, 0.18);
 }
 
 .public-service-panel .nr-step--invalid .nr-step-circle {
@@ -25041,8 +25041,8 @@ small,
 
 .internal-request-modal .nr-shell--internal .nr-step--done {
   border-color: #a7f3d0;
-  background: #ecfdf5;
-  color: #0f766e;
+  background: #eff6ff;
+  color: #1d4ed8;
 }
 
 .internal-request-modal .nr-shell--internal .nr-step-circle {
@@ -25100,8 +25100,8 @@ small,
 }
 
 .nr-shell .access-field select:focus {
-  border-color: #1f8a5f;
-  box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.1);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 .internal-request-modal .nr-shell--internal .access-field select {
@@ -25218,6 +25218,12 @@ small,
   display: grid;
   gap: 14px;
   animation: requester-reveal 0.22s ease-out;
+}
+
+.public-schedule-picker .schedule-chosen {
+  margin: 12px 0 0;
+  color: var(--ink);
+  font-weight: 600;
 }
 
 @keyframes requester-reveal {

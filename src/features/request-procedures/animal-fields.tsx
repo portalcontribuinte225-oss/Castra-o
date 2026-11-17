@@ -4,7 +4,8 @@ import type { AnyRecord } from "../../types";
 import { NeighborhoodField } from "../neighborhoods/neighborhood-field";
 
 const SEX_OPTIONS = ["Macho", "Fêmea"];
-const BREED_TYPE_OPTIONS = ["Indefinida", "Definida"];
+// The words the tutor reads; the values stored stay the ones the rest of the system knows.
+const BREED_TYPE_OPTIONS = [{ value: "Indefinida", label: "Sem raça definida" }, { value: "Definida", label: "Com raça definida" }];
 const FOOD_OPTIONS = ["Ração", "Diversos"];
 
 interface AnimalFieldsProps {
@@ -26,11 +27,11 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
   return (
     <>
       <div className="form-sub-card">
-        <span className="form-sub-card-title">Identificação do animal</span>
+        <span className="form-sub-card-title">Como ele é?</span>
         <div className="animal-choice-grid three-col">
           <CompactChoiceField label="Espécie" value={animal.species} options={speciesNames} onChange={onSelectSpecies} invalid={submitAttempted && !animal.species} required />
           <CompactChoiceField label="Sexo" value={animal.sex} options={SEX_OPTIONS} onChange={(value) => onChange("sex", value)} invalid={submitAttempted && !animal.sex} required />
-          <CompactChoiceField label="Raça" value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required />
+          <CompactChoiceField label="Tem raça definida?" value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required />
         </div>
         {animal.breedType === "Definida" && (breedOptions.length > 0 ? (
           <div className="access-field" data-label="Raça">
@@ -46,19 +47,20 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
             <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)} />
           </div>
         ))}
-        <CompactChoiceField label="Porte" value={animal.size} options={sizeChoices} onChange={(value) => onChange("size", value)} invalid={submitAttempted && !animal.size} required />
+        <CompactChoiceField label="Qual o porte?" value={animal.size} options={sizeChoices} onChange={(value) => onChange("size", value)} invalid={submitAttempted && !animal.size} required />
         <div className="animal-choice-grid name-coat-age-row">
-          <div className="access-field" data-label="Nome">
-            <input type="text" placeholder="Ex: Bidu" value={animal.name} onChange={(event) => onChange("name", event.target.value)} />
+          <div className="access-field" data-label="Como ele se chama?">
+            <input type="text" placeholder="Ex.: Bidu" value={animal.name} onChange={(event) => onChange("name", event.target.value)} />
           </div>
-          <div className="access-field" data-label="Pelagem">
-            <input type="text" placeholder="Cor" value={animal.coat} onChange={(event) => onChange("coat", event.target.value)} />
+          <div className="access-field" data-label="Cor da pelagem">
+            <input type="text" placeholder="Ex.: caramelo, preto e branco" value={animal.coat} onChange={(event) => onChange("coat", event.target.value)} />
           </div>
-          <div className="access-field" data-label="Idade">
-            <input type="text" placeholder="Ex: 2 anos" value={animal.age || ""} onChange={(event) => onChange("age", event.target.value)} />
+          <div className="access-field" data-label="Idade aproximada">
+            <input type="text" placeholder="Ex.: 2 anos" value={animal.age || ""} onChange={(event) => onChange("age", event.target.value)} />
           </div>
         </div>
-        <NeighborhoodField label="Bairro do animal" placeholder="Bairro onde o animal vive" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
+        <NeighborhoodField label="Em que bairro ele vive?" placeholder="Ex.: Centro" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
+        <small className="muted">Usamos o bairro para organizar os atendimentos da região.</small>
         {internal && (
           <div className="internal-microchip-row">
             <div className="access-field" data-label="Microchip">
@@ -87,11 +89,12 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
       </div>
       <div className="form-sub-card">
         <span className="form-sub-card-title">Saúde e cuidados</span>
+        <small className="muted">Responda como souber; tudo bem não ter certeza.</small>
         <div className="health-grid">
-          <YesNoToggleField label="Vermifugado" value={animal.dewormed} onChange={(value) => onChange("dewormed", value)} />
-          <YesNoToggleField label="Vacinas em dia" value={animal.vaccinated} onChange={(value) => onChange("vaccinated", value)} />
-          <YesNoToggleField label="Histórico de doenças" value={animal.illnessHistory} onChange={(value) => onChange("illnessHistory", value)} />
-          <ToggleChoiceField label="Alimentação exclusiva com ração" value={animal.food} options={FOOD_OPTIONS} onChange={(value) => onChange("food", value)} />
+          <YesNoToggleField label="Já tomou vermífugo?" value={animal.dewormed} onChange={(value) => onChange("dewormed", value)} />
+          <YesNoToggleField label="As vacinas estão em dia?" value={animal.vaccinated} onChange={(value) => onChange("vaccinated", value)} />
+          <YesNoToggleField label="Já teve alguma doença?" value={animal.illnessHistory} onChange={(value) => onChange("illnessHistory", value)} />
+          <ToggleChoiceField label="Come só ração?" value={animal.food} options={FOOD_OPTIONS} onChange={(value) => onChange("food", value)} />
         </div>
       </div>
     </>
