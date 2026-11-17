@@ -36,8 +36,11 @@ export function getRequestTypeNames(request: AnyRecord = {}, requestTypes: AnyRe
   return names.length ? names : [getRequestTypeName(request, requestTypes)];
 }
 
+// What a request without anyone in charge shows as its responsible.
+export const NO_RESPONSIBLE_LABEL = "Sem responsável";
+
 export function getRequestUserName(request: AnyRecord = {}) {
-  return request.responsible || request.assignedUserName || request.assignedSectorName || "Sem responsável";
+  return request.responsible || request.assignedUserName || request.assignedSectorName || NO_RESPONSIBLE_LABEL;
 }
 
 export function getTeamUserName(userId = "", teams: AnyRecord = initialTeams, currentUser: AnyRecord | null = null) {

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import {
   Activity,
@@ -150,7 +150,6 @@ import { AccessRequestsView, accessStatusLabel } from "./features/accessRequests
 import { AgendaView } from "./features/agenda";
 import { canEditRequests, useRequestActions } from "./features/request-actions";
 import { getSpecialRequestSection, specialRequestConfirmLabel } from "./features/request-analysis-sections";
-import { DashboardView } from "./features/dashboard";
 import { ReportsView } from "./features/reports";
 import { ActiveFiltersBar } from "./features/request-filters/active-filters-bar";
 import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-filters/request-filters";
@@ -218,6 +217,7 @@ import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./feature
 import { validateTutorName } from "./features/tutor-access/tutor-identity";
 import { SessionBoundary } from "./features/tutor-access/session-boundary";
 import { getAdoptionInterestCount } from "./features/adoption-interest-count";
+import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE, ADOPTION_STATUS_IN_PROGRESS } from "./features/adoption-status";
 import { bindProcedureIntent } from "./features/registered-animals/procedure-intent";
 import type { ProcedureIntent } from "./features/registered-animals/procedure-intent";
 import type { ReusableDocumentCandidate } from "./features/registered-animals/registered-animal-types";
@@ -231,6 +231,9 @@ import { DocumentReuseScope, DocumentReviewStatus, normalizeDocumentReusePolicy 
 import { documentPolicyFromForm } from "./features/registered-animals/document-policy-form";
 import { buildDocumentReviewDecisions } from "./features/registered-animals/document-review-decisions";
 import { buildDocumentSubmission, removeReusedDocument } from "./features/registered-animals/document-selection";
+
+// The dashboard and its chart library load only when someone opens it, so the public form does not carry them.
+const DashboardView = lazy(() => import("./features/dashboard/dashboard-view").then((module) => ({ default: module.DashboardView })));
 
 type ConfigTabItem = {
   id: string;
@@ -1037,55 +1040,57 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           </div>
         </header>
 
-        <ActiveView
-          requests={scopedRequests}
-          selected={scopedSelected}
-          selectedId={selectedId}
-          setSelectedId={setSelectedId}
-          metrics={scopedMetrics}
-          patchRequest={patchRequest}
-          createRequest={createRequest}
-          adoptionAnimals={scopedAdoptionAnimals}
-          setAdoptionAnimals={setAdoptionAnimals}
-          currentUser={currentUser}
-          scheduleDays={effectiveScopedScheduleDays}
-          requestTypes={scopedRequestTypes}
-          documentTypes={scopedDocumentTypes}
-          setRequestTypes={setRequestTypes}
-          setDocumentTypes={setDocumentTypes}
-          speciesOptions={scopedSpeciesOptions}
-          setSpeciesOptions={setSpeciesOptions}
-          sizeOptions={scopedSizeOptions}
-          setSizeOptions={setSizeOptions}
-          breeds={scopedBreeds}
-          setBreeds={setBreeds}
-          neighborhoods={scopedNeighborhoods}
-          setNeighborhoods={setNeighborhoods}
-          refreshRequests={refreshRequests}
-          municipalities={scopedMunicipalities}
-          setMunicipalities={setMunicipalities}
-          aiSettings={aiSettings}
-          setAiSettings={setAiSettings}
-          setScheduleDays={setScheduleDays}
-          scheduleRules={scopedScheduleRules}
-          setScheduleRules={setScheduleRules}
-          permissionGroups={scopedPermissionGroups}
-          setPermissionGroups={setPermissionGroups}
-          teams={scopedTeams}
-          setTeams={setTeams}
-          accessRequests={accessRequests}
-          reviewAccessRequest={reviewAccessRequest}
-          setActive={setActive}
-          configArea={configArea}
-          configTab={configTab}
-          setConfigTab={setConfigTab}
-          environmentTabs={visibleEnvironmentTabs}
-          integrationsTabs={visibleIntegrationsTabs}
-          globalSearch={globalSearch}
-          selectedMunicipalityId={activeMunicipalityId}
-          onConsultAnimal={(query: AnyRecord) => api.consultAnimalByMicrochip(query)}
-          onGenerateProntuario={generateAndDownloadProntuario}
-        />
+        <Suspense fallback={<p className="dash-empty">Carregando o painel...</p>}>
+          <ActiveView
+            requests={scopedRequests}
+            selected={scopedSelected}
+            selectedId={selectedId}
+            setSelectedId={setSelectedId}
+            metrics={scopedMetrics}
+            patchRequest={patchRequest}
+            createRequest={createRequest}
+            adoptionAnimals={scopedAdoptionAnimals}
+            setAdoptionAnimals={setAdoptionAnimals}
+            currentUser={currentUser}
+            scheduleDays={effectiveScopedScheduleDays}
+            requestTypes={scopedRequestTypes}
+            documentTypes={scopedDocumentTypes}
+            setRequestTypes={setRequestTypes}
+            setDocumentTypes={setDocumentTypes}
+            speciesOptions={scopedSpeciesOptions}
+            setSpeciesOptions={setSpeciesOptions}
+            sizeOptions={scopedSizeOptions}
+            setSizeOptions={setSizeOptions}
+            breeds={scopedBreeds}
+            setBreeds={setBreeds}
+            neighborhoods={scopedNeighborhoods}
+            setNeighborhoods={setNeighborhoods}
+            refreshRequests={refreshRequests}
+            municipalities={scopedMunicipalities}
+            setMunicipalities={setMunicipalities}
+            aiSettings={aiSettings}
+            setAiSettings={setAiSettings}
+            setScheduleDays={setScheduleDays}
+            scheduleRules={scopedScheduleRules}
+            setScheduleRules={setScheduleRules}
+            permissionGroups={scopedPermissionGroups}
+            setPermissionGroups={setPermissionGroups}
+            teams={scopedTeams}
+            setTeams={setTeams}
+            accessRequests={accessRequests}
+            reviewAccessRequest={reviewAccessRequest}
+            setActive={setActive}
+            configArea={configArea}
+            configTab={configTab}
+            setConfigTab={setConfigTab}
+            environmentTabs={visibleEnvironmentTabs}
+            integrationsTabs={visibleIntegrationsTabs}
+            globalSearch={globalSearch}
+            selectedMunicipalityId={activeMunicipalityId}
+            onConsultAnimal={(query: AnyRecord) => api.consultAnimalByMicrochip(query)}
+            onGenerateProntuario={generateAndDownloadProntuario}
+          />
+        </Suspense>
       </main>
 
       {mobileOpen && (
@@ -1637,9 +1642,6 @@ function getAnimalMainPhoto(animal) {
   return photos[animal.mainPhotoIndex || 0] || photos[0] || "";
 }
 
-const ADOPTION_STATUS_AVAILABLE = "disponivel";
-const ADOPTION_STATUS_IN_PROGRESS = "em_processo";
-const ADOPTION_STATUS_ADOPTED = "adotado";
 const ADOPTION_HIGHLIGHT_DAYS = 15;
 
 function getAdoptionDaysInProgram(animal: AnyRecord = {}) {
