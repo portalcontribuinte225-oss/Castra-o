@@ -218,7 +218,6 @@ import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./feature
 import { validateTutorName } from "./features/tutor-access/tutor-identity";
 import { SessionBoundary } from "./features/tutor-access/session-boundary";
 import { getAdoptionInterestCount } from "./features/adoption-interest-count";
-import { ProcedureEntry } from "./features/registered-animals/procedure-entry";
 import { bindProcedureIntent } from "./features/registered-animals/procedure-intent";
 import type { ProcedureIntent } from "./features/registered-animals/procedure-intent";
 import type { ReusableDocumentCandidate } from "./features/registered-animals/registered-animal-types";
@@ -1765,13 +1764,13 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   function openPublicService(serviceId: string) {
     setProcedurePrefill(null);
     setPublicServiceDone(null);
-    setActivePublicService(serviceId === "procedure_form" ? "procedure_entry" : serviceId);
+    setActivePublicService(serviceId);
   }
 
   function joinMutirao() {
     setProcedurePrefill(nextMutirao ? { schedule: nextMutirao.date } : null);
     setPublicServiceDone(null);
-    setActivePublicService("procedure_entry");
+    setActivePublicService("procedure_form");
   }
 
   function openRequestAccess(prefill: { protocol: string; cpf: string }) {
@@ -1819,7 +1818,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
         <nav className="public-topbar-nav" aria-label="Serviços públicos">
           {publicHomeServices.map((service) => {
             const Icon = service.icon;
-            const active = activePublicService === service.id || (service.id === "procedure_form" && activePublicService === "procedure_entry");
+            const active = activePublicService === service.id;
             return (
               <button
                 key={service.id}
@@ -1852,9 +1851,9 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
           </aside>
 
           <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
-            {activePublicService !== "procedure_form" && (
+            {(activePublicService !== "procedure_form" || !selectedMunicipalityId) && (
               <div className="public-service-panel-header">
-                <h2>{activePublicService === "procedure_entry" ? "Solicitar procedimento" : activePublicService === REQUEST_ACCESS_SERVICE ? "Acessar minha solicitação" : activePublicServiceDetails?.label || "Serviço"}</h2>
+                <h2>{activePublicService === REQUEST_ACCESS_SERVICE ? "Acessar minha solicitação" : activePublicServiceDetails?.label || "Serviço"}</h2>
                 <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
               </div>
             )}
@@ -1869,8 +1868,8 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 onCreatePassword={publicServiceDone.cpf && isProcedureRequest(publicServiceDone.request_type)
                   ? () => openRequestAccess({ protocol: publicServiceDone.protocol, cpf: onlyDigits(String(publicServiceDone.cpf)) }) : undefined}
               />
-            ) : activePublicService === "procedure_entry" ? (
-              <ProcedureEntry disabled={!selectedMunicipalityId} onFirst={() => setActivePublicService("procedure_form")} onRegistered={() => openAuthEntry(AuthEntryOrigin.REGISTERED_ANIMAL)} />
+            ) : activePublicService === "procedure_form" && !selectedMunicipalityId ? (
+              <p role="status">Selecione o município na página para continuar.</p>
             ) : activePublicService === "procedure_form" ? (
               <NewRequest
                 key={`public-procedure-${selectedMunicipalityId}`}
@@ -1879,8 +1878,9 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 publicFlow
                 selectedMunicipalityId={selectedMunicipalityId}
                 municipality={activeMunicipality}
-                onBack={() => setActivePublicService("procedure_entry")}
+                onBack={closePublicService}
                 backLabel="Voltar"
+                onRegisteredAnimal={() => openAuthEntry(AuthEntryOrigin.REGISTERED_ANIMAL)}
                 onDone={(request) => {
                   if (selectedMunicipalityId !== publicMunicipalityRef.current) return;
                   const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
@@ -2598,6 +2598,8 @@ function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {
 
 function NewRequest({
   createRequest,
+  // The public form only: "Animal já cadastrado" goes through the tutor's sign-in.
+  onRegisteredAnimal,
   currentUser,
   compact = false,
   internalSimple = false,
@@ -2654,7 +2656,7 @@ function NewRequest({
     isFarmer: Boolean(currentUser.isFarmer || currentUser.is_farmer),
     latitude: "",
     longitude: "",
-    identificationTypeId: registeredContext?.animal.identificationTypeId || "",
+    tutorship: registeredContext?.animal.tutorship || "",
     phone: currentUser.role === "tutor" ? currentUser.phone || "" : "",
     notes: "",
     schedule: initialSchedule,
@@ -2679,6 +2681,8 @@ function NewRequest({
   const [previewDocument, setPreviewDocument] = useState(null);
   const [submissionError, setSubmissionError] = useState("");
   const [followUp, setFollowUp] = useState<FollowUpValue>(emptyFollowUp);
+  // The public form asks first how the person wants to request: the rest of the step opens for a first request.
+  const [firstRequest, setFirstRequest] = useState(false);
   const followUpMunicipalityId = selectedMunicipalityId || requestData.municipalityId || currentUser.municipalityId || "";
   const followUpPolicy = useFollowUpPolicy(followUpMunicipalityId);
   // The notices go to the contacts typed in the first step (or the profile's), so nothing is typed twice.
@@ -2695,7 +2699,7 @@ function NewRequest({
     if (!registeredContext) return;
     // The procedure chosen for the animal outlives the refresh of its context that the choice itself triggers.
     setAnimals((current) => [{ ...animalForRequest(registeredContext.animal), requestTypeIds: animalRequestTypeIds(current[0]) }]);
-    setRequestData((current) => ({ ...current, tutor: registeredContext.tutor.name || registeredContext.tutor.tutor || "", cpf: registeredContext.tutor.cpf, address: registeredContext.tutor.address || "", neighborhood: registeredContext.tutor.neighborhood || "", city: registeredContext.tutor.city || "", state: registeredContext.tutor.state || "", cep: registeredContext.tutor.cep || "", identificationTypeId: registeredContext.animal.identificationTypeId || "" }));
+    setRequestData((current) => ({ ...current, tutor: registeredContext.tutor.name || registeredContext.tutor.tutor || "", cpf: registeredContext.tutor.cpf, address: registeredContext.tutor.address || "", neighborhood: registeredContext.tutor.neighborhood || "", city: registeredContext.tutor.city || "", state: registeredContext.tutor.state || "", cep: registeredContext.tutor.cep || "", tutorship: registeredContext.animal.tutorship || "" }));
   }, [registeredContext]);
 
   useEffect(() => {
@@ -2741,16 +2745,15 @@ function NewRequest({
   const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
   // Whoever is a tutor already (the account, or a registered animal) is not asked whether the animal has one: the answer is "with tutor".
   const tutorshipFixed = registered || currentUser.role === "tutor";
-  const tutorship = registeredContext ? (registeredContext.animal.identificationTypeId || AnimalTutorship.WITH_TUTOR)
-    : currentUser.role === "tutor" ? AnimalTutorship.WITH_TUTOR : requestData.identificationTypeId;
+  const tutorship = registeredContext ? (registeredContext.animal.tutorship || AnimalTutorship.WITH_TUTOR)
+    : currentUser.role === "tutor" ? AnimalTutorship.WITH_TUTOR : requestData.tutorship;
   const requiresTutorIdentity = currentUser.role === "tutor" || tutorshipRequiresTutor(tutorship);
   const showsTutorFields = tutorship === AnimalTutorship.WITH_TUTOR && !tutorKnown;
   const withoutTutor = tutorship === AnimalTutorship.WITHOUT_TUTOR && !tutorKnown;
   const reachableContacts = availableFollowUpContacts(tutorContacts, followUpPolicy.phoneEnabled);
-  // The acceptance cannot stand without a contact the notices can reach (the box is locked then), so it counts as not given.
-  const noticesEnabled = followUp.enabled && Boolean(reachableContacts.email || reachableContacts.phone);
-  // Without a tutor the person that said yes to the notices has to give a contact for them.
-  const noticesIssues = withoutTutor && followUp.enabled ? getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled) : [];
+  // A yes to the notices is sent only with a contact they can reach; without one the step says what is missing.
+  const noticesEnabled = followUp.enabled === true && Boolean(reachableContacts.email || reachableContacts.phone);
+  const noticesIssues = followUp.enabled ? getFollowUpIssues(followUp, tutorContacts, followUpPolicy.phoneEnabled) : [];
   // Without a tutor nothing about one is sent, whatever was typed before the answer changed; the contacts go only for the notices.
   const sent = requiresTutorIdentity ? requestData
     : { ...requestData, tutor: "", cpf: "", cep: "", number: "", address: "", neighborhood: "", city: "", state: "", latitude: "", longitude: "", ...(noticesEnabled ? {} : { email: "", phone: "" }) };
@@ -2771,7 +2774,7 @@ function NewRequest({
     ...selectedTypeDocuments.map((document) => documentUploads[document.id]).filter((upload) => upload && acceptableUploadStatuses.includes(upload.status)),
     ...(documentUploads.animal_photo ? [documentUploads.animal_photo] : []),
   ];
-  const contactIssues = registrationContactIssues(requestData.email, requestData.phone, showsTutorFields || (withoutTutor && followUp.enabled), showsTutorFields);
+  const contactIssues = registrationContactIssues(requestData.email, requestData.phone, showsTutorFields || (withoutTutor && followUp.enabled === true), showsTutorFields);
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
   const currentStepIndex = Math.max(requestSteps.findIndex((item) => item.step === formStep), 0);
@@ -2854,7 +2857,9 @@ function NewRequest({
   function getRequestValidationIssues() {
     const issues = [];
     if (animalPhotoLoading) issues.push("Aguarde a leitura da foto do animal.");
+    if (onRegisteredAnimal && !firstRequest) issues.push("Informe como deseja solicitar.");
     if (!tutorshipFixed && !tutorship) issues.push("Informe se o animal tem tutor ou responsável.");
+    if (followUp.enabled === null) issues.push("Informe se quer acompanhar a solicitação.");
     const filledAnimals = animals.length > 0 ? animals : [{}];
     if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false)) issues.push(registeredContext.eligibility?.reason || "Aguarde a validação do cadastro ou procure o atendimento.");
 
@@ -2894,9 +2899,11 @@ function NewRequest({
   function getStepIssues(step = formStep) {
     if (step === RequestStep.TUTOR) {
       return [
+        Boolean(onRegisteredAnimal) && !firstRequest,
         !tutorship,
         ...(showsTutorFields ? [!isValidCpf(requestData.cpf), validateTutorName(requestData.tutor)] : []),
         contactIssues.email, contactIssues.phone,
+        followUp.enabled === null,
         ...(followUp.enabled ? [!followUpPolicy.ready, ...noticesIssues] : []),
       ].filter(Boolean);
     }
@@ -3128,7 +3135,7 @@ function NewRequest({
     const { latitude, longitude } = hasGpsCoords
       ? { latitude: sent.latitude, longitude: sent.longitude }
       : (mapsApiKey && addressString ? await geocodeAddress(addressString, mapsApiKey) : { latitude: "", longitude: "" });
-    const identification = tutorship ? { identificationTypeId: tutorship } : {};
+    const tutorshipAnswer = tutorship ? { tutorship } : {};
     return {
       tutor: sent.tutor || (currentUser.role === "tutor" ? currentUser.name : ""),
       neighborhood: sent.neighborhood || "Bairro não informado",
@@ -3160,13 +3167,13 @@ function NewRequest({
         scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
-        ...identification,
+        ...tutorshipAnswer,
         followUp: buildFollowUpPayload({ enabled: noticesEnabled }, tutorContacts, followUpPolicy.phoneEnabled),
       },
       animalId: registeredContext?.animal.id || "",
       animals: registeredContext ? [{ id: registeredContext.animal.id }] : payloadAnimals(animals.map((animal) => ({
         ...animal,
-        ...identification,
+        ...tutorshipAnswer,
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
       }))),
@@ -3244,6 +3251,7 @@ function NewRequest({
           <div className="single-request-form clean-form">
           {formStep === RequestStep.TUTOR && <FormSection title="Você">
             <RequesterStep
+              entry={onRegisteredAnimal ? { first: firstRequest, onFirst: () => setFirstRequest(true), onRegistered: onRegisteredAnimal } : undefined}
               tutorship={tutorship}
               tutorshipFixed={tutorshipFixed}
               tutorKnown={tutorKnown}
@@ -3251,7 +3259,7 @@ function NewRequest({
               onTutorshipChange={(value) => {
                 // The acceptance of the notices belongs to the answer it was given under: a new answer starts it unchecked again.
                 if (value !== tutorship) setFollowUp({ ...emptyFollowUp });
-                updateRequestField("identificationTypeId", value);
+                updateRequestField("tutorship", value);
               }}
               tutorFields={{
                 data: requestData,
@@ -3452,7 +3460,7 @@ function NewRequest({
               <button
                 className="nr-topbar-continue primary-action"
                 type="button"
-                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false)) || (followUp.enabled && (!followUpPolicy.ready || noticesIssues.length > 0))}
+                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false)) || (followUp.enabled === true && (!followUpPolicy.ready || noticesIssues.length > 0))}
                 onClick={submit}
               >
                 {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}

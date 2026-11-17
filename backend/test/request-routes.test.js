@@ -26,7 +26,7 @@ function procedureBody(overrides = {}) {
     // The agenda is a fixed step: a public procedure always comes with the date it chose.
     preferredSchedule: FUTURE_DATE,
     animals: [{ species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida" }],
-    workflow_data: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false } }, ...overrides,
+    workflow_data: { tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false } }, ...overrides,
   };
 }
 
@@ -180,9 +180,9 @@ function pendingRequest(followUp = { enabled: false, email: "", phone: "" }) {
 
 test("public POST rejects omitted preference and CPF required by configured Tutor step", async (t) => {
   const { request, row } = await fixture(t);
-  const missingPreference = await request({ body: procedureBody({ workflow_data: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR } }) });
+  const missingPreference = await request({ body: procedureBody({ workflow_data: { tutorship: AnimalTutorship.WITHOUT_TUTOR } }) });
   assert.equal(missingPreference.status, 400);
-  const missingCpf = await request({ body: procedureBody({ workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
+  const missingCpf = await request({ body: procedureBody({ workflow_data: { tutorship: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(missingCpf.status, 400);
   assert.equal(row(), null);
 });
@@ -210,7 +210,7 @@ test("forged origin, skipTutor and stepTutor flags cannot dispense CPF", async (
   const { request, row } = await fixture(t);
   const response = await request({ body: procedureBody({
     origin: "INTERNA", skipTutor: true, stepTutor: false,
-    workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false }, skipTutor: true },
+    workflow_data: { tutorship: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false }, skipTutor: true },
   }) });
   assert.equal(response.status, 400);
   assert.equal(row(), null);
@@ -227,7 +227,7 @@ test("unknown request types and authenticated tutor identity cannot use no-Tutor
 test("explicit refusal is persisted independently from cadastral contact and strips forged delivery metadata", async (t) => {
   const { request, row } = await fixture(t);
   const response = await request({ body: procedureBody({ tutor_email: "registered@example.test", workflow_data: {
-    identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false, email: "stale@example.test", phone: "48999991234" },
+    tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false, email: "stale@example.test", phone: "48999991234" },
     notificationResults: [{ status: "sent" }], notificationDispatches: { fake: true },
   } }) });
   assert.equal(response.status, 201);
@@ -247,7 +247,7 @@ test("municipal POST cannot override the authenticated municipality", async (t) 
 
 test("a public request with a tutor creates no account nor password, and the answer carries only the request", async (t) => {
   const { request, row, stats } = await fixture(t);
-  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { tutorship: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(response.status, 201);
   assert.equal(response.cacheControl, "no-store");
   assert.deepEqual(Object.keys(response.body), ["request"]);
@@ -259,7 +259,7 @@ test("a public request with a tutor creates no account nor password, and the ans
 
 test("the registered notice goes after the answer to whoever accepted the notices, and is kept in the history", async (t) => {
   const { request, row } = await fixture(t, { registeredNotice: true });
-  const response = await request({ body: procedureBody({ workflow_data: { identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: true, email: "tutor@example.test", phone: "" } } }) });
+  const response = await request({ body: procedureBody({ workflow_data: { tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: true, email: "tutor@example.test", phone: "" } } }) });
   assert.equal(response.status, 201);
   assert.deepEqual(response.body.request.history, [], "the answer does not wait for the notice");
   await until(() => row().history.length > 0);
@@ -278,7 +278,7 @@ test("without the notices accepted the registered notice reads no channel and le
 
 test("a failed request insert rolls back and answers a generic error", async (t) => {
   const { request, stats } = await fixture(t, { failRequestInsert: true });
-  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { identificationTypeId: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
+  const response = await request({ body: procedureBody({ cpf: VALID_CPF, phone: "(48) 99999-1234", tutor_name: "Tutor Example", workflow_data: { tutorship: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } } }) });
   assert.equal(response.status, 500);
   assert.equal(response.body.error, "Não foi possível salvar a solicitação.");
   assert.equal(stats.calls.at(-1).sql, "ROLLBACK");

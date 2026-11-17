@@ -12,9 +12,9 @@ export function isProcedureRequest(body) {
 }
 
 // The answer about the tutor the registered animal was made with: one of the two, or the registration needs the staff's review.
-export function tutorshipForAnimal(animal, municipalityId) {
-  const tutorship = animalView(animal, municipalityId).identificationTypeId;
-  if (!isAnimalTutorship(tutorship)) throw authError(409, "O tipo de identificação deste animal precisa ser conferido pelo atendimento.");
+export function tutorshipForAnimal(animal) {
+  const { tutorship } = animalView(animal);
+  if (!isAnimalTutorship(tutorship)) throw authError(409, "A resposta sobre o tutor deste animal precisa ser conferida pelo atendimento.");
   return tutorship;
 }
 
@@ -26,7 +26,7 @@ export async function prepareRegisteredRequest(client, { body, user, municipalit
     const resolved = new Map();
     for (const id of [...requestedIds].sort()) {
       const animal = await findOwnedAnimal(client, { id, municipalityId, internal: true, lock: true });
-      requireLiveAnimal(animal); resolved.set(id, animalView(animal, municipalityId));
+      requireLiveAnimal(animal); resolved.set(id, animalView(animal));
     }
     return { ...body, animals: (body.animals || [{ id: requestedIds[0] }]).map((animal) => animal.id ? resolved.get(animal.id) : animal) };
   }
@@ -34,17 +34,17 @@ export async function prepareRegisteredRequest(client, { body, user, municipalit
   if (requestedIds.length !== 1 || (Array.isArray(body.animals) && body.animals.length !== 1)) throw authError(400, "Escolha um animal cadastrado por solicitação.");
   const animal = await findOwnedAnimal(client, { id: requestedIds[0], userId: user.id, municipalityId, lock: true });
   requireLiveAnimal(animal);
-  const gap = registrationGap(animal, municipalityId);
+  const gap = registrationGap(animal);
   if (gap) throw authError(409, gap);
-  const tutorship = tutorshipForAnimal(animal, municipalityId);
+  const tutorship = tutorshipForAnimal(animal);
   const tutor = await trustedTutorSnapshot(client, user, municipalityId);
   return { ...body, tutor_name: tutor.name, tutorName: tutor.name, tutor: tutor.name, cpf: tutor.cpf,
     tutor_email: tutor.email, email: tutor.email, phone: tutor.phone, address: tutor.address, neighborhood: tutor.neighborhood,
     city: tutor.city, state: tutor.state, cep: tutor.cep,
     animal_id: animal.id, animalId: animal.id, animal_microchip: animal.microchip || null,
     animal_name: animal.name, species: animal.species, size: animal.size,
-    animals: [animalView(animal, municipalityId)],
-    workflow_data: { ...(body.workflow_data || body.workflowData || {}), identificationTypeId: tutorship } };
+    animals: [animalView(animal)],
+    workflow_data: { ...(body.workflow_data || body.workflowData || {}), tutorship } };
 }
 
 export async function registerRequestAnimals(client, { body, request, user, tutorId, municipalityId }) {
@@ -60,12 +60,12 @@ export async function registerRequestAnimals(client, { body, request, user, tuto
       animal = await findOwnedAnimal(client, { id: data.id, userId: user?.id, municipalityId, lock: true, internal: isInternalUser(user) });
       if (animal.status === AnimalStatus.DECEASED) throw authError(409, "Animal em óbito não pode receber nova solicitação.");
     } else {
-      animal = await insertCanonicalAnimal(client, { data: { ...data, identificationTypeId: data.identificationTypeId || request.workflow_data?.identificationTypeId },
-        request, index, tutorId, municipalityId });
+      animal = await insertCanonicalAnimal(client, { data: { ...data, tutorship: data.tutorship || request.workflow_data?.tutorship },
+        request, index, tutorId });
     }
     // The request keeps what was asked for this animal next to the animal itself.
     const requestTypeIds = animalRequestTypeIds(data);
-    snapshots.push({ ...animalView(animal, municipalityId), ...(requestTypeIds.length ? { requestTypeIds } : {}) });
+    snapshots.push({ ...animalView(animal), ...(requestTypeIds.length ? { requestTypeIds } : {}) });
     await recordAnimalRequest(client, { animalId: animal.id, request, municipalityId, index, actorId: user?.id });
   }
   await saveRequestAnimalIds(client, request, snapshots);

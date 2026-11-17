@@ -23,7 +23,7 @@ export async function mine(req, res) {
   const result = await withAuthTransaction(async (client) => {
     const listing = await listOwnedAnimals(client, { ...identity, query, cursor });
     const candidates = cursor ? [] : await listSourceCandidates(client, { ...identity, query });
-    return { animals: listing.rows.map((row) => animalView(row, identity.municipalityId)), candidates, nextCursor: listing.nextCursor };
+    return { animals: listing.rows.map((row) => animalView(row)), candidates, nextCursor: listing.nextCursor };
   });
   res.set("Cache-Control", "no-store").json(result);
 }
@@ -47,11 +47,11 @@ export async function requestContext(req, res) {
       && (!type.municipalityId || type.municipalityId === identity.municipalityId)) : null;
     if (requestTypeId && !selected) throw authError(400, "Tipo de solicitação inválido.");
     let reason = animal.status === AnimalStatus.DECEASED ? "Animal em óbito não pode receber nova solicitação." : "";
-    reason ||= registrationGap(animal, identity.municipalityId);
-    try { tutorshipForAnimal(animal, identity.municipalityId); } catch (error) { reason ||= error.message; }
+    reason ||= registrationGap(animal);
+    try { tutorshipForAnimal(animal); } catch (error) { reason ||= error.message; }
     const tutor = await trustedTutorSnapshot(client, req.user, identity.municipalityId);
     const documents = selected && !reason ? await catalogReusableDocuments(client, { ...identity, animalId: animal.id, requestTypeId, settings }) : [];
-    return { animal: animalView(animal, identity.municipalityId), tutor, requestTypes: settings.requestTypes,
+    return { animal: animalView(animal), tutor, requestTypes: settings.requestTypes,
       documentTypes: settings.documentTypes || [],
       documents, eligibility: { canSubmit: !reason, reason } };
   });
@@ -82,7 +82,7 @@ export async function confirmMicrochip(req, res) {
     const row = await findOwnedAnimal(client, { id: req.params.id, municipalityId, internal: true, lock: true });
     return confirmAnimalMicrochip(client, { animal: row, microchip: req.body?.microchip, municipalityId, user: req.user });
   });
-  res.set("Cache-Control", "no-store").json({ animal: animalView(animal, municipalityId) });
+  res.set("Cache-Control", "no-store").json({ animal: animalView(animal) });
 }
 
 export function animalEndpoint(handler) {

@@ -5,7 +5,6 @@ import { DocumentReviewStatus, DocumentReuseScope, DocumentReuseState } from "..
 import { normalizeDocumentType } from "../../domain";
 import { RequestStep, requestSteps } from "../request-steps/request-steps";
 import { TutorArea } from "../tutor-access/tutor-area";
-import { ProcedureEntry } from "./procedure-entry";
 import { bindProcedureIntent } from "./procedure-intent";
 import { animalForRequest, pickReusableDocuments } from "./registered-request-data";
 import { AnimalTutorship } from "../../../shared/request-tutorship-contract.js";
@@ -19,7 +18,7 @@ import { availabilityPeriod, getAvailableScheduleSlot, selectScheduleOccurrence 
 import type { RegisteredRequestContext, ReusableDocumentCandidate } from "./registered-animal-types";
 
 const user = { id: "tutor-a", role: "tutor", name: "Ana", cpf: "52998224725", municipalityId: "town-a", mustChangePassword: false };
-const context: RegisteredRequestContext = { animal: { id: "animal-a", name: "Bidu", species: "Canino", sex: "Macho", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", identificationTypeId: AnimalTutorship.WITHOUT_TUTOR, declaredMicrochip: "12345" }, tutor: { name: "Ana", cpf: user.cpf, email: "ana@example.com", phone: "48999991234" }, requestTypes: [{ id: "type-a", name: "Vacinação" }, { id: "type-b", name: "Castração" }], documentTypes: [], documents: [] };
+const context: RegisteredRequestContext = { animal: { id: "animal-a", name: "Bidu", species: "Canino", sex: "Macho", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", tutorship: AnimalTutorship.WITHOUT_TUTOR, declaredMicrochip: "12345" }, tutor: { name: "Ana", cpf: user.cpf, email: "ana@example.com", phone: "48999991234" }, requestTypes: [{ id: "type-a", name: "Vacinação" }, { id: "type-b", name: "Castração" }], documentTypes: [], documents: [] };
 function document(overrides: Partial<ReusableDocumentCandidate> = {}): ReusableDocumentCandidate { return { attachmentId: "attachment-a", documentId: "identity", documentName: "Identidade", fileName: "identity.pdf", fileType: "application/pdf", fileSize: 100, status: DocumentReviewStatus.ATTACHED, state: DocumentReuseState.PENDING, eligible: true, receivedAt: "2026-11-01T00:00:00Z", reuseRef: { sourceRequestId: "source-a", attachmentId: "attachment-a", hash: "hash-a" }, ...overrides }; }
 
 describe("registered procedure entry", () => {
@@ -29,12 +28,6 @@ describe("registered procedure entry", () => {
     expect(bound).toEqual({ ...intent, ownerId: user.id });
     expect(bindProcedureIntent(bound, user)).toEqual(bound);
     for (const next of [null, { ...user, id: "another" }, { ...user, municipalityId: "town-b" }, { ...user, role: "analista" }]) expect(bindProcedureIntent(bound, next)).toBeNull();
-  });
-
-  it("offers both paths and gates them on municipality selection", () => {
-    const html = renderToStaticMarkup(<ProcedureEntry disabled onFirst={() => {}} onRegistered={() => {}} />);
-    expect(html).toContain("Primeira solicitação"); expect(html).toContain("Animal já cadastrado");
-    expect(html.match(/disabled=""/g)).toHaveLength(2);
   });
 
   it("opens the animal area without rendering requests or an administrative workspace for the intent", () => {
@@ -48,7 +41,7 @@ describe("registered procedure entry", () => {
 
 describe("registered request context", () => {
   it("preserves the persisted breed and the answer about the tutor, and has nothing to say about a type of identification", () => {
-    expect(animalForRequest(context.animal)).toMatchObject({ id: "animal-a", breedDescription: "Poodle", identificationTypeId: AnimalTutorship.WITHOUT_TUTOR });
+    expect(animalForRequest(context.animal)).toMatchObject({ id: "animal-a", breedDescription: "Poodle", tutorship: AnimalTutorship.WITHOUT_TUTOR });
     const html = renderToStaticMarkup(<RegisteredRequestSelection context={context} selectedType="Vacinação" onSelectType={() => {}} />);
     expect(html).toContain("Poodle"); expect(html).toContain("Animal sem tutor"); expect(html).not.toContain("indisponível"); expect(html).toContain("aguarda conferência");
     expect(html).not.toContain("<input"); expect(html).not.toContain("ana@example.com"); expect(html).not.toContain(user.cpf);

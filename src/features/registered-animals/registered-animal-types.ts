@@ -17,7 +17,7 @@ export interface RegisteredAnimal {
   confirmedMicrochip?: string;
   declaredMicrochip?: string;
   microchipStatus?: string;
-  identificationTypeId?: string;
+  tutorship?: string;
   status?: string;
   dewormed?: string;
   vaccinated?: string;

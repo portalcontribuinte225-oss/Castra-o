@@ -22,10 +22,10 @@ export function normalizeAnimalData(input = {}) {
 // Materializing the same source changes its id, never its source identity fingerprint.
 export function animalFingerprint(input) {
   const data = normalizeAnimalData(input);
-  return createHash("sha256").update(JSON.stringify({ ...data, identificationTypeId: input.identificationTypeId || AnimalTutorship.WITH_TUTOR })).digest("hex");
+  return createHash("sha256").update(JSON.stringify({ ...data, tutorship: input.tutorship || AnimalTutorship.WITH_TUTOR })).digest("hex");
 }
 
-export function animalView(row, municipalityId) {
+export function animalView(row) {
   const metadata = row.metadata || {};
   const registration = metadata.registration || {};
   const confirmed = row.microchip || "";
@@ -39,7 +39,7 @@ export function animalView(row, municipalityId) {
     confirmedMicrochip: confirmed, declaredMicrochip: declared, microchip: confirmed || declared,
     hasChip: confirmed || declared ? "Sim" : "Nao",
     microchipStatus: confirmed ? MicrochipStatus.CONFIRMED : declared ? MicrochipStatus.DECLARED : MicrochipStatus.ABSENT,
-    identificationTypeId: metadata.identificationTypes?.[municipalityId] || AnimalTutorship.WITH_TUTOR,
+    tutorship: metadata.tutorship || AnimalTutorship.WITH_TUTOR,
     status: row.status || AnimalStatus.ACTIVE,
   };
 }
@@ -48,8 +48,8 @@ export function requireLiveAnimal(row) {
   if (!row || row.status === AnimalStatus.DECEASED) throw authError(409, "Este animal não está disponível para uma nova solicitação.");
 }
 
-export function registrationGap(row, municipalityId) {
-  const animal = animalView(row, municipalityId);
+export function registrationGap(row) {
+  const animal = animalView(row);
   return ["species", "sex", "size", "breedType"].some((key) => !animal[key])
     ? "O cadastro do animal está incompleto. Procure o atendimento para conferência." : "";
 }

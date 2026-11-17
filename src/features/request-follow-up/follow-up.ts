@@ -1,11 +1,12 @@
 import { followUpContacts, normalizeFollowUp, validateFollowUp } from "../../../shared/notification-contract.js";
 
-// What the person chose: whether they want the notices about the request. They go to the contacts typed in the first step (or the profile's).
+// What the person chose: whether they want the notices about the request, or null while the question has no answer (nothing is chosen
+// for them). The notices go to the contacts typed in the first step (or the profile's).
 export interface FollowUpValue {
-  enabled: boolean;
+  enabled: boolean | null;
 }
 
-export const emptyFollowUp: FollowUpValue = { enabled: false };
+export const emptyFollowUp: FollowUpValue = { enabled: null };
 
 // The contacts typed in the first step (or the profile has), as they were typed.
 export interface TutorContacts {
@@ -21,7 +22,7 @@ export function availableFollowUpContacts(contacts: TutorContacts, phoneEnabled:
 // What the server is told: every contact that exists and can be reached.
 export function resolveFollowUp(value: FollowUpValue, contacts: TutorContacts, phoneEnabled: boolean) {
   const available = availableFollowUpContacts(contacts, phoneEnabled);
-  return { enabled: value.enabled, email: available.email, phone: available.phone };
+  return { enabled: value.enabled === true, email: available.email, phone: available.phone };
 }
 
 export function getFollowUpIssues(value: FollowUpValue, contacts: TutorContacts, phoneEnabled: boolean): string[] {

@@ -9,8 +9,8 @@ const both: TutorContacts = { email: "Tutor@Example.com", phone: "(48) 99999-123
 const yes: FollowUpValue = { enabled: true };
 
 describe("follow-up preference", () => {
-  it("starts without the notices, and accepting them needs at least one contact the municipality can reach", () => {
-    expect(emptyFollowUp).toEqual({ enabled: false });
+  it("starts with no answer, sent as no notices, and accepting them needs at least one contact the municipality can reach", () => {
+    expect(emptyFollowUp).toEqual({ enabled: null });
     expect(getFollowUpIssues(emptyFollowUp, { email: "", phone: "" }, true)).toEqual([]);
     expect(getFollowUpIssues(yes, both, true)).toEqual([]);
     expect(getFollowUpIssues(yes, { email: "", phone: "" }, true)[0]).toContain("ao menos um contato");

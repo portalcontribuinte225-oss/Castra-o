@@ -13,11 +13,10 @@ export async function findOwnedAnimal(client, { id, userId, municipalityId, lock
   return rows[0];
 }
 
-export async function insertCanonicalAnimal(client, { data, request, index, tutorId, municipalityId, sourceFingerprint }) {
+export async function insertCanonicalAnimal(client, { data, request, index, tutorId, sourceFingerprint }) {
   const normalized = normalizeAnimalData(data);
-  const identificationTypeId = data.identificationTypeId || request.workflow_data?.identificationTypeId || AnimalTutorship.WITH_TUTOR;
-  const metadata = { registration: normalized, declaredMicrochip: normalized.declaredMicrochip,
-    identificationTypes: { [municipalityId]: identificationTypeId },
+  const tutorship = data.tutorship || request.workflow_data?.tutorship || AnimalTutorship.WITH_TUTOR;
+  const metadata = { registration: normalized, declaredMicrochip: normalized.declaredMicrochip, tutorship,
     source: { requestId: request.id, animalIndex: index, fingerprint: sourceFingerprint || animalFingerprint(data) } };
   const { rows } = await client.query(`INSERT INTO animals (microchip,name,species,sex,size,breed,color,birth_date,metadata)
     VALUES (NULL,$1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,

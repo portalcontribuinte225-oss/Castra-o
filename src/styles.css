@@ -25125,16 +25125,91 @@ small,
   color: #78561d;
 }
 
-/* -- PASSO "VOCÊ": a resposta sobre o tutor, o que ela abre e o aceite dos avisos (público e balcão) -- */
+/* -- PASSO "VOCÊ": as perguntas em cards (como solicitar, tutor, avisos), a linha da resposta com "Alterar" e o que cada resposta abre
+   (público e balcão) -- */
 
-.nr-shell .requester-answer {
+.choice-question {
+  display: grid;
+  gap: 12px;
+}
+
+.choice-question-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.choice-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+}
+
+.choice-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.choice-card strong {
+  color: var(--ink);
+  font-size: 1.05rem;
+}
+
+.choice-card span {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.choice-card:hover:not(:disabled),
+.choice-card:focus-visible {
+  border-color: var(--blue);
+  box-shadow: var(--shadow-sm);
+  outline: none;
+}
+
+.choice-card[aria-pressed="true"] {
+  border-color: var(--blue);
+  background: var(--teal-soft);
+  box-shadow: inset 0 0 0 1px var(--blue);
+}
+
+.choice-card:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.choice-question.is-invalid .choice-question-title {
+  color: var(--red);
+}
+
+.choice-question.is-invalid .choice-card {
+  border-color: var(--field-invalid-border, #ef4444);
+  background: #fff1f2;
+}
+
+.choice-answer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
 }
 
-.nr-shell .requester-answer span {
+.choice-answer span {
   color: #475569;
   font-size: 0.88rem;
 }
@@ -25143,16 +25218,6 @@ small,
   display: grid;
   gap: 14px;
   animation: requester-reveal 0.22s ease-out;
-}
-
-.nr-shell .requester-notice {
-  display: grid;
-  gap: 8px;
-}
-
-.nr-shell .requester-notice p {
-  margin: 0;
-  font-size: 0.78rem;
 }
 
 @keyframes requester-reveal {
@@ -25213,7 +25278,6 @@ small,
 }
 
 
-.procedure-entry-options,
 .registered-animal-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
@@ -25221,7 +25285,6 @@ small,
   margin-top: 20px;
 }
 
-.procedure-entry-card,
 .registered-animal-card,
 .registered-readonly-summary {
   display: grid;
@@ -25234,12 +25297,6 @@ small,
   text-align: left;
 }
 
-.procedure-entry-card { cursor: pointer; font: inherit; }
-.procedure-entry-card strong { font-size: 1.1rem; }
-.procedure-entry-card:focus-visible,
-.procedure-entry-card:hover { border-color: #4d8b6a; outline-offset: 3px; }
-.procedure-entry-card:disabled { cursor: default; opacity: .6; }
-.procedure-entry-card span { line-height: 1.5; }
 .registered-animal-card h3,
 .registered-animal-card p { margin: 0; }
 .registered-animal-actions { display: flex; flex-wrap: wrap; gap: 8px; }

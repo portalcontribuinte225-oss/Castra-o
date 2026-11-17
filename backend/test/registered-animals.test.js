@@ -11,9 +11,9 @@ import { registeredAnimalDatabase, ANIMAL_TEST_MUNICIPALITY as MUNICIPALITY, ANI
 
 const tutor = { id: USER, role: "tutor", municipalityId: MUNICIPALITY };
 const staff = { id: randomUUID(), role: "analista", municipalityId: MUNICIPALITY };
-const animalInput = (name = "Luna") => ({ name, species: "Cão", sex: "Fêmea", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", coat: "Branca", birthDate: "2020-01-01", microchip: "chip-123", identificationTypeId: "animal_com_tutor" });
+const animalInput = (name = "Luna") => ({ name, species: "Cão", sex: "Fêmea", size: "Pequeno", breedType: "Definida", breedDescription: "Poodle", coat: "Branca", birthDate: "2020-01-01", microchip: "chip-123", tutorship: "animal_com_tutor" });
 const requestInput = (animals) => ({ id: REQUEST, tutor_id: USER, tutor_name: "Tutor", cpf: "52998224725", municipality_id: MUNICIPALITY,
-  request_type: "PROCEDIMENTO", workflow_data: { identificationTypeId: "animal_com_tutor" }, animals, status: "NOVA" });
+  request_type: "PROCEDIMENTO", workflow_data: { tutorship: "animal_com_tutor" }, animals, status: "NOVA" });
 
 async function seed(db, count = 1) {
   db.profiles.set(USER, { id: USER, name: "Tutor Atual", cpf: "52998224725", email: "own@example.test", phone: "", municipality_id: MUNICIPALITY });
@@ -43,7 +43,7 @@ test("existing animal request rehydrates immutable identity and rejects lost own
   const db = registeredAnimalDatabase(); const original = await seed(db); const id = original.animals[0].id;
   const body = await prepareRegisteredRequest(db, { body: { animals: [{ id, name: "Forged" }], cpf: "another-cpf", workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY });
   assert.equal(body.animals[0].name, "Animal 0"); assert.equal(body.cpf, "52998224725"); assert.equal(body.tutor_name, "Tutor Atual");
-  assert.equal(body.workflow_data.identificationTypeId, AnimalTutorship.WITH_TUTOR, "the request carries the answer the animal was made with");
+  assert.equal(body.workflow_data.tutorship, AnimalTutorship.WITH_TUTOR, "the request carries the answer the animal was made with");
   assert.match(db.calls.find(({ sql }) => sql.includes("SELECT a.* FROM animals a")).sql, /FOR UPDATE OF a/);
   await assert.rejects(prepareRegisteredRequest(db, { body, user: tutor, municipalityId: OTHER }), { status: 404 });
   db.owners[0].active = false;
@@ -135,11 +135,11 @@ test("readonly incomplete registration stays incomplete and cannot bypass server
 test("an animal whose answer about the tutor is not one of the two needs the staff's review, and is never given another", async () => {
   const db = registeredAnimalDatabase(); const original = await seed(db); const id = original.animals[0].id;
   const row = db.animals.get(id);
-  row.metadata.identificationTypes = { ...(row.metadata.identificationTypes || {}), [MUNICIPALITY]: "legacy_type" };
-  await assert.rejects(prepareRegisteredRequest(db, { body: { animals: [{ id }], workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY }), { status: 409, message: /identificação/ });
-  row.metadata.identificationTypes[MUNICIPALITY] = AnimalTutorship.WITHOUT_TUTOR;
+  row.metadata.tutorship = "legacy_type";
+  await assert.rejects(prepareRegisteredRequest(db, { body: { animals: [{ id }], workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY }), { status: 409, message: /resposta sobre o tutor/ });
+  row.metadata.tutorship = AnimalTutorship.WITHOUT_TUTOR;
   const prepared = await prepareRegisteredRequest(db, { body: { animals: [{ id }], workflow_data: {} }, user: tutor, municipalityId: MUNICIPALITY });
-  assert.equal(prepared.workflow_data.identificationTypeId, AnimalTutorship.WITHOUT_TUTOR);
+  assert.equal(prepared.workflow_data.tutorship, AnimalTutorship.WITHOUT_TUTOR);
 });
 
 test("death applies to all UUIDs once and complaints never write surgical records", async () => {

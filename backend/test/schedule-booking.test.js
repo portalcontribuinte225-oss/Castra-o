@@ -98,6 +98,6 @@ test("changing the procedures of a booked request counts as a booking change", (
   const before = { request_type: "Castração", animals: [{}], workflow_data: {} };
   assert.equal(bookingChanged(before, { ...before, request_type: "Castração, Microchipagem" }), true);
   assert.equal(bookingChanged(before, { ...before }), false);
-  const answered = (identificationTypeId) => ({ ...before, workflow_data: { identificationTypeId } });
+  const answered = (tutorship) => ({ ...before, workflow_data: { tutorship } });
   assert.equal(bookingChanged(answered("animal_com_tutor"), answered("animal_sem_tutor")), false, "the answer about the tutor has nothing to do with the booking");
 });

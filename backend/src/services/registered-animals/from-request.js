@@ -17,7 +17,7 @@ export async function materializeOwnRequestAnimal(client, { sourceRequestId, ani
     // A former owner's request never grants a second ownership after transfer.
     animal = await findOwnedAnimal(client, { id: existingIds[0], userId: user.id, municipalityId, lock: true });
   } else {
-    animal = await insertCanonicalAnimal(client, { data, request, index: animalIndex, tutorId: user.id, municipalityId, sourceFingerprint: fingerprint });
+    animal = await insertCanonicalAnimal(client, { data, request, index: animalIndex, tutorId: user.id, sourceFingerprint: fingerprint });
     await recordAnimalRequest(client, { animalId: animal.id, request, municipalityId, index: animalIndex, actorId: user.id });
   }
   const snapshots = [...request.animals]; snapshots[animalIndex] = { ...data, id: animal.id };
@@ -25,5 +25,5 @@ export async function materializeOwnRequestAnimal(client, { sourceRequestId, ani
   await client.query(`UPDATE requests SET animals=$1::jsonb, animal_id=CASE WHEN $2=0 THEN $3 ELSE animal_id END,
     updated_at=NOW() WHERE id=$4 AND tutor_id=$5 AND municipality_id=$6`,
   [JSON.stringify(snapshots), animalIndex, animal.id, request.id, user.id, municipalityId]);
-  return animalView(animal, municipalityId);
+  return animalView(animal);
 }

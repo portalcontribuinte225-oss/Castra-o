@@ -1,3 +1,5 @@
+import { useState } from "react";
+import type { ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import type { AnyRecord } from "../types";
 import { statusLabels } from "../domain";
@@ -178,6 +180,53 @@ export function CompactChoiceField({ label, value, options, onChange, invalid = 
           );
         })}
       </div>
+    </div>
+  );
+}
+
+export interface ChoiceOption {
+  value: string;
+  label: string;
+  description: string;
+  disabled?: boolean;
+}
+
+interface ChoiceQuestionProps {
+  question: string;
+  options: ChoiceOption[];
+  // "" while the question has no answer: nothing is chosen for the person.
+  value: string;
+  onChange: (value: string) => void;
+  invalid?: boolean;
+  // What the choice depends on, under the cards (channels still loading, a contact missing).
+  children?: ReactNode;
+}
+
+// A question answered by choosing one of a few large cards. Once answered it shrinks to one line, and "Alterar" brings the cards back.
+export function ChoiceQuestion({ question, options, value, onChange, invalid = false, children }: ChoiceQuestionProps) {
+  const [changing, setChanging] = useState(false);
+  const answer = options.find((option) => option.value === value);
+  if (answer && !changing) {
+    return (
+      <div className="choice-answer">
+        <span>{question} <strong>{answer.label}</strong></span>
+        <button className="inline-link-button" type="button" onClick={() => setChanging(true)}>Alterar</button>
+      </div>
+    );
+  }
+  return (
+    <div className={`choice-question${invalid ? " is-invalid" : ""}`} role="group" aria-label={question}>
+      <p className="choice-question-title">{question}</p>
+      <div className="choice-card-grid">
+        {options.map((option) => (
+          <button key={option.value} type="button" className="choice-card" aria-pressed={option.value === value} disabled={option.disabled}
+            onClick={() => { setChanging(false); onChange(option.value); }}>
+            <strong>{option.label}</strong>
+            <span>{option.description}</span>
+          </button>
+        ))}
+      </div>
+      {children}
     </div>
   );
 }

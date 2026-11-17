@@ -31,10 +31,10 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   // The answer to "does the animal have a tutor?": one of the two values of AnimalTutorship, and no answer means with a tutor. It is the
   // only thing that dispenses the tutor, and the animals of the request have to say the same.
   function selectTutorship() {
-    const answer = workflow.identificationTypeId || AnimalTutorship.WITH_TUTOR;
-    if (!isAnimalTutorship(answer)) invalid("Tipo de identificação inválido.");
-    if (Array.isArray(body.animals) && body.animals.some((animal) => animal?.identificationTypeId && animal.identificationTypeId !== workflow.identificationTypeId)) {
-      invalid("Tipo de identificação do animal não corresponde à solicitação.");
+    const answer = workflow.tutorship || AnimalTutorship.WITH_TUTOR;
+    if (!isAnimalTutorship(answer)) invalid("Resposta sobre o tutor inválida.");
+    if (Array.isArray(body.animals) && body.animals.some((animal) => animal?.tutorship && animal.tutorship !== workflow.tutorship)) {
+      invalid("A resposta sobre o tutor do animal não corresponde à solicitação.");
     }
     return answer;
   }

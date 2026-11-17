@@ -21,7 +21,7 @@ async function fixture(t, { registered = true, unknownTutorship = false } = {}) 
   const db = registeredAnimalDatabase(); const sessions = new Map();
   db.profiles.set(USER, { name: "Tutor atual", cpf: "52998224725", email: "own@example.test", municipality_id: MUNICIPALITY });
   const source = { id: REQUEST, tutor_id: USER, municipality_id: MUNICIPALITY, tutor_name: "Tutor", cpf: "52998224725",
-    request_type: "PROCEDIMENTO", animals: [{ ...animalData }], workflow_data: { identificationTypeId: unknownTutorship ? "legacy_type" : AnimalTutorship.WITH_TUTOR } };
+    request_type: "PROCEDIMENTO", animals: [{ ...animalData }], workflow_data: { tutorship: unknownTutorship ? "legacy_type" : AnimalTutorship.WITH_TUTOR } };
   db.requests.set(REQUEST, source);
   if (registered) await registerRequestAnimals(db, { body: source, request: source, user: tutor, tutorId: USER, municipalityId: MUNICIPALITY });
   const id = source.animal_id;
@@ -104,8 +104,8 @@ test("context returns persisted identity and blocks an animal whose answer about
   const { request, id } = await fixture(t, { unknownTutorship: true });
   const result = await request(`/${id}/request-context`);
   assert.equal(result.status, 200); assert.equal(result.body.tutor.cpf, "52998224725"); assert.equal(result.body.tutor.name, "Tutor atual");
-  assert.equal(result.body.eligibility.canSubmit, false); assert.match(result.body.eligibility.reason, /identificação/); assert.deepEqual(result.body.documents, []);
-  assert.equal(result.body.animal.identificationTypeId, "legacy_type"); assert.equal(result.body.identificationTypes, undefined);
+  assert.equal(result.body.eligibility.canSubmit, false); assert.match(result.body.eligibility.reason, /resposta sobre o tutor/); assert.deepEqual(result.body.documents, []);
+  assert.equal(result.body.animal.tutorship, "legacy_type");
 });
 
 test("former owner and another municipality lose context and preview without disclosing content", async (t) => {
