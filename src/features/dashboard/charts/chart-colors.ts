@@ -15,9 +15,9 @@ export function categoryColor(label: string, slot: number): string {
   return label === NOT_INFORMED_LABEL || label === OTHERS_LABEL ? NEUTRAL_COLOR : seriesColor(slot);
 }
 
-// The text set inside a coloured block: near-black on the yellow slot, white on every other.
-export function textOnColor(color: string): string {
-  return color === seriesColor(3) ? "#0b0b0b" : "#ffffff";
+// The text set inside a coloured slice: near-black on the yellow slot and on the neutral grey, white on every other.
+export function textOnColor(color = ""): string {
+  return color === seriesColor(3) || color === NEUTRAL_COLOR ? "#0b0b0b" : "#ffffff";
 }
 
 // Keeps the largest categories and folds the rest into "Outros", so no colour is ever generated past the palette.

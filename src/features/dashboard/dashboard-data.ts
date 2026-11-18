@@ -27,7 +27,7 @@ export interface DashboardData {
   teams: AnyRecord;
   currentUser: AnyRecord | null;
   range: PeriodRange;
-  previous: PeriodRange | null;
+  previous: PeriodRange;
   grouping: SeriesGrouping;
   now: Date;
 }

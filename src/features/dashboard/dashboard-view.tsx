@@ -2,7 +2,15 @@ import { useMemo, useState } from "react";
 import type { AnyRecord } from "../../types";
 import { initialRequestTypes, initialTeams, normalizeRequest } from "../../domain";
 import type { DashboardData } from "./dashboard-data";
-import { DashboardPeriod, DashboardTab, periodRange, previousPeriodRange, seriesGrouping } from "./dashboard-period";
+import {
+  DashboardPeriod,
+  DashboardTab,
+  periodRange,
+  previousPeriodRange,
+  seriesGrouping,
+  typedRangeOf,
+  type TypedRange,
+} from "./dashboard-period";
 import { AnimalsTab } from "./tabs/animals-tab";
 import { NeighborhoodsTab } from "./tabs/neighborhoods-tab";
 import { OverviewTab } from "./tabs/overview-tab";
@@ -19,15 +27,14 @@ const TABS: { id: DashboardTab; label: string; view: (props: { data: DashboardDa
   { id: DashboardTab.ANIMALS, label: "Animais e adoção", view: AnimalsTab },
 ];
 
-const PERIODS: { id: DashboardPeriod; label: string }[] = [
+const PRESETS: { id: DashboardPeriod; label: string }[] = [
   { id: DashboardPeriod.LAST_30_DAYS, label: "30 dias" },
   { id: DashboardPeriod.LAST_90_DAYS, label: "90 dias" },
   { id: DashboardPeriod.LAST_12_MONTHS, label: "12 meses" },
-  { id: DashboardPeriod.ALL, label: "Tudo" },
 ];
 
 // The manager's dashboard: one row of controls (tab and period) above everything they scope, then the active tab, which
-// computes only its own numbers.
+// computes only its own numbers. The period is a preset or any two days typed in the date fields.
 export function DashboardView({
   requests = [],
   adoptionAnimals = [],
@@ -39,9 +46,11 @@ export function DashboardView({
 }: AnyRecord) {
   const [tab, setTab] = useState(DashboardTab.OVERVIEW);
   const [period, setPeriod] = useState(DashboardPeriod.LAST_90_DAYS);
+  const [typed, setTyped] = useState<TypedRange>({ from: "", to: "" });
   const normalizedRequests = useMemo(() => requests.map(normalizeRequest), [requests]);
   const data = useMemo<DashboardData>(() => {
     const now = new Date();
+    const range = periodRange(period, typed, now);
     return {
       requests: normalizedRequests,
       scheduleDays,
@@ -50,12 +59,19 @@ export function DashboardView({
       requestTypes,
       teams,
       currentUser,
-      range: periodRange(period, now),
-      previous: previousPeriodRange(period, now),
-      grouping: seriesGrouping(period),
+      range,
+      previous: previousPeriodRange(range, now),
+      grouping: seriesGrouping(range, now),
       now,
     };
-  }, [normalizedRequests, scheduleDays, adoptionAnimals, neighborhoods, requestTypes, teams, currentUser, period]);
+  }, [normalizedRequests, scheduleDays, adoptionAnimals, neighborhoods, requestTypes, teams, currentUser, period, typed]);
+  const shown = typedRangeOf(data.range, data.now);
+  // A typed day turns the period into a custom one, keeping the other day as it was shown; a cleared field changes nothing.
+  const typeDay = (field: keyof TypedRange, value: string) => {
+    if (!value) return;
+    setTyped({ ...shown, [field]: value });
+    setPeriod(DashboardPeriod.CUSTOM);
+  };
   const ActiveTab = (TABS.find((item) => item.id === tab) || TABS[0]).view;
   return (
     <section className="dash-root">
@@ -67,12 +83,22 @@ export function DashboardView({
             </button>
           ))}
         </nav>
-        <div className="tab-bar" role="group" aria-label="Período">
-          {PERIODS.map((item) => (
-            <button key={item.id} type="button" className={period === item.id ? "active" : ""} aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>
-              {item.label}
-            </button>
-          ))}
+        <div className="dash-period" role="group" aria-label="Período">
+          <div className="tab-bar">
+            {PRESETS.map((item) => (
+              <button key={item.id} type="button" className={period === item.id ? "active" : ""} aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>
+                {item.label}
+              </button>
+            ))}
+          </div>
+          <label className="dash-range">
+            <span>De</span>
+            <input type="date" value={shown.from} max={shown.to} onChange={(event) => typeDay("from", event.target.value)} />
+          </label>
+          <label className="dash-range">
+            <span>até</span>
+            <input type="date" value={shown.to} min={shown.from} onChange={(event) => typeDay("to", event.target.value)} />
+          </label>
         </div>
       </div>
       <ActiveTab data={data} />

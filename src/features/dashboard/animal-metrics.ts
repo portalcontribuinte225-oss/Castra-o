@@ -6,14 +6,20 @@ import { ADOPTION_STATUS_ADOPTED } from "../adoption-status";
 import { getAdoptionInterestCount } from "../adoption-interest-count";
 import { NOT_INFORMED_LABEL, type ChartItem } from "./dashboard-data";
 import { daysBetween, isInRange, type PeriodRange, type SeriesGrouping } from "./dashboard-period";
-import { average, sum } from "./metric-math";
-import { arrivedInRange } from "./request-outcome";
+import { average, percent, sum } from "./metric-math";
+import { arrivedInRange, closedInRange, isCompletedRequest } from "./request-outcome";
 import { countSeries, type SeriesPoint } from "./time-series";
 
 export interface AnimalProfile {
   species: ChartItem[];
   sex: ChartItem[];
   size: ChartItem[];
+}
+
+export interface AnimalCounts {
+  requested: number;
+  served: number;
+  microchipShare: number | null;
 }
 
 export interface AdoptionSummary {
@@ -41,12 +47,25 @@ export function countLabels(values: unknown[]): ChartItem[] {
 
 // The animals of the requests that arrived in the period, by species, sex and size.
 export function animalProfile(requests: AnyRecord[], range: PeriodRange): AnimalProfile {
-  const animals: AnyRecord[] = arrivedInRange(requests, range).flatMap((request) => (Array.isArray(request.animals) ? request.animals : []));
+  const animals = animalsOf(arrivedInRange(requests, range));
   return {
     species: countLabels(animals.map((animal) => animal?.species)),
     sex: countLabels(animals.map((animal) => animal?.sex)),
     size: countLabels(animals.map((animal) => animal?.size)),
   };
+}
+
+function animalsOf(requests: AnyRecord[]): AnyRecord[] {
+  return requests.flatMap((request) => (Array.isArray(request.animals) ? request.animals : []));
+}
+
+// The animals of the requests that arrived in the period, the animals of the visits done in it, and how many of the first
+// already carry a microchip.
+export function animalCounts(requests: AnyRecord[], range: PeriodRange): AnimalCounts {
+  const requested = animalsOf(arrivedInRange(requests, range));
+  const served = animalsOf(closedInRange(requests, range).filter(isCompletedRequest));
+  const chipped = requested.filter((animal) => String(animal?.microchip || animal?.microchipNumber || "").trim()).length;
+  return { requested: requested.length, served: served.length, microchipShare: percent(chipped, requested.length) };
 }
 
 // Where the requests of the period came from: the public form or the staff's own registration.

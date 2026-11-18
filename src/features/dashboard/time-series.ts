@@ -36,13 +36,16 @@ function bucketLabel(start: Date, grouping: SeriesGrouping): string {
   return grouping === SeriesGrouping.MONTH ? formatMonthYear(start) : formatDayMonth(start);
 }
 
-// Every bucket from the start of the range (or the earliest date, for "all") up to now, in calendar order, so a stretch
-// without records still shows.
-function timeBuckets(dates: Date[], range: PeriodRange, grouping: SeriesGrouping, now: Date): Bucket[] {
-  const earliest = dates.reduce<Date | null>((first, date) => (!first || date < first ? date : first), null);
-  const last = bucketStart(now, grouping);
+// The last moment a line reaches: the end of the range, or now when the range is still open or ends ahead.
+function lastMoment(range: PeriodRange, now: Date): Date {
+  return range.end && range.end <= now ? new Date(range.end.getTime() - 1) : now;
+}
+
+// Every bucket from the start of the range to its last moment, in calendar order, so a stretch without records still shows.
+function timeBuckets(range: PeriodRange, grouping: SeriesGrouping, now: Date): Bucket[] {
+  const last = bucketStart(lastMoment(range, now), grouping);
   const buckets: Bucket[] = [];
-  for (let cursor = bucketStart(range.start || earliest || now, grouping); cursor <= last; cursor = nextBucketStart(cursor, grouping)) {
+  for (let cursor = bucketStart(range.start, grouping); cursor <= last; cursor = nextBucketStart(cursor, grouping)) {
     buckets.push({ key: bucketKey(cursor), label: bucketLabel(cursor, grouping) });
   }
   return buckets;
@@ -56,8 +59,8 @@ function aggregateSeries(
   reduce: (values: number[]) => number | null,
 ): SeriesPoint[] {
   const keys = Object.keys(series);
-  const kept = keys.map((key) => series[key].filter((item) => item.date && isInRange(item.date, range) && item.date <= now));
-  const buckets = timeBuckets(kept.flat().map((item) => item.date as Date), range, grouping, now);
+  const kept = keys.map((key) => series[key].filter((item) => isInRange(item.date, range) && (item.date as Date) <= now));
+  const buckets = timeBuckets(range, grouping, now);
   const positions = new Map(buckets.map((bucket, position) => [bucket.key, position]));
   const grouped = keys.map(() => buckets.map((): number[] => []));
   kept.forEach((items, serie) => items.forEach((item) => {

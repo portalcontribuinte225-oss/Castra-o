@@ -41,7 +41,9 @@ export function CategoryBarChart({ data, series, caption, layout = BarLayout.COL
   const bars = layout === BarLayout.BARS;
   // While every bar carries its value at the tip, the value axis and its grid would only repeat it.
   const labelled = data.length <= MAX_LABELLED_BARS;
-  const height = bars ? data.length * (series.length > 1 ? GROUPED_ROW_HEIGHT : BAR_ROW_HEIGHT) + (labelled ? 24 : 48) : COLUMNS_HEIGHT;
+  // Bars never get shorter than columns, so two panels side by side keep the same height.
+  const rowsHeight = data.length * (series.length > 1 ? GROUPED_ROW_HEIGHT : BAR_ROW_HEIGHT) + (labelled ? 24 : 48);
+  const height = bars ? Math.max(COLUMNS_HEIGHT, rowsHeight) : COLUMNS_HEIGHT;
   const longest = Math.max(...data.map((row) => shortLabel(row.label).length));
   const valueAxis = {
     type: "number" as const,

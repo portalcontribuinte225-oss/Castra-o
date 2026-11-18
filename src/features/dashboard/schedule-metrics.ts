@@ -27,6 +27,7 @@ export interface ScheduleSummary {
   vacancies: number;
   used: number;
   occupancy: number | null;
+  freeAhead: number;
   nextOpenDay: { dateText: string; remaining: number } | null;
 }
 
@@ -83,20 +84,33 @@ export function daysInRange(usages: DayUsage[], range: PeriodRange): DayUsage[] 
   return usages.filter((usage) => isInRange(usage.date, range));
 }
 
-// The agenda days of the period and their places, and the next day from today that still has a free place.
+// The agenda days of the range that already came (today included): occupancy is measured on them only, since the days
+// ahead are still being booked.
+export function pastDaysInRange(usages: DayUsage[], range: PeriodRange, now: Date): DayUsage[] {
+  return daysInRange(usages, range).filter((usage) => usage.date <= startOfDay(now));
+}
+
+// The agenda days of the period that already came and their places; from today on, the places still free and the next
+// day that has one.
 export function scheduleSummary(usages: DayUsage[], range: PeriodRange, now: Date): ScheduleSummary {
-  const inRange = daysInRange(usages, range);
+  const inRange = pastDaysInRange(usages, range, now);
   const vacancies = sum(inRange.map((day) => day.vacancies));
   const used = sum(inRange.map((day) => day.used));
-  const today = startOfDay(now);
-  const next = usages.find((day) => day.date >= today && day.vacancies > day.used);
+  const ahead = usages.filter((day) => day.date >= startOfDay(now));
+  const next = ahead.find((day) => day.vacancies > day.used);
   return {
     days: inRange.length,
     vacancies,
     used,
     occupancy: percent(used, vacancies),
+    freeAhead: sum(ahead.map((day) => day.vacancies - day.used)),
     nextOpenDay: next ? { dateText: next.dateText, remaining: next.vacancies - next.used } : null,
   };
+}
+
+// How many booked tutors did not come to their visit in the period.
+export function noShowCount(requests: AnyRecord[], range: PeriodRange): number {
+  return closedInRange(requests, range).filter(isNoShowRequest).length;
 }
 
 function occupancyItem(label: string, used: number, vacancies: number): ChartItem {

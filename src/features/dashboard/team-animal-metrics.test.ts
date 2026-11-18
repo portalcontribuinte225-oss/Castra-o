@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE } from "../adoption-status";
-import { adoptionSummary, adoptionsInRange, animalProfile, countLabels, requestOrigins } from "./animal-metrics";
+import { adoptionSummary, adoptionsInRange, animalCounts, animalProfile, countLabels, requestOrigins } from "./animal-metrics";
 import { DashboardPeriod, periodRange } from "./dashboard-period";
 import { TEST_NOW, testRequest } from "./dashboard-test-requests";
-import { loadConcentration, personLoads, queueBySector } from "./team-metrics";
+import { loadConcentration, personLoads, queueBySector, teamSummary } from "./team-metrics";
 
-const range = periodRange(DashboardPeriod.LAST_30_DAYS, TEST_NOW);
+const range = periodRange(DashboardPeriod.LAST_30_DAYS, { from: "", to: "" }, TEST_NOW);
 const teams = { users: [], sectors: [{ id: "s1", name: "Setor Teste" }] };
 
 describe("dashboard team", () => {
@@ -30,12 +30,31 @@ describe("dashboard team", () => {
       testRequest({ status: "REALIZADA", responsible: "Pessoa B", preferredSchedule: "12/11/2026" }),
     ];
     expect(queueBySector(requests, teams)).toEqual([{ label: "Sem setor", value: 2 }, { label: "Setor Teste", value: 1 }]);
-    expect(loadConcentration(requests)).toEqual({ name: "Pessoa A", count: 2, total: 3, share: 67 });
-    expect(loadConcentration([testRequest()])).toBeNull();
+    expect(loadConcentration(requests, teams, null)).toEqual({ name: "Pessoa A", count: 2, total: 3, share: 67 });
+    expect(loadConcentration([testRequest()], teams, null)).toBeNull();
+  });
+
+  it("sums up the team as registered and as it works", () => {
+    const people = { users: [{ id: "u1", active: true }, { id: "u2", active: false }, { id: "u3" }], sectors: [{ id: "s1" }, { id: "s2", active: false }] };
+    const requests = [
+      testRequest({ responsible: "Pessoa A" }),
+      testRequest({ responsible: "Pessoa A" }),
+      testRequest({ responsible: "Pessoa B" }),
+      testRequest({ responsible: "Pessoa B", status: "REALIZADA", preferredSchedule: "12/11/2026" }),
+    ];
+    expect(teamSummary(requests, range, people, null)).toEqual({ activeUsers: 2, activeSectors: 1, peopleWithQueue: 2, queuePerPerson: 1.5, closedPerPerson: 1 });
   });
 });
 
 describe("dashboard animals and adoption", () => {
+  it("counts the animals asked for and served in the period, and the share of them with a microchip", () => {
+    const requests = [
+      testRequest({ animals: [{ name: "A", microchip: "900000000000001" }, { name: "B" }] }),
+      testRequest({ status: "REALIZADA", preferredSchedule: "12/11/2026", animals: [{ name: "C" }] }),
+    ];
+    expect(animalCounts(requests, range)).toEqual({ requested: 3, served: 1, microchipShare: 33 });
+  });
+
   it("counts labels written in different ways as one", () => {
     expect(countLabels(["Cão", " cão", "Gato", ""])).toEqual([
       { label: "Cão", value: 2 },

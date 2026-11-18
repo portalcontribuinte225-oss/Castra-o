@@ -14,7 +14,7 @@ import { ScheduleTab } from "./tabs/schedule-tab";
 import { TeamTab } from "./tabs/team-tab";
 
 function dashboardData(fields: Partial<DashboardData> = {}): DashboardData {
-  const period = DashboardPeriod.LAST_30_DAYS;
+  const range = periodRange(DashboardPeriod.LAST_30_DAYS, { from: "", to: "" }, TEST_NOW);
   return {
     requests: [],
     scheduleDays: [],
@@ -23,9 +23,9 @@ function dashboardData(fields: Partial<DashboardData> = {}): DashboardData {
     requestTypes: [],
     teams: { users: [], sectors: [] },
     currentUser: null,
-    range: periodRange(period, TEST_NOW),
-    previous: previousPeriodRange(period, TEST_NOW),
-    grouping: seriesGrouping(period),
+    range,
+    previous: previousPeriodRange(range, TEST_NOW),
+    grouping: seriesGrouping(range, TEST_NOW),
     now: TEST_NOW,
     ...fields,
   };
@@ -71,11 +71,16 @@ describe("dashboard tabs", () => {
     expect(html).toContain("Sem dados no período.");
   });
 
-  it("opens on the overview with the period of 90 days", () => {
+  it("opens on the overview with the period of 90 days, its days shown in the date fields", () => {
     const html = renderToStaticMarkup(<DashboardView requests={[]} />);
     expect(html).toContain("Visão geral");
     expect(html).toContain("Entradas e realizadas");
     expect(html).toMatch(/aria-pressed="true"[^>]*>90 dias/);
+    expect(html.match(/type="date"/g)).toHaveLength(2);
+  });
+
+  it("shows six cards on every tab", () => {
+    TABS.forEach(({ Tab }) => expect(renderToStaticMarkup(<Tab data={filled} />).match(/class="metric-card"/g)).toHaveLength(6));
   });
 
   it("marks the registered neighborhoods without any visit and points to where they are registered when there are none", () => {

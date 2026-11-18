@@ -3,7 +3,7 @@ import { RequestStatus } from "../../../shared/request-contract.js";
 import type { ChartItem } from "./dashboard-data";
 import type { PeriodRange, SeriesGrouping } from "./dashboard-period";
 import { pluralize } from "./dashboard-format";
-import { percent } from "./metric-math";
+import { average, percent } from "./metric-math";
 import {
   CancelCause,
   arrivedInRange,
@@ -26,8 +26,32 @@ const WAITING_BANDS = [
   { label: "15 dias ou mais", from: 15, to: Infinity },
 ];
 
+export interface QueueSnapshot {
+  inAnalysis: number;
+  waitingProcedure: number;
+  averageWait: number | null;
+  oldestWait: number | null;
+  cancelled: number;
+  rescheduled: number;
+}
+
 function requestCount(count: number): string {
   return pluralize(count, "solicitação", "solicitações");
+}
+
+// Today's queue by stage and how long it has been waiting; what left it cancelled in the period, and how many of the
+// requests that arrived in the period had to be rescheduled.
+export function queueSnapshot(requests: AnyRecord[], range: PeriodRange, now: Date): QueueSnapshot {
+  const open = requests.filter(isOpenRequest);
+  const waits = open.map((request) => waitingDaysOf(request, now)).filter((days): days is number => days !== null);
+  return {
+    inAnalysis: open.filter((request) => request.status === RequestStatus.NEW).length,
+    waitingProcedure: open.filter((request) => request.status === RequestStatus.SCHEDULED).length,
+    averageWait: average(waits),
+    oldestWait: waits.length ? Math.max(...waits) : null,
+    cancelled: closedInRange(requests, range).filter(isCancelledRequest).length,
+    rescheduled: arrivedInRange(requests, range).filter((request) => Number(request.rescheduleCount) > 0).length,
+  };
 }
 
 // How long today's open requests have been waiting, in bands.

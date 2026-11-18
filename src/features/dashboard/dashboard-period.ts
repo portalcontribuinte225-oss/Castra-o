@@ -11,7 +11,7 @@ export enum DashboardPeriod {
   LAST_30_DAYS = "30-days",
   LAST_90_DAYS = "90-days",
   LAST_12_MONTHS = "12-months",
-  ALL = "all",
+  CUSTOM = "custom",
 }
 
 export enum SeriesGrouping {
@@ -20,20 +20,25 @@ export enum SeriesGrouping {
   MONTH = "month",
 }
 
-// A span of time from `start` (inclusive) to `end` (exclusive). Without a start it reaches back to the first record;
-// without an end it stays open, so the agenda days ahead still count.
+// A span of time from `start` (inclusive) to `end` (exclusive). A preset has no end, so the agenda days ahead still count;
+// a range typed by hand ends the day after its last day.
 export interface PeriodRange {
-  start: Date | null;
+  start: Date;
   end: Date | null;
+}
+
+// The two days typed in the period fields, as the date inputs give them ("yyyy-mm-dd").
+export interface TypedRange {
+  from: string;
+  to: string;
 }
 
 const DAY_MS = 86400000;
 
-const PERIOD_DAYS: Record<DashboardPeriod, number | null> = {
+const PRESET_DAYS: Record<Exclude<DashboardPeriod, DashboardPeriod.CUSTOM>, number> = {
   [DashboardPeriod.LAST_30_DAYS]: 30,
   [DashboardPeriod.LAST_90_DAYS]: 90,
   [DashboardPeriod.LAST_12_MONTHS]: 365,
-  [DashboardPeriod.ALL]: null,
 };
 
 export function startOfDay(date: Date): Date {
@@ -53,29 +58,48 @@ export function daysBetween(from: Date, to: Date): number {
   return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / DAY_MS);
 }
 
-export function periodRange(period: DashboardPeriod, now = new Date()): PeriodRange {
-  const days = PERIOD_DAYS[period];
-  return { start: days === null ? null : addDays(startOfDay(now), -days), end: null };
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
-// The span of the same length right before the period, to compare with; "all" has none.
-export function previousPeriodRange(period: DashboardPeriod, now = new Date()): PeriodRange | null {
-  const days = PERIOD_DAYS[period];
-  if (days === null) return null;
-  const start = addDays(startOfDay(now), -days);
-  return { start: addDays(start, -days), end: start };
+export function toInputDate(date: Date): string {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-// Whether a date falls in a range; a record without a date only counts when the range has no limits at all.
+export function fromInputDate(text: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  return match ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])) : null;
+}
+
+// The span a choice covers: a preset counts back from today; typed days run from the first to the last, whichever order
+// they came in.
+export function periodRange(period: DashboardPeriod, typed: TypedRange, now = new Date()): PeriodRange {
+  if (period !== DashboardPeriod.CUSTOM) return { start: addDays(startOfDay(now), -PRESET_DAYS[period]), end: null };
+  const from = fromInputDate(typed.from) || startOfDay(now);
+  const to = fromInputDate(typed.to) || startOfDay(now);
+  const [first, last] = from <= to ? [from, to] : [to, from];
+  return { start: first, end: addDays(last, 1) };
+}
+
+// The span of the same length right before, to compare with.
+export function previousPeriodRange(range: PeriodRange, now = new Date()): PeriodRange {
+  const length = daysBetween(range.start, range.end || addDays(startOfDay(now), 1));
+  return { start: addDays(range.start, -length), end: range.start };
+}
+
+// The days the period fields show for a range: its first day and its last (today, for a preset).
+export function typedRangeOf(range: PeriodRange, now = new Date()): TypedRange {
+  return { from: toInputDate(range.start), to: toInputDate(range.end ? addDays(range.end, -1) : now) };
+}
+
 export function isInRange(date: Date | null, range: PeriodRange): boolean {
-  if (!range.start && !range.end) return true;
-  if (!date) return false;
-  return (!range.start || date >= range.start) && (!range.end || date < range.end);
+  return Boolean(date) && (date as Date) >= range.start && (!range.end || (date as Date) < range.end);
 }
 
-// How the lines over time group their points: by day over 30 days, by week over 90, by month beyond.
-export function seriesGrouping(period: DashboardPeriod): SeriesGrouping {
-  if (period === DashboardPeriod.LAST_30_DAYS) return SeriesGrouping.DAY;
-  if (period === DashboardPeriod.LAST_90_DAYS) return SeriesGrouping.WEEK;
+// How the lines over time group their points: by day up to a month, by week up to four months, by month beyond.
+export function seriesGrouping(range: PeriodRange, now = new Date()): SeriesGrouping {
+  const days = daysBetween(range.start, range.end || addDays(startOfDay(now), 1));
+  if (days <= 31) return SeriesGrouping.DAY;
+  if (days <= 120) return SeriesGrouping.WEEK;
   return SeriesGrouping.MONTH;
 }

@@ -1,13 +1,15 @@
 import { useMemo } from "react";
-import { CalendarCheck, CalendarDays, Gauge, Layers3 } from "lucide-react";
+import { CalendarCheck, CalendarDays, Gauge, Layers3, Ticket, UserX } from "lucide-react";
 import { Metric } from "../../../components/ui";
 import type { DashboardData } from "../dashboard-data";
 import { formatNumber, formatPercent, pluralize } from "../dashboard-format";
 import {
   dayUsages,
   daysInRange,
+  pastDaysInRange,
   entryMatrix,
   hourBandLabel,
+  noShowCount,
   noShowsByTime,
   occupancyByLocation,
   occupancyByTime,
@@ -24,19 +26,23 @@ const SHARE_SERIES = [{ key: "value", label: "Ocupação" }];
 export function ScheduleTab({ data }: { data: DashboardData }) {
   const { requests, scheduleDays, range, now } = data;
   const usages = useMemo(() => dayUsages(scheduleDays, requests), [scheduleDays, requests]);
-  const days = useMemo(() => daysInRange(usages, range), [usages, range]);
+  const calendar = useMemo(() => daysInRange(usages, range).map((day) => ({ ...day, ahead: day.date > now })), [usages, range, now]);
+  const days = useMemo(() => pastDaysInRange(usages, range, now), [usages, range, now]);
   const summary = useMemo(() => scheduleSummary(usages, range, now), [usages, range, now]);
   const byTime = useMemo(() => occupancyByTime(days), [days]);
   const byWeekday = useMemo(() => occupancyByWeekday(days), [days]);
   const byLocation = useMemo(() => occupancyByLocation(days), [days]);
   const noShows = useMemo(() => noShowsByTime(requests, range), [requests, range]);
+  const missed = useMemo(() => noShowCount(requests, range), [requests, range]);
   const entries = useMemo(() => entryMatrix(requests, range), [requests, range]);
   return (
     <>
       <div className="dash-kpis">
-        <Metric title="Dias de agenda" value={formatNumber(summary.days)} icon={CalendarDays} trend="no período, inclusive os próximos" />
-        <Metric title="Vagas ofertadas" value={formatNumber(summary.vacancies)} icon={Layers3} trend="somando os dias de agenda" />
+        <Metric title="Dias de agenda" value={formatNumber(summary.days)} icon={CalendarDays} trend="já realizados no período" />
+        <Metric title="Vagas ofertadas" value={formatNumber(summary.vacancies)} icon={Layers3} trend="nos dias que já passaram" />
         <Metric title="Ocupação" value={formatPercent(summary.occupancy)} icon={Gauge} trend={pluralize(summary.used, "vaga ocupada", "vagas ocupadas")} />
+        <Metric title="Faltas" value={formatNumber(missed)} icon={UserX} trend="agendados que não vieram" />
+        <Metric title="Vagas livres à frente" value={formatNumber(summary.freeAhead)} icon={Ticket} trend="de hoje em diante" />
         <Metric
           title="Próximo dia com vaga"
           value={summary.nextOpenDay ? summary.nextOpenDay.dateText.slice(0, 5) : "Nenhum"}
@@ -46,7 +52,7 @@ export function ScheduleTab({ data }: { data: DashboardData }) {
       </div>
       <div className="dash-grid">
         <ChartPanel wide title="Ocupação de cada dia" subtitle="Cada dia de agenda colorido por quanto das vagas foi ocupado.">
-          <CalendarHeat days={days} />
+          <CalendarHeat days={calendar} />
         </ChartPanel>
         <ChartPanel title="Ocupação por horário" subtitle="Qual horário da agenda é mais disputado.">
           <CategoryBarChart data={byTime} series={SHARE_SERIES} layout={BarLayout.BARS} format={formatPercent} maxValue={100} caption="Ocupação das vagas por horário" />

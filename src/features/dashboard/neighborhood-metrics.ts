@@ -40,6 +40,9 @@ export interface NeighborhoodReport {
   servedCount: number;
   neverServedCount: number;
   coverage: number | null;
+  // The neighborhood with the most requests in the period and the one with the longest queue today, when there is any.
+  topDemand: NeighborhoodRow | null;
+  topQueue: NeighborhoodRow | null;
 }
 
 // The neighborhoods of a request, each with how many of its animals live there: an animal without a neighborhood of its
@@ -93,12 +96,17 @@ export function neighborhoodReport(requests: AnyRecord[], registered: AnyRecord[
   const finished = [...rows.values()].map((row) => ({ ...row, completionRate: percent(row.completed, row.completed + row.open), topType: topTypeOf(row.typeCounts) }));
   const registeredRows = finished.filter((row) => row.registered);
   const servedCount = registeredRows.filter((row) => row.lastServedAt).length;
+  const named = finished.filter((row) => row.key);
+  const [byDemand] = sortNeighborhoodRows(named, NeighborhoodColumn.REQUESTED, true);
+  const [byQueue] = sortNeighborhoodRows(named, NeighborhoodColumn.OPEN, true);
   return {
     rows: sortNeighborhoodRows(finished, NeighborhoodColumn.REQUESTED, true),
     registeredCount: registeredRows.length,
     servedCount,
     neverServedCount: registeredRows.length - servedCount,
     coverage: percent(servedCount, registeredRows.length),
+    topDemand: byDemand?.requested ? byDemand : null,
+    topQueue: byQueue?.open ? byQueue : null,
   };
 }
 

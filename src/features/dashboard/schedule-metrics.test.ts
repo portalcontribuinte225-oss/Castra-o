@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { NO_SHOW_CANCEL_REASON } from "../../../shared/notification-contract.js";
 import { DashboardPeriod, periodRange } from "./dashboard-period";
 import { TEST_NOW, testRequest } from "./dashboard-test-requests";
-import { NO_TIME_LABEL, dayUsages, entryMatrix, noShowsByTime, occupancyByLocation, occupancyByTime, occupancyByWeekday, scheduleSummary } from "./schedule-metrics";
+import { NO_TIME_LABEL, dayUsages, entryMatrix, noShowCount, noShowsByTime, occupancyByLocation, occupancyByTime, occupancyByWeekday, scheduleSummary } from "./schedule-metrics";
 
-const range = periodRange(DashboardPeriod.LAST_30_DAYS, TEST_NOW);
+const range = periodRange(DashboardPeriod.LAST_30_DAYS, { from: "", to: "" }, TEST_NOW);
 
 const agendaDay = (date: string, slots: { time: string; vacancies: number }[], locationName = "Clínica Teste") => ({ date, slots, locationName, active: true });
 const twoAnimals = [{ name: "A" }, { name: "B" }];
@@ -23,7 +23,7 @@ describe("dashboard agenda", () => {
     expect(occupancyByTime([usage]).map((item) => [item.label, item.value])).toEqual([["08:00", 50], ["10:00", 50]]);
   });
 
-  it("sums the period and finds the next day from today that still has a place", () => {
+  it("measures the occupancy on the days that already came and finds the places still free from today on", () => {
     const days = [
       agendaDay("10/11/2026", [{ time: "08:00", vacancies: 2 }]),
       agendaDay("20/11/2026", [{ time: "08:00", vacancies: 1 }]),
@@ -34,7 +34,7 @@ describe("dashboard agenda", () => {
       testRequest({ status: "AGENDADA", preferredSchedule: "20/11/2026" }),
     ];
     const summary = scheduleSummary(dayUsages(days, requests), range, TEST_NOW);
-    expect(summary).toMatchObject({ days: 3, vacancies: 6, used: 2, occupancy: 33 });
+    expect(summary).toMatchObject({ days: 1, vacancies: 2, used: 1, occupancy: 50, freeAhead: 3 });
     expect(summary.nextOpenDay).toEqual({ dateText: "25/11/2026", remaining: 3 });
   });
 
@@ -54,6 +54,7 @@ describe("dashboard agenda", () => {
       testRequest({ status: "REALIZADA", preferredSchedule: "11/11/2026" }),
     ];
     expect(noShowsByTime(requests, range).map((item) => [item.label, item.value])).toEqual([["08:00", 50], [NO_TIME_LABEL, 0]]);
+    expect(noShowCount(requests, range)).toBe(1);
   });
 
   it("places each request of the period on its weekday and two-hour band, skipping dates without a time", () => {

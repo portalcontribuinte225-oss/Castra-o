@@ -23749,16 +23749,58 @@ small,
   justify-content: space-between;
 }
 
+/* Every chip of a group takes the width of the widest, whatever its text. */
 .dash-toolbar .tab-bar {
-  display: inline-flex;
-  flex-wrap: wrap;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
   gap: 2px;
+}
+
+.dash-toolbar .tab-bar button {
+  padding-inline: 14px;
+  white-space: nowrap;
+}
+
+.dash-period {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.dash-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--type-color-secondary);
+  font-size: var(--type-size-label);
+}
+
+.dash-range input {
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
 }
 
 .dash-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
+}
+
+.dash-kpis .metric-card > div:last-child {
+  min-width: 0;
+}
+
+.dash-kpis .metric-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dash-trend {
@@ -23780,14 +23822,26 @@ small,
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
-  align-items: start;
 }
 
 .dash-panel {
   display: grid;
-  gap: 12px;
+  gap: 16px;
   align-content: start;
   min-width: 0;
+}
+
+.dash-panel-head {
+  display: grid;
+  gap: 4px;
+}
+
+/* The panel header of the app opens with a divider line meant for a section that follows other content; here it is the
+   first thing of the panel, as on the settings screen. */
+.dash-panel-head > .panel-header {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
 }
 
 .dash-panel.is-wide {
@@ -23854,6 +23908,7 @@ small,
 .dash-legend.is-stacked {
   display: grid;
   gap: 8px;
+  max-width: 320px;
 }
 
 .dash-legend.is-stacked li {
@@ -23861,8 +23916,8 @@ small,
   grid-template-columns: 10px minmax(0, 1fr) auto;
 }
 
-.dash-donut {
-  grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
+.dash-pie {
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
   align-items: center;
 }
 
@@ -23904,23 +23959,6 @@ small,
 .dash-tooltip-row small {
   grid-column: 2 / -1;
   color: var(--type-color-muted);
-}
-
-.dash-segments {
-  display: flex;
-  gap: 2px;
-  height: 28px;
-}
-
-.dash-segment {
-  display: flex;
-  align-items: center;
-  min-width: 4px;
-  padding-left: 8px;
-  border-radius: 4px;
-  font-size: var(--type-size-detail);
-  font-weight: var(--type-weight-strong);
-  white-space: nowrap;
 }
 
 .dash-calendar {
@@ -23979,11 +24017,17 @@ small,
   color: #ffffff;
 }
 
+.dash-calendar-day.is-ahead {
+  background: var(--dash-track);
+  color: var(--type-color-primary);
+}
+
 .dash-heat-scroll {
   overflow-x: auto;
 }
 
 .dash-heat {
+  width: 100%;
   border-collapse: separate;
   border-spacing: 2px;
   font-size: var(--type-size-detail);
@@ -23996,7 +24040,9 @@ small,
   white-space: nowrap;
 }
 
-.dash-heat tbody th {
+.dash-heat tbody th,
+.dash-heat thead th:first-child {
+  width: 1%;
   text-align: left;
 }
 
@@ -24052,6 +24098,11 @@ small,
   overflow: auto;
   border: 1px solid var(--ui-border);
   border-radius: 10px;
+}
+
+.dash-table th,
+.dash-table td {
+  white-space: nowrap;
 }
 
 .dash-table thead th {
@@ -24190,14 +24241,32 @@ small,
   white-space: nowrap;
 }
 
+@media (max-width: 1400px) {
+  .dash-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1100px) {
   .dash-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
+@media (max-width: 900px) {
+  .dash-toolbar .tab-bar {
+    grid-auto-flow: row;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+  }
+}
+
 @media (max-width: 560px) {
-  .dash-donut {
+  .dash-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dash-pie {
     grid-template-columns: minmax(0, 1fr);
   }
 }

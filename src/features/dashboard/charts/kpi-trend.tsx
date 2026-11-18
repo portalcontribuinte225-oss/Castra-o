@@ -29,10 +29,10 @@ function amountText(amount: number, unit: TrendUnit): string {
 // The change of a card against the period right before, signed and coloured by whether it is good news, with an arrow so
 // the colour never speaks alone.
 export function KpiTrend({ current, previous, unit = TrendUnit.COUNT, goal = TrendGoal.RISE }: KpiTrendProps) {
-  if (current === null || previous === null) return <>sem base no período anterior</>;
+  if (current === null || previous === null) return <>sem base anterior</>;
   const change = current - previous;
   if (change === 0) {
-    return <span className="dash-trend"><Minus size={13} aria-hidden="true" />igual ao período anterior</span>;
+    return <><span className="dash-trend"><Minus size={13} aria-hidden="true" /></span>{" igual ao anterior"}</>;
   }
   const good = goal === TrendGoal.RISE ? change > 0 : change < 0;
   const Arrow = change > 0 ? ArrowUpRight : ArrowDownRight;
@@ -42,7 +42,7 @@ export function KpiTrend({ current, previous, unit = TrendUnit.COUNT, goal = Tre
         <Arrow size={13} aria-hidden="true" />
         {`${change > 0 ? "+" : "−"}${amountText(Math.abs(change), unit)}`}
       </span>
-      {" vs. período anterior"}
+      {" vs. anterior"}
     </>
   );
 }

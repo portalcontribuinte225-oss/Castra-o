@@ -3,9 +3,9 @@ import { NO_SHOW_CANCEL_REASON, REJECTED_CANCEL_REASON } from "../../../shared/n
 import { DashboardPeriod, periodRange } from "./dashboard-period";
 import { TEST_NOW, testRequest } from "./dashboard-test-requests";
 import { periodTotals, queueAlerts, volumeParts } from "./overview-metrics";
-import { cancelCauses, conversionFunnel, queueAges } from "./queue-metrics";
+import { cancelCauses, conversionFunnel, queueAges, queueSnapshot } from "./queue-metrics";
 
-const range = periodRange(DashboardPeriod.LAST_30_DAYS, TEST_NOW);
+const range = periodRange(DashboardPeriod.LAST_30_DAYS, { from: "", to: "" }, TEST_NOW);
 
 const completed = (day: string) => testRequest({ status: "REALIZADA", createdAt: "2026-11-01T09:00:00", preferredSchedule: day });
 const noShow = (day: string) => testRequest({ status: "CANCELADA", preferredSchedule: day, workflow_data: { cancelReason: NO_SHOW_CANCEL_REASON } });
@@ -62,6 +62,16 @@ describe("dashboard queue", () => {
     const requests = [testRequest(), testRequest({ status: "AGENDADA" }), testRequest({ status: "REALIZADA", preferredSchedule: "12/11/2026" }), noShow("13/11/2026")];
     expect(conversionFunnel(requests, range).map((stage) => stage.value)).toEqual([100, 75, 25]);
     expect(conversionFunnel([], range)).toEqual([]);
+  });
+
+  it("sums up today's queue by stage and wait, the cancellations of the period and the rescheduled requests", () => {
+    const requests = [
+      testRequest({ createdAt: "2026-11-15T08:00:00" }),
+      testRequest({ status: "AGENDADA", createdAt: "2026-11-07T08:00:00", tags: ["REAGENDADA"] }),
+      rejected(),
+      completed("05/11/2026"),
+    ];
+    expect(queueSnapshot(requests, range, TEST_NOW)).toEqual({ inAnalysis: 1, waitingProcedure: 1, averageWait: 6, oldestWait: 10, cancelled: 1, rescheduled: 1 });
   });
 
   it("tells rejections and no-shows from other cancellations", () => {

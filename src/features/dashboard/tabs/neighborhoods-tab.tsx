@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { CircleCheck, MapPin, MapPinOff, Percent } from "lucide-react";
+import { CircleCheck, ListTodo, MapPin, MapPinOff, Percent, Trophy } from "lucide-react";
 import { Metric } from "../../../components/ui";
 import type { DashboardData } from "../dashboard-data";
 import { formatNumber, formatPercent, pluralize } from "../dashboard-format";
@@ -16,9 +16,21 @@ export function NeighborhoodsTab({ data }: { data: DashboardData }) {
     <>
       <div className="dash-kpis">
         <Metric title="Bairros cadastrados" value={formatNumber(report.registeredCount)} icon={MapPin} trend="ativos no município" />
-        <Metric title="Com atendimento" value={formatNumber(report.servedCount)} icon={CircleCheck} trend="ao menos uma realização" />
-        <Metric title="Nunca atendidos" value={formatNumber(report.neverServedCount)} icon={MapPinOff} trend="nenhuma realização até hoje" />
-        <Metric title="Cobertura" value={formatPercent(report.coverage)} icon={Percent} trend="dos bairros cadastrados já atendidos" />
+        <Metric title="Com atendimento" value={formatNumber(report.servedCount)} icon={CircleCheck} trend="já tiveram realização" />
+        <Metric title="Nunca atendidos" value={formatNumber(report.neverServedCount)} icon={MapPinOff} trend="nenhuma realização" />
+        <Metric title="Cobertura" value={formatPercent(report.coverage)} icon={Percent} trend="dos cadastrados atendidos" />
+        <Metric
+          title="Maior demanda"
+          value={report.topDemand?.name || "Nenhum"}
+          icon={Trophy}
+          trend={report.topDemand ? `${pluralize(report.topDemand.requested, "solicitação", "solicitações")} no período` : "sem solicitações"}
+        />
+        <Metric
+          title="Maior fila"
+          value={report.topQueue?.name || "Nenhum"}
+          icon={ListTodo}
+          trend={report.topQueue ? `${formatNumber(report.topQueue.open)} em aberto` : "sem fila"}
+        />
       </div>
       <div className="dash-grid">
         <ChartPanel

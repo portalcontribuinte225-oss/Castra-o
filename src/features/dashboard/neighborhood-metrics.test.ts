@@ -3,7 +3,7 @@ import { DashboardPeriod, periodRange } from "./dashboard-period";
 import { TEST_NOW, testRequest } from "./dashboard-test-requests";
 import { NeighborhoodColumn, neighborhoodReport, neighborhoodTypeMatrix, requestNeighborhoods, sortNeighborhoodRows } from "./neighborhood-metrics";
 
-const range = periodRange(DashboardPeriod.LAST_30_DAYS, TEST_NOW);
+const range = periodRange(DashboardPeriod.LAST_30_DAYS, { from: "", to: "" }, TEST_NOW);
 const registered = [
   { id: "n1", name: "Centro", active: true },
   { id: "n2", name: "São João", active: true },
@@ -38,6 +38,7 @@ describe("dashboard neighborhoods", () => {
     expect(byName["Não informado"]).toMatchObject({ requested: 1, open: 1 });
     expect(byName["Bairro Inativo"]).toBeUndefined();
     expect(report).toMatchObject({ registeredCount: 3, servedCount: 2, neverServedCount: 1, coverage: 67 });
+    expect([report.topDemand?.name, report.topQueue?.name]).toEqual(["Centro", "Centro"]);
   });
 
   it("sorts by a column with empty values last either way", () => {

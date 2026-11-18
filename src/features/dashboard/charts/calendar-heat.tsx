@@ -7,6 +7,8 @@ export interface CalendarDay {
   date: Date;
   used: number;
   vacancies: number;
+  // A day still to come, whose places are still being booked: it is not judged by its occupancy yet.
+  ahead?: boolean;
 }
 
 // How full an agenda day got: at least 80% of its places, between half and 80%, or under half.
@@ -30,11 +32,12 @@ const BAND_LEGEND = [
   { label: "80% ou mais das vagas", color: "var(--dash-good)" },
   { label: "de 50% a 79%", color: "var(--dash-warning)" },
   { label: "menos de 50%", color: "var(--dash-critical)" },
+  { label: "à frente, ainda recebendo agendamentos", color: "var(--dash-track)" },
   { label: "sem agenda", color: "var(--dash-empty-day)" },
 ];
 
 function describeDay(day: CalendarDay): string {
-  return `${formatDayMonth(day.date)}, ${WEEKDAY_NAMES[day.date.getDay()].toLowerCase()}: ${formatNumber(day.used)} de ${formatNumber(day.vacancies)} vagas ocupadas (${percent(day.used, day.vacancies) ?? 0}%)`;
+  return `${formatDayMonth(day.date)}, ${WEEKDAY_NAMES[day.date.getDay()].toLowerCase()}: ${formatNumber(day.used)} de ${formatNumber(day.vacancies)} vagas ocupadas (${percent(day.used, day.vacancies) ?? 0}%)${day.ahead ? ", ainda recebendo agendamentos" : ""}`;
 }
 
 // The months of the period as small calendars, each agenda day coloured by how full it got and every other day left blank.
@@ -62,7 +65,7 @@ export function CalendarHeat({ days }: { days: CalendarDay[] }) {
                   const day = monthDays.get(index + 1);
                   if (!day) return <span key={index} className="dash-calendar-day" aria-hidden="true">{index + 1}</span>;
                   return (
-                    <span key={index} className={`dash-calendar-day is-${occupancyBand(day.used, day.vacancies)}`} role="img" aria-label={describeDay(day)} title={describeDay(day)}>
+                    <span key={index} className={`dash-calendar-day is-${day.ahead ? "ahead" : occupancyBand(day.used, day.vacancies)}`} role="img" aria-label={describeDay(day)} title={describeDay(day)}>
                       {index + 1}
                     </span>
                   );

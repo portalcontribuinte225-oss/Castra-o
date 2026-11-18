@@ -8,12 +8,14 @@ interface ChartPanelProps {
   children: ReactNode;
 }
 
-// A panel of the dashboard: the app's panel with a title, the question it answers and the chart.
+// A panel of the dashboard: the app's panel with a title, the question it answers right under it, and the chart.
 export function ChartPanel({ title, subtitle, wide = false, children }: ChartPanelProps) {
   return (
     <section className={`panel dash-panel${wide ? " is-wide" : ""}`}>
-      <PanelHeader title={title} />
-      {subtitle && <p className="form-hint">{subtitle}</p>}
+      <div className="dash-panel-head">
+        <PanelHeader title={title} />
+        {subtitle && <p className="form-hint">{subtitle}</p>}
+      </div>
       {children}
     </section>
   );
