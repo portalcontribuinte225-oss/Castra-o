@@ -3116,6 +3116,33 @@ button:disabled {
   border-radius: 12px;
 }
 
+/* The share button under the main call of an animal's window, and the notice of a shared animal that is no longer waiting. */
+.adoption-share-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  border-radius: 12px;
+}
+
+.adoption-share-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--status-info-bg);
+  color: var(--status-info-ink);
+  font-size: var(--type-size-body);
+}
+
+.adoption-share-notice svg {
+  flex: none;
+}
+
 
 .adoption-profile-tags,
 .adoption-health-list {

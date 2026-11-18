@@ -218,6 +218,11 @@ import { validateTutorName } from "./features/tutor-access/tutor-identity";
 import { SessionBoundary } from "./features/tutor-access/session-boundary";
 import { getAdoptionInterestCount } from "./features/adoption-interest-count";
 import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE, ADOPTION_STATUS_IN_PROGRESS } from "./features/adoption-status";
+import { MAX_ADOPTION_PHOTO_BYTES } from "../shared/adoption-contract.js";
+import { ShareAdoptionButton, ShareButtonLook } from "./features/adoption-share/share-adoption-button";
+import { SharedAdoptionState, useSharedAdoption } from "./features/adoption-share/use-shared-adoption";
+import { SharedAdoptionNotice } from "./features/adoption-share/shared-adoption-notice";
+import { compressAdoptionPhoto } from "./features/adoption-share/compress-adoption-photo";
 import { bindProcedureIntent } from "./features/registered-animals/procedure-intent";
 import type { ProcedureIntent } from "./features/registered-animals/procedure-intent";
 import type { ReusableDocumentCandidate } from "./features/registered-animals/registered-animal-types";
@@ -409,6 +414,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [sidebarResetOpen, setSidebarResetOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  // A shared adoption link opens the public page on the animal; whoever is signed in sees the app as usual.
+  const sharedAdoption = useSharedAdoption(!currentUser, handleMunicipalitySelect);
 
   const selected = requests.find((request) => request.id === selectedId) || requests[0] || null;
   const metrics = useMemo(() => buildMetrics(requests), [requests]);
@@ -432,6 +439,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
         setSelectedMunicipalityId(stored);
         return;
       }
+      // The animal of a shared link decides the municipality; guessing it from the location would race with it.
+      if (sharedAdoption.id) return;
       const normalize = (s) => (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
       function applyMatch(city, state) {
         if (!city) return false;
@@ -747,6 +756,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           onProcedureIntent={onProcedureIntent}
           onAccessRequest={createAccessRequest}
           adoptionAnimals={adoptionAnimals}
+          sharedAdoption={sharedAdoption}
           onInterestSent={handleInterestSent}
           municipalities={municipalities}
           selectedMunicipalityId={selectedMunicipalityId}
@@ -1418,7 +1428,7 @@ function PublicSchedulePicker({
   );
 }
 
-function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRecord) {
+function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedAdoption = null }: AnyRecord) {
   const availableAnimals = sortAdoptionsForHighlight(adoptionAnimals.filter((animal) => animal.status !== ADOPTION_STATUS_ADOPTED));
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [selectedAnimal, setSelectedAnimal] = useState(null);
@@ -1433,6 +1443,11 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
   const filteredAnimals = availableAnimals
     .filter((animal) => !speciesFilter || normalizeText(animal.species).includes(speciesFilter))
     .slice(0, limit);
+  // The animal of a shared link opens on its own once it has been found.
+  const sharedAnimalId = sharedAdoption?.state === SharedAdoptionState.AVAILABLE ? sharedAdoption.animal?.id || "" : "";
+  useEffect(() => {
+    if (sharedAnimalId) openAnimalModal(normalizeAdoptionAnimal(sharedAdoption.animal));
+  }, [sharedAnimalId]);
 
   function openAnimalModal(animal, openInterestForm = false) {
     setSelectedAnimal(animal);
@@ -1480,6 +1495,8 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
           ))}
         </div>
       </div>
+
+      {sharedAdoption && <SharedAdoptionNotice shared={sharedAdoption} />}
 
       <div className="public-animal-grid">
         {filteredAnimals.length === 0 && (
@@ -1560,6 +1577,8 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent }: AnyRe
                 Quero adotar
               </button>
             )}
+
+            <ShareAdoptionButton animal={selectedAnimal} />
 
             {showInterestForm && !interestSent && (
               <form className="adoption-interest-form" onSubmit={submitInterest}>
@@ -1706,7 +1725,7 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequest, adoptionAnimals = [], onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequest, adoptionAnimals = [], sharedAdoption = null, onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
   const [authEntryError, setAuthEntryError] = useState("");
   const [activePublicService, setActivePublicService] = useState<string | null>(accessLink ? REQUEST_ACCESS_SERVICE : null);
@@ -1723,6 +1742,12 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
   const [publicServiceNeighborhoods, setPublicServiceNeighborhoods] = useState(neighborhoods);
   const adoptionSectionRef = useRef(null);
+  // A shared adoption link lands on the adoption section, where its animal or its notice is.
+  const sharedAdoptionState = sharedAdoption?.state || SharedAdoptionState.NONE;
+  useEffect(() => {
+    if (sharedAdoptionState === SharedAdoptionState.NONE || sharedAdoptionState === SharedAdoptionState.LOADING) return;
+    adoptionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [sharedAdoptionState]);
   const publicMunicipalityRef = useRef(selectedMunicipalityId);
   publicMunicipalityRef.current = selectedMunicipalityId;
   useEffect(() => { setPublicServiceDone(null); setProcedurePrefill(null); setAuthEntry(null); setAuthEntryError(""); }, [selectedMunicipalityId]);
@@ -1972,7 +1997,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
           </div>
 
           <section className="public-adoption-section" ref={adoptionSectionRef}>
-            <AdoptionCarousel adoptionAnimals={adoptionAnimals} onInterestSent={onInterestSent} />
+            <AdoptionCarousel adoptionAnimals={adoptionAnimals} sharedAdoption={sharedAdoption} onInterestSent={onInterestSent} />
           </section>
         </>
       )}
@@ -5096,7 +5121,6 @@ function AdoptionView({
   selectedMunicipalityId = "",
 }) {
   const MAX_ADOPTION_PHOTOS = 5;
-  const MAX_ADOPTION_PHOTO_BYTES = 2 * 1024 * 1024;
   const MAX_ADOPTION_TOTAL_BYTES = 8 * 1024 * 1024;
   const activeSpecies = speciesOptions.filter((item) => item.active !== false).map((item) => item.name);
   const emptyAnimalForm = {
@@ -5233,31 +5257,20 @@ function AdoptionView({
       return;
     }
 
-    const oversized = files.find((file) => file.size > MAX_ADOPTION_PHOTO_BYTES);
-    if (oversized) {
-      setFormError(`Cada imagem pode ter no máximo ${Math.floor(MAX_ADOPTION_PHOTO_BYTES / (1024 * 1024))} MB.`);
-      selectedInput.value = "";
-      return;
-    }
-
-    const currentTotalBytes = animalForm.photos.reduce((total, photo) => total + estimatePhotoBytes(photo), 0);
-    const incomingBytes = files.reduce((total, file) => total + file.size, 0);
-    if (currentTotalBytes + incomingBytes > MAX_ADOPTION_TOTAL_BYTES) {
-      setFormError(`Total de imagens excedido. Limite: ${Math.floor(MAX_ADOPTION_TOTAL_BYTES / (1024 * 1024))} MB.`);
-      selectedInput.value = "";
-      return;
-    }
-
-    Promise.all(
-      files.map(
-        (file) =>
-          new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result || ""));
-            reader.readAsDataURL(file);
-          }),
-      ),
-    ).then((photos) => {
+    // The photos are made light first (so a link preview shows them), and the limits apply to what will be stored.
+    Promise.all(files.map(compressAdoptionPhoto)).then((photos) => {
+      if (photos.some((photo) => estimatePhotoBytes(photo) > MAX_ADOPTION_PHOTO_BYTES)) {
+        setFormError(`Cada imagem pode ter no máximo ${Math.floor(MAX_ADOPTION_PHOTO_BYTES / (1024 * 1024))} MB.`);
+        selectedInput.value = "";
+        return;
+      }
+      const currentTotalBytes = animalForm.photos.reduce((total, photo) => total + estimatePhotoBytes(photo), 0);
+      const incomingBytes = photos.reduce((total, photo) => total + estimatePhotoBytes(photo), 0);
+      if (currentTotalBytes + incomingBytes > MAX_ADOPTION_TOTAL_BYTES) {
+        setFormError(`Total de imagens excedido. Limite: ${Math.floor(MAX_ADOPTION_TOTAL_BYTES / (1024 * 1024))} MB.`);
+        selectedInput.value = "";
+        return;
+      }
       setAnimalForm((current) => ({
         ...current,
         photos: [...current.photos, ...photos],
@@ -5648,6 +5661,7 @@ function AdoptionView({
                             <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar">
                               <Edit3 size={15} />
                             </button>
+                            {animal.status !== ADOPTION_STATUS_ADOPTED && <ShareAdoptionButton animal={animal} look={ShareButtonLook.ICON} />}
                             {animal.status === ADOPTION_STATUS_ADOPTED ? (
                               <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar">
                                 <RefreshCw size={15} />
@@ -5689,6 +5703,7 @@ function AdoptionView({
                         <div className="adoption-list-actions">
                           <button className="ghost-button" type="button" onClick={() => setSelectedAdoptionAnimal(animal)} title="Ver ficha" aria-label="Ver ficha"><Eye size={15} /></button>
                           <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar"><Edit3 size={15} /></button>
+                          {animal.status !== ADOPTION_STATUS_ADOPTED && <ShareAdoptionButton animal={animal} look={ShareButtonLook.ICON} />}
                           {animal.status === ADOPTION_STATUS_ADOPTED ? (
                             <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar"><RefreshCw size={15} /></button>
                           ) : (

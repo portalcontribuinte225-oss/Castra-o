@@ -22,6 +22,7 @@ import messageQuotaRoutes from "./routes/message-quota.js";
 import municipalityBrasaoRoutes from "./routes/municipality-brasao.js";
 import requestTrackingRoutes from "./routes/request-tracking.js";
 import requestAccessRoutes from "./routes/request-access.js";
+import { createAdoptionShareRouter } from "./routes/adoption-share.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -50,6 +51,7 @@ app.use("/api/message-quota", messageQuotaRoutes);
 app.use("/api/public/municipalities", municipalityBrasaoRoutes);
 app.use("/api/request-tracking", requestTrackingRoutes);
 app.use("/api/request-access", requestAccessRoutes);
+app.use(createAdoptionShareRouter({ indexHtmlPath: path.join(distPath, "index.html") }));
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 app.use("/assets", express.static(path.join(distPath, "assets"), {

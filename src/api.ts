@@ -134,6 +134,7 @@ export const api = {
   },
 
   getAdoptions: (municipalityId?: string) => request("GET", municipalityId ? `/adoptions?municipalityId=${encodeURIComponent(municipalityId)}` : "/adoptions"),
+  getPublicAdoption: (id: string) => request("GET", `/adoptions/${encodeURIComponent(id)}/public`),
   createAdoption: (body) => request("POST", "/adoptions", body),
   updateAdoption: (id, body) => request("PATCH", `/adoptions/${id}`, body),
   deleteAdoption: (id) => request("DELETE", `/adoptions/${id}`),

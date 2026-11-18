@@ -4,11 +4,11 @@ import { auth, optionalAuth, requireRole } from "../middleware/auth.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
 import { isGlobalUser, pickMunicipalityId, requireMunicipality } from "../tenant.js";
 import { ADOPTION_OPERATOR_ROLES, canManageAdoptions, publicAdoption } from "../services/adoption-public-view.js";
+import { MAX_ADOPTION_PHOTO_BYTES } from "../../../shared/adoption-contract.js";
 
 const router = Router();
 const requireAdoptionOperator = requireRole(...ADOPTION_OPERATOR_ROLES);
 const MAX_ADOPTION_PHOTOS = 5;
-const MAX_ADOPTION_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_ADOPTION_TOTAL_BYTES = 8 * 1024 * 1024;
 
 function estimatePhotoBytes(photo = "") {

@@ -1,11 +1,9 @@
-import { createHash } from "node:crypto";
 import { Router } from "express";
 import { loadMunicipalityBrasao } from "../repositories/municipality-identity.js";
 import { isUuid } from "../repositories/request-tracking.js";
+import { decodeRasterDataUrl, sendCachedImage } from "../services/raster-image.js";
 
 const MAX_BRASAO_BYTES = 2 * 1024 * 1024;
-// Only raster images are served: an SVG could carry script and would run on this origin.
-const RASTER_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/;
 
 const router = Router();
 
@@ -16,17 +14,8 @@ router.get("/:id/brasao", async (req, res) => {
   if (!isUuid(req.params.id)) return notFound();
   try {
     const row = await loadMunicipalityBrasao(req.params.id);
-    const stored = typeof row?.brasao === "string" ? row.brasao : "";
-    if (!stored || stored.length > Math.ceil(MAX_BRASAO_BYTES * 4 / 3) + 64) return notFound();
-    const match = RASTER_DATA_URL.exec(stored);
-    if (!match) return notFound();
-    const image = Buffer.from(match[2], "base64");
-    if (!image.length || image.length > MAX_BRASAO_BYTES) return notFound();
-    const etag = `"${createHash("sha1").update(image).digest("hex")}"`;
-    res.set({ ETag: etag, "Cache-Control": "public, max-age=86400", "X-Content-Type-Options": "nosniff" });
-    if (req.headers["if-none-match"] === etag) return res.status(304).end();
-    res.set("Content-Type", `image/${match[1]}`);
-    return res.send(image);
+    const image = decodeRasterDataUrl(row?.brasao, MAX_BRASAO_BYTES);
+    return image ? sendCachedImage(req, res, image) : notFound();
   } catch {
     return notFound();
   }
