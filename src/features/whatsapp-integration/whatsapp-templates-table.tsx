@@ -1,5 +1,5 @@
 import React from "react";
-import { Lock } from "lucide-react";
+import { Lock, Settings } from "lucide-react";
 import { isNotUsedBySystem, lockReason, NOT_USED_BY_SYSTEM_TEXT, templateRowKey, templateStatusLabel, templateStatusTone, variableOrderHint } from "./whatsapp-template-display";
 import type { WhatsappTemplateList, WhatsappTemplateRow } from "./whatsapp-integration-types";
 
@@ -9,11 +9,13 @@ interface Props {
   busy: boolean;
   readOnly: boolean;
   canSync: boolean;
+  master: boolean;
   onSync: () => void;
   onToggle: (row: WhatsappTemplateRow) => void;
+  onConfigure: (row: WhatsappTemplateRow) => void;
 }
 
-export function WhatsappTemplatesTable({ list, syncing, busy, readOnly, canSync, onSync, onToggle }: Props) {
+export function WhatsappTemplatesTable({ list, syncing, busy, readOnly, canSync, master, onSync, onToggle, onConfigure }: Props) {
   const syncedAt = list.syncedAt ? new Date(list.syncedAt).toLocaleString("pt-BR") : "";
   return (
     <div className="whatsapp-grid-wrap">
@@ -34,7 +36,7 @@ export function WhatsappTemplatesTable({ list, syncing, busy, readOnly, canSync,
                   <td><code>{row.name}</code> <small>{row.language}</small></td>
                   <td><span className={`whatsapp-badge whatsapp-badge--${templateStatusTone(row.status)}`}>{templateStatusLabel(row.status)}</span></td>
                   <td title={row.variables.length ? variableOrderHint(row) : undefined}>
-                    {row.label || (isNotUsedBySystem(row)
+                    {row.label ? <>{row.label}{!row.configured && <small className="whatsapp-muted"> (pelo nome)</small>}</> : (isNotUsedBySystem(row)
                       ? <span className="whatsapp-muted">{NOT_USED_BY_SYSTEM_TEXT}</span>
                       : <span className="whatsapp-outside">Fora do padrão{row.reason ? `: ${row.reason}` : ""}</span>)}
                   </td>
@@ -49,6 +51,11 @@ export function WhatsappTemplatesTable({ list, syncing, busy, readOnly, canSync,
                       onClick={() => onToggle(row)}
                     ><span className="whatsapp-switch-knob" /></button>
                     {locked && <span role="img" aria-label={locked} title={locked}><Lock size={14} aria-hidden="true" /></span>}
+                    {master && row.configurable && (
+                      <button type="button" className="whatsapp-config-btn" title="Configurar" aria-label={`Configurar ${row.name}`} onClick={() => onConfigure(row)}>
+                        <Settings size={15} aria-hidden="true" />
+                      </button>
+                    )}
                   </td>
                 </tr>
               );

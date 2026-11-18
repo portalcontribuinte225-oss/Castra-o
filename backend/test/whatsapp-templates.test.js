@@ -6,10 +6,11 @@ import { pool } from "../src/db/index.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DeliveryCode, NotificationEvent } from "../../shared/notification-contract.js";
 import {
-  WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_CATALOG_CONFIG_KEY, activateTemplate, deactivateTemplate, getWhatsappUse,
-  isWhatsappTemplateUsable, normalizeActiveTemplates, parseWhatsappTemplateName, recognizeWhatsappTemplate, whatsappUses,
+  WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_CATALOG_CONFIG_KEY, WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY, WhatsappTemplateField, activateTemplate,
+  deactivateTemplate, getWhatsappUse, isWhatsappTemplateUsable, normalizeActiveTemplates, normalizeTemplateLinks, parseWhatsappTemplateName,
+  recognizeWhatsappTemplate, templateFields, templateLinkIssue, whatsappUses,
 } from "../../shared/whatsapp-templates-contract.js";
-import { buildTemplateRows, resolveActiveTemplate, setWhatsappTemplateActive } from "../src/services/whatsapp-active-templates.js";
+import { buildTemplateRows, resolveActiveTemplate, setWhatsappTemplateActive, setWhatsappTemplateLink } from "../src/services/whatsapp-active-templates.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { permissionConfigs, permissionGroup } from "./fixtures/permission-groups.js";
 
@@ -206,12 +207,114 @@ test("resolving a use answers not configured, unavailable or ready, per municipa
   const active = { [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } };
   const database = fakeDatabase({ ...withCatalog("municipality-a", [confirmation()], active), ...withCatalog("municipality-b", [confirmation({ status: "PAUSED" })], active), ...withCatalog("municipality-c", [], active) });
   const resolve = (municipality, use = NotificationEvent.SCHEDULE_CONFIRMED) => resolveActiveTemplate(municipality, use, database);
-  assert.deepEqual(await resolve("municipality-a"), { ok: true, template: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } });
+  assert.deepEqual(await resolve("municipality-a"), { ok: true, template: { name: "castracao_confirmacao_agendamento", language: "pt_BR", fields: getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields } });
   assert.deepEqual(await resolve("municipality-a", NotificationEvent.NO_SHOW), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
   assert.deepEqual(await resolve("municipality-a", "unknown_use"), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
   assert.deepEqual(await resolve("municipality-b"), { ok: false, code: DeliveryCode.TEMPLATE_UNAVAILABLE });
   assert.deepEqual(await resolve("municipality-c"), { ok: false, code: DeliveryCode.TEMPLATE_UNAVAILABLE });
   assert.deepEqual(await resolve("municipality-without-config"), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
+});
+
+const F = WhatsappTemplateField;
+const LINKS_KEY = WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY;
+const noShowByOwnName = (overrides) => entry("castracao_nao_comparecimento", { bodyVariables: 3, bodyText: "Olá {{1}}, sentimos sua falta em {{2}} às {{3}}.", ...overrides });
+// Not the notice's own order (tutor, date, time), so a test can tell the link from the default.
+const linkFields = [F.SCHEDULE_DATE, F.TUTOR_NAME, F.SCHEDULE_TIME];
+const noShowLink = { name: "castracao_nao_comparecimento", language: "pt_BR", use: NotificationEvent.NO_SHOW, fields: linkFields };
+
+test("a link names a notice and one known field per number; anything else is dropped when it is read", () => {
+  const invalid = [
+    { ...noShowLink }, { ...noShowLink, name: "access", use: AuthPurpose.PASSWORD_RESET }, { ...noShowLink, name: "unknown", use: "unknown" },
+    { ...noShowLink, name: "cpf", fields: ["cpf", F.TUTOR_NAME, F.SCHEDULE_TIME] }, { ...noShowLink, name: "text", fields: "tutor_name" },
+    { use: NotificationEvent.NO_SHOW, fields: [] }, null,
+  ];
+  assert.deepEqual(normalizeTemplateLinks({ links: [noShowLink, ...invalid] }), [noShowLink]);
+  assert.deepEqual(normalizeTemplateLinks(null), []);
+  assert.deepEqual(templateFields(NotificationEvent.NO_SHOW, noShowLink), linkFields);
+  assert.deepEqual(templateFields(NotificationEvent.NO_SHOW), getWhatsappUse(NotificationEvent.NO_SHOW).fields);
+  assert.deepEqual(templateFields(NotificationEvent.SCHEDULE_CONFIRMED, noShowLink), getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields, "a link serves only its own notice");
+  assert.deepEqual(templateFields(AuthPurpose.PASSWORD_RESET), []);
+});
+
+test("a linked template sends the notice of its link whatever its name, while its structure and its number of variables still fit", () => {
+  assert.deepEqual(recognizeWhatsappTemplate(noShowByOwnName()).uses, [], "by its name alone it is no notice");
+  assert.deepEqual(recognizeWhatsappTemplate(noShowByOwnName(), noShowLink), { uses: [NotificationEvent.NO_SHOW], reason: "" });
+  assert.match(recognizeWhatsappTemplate(noShowByOwnName({ bodyVariables: 2 }), noShowLink).reason, /a configuração tem 3/);
+  assert.match(recognizeWhatsappTemplate(noShowByOwnName({ header: "MEDIA" }), noShowLink).reason, /Cabeçalho/);
+  assert.match(recognizeWhatsappTemplate(noShowByOwnName({ buttons: ["URL_VARIABLE"] }), noShowLink).reason, /Botão/);
+  assert.equal(isWhatsappTemplateUsable(noShowByOwnName(), NotificationEvent.NO_SHOW, noShowLink), true);
+  assert.equal(isWhatsappTemplateUsable(noShowByOwnName({ status: "PAUSED" }), NotificationEvent.NO_SHOW, noShowLink), false);
+  const renamed = { ...noShowLink, name: "castracao_cancelamento", use: NotificationEvent.REQUEST_REJECTED };
+  assert.equal(isWhatsappTemplateUsable(cancellation(), NotificationEvent.NO_SHOW, renamed), false, "a link replaces what the name says");
+  assert.equal(templateLinkIssue(noShowByOwnName(), NotificationEvent.NO_SHOW, linkFields), "");
+  assert.match(templateLinkIssue(noShowByOwnName(), AuthPurpose.PASSWORD_RESET, linkFields), /aviso/);
+  assert.match(templateLinkIssue(noShowByOwnName(), NotificationEvent.NO_SHOW, ["cpf", F.TUTOR_NAME, F.SCHEDULE_TIME]), /variável do sistema/);
+  assert.match(templateLinkIssue(noShowByOwnName(), NotificationEvent.NO_SHOW, linkFields.slice(0, 2)), /tem 3 variável/);
+  assert.match(templateLinkIssue(noShowByOwnName({ parameterFormat: "NAMED" }), NotificationEvent.NO_SHOW, linkFields), /Variáveis com nome/);
+});
+
+test("the list shows a configured template with its notice, fields and text, and which templates can be configured", () => {
+  const catalog = catalogOf(authentication(), noShowByOwnName(), confirmation({ bodyText: "Olá {{1}}" }));
+  const rows = Object.fromEntries(buildTemplateRows(catalog, {}, [noShowLink]).map((row) => [row.name, row]));
+  const configured = rows.castracao_nao_comparecimento;
+  assert.deepEqual(
+    { label: configured.label, configured: configured.configured, linkedUse: configured.linkedUse, fields: configured.fields, canActivate: configured.canActivate },
+    { label: "Não comparecimento", configured: true, linkedUse: NotificationEvent.NO_SHOW, fields: linkFields, canActivate: true },
+  );
+  assert.deepEqual(configured.variables, ["Data do agendamento", "Nome do tutor", "Horário do agendamento"]);
+  assert.deepEqual([configured.bodyText, configured.bodyVariables, configured.configurable, configured.structureReason], ["Olá {{1}}, sentimos sua falta em {{2}} às {{3}}.", 3, true, ""]);
+  const byName = rows.castracao_confirmacao_agendamento;
+  assert.deepEqual([byName.configured, byName.linkedUse, byName.fields], [false, "", getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields]);
+  assert.equal(rows.castracao_codigo_verificacao.configurable, false);
+  const outdated = buildTemplateRows(catalogOf(noShowByOwnName({ bodyVariables: 4 })), {}, [noShowLink])[0];
+  assert.deepEqual([outdated.label, outdated.linkedUse, outdated.fields, outdated.canActivate], ["", NotificationEvent.NO_SHOW, linkFields, false]);
+  assert.match(outdated.reason, /Configure o template de novo/);
+});
+
+test("saving a link stores it per municipality, turns the template off only when its notice changes and goes back to the name", async () => {
+  const database = fakeDatabase(withCatalog("municipality-a", [noShowByOwnName(), cancellation()]));
+  const save = (use, fields = linkFields, extra = {}) => setWhatsappTemplateLink({ municipalityId: "municipality-a", name: "castracao_nao_comparecimento", language: "pt_BR", use, fields, database, ...extra });
+  const turnOn = (name) => setWhatsappTemplateActive({ municipalityId: "municipality-a", name, language: "pt_BR", active: true, database });
+  const linksOf = () => database.store.get(`${LINKS_KEY}:municipality-a`);
+  const activeOf = () => database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`).active;
+
+  const saved = await save(NotificationEvent.NO_SHOW, linkFields, { audit: { userId: "master" } });
+  assert.deepEqual(linksOf(), { links: [noShowLink] });
+  assert.equal(saved.templates.find((row) => row.name === "castracao_nao_comparecimento").label, "Não comparecimento");
+  assert.equal(saved.fieldSamples[F.TUTOR_NAME], "Maria Silva");
+  assert.equal(database.calls.some(({ sql, values }) => sql.includes("INSERT INTO audit_logs") && values[3] === "WHATSAPP_TEMPLATE_UPDATE"), true);
+
+  await turnOn("castracao_nao_comparecimento");
+  await save(NotificationEvent.NO_SHOW, [F.TUTOR_NAME, F.SCHEDULE_TIME, F.SCHEDULE_DATE]);
+  assert.deepEqual(Object.keys(activeOf()), [NotificationEvent.NO_SHOW], "new fields keep it on");
+  await save(NotificationEvent.REQUEST_REJECTED, [F.PROTOCOL, F.NOTIFICATION_MESSAGE, F.TUTOR_NAME]);
+  assert.deepEqual(activeOf(), {}, "a new notice turns it off");
+  const back = await save("");
+  assert.deepEqual(linksOf(), { links: [] });
+  assert.equal(back.templates.find((row) => row.name === "castracao_nao_comparecimento").label, "");
+
+  for (const [use, fields] of [[AuthPurpose.PASSWORD_RESET, linkFields], [NotificationEvent.NO_SHOW, ["cpf", F.TUTOR_NAME, F.SCHEDULE_TIME]], [NotificationEvent.NO_SHOW, linkFields.slice(0, 2)], [undefined, linkFields]]) {
+    await assert.rejects(save(use, fields), { status: 400 }, String(use));
+  }
+  await assert.rejects(setWhatsappTemplateLink({ municipalityId: "municipality-a", name: "castracao_inexistente", language: "pt_BR", use: NotificationEvent.NO_SHOW, fields: linkFields, database }), { status: 400, message: /Sincronize/ });
+  assert.equal(database.store.has(`${LINKS_KEY}:municipality-b`), false);
+});
+
+test("going back to the name keeps on a template whose name sends the same notice", async () => {
+  const database = fakeDatabase(withCatalog("municipality-a", [cancellation()]));
+  const save = (use, fields) => setWhatsappTemplateLink({ municipalityId: "municipality-a", name: "castracao_cancelamento", language: "pt_BR", use, fields, database });
+  await save(NotificationEvent.NO_SHOW, linkFields);
+  await setWhatsappTemplateActive({ municipalityId: "municipality-a", name: "castracao_cancelamento", language: "pt_BR", active: true, database });
+  await save("", []);
+  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`).active, { no_show: { name: "castracao_cancelamento", language: "pt_BR" } });
+});
+
+test("a configured template resolves with its own fields, and without its link it is not sent", async () => {
+  const active = { [NotificationEvent.NO_SHOW]: { name: "castracao_nao_comparecimento", language: "pt_BR" } };
+  const linked = fakeDatabase({ ...withCatalog("municipality-a", [noShowByOwnName()], active), [`${LINKS_KEY}:municipality-a`]: { links: [noShowLink] } });
+  assert.deepEqual(await resolveActiveTemplate("municipality-a", NotificationEvent.NO_SHOW, linked), { ok: true, template: { name: "castracao_nao_comparecimento", language: "pt_BR", fields: linkFields } });
+  const unlinked = fakeDatabase(withCatalog("municipality-a", [noShowByOwnName()], active));
+  assert.deepEqual(await resolveActiveTemplate("municipality-a", NotificationEvent.NO_SHOW, unlinked), { ok: false, code: DeliveryCode.TEMPLATE_UNAVAILABLE });
 });
 
 async function routeFixture(t, initial = {}) {
@@ -289,10 +392,27 @@ test("the active endpoint turns templates on and off, validates the body and aud
   assert.equal(off.body.templates.some((row) => row.active), false);
 });
 
+test("the link endpoint is the master's and saves in the municipality it names", async (t) => {
+  const MASTER = { id: "99999999-9999-4999-8999-999999999999", role: "master" };
+  const { request, database } = await routeFixture(t, withCatalog(MUNICIPALITY_ID, [noShowByOwnName()]));
+  const url = "/whatsapp/templates/link";
+  const body = { ...noShowLink, municipalityId: MUNICIPALITY_ID };
+  assert.equal((await request(url, { method: "PUT", body })).status, 401);
+  for (const user of [ADMIN, STAFF]) assert.equal((await request(url, { method: "PUT", user, body })).status, 403, user.role);
+  const saved = await request(url, { method: "PUT", user: MASTER, body });
+  assert.equal(saved.status, 200);
+  assert.equal(saved.body.templates[0].configured, true);
+  assert.deepEqual(database.store.get(`${LINKS_KEY}:${MUNICIPALITY_ID}`), { links: [noShowLink] });
+  const refused = await request(url, { method: "PUT", user: MASTER, body: { ...body, fields: linkFields.slice(0, 1) } });
+  assert.equal(refused.status, 400);
+  assert.match(refused.body.error, /tem 3 variável/);
+  assert.equal(database.store.has(`${LINKS_KEY}:${OTHER_MUNICIPALITY_ID}`), false);
+});
+
 test("the catalog and active-template keys stay off the generic configuration route", async () => {
   const { default: configRoutes } = await import("../src/routes/config.js");
   const layers = configRoutes.stack.filter((layer) => layer.route).map((layer) => layer.route.path);
   assert.equal(layers.some((path) => String(path).includes("catalog") || String(path).includes("templates")), false);
   const source = (await import("node:fs")).readFileSync(new URL("../src/routes/config.js", import.meta.url), "utf8");
-  for (const key of ["whatsapp_catalog", "whatsapp_active_templates", WHATSAPP_CATALOG_CONFIG_KEY, WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY]) assert.equal(source.includes(`"${key}"`), false, key);
+  for (const key of ["whatsapp_catalog", "whatsapp_active_templates", "whatsapp_template_links", WHATSAPP_CATALOG_CONFIG_KEY, WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY]) assert.equal(source.includes(`"${key}"`), false, key);
 });

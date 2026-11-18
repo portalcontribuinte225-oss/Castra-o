@@ -78,5 +78,18 @@ export function useWhatsappTemplates(municipalityId: string, canSync: boolean) {
     } finally { setSaving(false); }
   }
 
-  return { list, loading, ready, syncing, saving, error, notice, retry, sync: () => runSync(false), toggle };
+  // Answers "" when saved, or the message the configuration window shows.
+  async function saveLink(row: WhatsappTemplateRow, use: string, fields: string[]) {
+    if (!ready) return "Carregue os templates antes de configurar.";
+    const changedId = municipalityId;
+    try {
+      const updated = await api.setWhatsappTemplateLink(changedId, { name: row.name, language: row.language, use, fields });
+      if (activeId.current === changedId) setList(updated);
+      return "";
+    } catch (failure) {
+      return messageOf(failure, "Não foi possível salvar a configuração do template.");
+    }
+  }
+
+  return { list, loading, ready, syncing, saving, error, notice, retry, sync: () => runSync(false), toggle, saveLink };
 }

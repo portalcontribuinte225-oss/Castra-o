@@ -10,11 +10,22 @@ export interface WhatsappTemplateRow {
   reason: string;
   active: boolean;
   canActivate: boolean;
+  // Whether the templates screen linked it to a notice, which notice, and the field of each numbered variable.
+  configured: boolean;
+  linkedUse: string;
+  fields: string[];
+  bodyText: string;
+  bodyVariables: number;
+  configurable: boolean;
+  // Why the template cannot carry a notice at all ("" when its structure fits).
+  structureReason: string;
 }
 
 export interface WhatsappTemplateList {
   syncedAt: string;
   templates: WhatsappTemplateRow[];
+  // What each field shows in the preview of a template being configured.
+  fieldSamples: Record<string, string>;
 }
 
-export const emptyTemplateList: WhatsappTemplateList = { syncedAt: "", templates: [] };
+export const emptyTemplateList: WhatsappTemplateList = { syncedAt: "", templates: [], fieldSamples: {} };

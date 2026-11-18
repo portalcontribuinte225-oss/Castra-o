@@ -3,11 +3,15 @@ import { AuthPurpose } from "./auth-contract.js";
 
 export const WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY = "whatsapp_active_templates";
 export const WHATSAPP_CATALOG_CONFIG_KEY = "whatsapp_catalog";
+// Which notice each template sends and which field fills each numbered variable, as chosen on the templates screen.
+export const WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY = "whatsapp_template_links";
 export const WHATSAPP_APPROVED_STATUS = "APPROVED";
 // Reason for a template whose name is simply not one of the system's notices (not a defect of the template).
 export const WHATSAPP_NOT_A_NOTICE_REASON = "O nome não indica um aviso do sistema.";
 export const WHATSAPP_DEFAULT_LANGUAGE = "pt_BR";
 export const WHATSAPP_MAX_VARIABLES = 20;
+// The longest body text kept from Meta; a longer body is treated as missing.
+export const WHATSAPP_MAX_BODY_LENGTH = 1100;
 export const WHATSAPP_TEMPLATE_PREFIX = "castracao_";
 
 export const WhatsappTemplateField = Object.freeze({
@@ -87,6 +91,7 @@ function matchesUse(part, use) {
 }
 
 const NOTICE_BUTTONS = new Set(["QUICK_REPLY", "PHONE_NUMBER", "URL"]);
+const noticeButtonsReason = (entry) => (entry.buttons.every((button) => NOTICE_BUTTONS.has(button)) ? "" : "Botão com variável ou de código não é suportado.");
 
 function structuralReason(entry) {
   if (!entry.hasBody) return "O template não tem corpo de texto.";
@@ -104,11 +109,24 @@ function useReason(entry, use) {
     if (entry.category !== "AUTHENTICATION") return "Códigos de acesso precisam ser um template de autenticação.";
     return entry.buttons.length === 1 && entry.buttons[0] === "OTP_COPY_CODE" ? "" : "O template de código precisa do botão de copiar código.";
   }
-  return entry.buttons.every((button) => NOTICE_BUTTONS.has(button)) ? "" : "Botão com variável ou de código não é suportado.";
+  return noticeButtonsReason(entry);
 }
 
-// Which uses a catalog entry can serve, judged only by its name and structure (never by its status).
-export function recognizeWhatsappTemplate(entry) {
+// Why a template cannot carry any notice, whatever its name or link: "" when its structure fits.
+export function noticeStructureReason(entry) {
+  const structural = structuralReason(entry);
+  if (structural) return structural;
+  return noticeButtonsReason(entry);
+}
+
+// Which uses a catalog entry can serve, judged by its structure and never by its status: the notice of its link when the templates
+// screen configured one, otherwise the notice its name indicates.
+export function recognizeWhatsappTemplate(entry, link = null) {
+  if (link) {
+    const reason = noticeStructureReason(entry)
+      || (link.fields.length === entry.bodyVariables ? "" : `O corpo tem ${entry.bodyVariables} variável(is); a configuração tem ${link.fields.length}. Configure o template de novo.`);
+    return reason ? { uses: [], reason } : { uses: [link.use], reason: "" };
+  }
   const part = parseWhatsappTemplateName(entry?.name);
   const candidates = part === null ? [] : whatsappUses.filter((use) => matchesUse(part, use));
   if (!candidates.length) return { uses: [], reason: WHATSAPP_NOT_A_NOTICE_REASON };
@@ -119,8 +137,8 @@ export function recognizeWhatsappTemplate(entry) {
   return passing.length ? { uses: passing, reason: "" } : { uses: [], reason: checked[0].reason };
 }
 
-export function isWhatsappTemplateUsable(entry, useKey) {
-  return Boolean(entry) && entry.status === WHATSAPP_APPROVED_STATUS && recognizeWhatsappTemplate(entry).uses.includes(useKey);
+export function isWhatsappTemplateUsable(entry, useKey, link = null) {
+  return Boolean(entry) && entry.status === WHATSAPP_APPROVED_STATUS && recognizeWhatsappTemplate(entry, link).uses.includes(useKey);
 }
 
 const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/;
@@ -149,9 +167,9 @@ export function normalizeActiveTemplates(stored) {
 }
 
 // Turning a template on replaces whichever template was active for each of its uses.
-export function activateTemplate(active, entry) {
+export function activateTemplate(active, entry, link = null) {
   const next = { ...active };
-  for (const key of recognizeWhatsappTemplate(entry).uses) next[key] = { name: entry.name, language: entry.language };
+  for (const key of recognizeWhatsappTemplate(entry, link).uses) next[key] = { name: entry.name, language: entry.language };
   return next;
 }
 
@@ -161,4 +179,40 @@ export function deactivateTemplate(active, name, language) {
 
 export function activeUseKeys(active, name, language) {
   return Object.entries(active).filter(([, item]) => item.name === name && item.language === language).map(([key]) => key);
+}
+
+const knownFields = new Set(Object.values(WhatsappTemplateField));
+export const isWhatsappNoticeUse = (key) => getWhatsappUse(key)?.kind === WhatsappUseKind.NOTICE;
+
+// Stored value: { links: [{ name, language, use, fields }] }. Only links to a notice whose fields are all known survive, one per template.
+export function normalizeTemplateLinks(stored) {
+  const source = Array.isArray(stored?.links) ? stored.links : [];
+  const links = [];
+  for (const item of source) {
+    const identity = cleanTemplateIdentity(item?.name, item?.language);
+    if (!identity || !isWhatsappNoticeUse(item.use) || !Array.isArray(item.fields) || item.fields.length > WHATSAPP_MAX_VARIABLES) continue;
+    if (!item.fields.every((value) => knownFields.has(value))) continue;
+    if (findTemplateLink(links, identity.name, identity.language)) continue;
+    links.push({ ...identity, use: item.use, fields: [...item.fields] });
+  }
+  return links;
+}
+
+export function findTemplateLink(links, name, language) {
+  return links.find((link) => link.name === name && link.language === language) || null;
+}
+
+// The field that fills each numbered variable when the template sends the use: what its link chose, or the use's own order.
+export function templateFields(useKey, link = null) {
+  if (link && link.use === useKey) return [...link.fields];
+  return [...(getWhatsappUse(useKey)?.fields || [])];
+}
+
+// Why a link cannot be saved for a catalog entry ("" when it can).
+export function templateLinkIssue(entry, use, fields) {
+  if (!isWhatsappNoticeUse(use)) return "Escolha um aviso do sistema.";
+  if (!Array.isArray(fields) || fields.some((value) => !knownFields.has(value))) return "Escolha uma variável do sistema para cada número.";
+  const structural = noticeStructureReason(entry);
+  if (structural) return structural;
+  return fields.length === entry.bodyVariables ? "" : `O template tem ${entry.bodyVariables} variável(is); escolha uma para cada número.`;
 }

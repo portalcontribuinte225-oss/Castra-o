@@ -28,10 +28,16 @@ function parameterText(value) {
   return String(value).replace(/\s+/g, " ").trim().slice(0, MAX_PARAMETER_LENGTH) || EMPTY_PARAMETER;
 }
 
-// `fields` is the ordered field list of the use: parameter n of the template receives fields[n - 1].
+// `fields` is the field of each numbered variable, as the template was configured or in the use's own order: parameter n receives fields[n - 1].
 export function buildBodyComponents(fields, request) {
   const parameters = fields.map((item) => ({ type: "text", text: parameterText(resolveWhatsappField(item, request)) }));
   return parameters.length ? [{ type: "body", parameters }] : [];
+}
+
+// What each field shows in the preview of a template being configured, from the same example request the test send uses.
+export function previewFieldValues() {
+  const request = previewRequest();
+  return Object.fromEntries(Object.values(WhatsappTemplateField).map((field) => [field, resolveWhatsappField(field, request)]));
 }
 
 export function previewRequest() {

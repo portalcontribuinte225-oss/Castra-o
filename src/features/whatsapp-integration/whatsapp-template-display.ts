@@ -39,7 +39,7 @@ export function variableOrderHint(row: WhatsappTemplateRow) {
   return row.variables.map((label, index) => `{{${index + 1}}} ${label}`).join(" · ");
 }
 
-export const NOT_USED_BY_SYSTEM_TEXT = "Template padrão da Meta, não usado pelo sistema.";
+export const NOT_USED_BY_SYSTEM_TEXT = "Não usado pelo sistema";
 
 // A template whose name is not a system notice (e.g. the test template Meta creates) is neutral, not a defect.
 export function isNotUsedBySystem(row: WhatsappTemplateRow) {
@@ -52,3 +52,39 @@ export function lockReason(row: WhatsappTemplateRow) {
   if (isNotUsedBySystem(row)) return NOT_USED_BY_SYSTEM_TEXT;
   return row.label ? "Liga quando a Meta aprovar o template." : row.reason || "Fora do padrão.";
 }
+
+export type BodySegment = { kind: "text"; text: string } | { kind: "variable"; number: number };
+
+const PLACEHOLDER = /\{\{\s*(\d+)\s*\}\}/g;
+
+// The body text split into plain text and numbered variables, so each number can be highlighted.
+export function templateBodySegments(bodyText: string): BodySegment[] {
+  const segments: BodySegment[] = [];
+  let last = 0;
+  for (const match of bodyText.matchAll(PLACEHOLDER)) {
+    const start = match.index ?? 0;
+    if (start > last) segments.push({ kind: "text", text: bodyText.slice(last, start) });
+    segments.push({ kind: "variable", number: Number(match[1]) });
+    last = start + match[0].length;
+  }
+  if (last < bodyText.length) segments.push({ kind: "text", text: bodyText.slice(last) });
+  return segments;
+}
+
+// The message as the tutor would read it: each number becomes the example value of its field; a number without a field stays as it is.
+export function templatePreview(bodyText: string, fields: string[], samples: Record<string, string>) {
+  return bodyText.replace(PLACEHOLDER, (placeholder, number) => samples[fields[Number(number) - 1]] || placeholder);
+}
+
+// One field per numbered variable: the given ones in order, "" for the numbers left.
+export function fieldsForVariables(fields: string[], count: number) {
+  return Array.from({ length: count }, (_, index) => fields[index] || "");
+}
+
+// The first number without a field (1-based), or 0 when every number has one.
+export function firstMissingVariable(fields: string[]) {
+  return fields.findIndex((field) => !field) + 1;
+}
+
+// The tone a number shares with its select, so the person sees which part of the text each choice fills.
+export const variableTone = (number: number) => (number - 1) % 4;

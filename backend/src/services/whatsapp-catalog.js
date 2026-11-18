@@ -1,4 +1,4 @@
-import { WHATSAPP_CATALOG_CONFIG_KEY } from "../../../shared/whatsapp-templates-contract.js";
+import { WHATSAPP_CATALOG_CONFIG_KEY, WHATSAPP_MAX_BODY_LENGTH } from "../../../shared/whatsapp-templates-contract.js";
 import { readWhatsappConfigValue, updateWhatsappConfigValue } from "../repositories/whatsapp-templates.js";
 import { AUDIT_ACTIONS } from "./audit.js";
 import { describeGraphTemplate, fetchGraphTemplates } from "./whatsapp-graph-templates.js";
@@ -17,7 +17,9 @@ function normalizeEntry(entry) {
   if ([hasBody, bodySequential, extraComponents].some((value) => typeof value !== "boolean")) return null;
   if (!Number.isInteger(bodyVariables) || bodyVariables < 0) return null;
   if (!Array.isArray(buttons) || buttons.length > 10 || buttons.some((button) => typeof button !== "string")) return null;
-  return { name, language, status, category, parameterFormat, hasBody, bodyVariables, bodySequential, header, buttons, extraComponents };
+  // The body text came later: an entry cached without it stays, with no text to show until the next synchronization.
+  const bodyText = typeof entry.bodyText === "string" && entry.bodyText.length <= WHATSAPP_MAX_BODY_LENGTH ? entry.bodyText : "";
+  return { name, language, status, category, parameterFormat, bodyText, hasBody, bodyVariables, bodySequential, header, buttons, extraComponents };
 }
 
 // Entries cached before a format change fail validation and are dropped: the next synchronization rebuilds them.

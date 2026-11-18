@@ -3,7 +3,6 @@ import { auth, requireMaster } from "../middleware/auth.js";
 import { pickMunicipalityId } from "../tenant.js";
 import { isValidPhone } from "../utils.js";
 import { DeliveryCode, NotificationEvent } from "../../../shared/notification-contract.js";
-import { getWhatsappUse } from "../../../shared/whatsapp-templates-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../services/whatsapp.js";
 import { resolveActiveTemplate } from "../services/whatsapp-active-templates.js";
 import { sendResolvedTemplate } from "../services/whatsapp-template-sender.js";
@@ -38,7 +37,7 @@ router.post("/test", auth, requireMaster, async (req, res) => {
     }
     const result = await sendResolvedTemplate({
       municipalityId: mId, runtime: config, template: resolved.template, phone,
-      components: buildBodyComponents(getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields, { ...previewRequest(), tutor_name: "Teste" }),
+      components: buildBodyComponents(resolved.template.fields, { ...previewRequest(), tutor_name: "Teste" }),
     });
     res.json({
       status: result.status,

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { dispatchNotification } from "../src/services/notifications/dispatch-notification.js";
 import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode } from "../../shared/notification-contract.js";
+import { WhatsappTemplateField, templateFields } from "../../shared/whatsapp-templates-contract.js";
 
 // Every channel starts in use: e-mail on with its template, WhatsApp active with a template per notice, SMS on for every notice.
 function fixture() {
@@ -19,7 +20,7 @@ function fixture() {
     loadWhatsappConfig: async (municipalityId) => { calls.push(["config", municipalityId]); return { active: true, accessToken: "token", phoneNumberId: "number" }; },
     resolveTemplate: async (municipalityId, event) => {
       calls.push(["template", municipalityId, event]);
-      return active[event] ? { ok: true, template: { name: active[event], language: "pt_BR" } } : { ok: false, code: DeliveryCode.NOT_CONFIGURED };
+      return active[event] ? { ok: true, template: { name: active[event], language: "pt_BR", fields: templateFields(event) } } : { ok: false, code: DeliveryCode.NOT_CONFIGURED };
     },
     markTemplateStatus: async (...args) => { calls.push(["mark", ...args]); },
     consumeQuota: async (channel, municipalityId) => { calls.push(["quota", channel, municipalityId]); return { allowed: true }; },
@@ -125,6 +126,16 @@ test("confirmation, reschedule and cancellation send the parameters their Meta t
     assert.equal(settings.languageCode, "pt_BR");
     assert.deepEqual(texts(components), parameters);
   }
+});
+
+test("a template configured on screen gets each number from the field chosen for it, in its own order", async () => {
+  const f = fixture();
+  f.dependencies.resolveTemplate = async () => ({ ok: true, template: { name: "castracao_nao_comparecimento", language: "pt_BR",
+    fields: [WhatsappTemplateField.PROTOCOL, WhatsappTemplateField.TUTOR_NAME, WhatsappTemplateField.SCHEDULE_LOCATION_NAME, WhatsappTemplateField.TUTOR_NAME] } });
+  await dispatchNotification({ event: NotificationEvent.NO_SHOW, request: f.request }, f.dependencies);
+  const [, settings, , components] = f.calls.find(([kind]) => kind === "whatsapp");
+  assert.equal(settings.templateName, "castracao_nao_comparecimento");
+  assert.deepEqual(texts(components), ["123/2026", "Maria", "Unidade Municipal", "Maria"]);
 });
 
 test("documents reviewed and completed send the protocol and the notice sentence", async () => {

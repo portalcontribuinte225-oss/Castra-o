@@ -4,7 +4,7 @@ import { pickMunicipalityId } from "../tenant.js";
 import { auditCtx } from "../services/audit.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../services/whatsapp.js";
 import { syncWhatsappCatalog } from "../services/whatsapp-catalog.js";
-import { listWhatsappTemplates, setWhatsappTemplateActive } from "../services/whatsapp-active-templates.js";
+import { listWhatsappTemplates, setWhatsappTemplateActive, setWhatsappTemplateLink } from "../services/whatsapp-active-templates.js";
 import { IntegrationConfigItem } from "../../../shared/config-permission-contract.js";
 
 const router = Router();
@@ -52,6 +52,18 @@ router.put("/templates/active", requireWhatsappItem, async (req, res) => {
     res.set("Cache-Control", "no-store").json(await setWhatsappTemplateActive({ municipalityId, name, language, active, audit: auditCtx(req) }));
   } catch (error) {
     sendFailure(res, error, "Não foi possível alterar o template.");
+  }
+});
+
+// Which notice a template sends and which field fills each number: an integration setting, so only the master changes it.
+router.put("/templates/link", requireMaster, async (req, res) => {
+  const municipalityId = municipalityOf(req, res);
+  if (!municipalityId) return;
+  try {
+    const { name, language, use, fields } = req.body || {};
+    res.set("Cache-Control", "no-store").json(await setWhatsappTemplateLink({ municipalityId, name, language, use, fields, audit: auditCtx(req) }));
+  } catch (error) {
+    sendFailure(res, error, "Não foi possível salvar a configuração do template.");
   }
 });
 

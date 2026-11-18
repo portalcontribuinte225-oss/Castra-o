@@ -43,7 +43,7 @@ test("a template with a numbered body, text header, footer and fixed buttons is 
     { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Ok" }, { type: "URL", text: "Site", url: "https://example.com" }, { type: "PHONE_NUMBER", text: "Ligar", phone_number: "+5548000000000" }] },
   ], { parameter_format: "POSITIONAL" }));
   assert.deepEqual(described, facts({
-    name: "castracao_confirmacao_agendamento", bodyVariables: 5, header: "TEXT", buttons: ["QUICK_REPLY", "URL", "PHONE_NUMBER"],
+    name: "castracao_confirmacao_agendamento", bodyText: "Olá {{1}}, {{2}} às {{3}} em {{4}}. Protocolo {{5}}.", bodyVariables: 5, header: "TEXT", buttons: ["QUICK_REPLY", "URL", "PHONE_NUMBER"],
   }));
   assert.deepEqual(recognizeWhatsappTemplate(described).uses, ["schedule_confirmed"]);
   assert.equal(describeGraphTemplate(graph("castracao_x", [body("Texto fixo")])).bodyVariables, 0);
@@ -165,6 +165,9 @@ test("stored catalogs are validated on read and entries cached in an older forma
   const catalog = normalizeWhatsappCatalog({ syncedAt: 5, templates: [facts({ name: "ok" }), legacy, { name: "broken" }, null, facts({ name: "bad-format", parameterFormat: "OTHER" }), facts({ name: "bad-buttons", buttons: [1] })] });
   assert.equal(catalog.syncedAt, "");
   assert.deepEqual(catalog.templates.map(({ name }) => name), ["ok"]);
+  assert.equal(catalog.templates[0].bodyText, "", "an entry cached before the body text stays, without text");
+  const withText = normalizeWhatsappCatalog({ templates: [facts({ name: "text", bodyText: "Olá {{1}}" }), facts({ name: "long", bodyText: "x".repeat(1101) })] });
+  assert.deepEqual(withText.templates.map(({ name, bodyText }) => [name, bodyText]), [["text", "Olá {{1}}"], ["long", ""]]);
   assert.deepEqual(normalizeWhatsappCatalog(null), { syncedAt: "", templates: [] });
 });
 

@@ -23192,9 +23192,97 @@ small,
   gap: 16px;
 }
 
-.whatsapp-variables-field {
-  flex: 0 1 50%;
+.whatsapp-config-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.whatsapp-config-btn:hover {
+  border-color: #2563eb;
+  color: #2563eb;
+}
+
+/* "Configurar template": the Meta text with each number in the tone of its select, one select per number and the preview. */
+.whatsapp-link-section {
+  display: grid;
+  gap: 8px;
+}
+
+.whatsapp-link-body,
+.whatsapp-link-preview {
   margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8fafc;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.whatsapp-link-preview {
+  background: #ffffff;
+}
+
+.whatsapp-link-var {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 6px;
+  font-size: var(--type-size-detail);
+  font-weight: var(--type-weight-strong);
+  line-height: 1.6;
+}
+
+.whatsapp-link-var--0 {
+  background: var(--accent-blue-soft);
+  color: #1d4ed8;
+}
+
+.whatsapp-link-var--1 {
+  background: var(--accent-teal-soft);
+  color: var(--accent-teal);
+}
+
+.whatsapp-link-var--2 {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.whatsapp-link-var--3 {
+  background: var(--accent-rose-soft);
+  color: #be123c;
+}
+
+.whatsapp-link-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.whatsapp-link-field {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.whatsapp-link-field select {
+  width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
 }
 
 /* Lista com rolagem própria e caixas de seleção: raças do tipo de solicitação. */

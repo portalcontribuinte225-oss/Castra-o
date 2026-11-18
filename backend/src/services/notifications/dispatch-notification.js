@@ -1,5 +1,5 @@
 import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, documentsOutcome, rejectionReasonText } from "../../../../shared/notification-contract.js";
-import { getWhatsappUse, WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
+import { WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
@@ -39,7 +39,7 @@ async function attempt(event, channel, task) {
 async function deliverWhatsapp({ event, request, phone, runtime, template }, dependencies) {
   const channel = NotificationChannel.WHATSAPP;
   const content = buildNotificationMessage(event, request);
-  const components = buildBodyComponents(getWhatsappUse(event).fields, { ...request, notification_message: content.message });
+  const components = buildBodyComponents(template.fields, { ...request, notification_message: content.message });
   const quota = await dependencies.consumeQuota(channel, request.municipality_id);
   if (!quota.allowed) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE) };
   const transport = await sendResolvedTemplate({ municipalityId: request.municipality_id, runtime, template, phone, components }, dependencies);

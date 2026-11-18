@@ -24,7 +24,7 @@ export function WhatsappIntegrationTab({ municipalityId, master, readOnly, canEd
         {master
           ? <WhatsappCredentials municipalityId={municipalityId} credentials={credentials} />
           : <p className="whatsapp-note">A conexão com o WhatsApp (credenciais e teste de envio) é configurada pela administração da plataforma.</p>}
-        <WhatsappTemplatesPanel municipalityId={municipalityId} readOnly={readOnly} canSync={canSync} templates={templates} />
+        <WhatsappTemplatesPanel municipalityId={municipalityId} master={master} readOnly={readOnly} canSync={canSync} templates={templates} />
         {canEditContract && <MessageContractForm municipalityId={municipalityId} contract={contract} serviceSwitch={false} />}
       </div>
     </div>

@@ -1,11 +1,10 @@
 import { DeliveryCode } from "../../../shared/notification-contract.js";
-import { WHATSAPP_MAX_VARIABLES } from "../../../shared/whatsapp-templates-contract.js";
+import { WHATSAPP_MAX_BODY_LENGTH, WHATSAPP_MAX_VARIABLES } from "../../../shared/whatsapp-templates-contract.js";
 import { GRAPH_API_BASE } from "./whatsapp.js";
 
 const MAX_PAGES = 10;
 const PAGE_SIZE = 100;
 const MAX_TEMPLATES = 500;
-const MAX_BODY_LENGTH = 1100;
 const SUPPORTED_COMPONENT_TYPES = new Set(["HEADER", "BODY", "FOOTER", "BUTTONS"]);
 
 const syncErrorMessages = Object.freeze({
@@ -72,7 +71,7 @@ function buttonKind(button) {
   }
 }
 
-// Turns one Graph template into the cached catalog entry: structural facts only.
+// Turns one Graph template into the cached catalog entry: its body text, shown when it is configured, and structural facts.
 // Whether the system can use it (and for what) is decided when the catalog is read, by the shared contract.
 export function describeGraphTemplate(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -82,7 +81,7 @@ export function describeGraphTemplate(raw) {
   const components = Array.isArray(raw.components) ? raw.components : [];
   const body = components.find((component) => component?.type === "BODY");
   const category = text(raw.category, 40).toUpperCase();
-  const bodyText = text(body?.text, MAX_BODY_LENGTH);
+  const bodyText = text(body?.text, WHATSAPP_MAX_BODY_LENGTH);
   const named = /\{\{\s*[A-Za-z_]\w*\s*\}\}/.test(bodyText);
   const indexes = [...bodyText.matchAll(/\{\{\s*(\d+)\s*\}\}/g)].map((match) => Number(match[1]));
   const highest = indexes.length ? Math.max(...indexes) : 0;
@@ -95,6 +94,7 @@ export function describeGraphTemplate(raw) {
     status: text(raw.status, 40).toUpperCase(),
     category,
     parameterFormat: named || raw.parameter_format === "NAMED" ? "NAMED" : "POSITIONAL",
+    bodyText,
     hasBody: bodyText !== "" || codeOnly,
     bodyVariables: codeOnly ? 1 : highest,
     bodySequential: codeOnly || (new Set(indexes).size === highest && highest <= WHATSAPP_MAX_VARIABLES),

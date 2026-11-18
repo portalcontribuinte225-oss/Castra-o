@@ -1,23 +1,26 @@
-import React from "react";
+import React, { useState } from "react";
+import { WhatsappTemplateLinkModal } from "./whatsapp-template-link-modal";
 import { WhatsappTemplatesTable } from "./whatsapp-templates-table";
-import { WhatsappVariablesList } from "./whatsapp-variables-list";
 import type { useWhatsappTemplates } from "./use-whatsapp-templates";
+import type { WhatsappTemplateRow } from "./whatsapp-integration-types";
 
 type Templates = ReturnType<typeof useWhatsappTemplates>;
 
 interface Props {
   municipalityId: string;
+  // Only the master links a template to a notice and chooses its variables.
+  master: boolean;
   readOnly: boolean;
   canSync: boolean;
   templates: Templates;
 }
 
-export function WhatsappTemplatesPanel({ municipalityId, readOnly, canSync, templates }: Props) {
+export function WhatsappTemplatesPanel({ municipalityId, master, readOnly, canSync, templates }: Props) {
+  const [configuring, setConfiguring] = useState<WhatsappTemplateRow | null>(null);
   return (
     <section className="whatsapp-section">
       <div className="whatsapp-section-header">
         <span className="whatsapp-section-label">Templates da Meta</span>
-        <WhatsappVariablesList />
       </div>
       {!municipalityId && <p>Selecione um município para ver os templates.</p>}
       {readOnly && <p>Você não tem permissão para ligar ou desligar templates.</p>}
@@ -36,8 +39,18 @@ export function WhatsappTemplatesPanel({ municipalityId, readOnly, canSync, temp
           busy={templates.saving}
           readOnly={readOnly}
           canSync={canSync}
+          master={master}
           onSync={templates.sync}
           onToggle={templates.toggle}
+          onConfigure={setConfiguring}
+        />
+      )}
+      {configuring && (
+        <WhatsappTemplateLinkModal
+          row={configuring}
+          samples={templates.list.fieldSamples}
+          onSave={(use, fields) => templates.saveLink(configuring, use, fields)}
+          onClose={() => setConfiguring(null)}
         />
       )}
     </section>

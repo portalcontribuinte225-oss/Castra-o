@@ -185,4 +185,5 @@ export const api = {
   getWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("GET", `/whatsapp/templates?municipalityId=${encodeURIComponent(municipalityId)}`),
   syncWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("POST", "/whatsapp/templates/sync", { municipalityId }),
   setWhatsappTemplateActive: (municipalityId: string, body: { name: string; language: string; active: boolean }): Promise<WhatsappTemplateList> => request("PUT", "/whatsapp/templates/active", { ...body, municipalityId }),
+  setWhatsappTemplateLink: (municipalityId: string, body: { name: string; language: string; use: string; fields: string[] }): Promise<WhatsappTemplateList> => request("PUT", "/whatsapp/templates/link", { ...body, municipalityId }),
 };
