@@ -143,27 +143,6 @@ export function YesNoField({ label, value, onChange }: AnyRecord) {
   );
 }
 
-export function YesNoToggleField({ label, value, onChange }: AnyRecord) {
-  const checked = value === "Sim";
-  return (
-    <div className="yes-no-toggle-field">
-      <span>{label}</span>
-      <ToggleSwitch checked={checked} onChange={(next: boolean) => onChange(next ? "Sim" : "Não")} label={checked ? "Sim" : "Não"} />
-    </div>
-  );
-}
-
-export function ToggleChoiceField({ label, value, options, onChange }: AnyRecord) {
-  const [onOption, offOption] = options;
-  const checked = value === onOption;
-  return (
-    <div className="yes-no-toggle-field">
-      <span>{label}</span>
-      <ToggleSwitch checked={checked} onChange={(next: boolean) => onChange(next ? onOption : offOption)} label={checked ? "Sim" : "Não"} />
-    </div>
-  );
-}
-
 export function CompactChoiceField({ label, value, options, onChange, invalid = false, required = false }: AnyRecord) {
   return (
     <div className={`compact-choice-field ${invalid ? "invalid" : ""}`}>
@@ -228,16 +207,6 @@ export function ChoiceQuestion({ question, options, value, onChange, invalid = f
       </div>
       {children}
     </div>
-  );
-}
-
-export function ToggleSwitch({ label, checked, onChange, onText = "Ativo", offText = "Inativo" }: AnyRecord) {
-  return (
-    <label className="toggle-switch">
-      <input type="checkbox" checked={!!checked} onChange={(event) => onChange(event.target.checked)} />
-      <span className="toggle-track"><span className="toggle-thumb" /></span>
-      <span>{label || (checked ? onText : offText)}</span>
-    </label>
   );
 }
 

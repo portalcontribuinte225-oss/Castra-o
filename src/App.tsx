@@ -29,6 +29,7 @@ import {
   Navigation,
   PawPrint,
   Plus,
+  PlusCircle,
   ClipboardList,
   RefreshCw,
   Search,
@@ -3479,9 +3480,11 @@ function NewRequest({
             {formStep === RequestStep.ANIMAL && !registered && (
               <>
                 <button className="anm-add-btn" type="button" onClick={addAnimal}>
-                  + Adicionar outro animal
+                  <PlusCircle size={18} aria-hidden="true" />
+                  Adicionar outro animal
                 </button>
                 <button className="anm-add-btn" type="button" onClick={duplicatePreviousAnimal}>
+                  <RefreshCw size={18} aria-hidden="true" />
                   Repetir os dados do anterior
                 </button>
               </>

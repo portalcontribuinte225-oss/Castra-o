@@ -2107,7 +2107,6 @@ button:disabled {
 }
 
 
-
 .access-status {
   margin: 0 20px;
   font-size: 0.82rem;
@@ -2126,7 +2125,6 @@ button:disabled {
   background: #fef2f2;
   color: #dc2626;
 }
-
 
 
 .access-modal-success {
@@ -3537,16 +3535,10 @@ button:disabled {
 }
 
 
-.two-column-fields,
-.health-grid {
+.two-column-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-
-
-.health-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 
@@ -3949,7 +3941,6 @@ button:disabled {
 }
 
 
-
 .adoption-confirm-modal > .modal-header {
   margin: 0;
   border-radius: var(--radius) var(--radius) 0 0;
@@ -4025,7 +4016,6 @@ button:disabled {
   display: grid;
   gap: 12px;
 }
-
 
 
 .helper-text {
@@ -4231,7 +4221,6 @@ main {
 }
 
 
-
 .icon-button {
   border: 1px solid var(--line);
   background: white;
@@ -4376,7 +4365,6 @@ main {
   background: #e2e8f0;
   color: #64748b;
 }
-
 
 
 .triage-workspace {
@@ -4679,7 +4667,6 @@ main {
   gap: 10px;
   list-style: none;
 }
-
 
 
 .process-history-tree::before {
@@ -5217,7 +5204,6 @@ main {
 }
 
 
-
 .request-list,
 .detail-stack {
   display: grid;
@@ -5442,8 +5428,6 @@ main {
 }
 
 
-
-
 .field {
   display: grid;
   gap: 6px;
@@ -5520,10 +5504,6 @@ main {
   background-size: 6px 6px, 6px 6px;
   background-repeat: no-repeat;
 }
-
-
-
-
 
 
 /* --- Documentos comprobatórios modernizado --- */
@@ -5961,56 +5941,10 @@ main {
 }
 
 
-.single-request-form .animal-form .compact-choice-field,
-.single-request-form .animal-form .animal-choice-grid,
 .single-request-form .animal-form .two-column-fields,
 .single-request-form .animal-form .access-field {
   padding: 10px 14px;
   margin: 0;
-}
-
-
-.single-request-form .animal-form .animal-choice-grid {
-  display: grid;
-  gap: 8px;
-  padding: 10px 14px;
-}
-
-
-.single-request-form .animal-form .animal-choice-grid.two-col {
-  grid-template-columns: repeat(2, 1fr);
-}
-
-
-.single-request-form .animal-form .compact-choice-field > span {
-  font-size: var(--type-size-label);
-  font-weight: var(--type-weight-label);
-  text-transform: none;
-  letter-spacing: 0.05em;
-  color: #64748b;
-  text-align: left;
-}
-
-
-.single-request-form .animal-form .compact-choice-field > div {
-  gap: 6px;
-}
-
-
-.single-request-form .animal-form .compact-choice-field button {
-  min-height: 36px;
-  border-radius: 8px;
-  font-size: var(--type-size-label);
-  font-weight: 600;
-  border: 1.5px solid #e2e8f0;
-  background: #f8fafc;
-  color: #475569;
-  transition: border-color 0.13s, background 0.13s, color 0.13s;
-}
-
-
-.single-request-form .animal-form .health-grid {
-  gap: 6px;
 }
 
 
@@ -6121,21 +6055,6 @@ main {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-}
-
-
-.animal-choice-grid.two-col {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-
-.animal-choice-grid.three-col {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-
-.animal-choice-grid.name-coat-age-row {
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) minmax(0, 0.8fr);
 }
 
 
@@ -6313,7 +6232,6 @@ main {
 }
 
 
-
 .checkbox-row {
   display: flex;
   gap: 10px;
@@ -6452,9 +6370,6 @@ main {
   border-color: var(--blue);
   background: #eff8ff;
 }
-
-
-
 
 
 .adoption-grid {
@@ -6906,9 +6821,6 @@ main {
 .whatsapp-inline-status.ok {
   color: #15803d;
 }
-
-
-
 
 
 .whatsapp-section-heading {
@@ -7745,7 +7657,6 @@ main {
 }
 
 
-
 .document-criteria-column {
   display: flex;
   flex-direction: column;
@@ -8459,7 +8370,6 @@ main {
 
 
   .schedule-rule-row,
-  .health-grid,
   .animal-choice-grid,
   .inline-microchip-fields,
   .animal-main-grid,
@@ -8556,14 +8466,11 @@ main {
   .two-column-fields,
   .address-lookup-grid,
   .address-city-grid,
-  .health-grid,
   .clean-form,
   .schedule-rule-row,
   .modal-form-grid,
   .toggle-row,
   .animal-choice-grid,
-  .animal-choice-grid.two-col,
-  .animal-choice-grid.three-col,
   .inline-microchip-fields,
   .animal-main-grid,
   .access-metrics-grid,
@@ -8587,8 +8494,6 @@ main {
     align-items: flex-start;
     grid-column: 1 / -1;
   }
-
-
 
 
   .inline-create-row,
@@ -8645,7 +8550,6 @@ main {
   .request-card {
     grid-template-columns: 1fr;
   }
-
 
 
   .form-actions {
@@ -8877,13 +8781,11 @@ main {
 }
 
 
-
 .topbar {
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   box-shadow: none;
 }
-
 
 
 .panel,
@@ -8906,7 +8808,6 @@ main {
 .modal-backdrop > div {
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
 }
-
 
 
 .primary-action {
@@ -8943,7 +8844,6 @@ main {
 }
 
 
-
 .field input,
 .field select,
 .field textarea,
@@ -8975,13 +8875,11 @@ form textarea:focus {
 }
 
 
-
 .status-badge {
   font-weight: 600;
   font-size: 0.72rem;
   letter-spacing: 0.02em;
 }
-
 
 
 .mobile-bottom-nav {
@@ -9084,7 +8982,6 @@ form textarea:focus {
 }
 
 
-
 .mun-list-item:hover {
   background: var(--teal-soft) !important;
   color: var(--teal-dark) !important;
@@ -9096,7 +8993,6 @@ form textarea:focus {
   color: var(--teal-dark) !important;
   font-weight: 600 !important;
 }
-
 
 
 .config-status-filter button.active {
@@ -9112,7 +9008,6 @@ form textarea:focus {
   color: #2563eb !important;
   border-color: #bfdbfe !important;
 }
-
 
 
 .ag-root {
@@ -10229,8 +10124,6 @@ form textarea:focus {
 }
 
 
-
-
 .metric-card,
 .summary-card,
 .report-card,
@@ -10248,120 +10141,6 @@ form textarea:focus {
 .stat-card::before {
   display: none;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 /* Keep typography calm and consistent across legacy surfaces. */
@@ -11441,12 +11220,6 @@ body * {
 }
 
 
-.internal-request-modal .animal-choice-grid,
-.internal-request-modal .health-grid {
-  gap: 8px;
-}
-
-
 .internal-request-modal .schedule-picker-header {
   display: grid;
   grid-template-columns: 1fr;
@@ -11861,16 +11634,9 @@ body * {
 }
 
 
-.internal-request-modal .single-request-form .animal-form .compact-choice-field,
-.internal-request-modal .single-request-form .animal-form .animal-choice-grid,
 .internal-request-modal .single-request-form .animal-form .two-column-fields,
 .internal-request-modal .single-request-form .animal-form .access-field {
   padding: 9px 14px;
-}
-
-
-.internal-request-modal .single-request-form .animal-form .animal-choice-grid.two-col {
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.9fr);
 }
 
 
@@ -11912,7 +11678,6 @@ body * {
 
 @media (max-width: 760px) {
 
-  .internal-request-modal .single-request-form .animal-form .animal-choice-grid.two-col,
   .internal-request-modal .internal-microchip-row {
     grid-template-columns: 1fr;
   }
@@ -13747,10 +13512,7 @@ body * {
   .public-form-page:not(.public-form-page--consultation) .two-column-fields,
   .public-form-page:not(.public-form-page--consultation) .address-lookup-grid,
   .public-form-page:not(.public-form-page--consultation) .address-city-grid,
-  .public-form-page:not(.public-form-page--consultation) .phone-validation-row,
-  .public-form-page:not(.public-form-page--consultation) .animal-choice-grid,
-  .public-form-page:not(.public-form-page--consultation) .animal-choice-grid.two-col,
-  .public-form-page:not(.public-form-page--consultation) .health-grid {
+  .public-form-page:not(.public-form-page--consultation) .phone-validation-row {
     grid-template-columns: 1fr;
   }
 
@@ -13790,19 +13552,6 @@ body * {
   .public-form-page:not(.public-form-page--consultation) .animal-form-header {
     min-height: 52px;
     padding: 12px 14px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .compact-choice-field > div,
-  .public-form-page:not(.public-form-page--consultation) .compact-choice-field:has(button:nth-child(3)) > div {
-    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form .compact-choice-field button {
-    min-height: 44px;
-    padding: 8px 10px;
-    border-radius: 12px;
   }
 
 
@@ -13965,7 +13714,6 @@ main {
   background: rgba(255, 255, 255, 0.94);
   border-bottom: 1px solid var(--ui-border);
 }
-
 
 
 .brand,
@@ -14429,7 +14177,6 @@ form textarea:focus,
 }
 
 
-
 .config-workspace .panel-header {
   margin: 0 0 12px;
   padding: 0;
@@ -14483,7 +14230,6 @@ form textarea:focus,
   margin-bottom: 10px;
   padding: 10px 12px;
 }
-
 
 
 @media (max-width: 760px) {
@@ -14783,8 +14529,7 @@ form textarea:focus,
 
 
 .nr-shell .form-subsection-title,
-.nr-shell .anm-type-label,
-.nr-shell .compact-choice-field > span {
+.nr-shell .anm-type-label {
   color: #64748b;
   font-size: 0.72rem;
   font-weight: 800;
@@ -16158,7 +15903,6 @@ form textarea:focus,
 }
 
 
-
 /* Modern agenda modal */
 .config-modal.agenda-config-modal {
   width: min(980px, calc(100vw - 32px));
@@ -16337,8 +16081,7 @@ form textarea:focus,
 }
 
 
-.nr-shell .anm-type-label,
-.nr-shell .compact-choice-field > span {
+.nr-shell .anm-type-label {
   color: #66758a;
   font-size: 0.66rem;
   font-weight: 800;
@@ -16347,15 +16090,12 @@ form textarea:focus,
 }
 
 
-.nr-shell .anm-type-cards,
-.nr-shell .compact-choice-field > div,
-.nr-shell .health-grid {
+.nr-shell .anm-type-cards {
   gap: 8px;
 }
 
 
-.nr-shell .anm-type-card,
-.nr-shell .compact-choice-field button {
+.nr-shell .anm-type-card {
   min-height: 36px;
   padding: 0 12px;
   border: 1px solid #d7e2ef;
@@ -16366,8 +16106,7 @@ form textarea:focus,
 }
 
 
-.nr-shell .anm-type-card.is-selected,
-.nr-shell .compact-choice-field button.selected {
+.nr-shell .anm-type-card.is-selected {
   border-color: #2563eb;
   background: #eff6ff;
   color: #1d4ed8;
@@ -16417,24 +16156,10 @@ form textarea:focus,
 }
 
 
-.nr-shell .single-request-form .animal-form .compact-choice-field,
-.nr-shell .single-request-form .animal-form .animal-choice-grid,
 .nr-shell .single-request-form .animal-form .two-column-fields,
 .nr-shell .single-request-form .animal-form .access-field {
   padding: 0;
   margin: 0;
-}
-
-
-.nr-shell .animal-choice-grid,
-.nr-shell .single-request-form .animal-form .animal-choice-grid {
-  gap: 10px;
-}
-
-
-.nr-shell .health-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 
@@ -16481,7 +16206,6 @@ form textarea:focus,
 
 @media (max-width: 760px) {
 
-  .nr-shell .health-grid,
   .nr-shell .internal-microchip-row {
     grid-template-columns: 1fr;
   }
@@ -17024,8 +16748,6 @@ main {
   grid-template-columns: 1fr;
   gap: 16px;
 }
-
-
 
 
 .prm-section,
@@ -18760,17 +18482,14 @@ form textarea:focus,
    Escopado a .nr-shell--public (presente só quando publicFlow=true) para não
    afetar .nr-shell--internal, usado dentro de .internal-request-modal
    (fora de escopo). Colocado ao final do arquivo para vencer, de forma
-   previsível, as demais regras .nr-shell/.compact-choice-field/.anm-type-card
+   previsível, as demais regras .nr-shell/.anm-type-card
    de mesma especificidade espalhadas pelo arquivo. */
 .nr-shell--public .anm-type-label,
-.nr-shell--public .compact-choice-field > span,
 .nr-shell--public .access-field[data-label]::before {
   color: var(--type-color-secondary);
 }
 
-/* .access-field[data-label]::before (~L16704, base) usa font-weight:800/0.66rem —
-   mais pesado/menor que a legenda irmã .compact-choice-field > span (700/11.5px, já
-   correta) e mais pesado que o mockup (700). Alinha as duas para ficarem consistentes. */
+/* .access-field[data-label]::before (base) usa font-weight:800/0.66rem, mais pesado que o mockup (700). */
 .nr-shell--public .access-field[data-label]::before,
 .nr-shell--public .anm-type-label {
   font-size: var(--type-size-label);
@@ -18799,16 +18518,8 @@ form textarea:focus,
 }
 
 
-.nr-shell--public .single-request-form .animal-form .compact-choice-field > span {
-  color: var(--type-color-secondary);
-}
-
-
-/* Cada opção vira um card independente (borda própria, sem trilho de fundo compartilhado),
-   mesmo tratamento visual dos cards de Espécie/Sexo/Raça. */
-.nr-shell--public .anm-type-cards,
-.nr-shell--public .compact-choice-field > div,
-.nr-shell--public .single-request-form .animal-form .compact-choice-field > div {
+/* Cada opção vira um card independente (borda própria, sem trilho de fundo compartilhado). */
+.nr-shell--public .anm-type-cards {
   gap: 8px;
   border: none;
   border-radius: 0;
@@ -18817,9 +18528,7 @@ form textarea:focus,
 }
 
 
-.nr-shell--public .anm-type-card,
-.nr-shell--public .compact-choice-field button,
-.nr-shell--public .single-request-form .animal-form .compact-choice-field button {
+.nr-shell--public .anm-type-card {
   border: 1px solid var(--field-invalid-border, #dbe5f1);
   border-radius: 10px;
   background: #ffffff;
@@ -18832,11 +18541,7 @@ form textarea:focus,
 }
 
 
-/* .compact-choice-field button.selected (~L8716, sem prefixo) usa !important —
-   precisa de !important aqui também para vencer, com especificidade igual/maior */
-.nr-shell--public .anm-type-card.is-selected,
-.nr-shell--public .compact-choice-field button.selected,
-.nr-shell--public .single-request-form .animal-form .compact-choice-field button.selected {
+.nr-shell--public .anm-type-card.is-selected {
   border-color: #2563eb !important;
   background: #eff6ff !important;
   color: #1d4ed8 !important;
@@ -18844,88 +18549,19 @@ form textarea:focus,
 }
 
 
-/* Campos de saúde: cada item vira uma linha cheia (rótulo à esquerda, toggle switch à direita),
-   como no mockup — não mais pares em grade de 2 colunas com legenda acima do controle. */
-.nr-shell--public .health-grid {
-  grid-template-columns: 1fr;
-  gap: 0;
-  margin-top: -10px;
-}
-
-
-.nr-shell--public .yes-no-toggle-field {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 6px 0;
-  border-bottom: 1px solid #eef3f9;
-}
-
-
-.nr-shell--public .yes-no-toggle-field > span {
-  font-size: var(--type-size-label);
-  font-weight: var(--type-weight-label);
-  color: var(--type-color-secondary);
-}
-
-
-/* Neutraliza a regra .toggle-switch sem prefixo (~L7630), compartilhada com o toggle de
-   config (.config-active-toggle), que redefine grid-column/row/border/padding para outro layout. */
-.nr-shell--public .yes-no-toggle-field .toggle-switch {
-  grid-column: auto;
-  grid-row: auto;
-  width: auto;
-  height: auto;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  color: #0f172a;
-  font-size: var(--type-size-label);
-  font-weight: var(--type-weight-label);
-}
-
-
-/* Mockup mostra o texto (Sim/Não) antes do switch — mas a ordem no DOM (input, track, texto)
-   precisa continuar assim porque ".toggle-switch input:checked + .toggle-track" (~L1578,
-   base) é um seletor de irmão adjacente que depende do track vir logo após o input. Usa
-   `order` do flex só para inverter a posição visual, sem quebrar esse seletor. */
-.nr-shell--public .yes-no-toggle-field .toggle-track {
-  width: 38px;
-  height: 22px;
-  background: #e3ddd0;
-  order: 1;
-}
-
-
-.nr-shell--public .yes-no-toggle-field .toggle-thumb {
-  width: 18px;
-  height: 18px;
-}
-
-
-.nr-shell--public .yes-no-toggle-field input:checked + .toggle-track {
-  background: #2563eb;
-}
-
-
-/* "Adicionar outro animal": .nr-shell .anm-add-btn (~L16887) o deixa azul sólido preenchido —
-   esta sobrepõe para o tracejado verde do mockup. */
+/* "Adicionar outro animal" e "Repetir os dados do anterior": .nr-shell .anm-add-btn os deixa azul sólido preenchido —
+   aqui ficam tracejados, fundo branco, com o ícone antes do texto. */
 .nr-shell--public .anm-add-btn {
   border: 1.5px dashed #2563eb;
-  background: #eff6ff;
+  background: #ffffff;
   color: #2563eb;
   box-shadow: none;
 }
 
 
 .nr-shell--public .anm-add-btn:hover {
-  border-color: #156b48;
-  background: #ddebe2;
+  border-color: #1d4ed8;
+  background: #eff6ff;
   box-shadow: none;
 }
 
@@ -18941,16 +18577,6 @@ form textarea:focus,
 .nr-shell--public .anm-actions-row .animal-remove-inline {
   width: auto;
   flex: 1 1 0;
-}
-
-
-/* Faixa de peso do porte (ex: "0–5 kg"), mostrada como legenda abaixo do nome do porte. */
-.nr-shell--public .compact-choice-field button small {
-  color: var(--type-color-muted);
-}
-
-.nr-shell--public .compact-choice-field button.selected small {
-  color: var(--type-color-primary);
 }
 
 
@@ -19025,11 +18651,6 @@ form textarea:focus,
 
 .nr-shell--public .single-request-form {
   gap: 18px;
-}
-
-
-.nr-shell--public .animal-choice-grid.three-col {
-  gap: 20px;
 }
 
 
@@ -19238,8 +18859,6 @@ form textarea:focus,
   background: #156b48 !important;
   box-shadow: none !important;
 }
-
-
 
 
 .nr-shell--public .sms-status {
@@ -19502,8 +19121,7 @@ form textarea:focus,
 .public-service-panel button,
 .public-service-panel label,
 .public-service-panel .access-field,
-.public-service-panel .compact-choice-field,
-.public-service-panel .yes-no-toggle-field {
+.public-service-panel .compact-choice-field {
   pointer-events: auto;
 }
 
@@ -21222,7 +20840,6 @@ h6,
   border: 0 !important;
   box-shadow: none !important;
 }
-
 
 
 .brand-mark,
@@ -22944,7 +22561,6 @@ small,
 }
 
 .internal-request-modal .nr-shell--internal .anm-type-label,
-.internal-request-modal .nr-shell--internal .compact-choice-field > span,
 .internal-request-modal .nr-shell--internal .access-field[data-label]::before {
   color: #64748b !important;
   font-size: 0.72rem !important;
@@ -22958,9 +22574,7 @@ small,
   margin-bottom: 8px !important;
 }
 
-.internal-request-modal .nr-shell--internal .anm-type-cards,
-.internal-request-modal .nr-shell--internal .compact-choice-field > div,
-.internal-request-modal .nr-shell--internal .single-request-form .animal-form .compact-choice-field > div {
+.internal-request-modal .nr-shell--internal .anm-type-cards {
   gap: 4px !important;
   padding: 3px !important;
   border: 1px solid var(--field-invalid-border, transparent) !important;
@@ -22968,9 +22582,7 @@ small,
   background: #eef3f9 !important;
 }
 
-.internal-request-modal .nr-shell--internal .anm-type-card,
-.internal-request-modal .nr-shell--internal .compact-choice-field button,
-.internal-request-modal .nr-shell--internal .single-request-form .animal-form .compact-choice-field button {
+.internal-request-modal .nr-shell--internal .anm-type-card {
   min-height: 38px !important;
   border: 0 !important;
   border-radius: 8px !important;
@@ -22983,81 +22595,10 @@ small,
   flex: 1 1 0 !important;
 }
 
-.internal-request-modal .nr-shell--internal .anm-type-card.is-selected,
-.internal-request-modal .nr-shell--internal .compact-choice-field button.selected,
-.internal-request-modal .nr-shell--internal .single-request-form .animal-form .compact-choice-field button.selected {
+.internal-request-modal .nr-shell--internal .anm-type-card.is-selected {
   background: #ffffff !important;
   color: #0f172a !important;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14) !important;
-}
-
-.internal-request-modal .nr-shell--internal .compact-choice-field button small {
-  color: #64748b !important;
-}
-
-.internal-request-modal .nr-shell--internal .compact-choice-field button.selected small {
-  color: #0f172a !important;
-}
-
-.internal-request-modal .nr-shell--internal .animal-choice-grid.three-col {
-  gap: 20px !important;
-}
-
-.internal-request-modal .nr-shell--internal .health-grid {
-  grid-template-columns: 1fr !important;
-  gap: 0 !important;
-}
-
-.internal-request-modal .nr-shell--internal .yes-no-toggle-field {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 12px !important;
-  padding: 9px 0 !important;
-  border-bottom: 1px solid #e2e8f0 !important;
-}
-
-.internal-request-modal .nr-shell--internal .yes-no-toggle-field:last-child {
-  border-bottom: 0 !important;
-}
-
-.internal-request-modal .nr-shell--internal .yes-no-toggle-field > span {
-  color: #0f172a !important;
-  font-size: 0.86rem !important;
-  font-weight: 500 !important;
-}
-
-.internal-request-modal .nr-shell--internal .yes-no-toggle-field .toggle-switch {
-  grid-column: auto !important;
-  grid-row: auto !important;
-  width: auto !important;
-  height: auto !important;
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  padding: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  background: transparent !important;
-  color: #334155 !important;
-  font-size: 0.8rem !important;
-  font-weight: 600 !important;
-}
-
-.internal-request-modal .nr-shell--internal .yes-no-toggle-field .toggle-track {
-  width: 38px !important;
-  height: 22px !important;
-  background: #cbd5e1 !important;
-  order: 1 !important;
-}
-
-.internal-request-modal .nr-shell--internal .yes-no-toggle-field .toggle-thumb {
-  width: 18px !important;
-  height: 18px !important;
-}
-
-.internal-request-modal .nr-shell--internal .yes-no-toggle-field input:checked + .toggle-track {
-  background: #2563eb !important;
 }
 
 .internal-request-modal .nr-shell--internal .access-field input,
@@ -23098,14 +22639,14 @@ small,
 
 .internal-request-modal .nr-shell--internal .anm-add-btn {
   border: 1.5px dashed #2563eb !important;
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
+  background: #ffffff !important;
+  color: #2563eb !important;
   box-shadow: none !important;
 }
 
 .internal-request-modal .nr-shell--internal .anm-add-btn:hover {
   border-color: #1d4ed8 !important;
-  background: #dbeafe !important;
+  background: #eff6ff !important;
 }
 
 .internal-request-modal .nr-shell--internal .animal-remove-inline {
@@ -23202,8 +22743,6 @@ small,
     padding: 18px !important;
   }
 
-  .internal-request-modal .nr-shell--internal .animal-choice-grid.three-col,
-  .internal-request-modal .nr-shell--internal .animal-choice-grid.two-col,
   .internal-request-modal .nr-shell--internal .internal-microchip-row,
   .internal-request-modal .nr-shell--internal .anm-actions-row {
     grid-template-columns: 1fr !important;
@@ -23658,7 +23197,7 @@ small,
   margin: 0;
 }
 
-/* Lista com rolagem própria e caixas de seleção: procedimentos do animal e raças do tipo de solicitação. */
+/* Lista com rolagem própria e caixas de seleção: raças do tipo de solicitação. */
 .scroll-checklist {
   display: grid;
   gap: 8px;
@@ -23751,6 +23290,210 @@ small,
   padding: 12px;
   color: #64748b;
   font-size: 0.88rem;
+}
+
+/* Título de um card com a dica logo abaixo, sem o espaço maior que separa os blocos do card. */
+.form-sub-card-heading {
+  display: grid;
+  gap: 4px;
+}
+
+/* Perguntas em cartões (etapa Animal): 4 por linha, 2 quando o card estreita (tablet, modal estreito) e 1 no celular.
+   O card que tem a grade mede a própria largura para isso. */
+.form-sub-card:has(> .option-card-grid) {
+  container-type: inline-size;
+}
+
+.option-card-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.option-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid #dbe5f1;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.option-card.is-invalid {
+  border-color: #ef4444;
+}
+
+/* Flutuante, a legenda vira um item comum do card em vez de ficar sobre a borda. */
+.option-card > legend {
+  float: left;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 0;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
+  font-weight: var(--type-weight-strong);
+}
+
+.option-card-choice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
+  font-weight: var(--type-weight-body);
+  cursor: pointer;
+}
+
+.option-card-choice input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.option-card-choice small {
+  color: #2563eb;
+  font-size: var(--type-size-detail);
+}
+
+.text-field-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@container (max-width: 760px) {
+  .option-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 520px) {
+  .option-card-grid,
+  .text-field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Campo que mostra o que foi escolhido e abre uma lista flutuante de caixas de seleção (procedimentos do animal). */
+.multi-select {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.multi-select-field {
+  position: relative;
+  min-width: 0;
+}
+
+.multi-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #ffffff;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
+  font-weight: var(--type-weight-body);
+  text-align: left;
+  cursor: pointer;
+}
+
+.multi-select-trigger:focus-visible,
+.multi-select-trigger[aria-expanded="true"] {
+  border-color: #2563eb;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.multi-select.is-invalid .multi-select-trigger {
+  border-color: #ef4444;
+}
+
+.multi-select-value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-select-value.is-placeholder {
+  color: var(--type-color-muted);
+}
+
+.multi-select-trigger svg {
+  flex: 0 0 auto;
+  color: var(--type-color-muted);
+  transition: transform 0.15s;
+}
+
+.multi-select-trigger svg.is-open {
+  transform: rotate(180deg);
+}
+
+.multi-select-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: 2px;
+  max-height: min(18rem, 60vh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid #dbe5f1;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.12);
+}
+
+.multi-select-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--type-color-primary);
+  font-size: var(--type-size-body);
+  cursor: pointer;
+}
+
+.multi-select-row:hover {
+  background: #f8fafc;
+}
+
+.multi-select-row input {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.multi-select-row span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.multi-select-row small {
+  flex: 0 0 auto;
+  color: var(--type-color-muted);
+  font-size: var(--type-size-detail);
 }
 
 /* Manager's dashboard: cards, charts, calendar and heat maps. The series colours keep a fixed order, checked for colour-blind

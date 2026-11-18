@@ -74,21 +74,20 @@ describe("ScrollChecklist", () => {
 });
 
 describe("RequestProcedureList", () => {
-  it("lists the municipality's types with their fee and marks the chosen ones", () => {
-    const html = renderToStaticMarkup(<RequestProcedureList types={types} selectedIds={["castration", "vaccine"]} onChange={noop} />);
-    expect(html).toContain("O que ele precisa?"); expect(html).toContain("Pode marcar mais de um.");
-    for (const type of types) expect(html).toContain(type.name);
-    expect(html).toContain("R$ 15,00");
-    expect(html.match(/Gratuito/g)).toHaveLength(2);
-    expect(rows(html)).toBe(3);
-    expect(checked(html)).toBe(2);
+  it("asks which procedure to request in a closed field that shows the chosen ones, in the order chosen", () => {
+    const html = renderToStaticMarkup(<RequestProcedureList types={types} selectedIds={["vaccine", "castration"]} onChange={noop} />);
+    expect(html).toContain("Qual procedimento solicitar?"); expect(html).toContain("Pode marcar mais de um.");
+    expect(html).toContain("Vacinação antirrábica, Castração");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain("multi-select-row");
+    expect(renderToStaticMarkup(<RequestProcedureList types={types} selectedIds={[]} onChange={noop} />)).toContain("Selecione os procedimentos");
   });
 
   it("shows the error when invalid and skips a type that has no id", () => {
-    const html = renderToStaticMarkup(<RequestProcedureList types={[...types, { name: "Sem id" }]} selectedIds={[]} onChange={noop} invalid />);
+    const html = renderToStaticMarkup(<RequestProcedureList types={[...types, { name: "Sem id" }]} selectedIds={["castration"]} onChange={noop} invalid />);
     expect(html).toContain("Escolha ao menos um procedimento");
+    expect(html).toContain("multi-select is-invalid");
     expect(html).not.toContain("Sem id");
-    expect(rows(html)).toBe(3);
   });
 
   it("explains where to register types when there are none", () => {
@@ -160,6 +159,19 @@ describe("AnimalFields", () => {
       expect(html).toContain(label);
     }
     expect(html).not.toContain("Microchipado");
+    expect(html).not.toContain("toggle-switch");
+  });
+
+  it("puts each question in a card of radios, with nothing marked until it is answered", () => {
+    const blank = renderToStaticMarkup(<AnimalFields {...props} animal={blankAnimal()} />);
+    expect(blank.match(/class="option-card"/g)).toHaveLength(8);
+    expect(blank.match(/type="radio"/g)).toHaveLength(2 + 2 + 2 + 1 + 2 * 4);
+    expect(blank).not.toContain("checked");
+    expect(blank).toContain("0–5 kg");
+    const answered = renderToStaticMarkup(<AnimalFields {...props} animal={{ ...props.animal, sex: "Fêmea", dewormed: "Não", food: "Diversos" }} />);
+    expect(answered.match(/checked=""/g)).toHaveLength(5);
+    expect(answered).toMatch(/checked="" value="Diversos"/);
+    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={blankAnimal()} />).match(/option-card is-invalid/g)).toHaveLength(4);
   });
 
   it("offers a select when the procedures link breeds and a text field when they do not", () => {
@@ -176,8 +188,8 @@ describe("AnimalFields", () => {
     expect(withNames).toContain("Selecione o bairro");
     expect(withNames).toContain("Pinheirinho");
     expect(withNames).not.toContain("Ex.: Centro");
-    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted />)).toContain("is-invalid");
-    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={{ ...props.animal, neighborhood: "Centro" }} />)).not.toContain("is-invalid");
+    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted />)).toContain("access-field is-invalid");
+    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={{ ...props.animal, neighborhood: "Centro" }} />)).not.toContain("access-field is-invalid");
   });
 
   it("adds the microchip only for staff", () => {

@@ -1,17 +1,20 @@
 import React from "react";
-import { CompactChoiceField, ToggleChoiceField, YesNoToggleField } from "../../components/ui";
+import { OptionCardGroup } from "../../components/option-card-group";
+import type { OptionCardChoice } from "../../components/option-card-group";
 import type { AnyRecord } from "../../types";
 import { NeighborhoodField } from "../neighborhoods/neighborhood-field";
 
 const SEX_OPTIONS = ["Macho", "Fêmea"];
 // The words the tutor reads; the values stored stay the ones the rest of the system knows.
 const BREED_TYPE_OPTIONS = [{ value: "Indefinida", label: "Sem raça definida" }, { value: "Definida", label: "Com raça definida" }];
-const FOOD_OPTIONS = ["Ração", "Diversos"];
+const YES_NO_OPTIONS = ["Sim", "Não"];
+// "Come só ração?" is answered yes or no, and stored as the kind of food.
+const FOOD_OPTIONS = [{ value: "Ração", label: "Sim" }, { value: "Diversos", label: "Não" }];
 
 interface AnimalFieldsProps {
   animal: AnyRecord;
   speciesNames: string[];
-  sizeChoices: AnyRecord[];
+  sizeChoices: OptionCardChoice[];
   breedOptions: AnyRecord[];
   // The neighborhoods the municipality registered; with none the neighborhood is typed.
   neighborhoodNames?: string[];
@@ -28,10 +31,11 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
     <>
       <div className="form-sub-card">
         <span className="form-sub-card-title">Como ele é?</span>
-        <div className="animal-choice-grid three-col">
-          <CompactChoiceField label="Espécie" value={animal.species} options={speciesNames} onChange={onSelectSpecies} invalid={submitAttempted && !animal.species} required />
-          <CompactChoiceField label="Sexo" value={animal.sex} options={SEX_OPTIONS} onChange={(value) => onChange("sex", value)} invalid={submitAttempted && !animal.sex} required />
-          <CompactChoiceField label="Tem raça definida?" value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required />
+        <div className="option-card-grid">
+          <OptionCardGroup label="Espécie" value={animal.species} options={speciesNames} onChange={onSelectSpecies} invalid={submitAttempted && !animal.species} required />
+          <OptionCardGroup label="Sexo" value={animal.sex} options={SEX_OPTIONS} onChange={(value) => onChange("sex", value)} invalid={submitAttempted && !animal.sex} required />
+          <OptionCardGroup label="Tem raça definida?" value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required />
+          <OptionCardGroup label="Qual o porte?" value={animal.size} options={sizeChoices} onChange={(value) => onChange("size", value)} invalid={submitAttempted && !animal.size} required />
         </div>
         {animal.breedType === "Definida" && (breedOptions.length > 0 ? (
           <div className="access-field" data-label="Raça">
@@ -47,8 +51,7 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
             <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)} />
           </div>
         ))}
-        <CompactChoiceField label="Qual o porte?" value={animal.size} options={sizeChoices} onChange={(value) => onChange("size", value)} invalid={submitAttempted && !animal.size} required />
-        <div className="animal-choice-grid name-coat-age-row">
+        <div className="text-field-row">
           <div className="access-field" data-label="Como ele se chama?">
             <input type="text" placeholder="Ex.: Bidu" value={animal.name} onChange={(event) => onChange("name", event.target.value)} />
           </div>
@@ -88,13 +91,15 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
         )}
       </div>
       <div className="form-sub-card">
-        <span className="form-sub-card-title">Saúde e cuidados</span>
-        <small className="form-hint">Responda como souber; tudo bem não ter certeza.</small>
-        <div className="health-grid">
-          <YesNoToggleField label="Já tomou vermífugo?" value={animal.dewormed} onChange={(value) => onChange("dewormed", value)} />
-          <YesNoToggleField label="As vacinas estão em dia?" value={animal.vaccinated} onChange={(value) => onChange("vaccinated", value)} />
-          <YesNoToggleField label="Já teve alguma doença?" value={animal.illnessHistory} onChange={(value) => onChange("illnessHistory", value)} />
-          <ToggleChoiceField label="Come só ração?" value={animal.food} options={FOOD_OPTIONS} onChange={(value) => onChange("food", value)} />
+        <div className="form-sub-card-heading">
+          <span className="form-sub-card-title">Saúde e cuidados</span>
+          <small className="form-hint">Responda como souber, tudo bem não ter certeza.</small>
+        </div>
+        <div className="option-card-grid">
+          <OptionCardGroup label="Já tomou vermífugo?" value={animal.dewormed} options={YES_NO_OPTIONS} onChange={(value) => onChange("dewormed", value)} />
+          <OptionCardGroup label="As vacinas estão em dia?" value={animal.vaccinated} options={YES_NO_OPTIONS} onChange={(value) => onChange("vaccinated", value)} />
+          <OptionCardGroup label="Já teve alguma doença?" value={animal.illnessHistory} options={YES_NO_OPTIONS} onChange={(value) => onChange("illnessHistory", value)} />
+          <OptionCardGroup label="Come só ração?" value={animal.food} options={FOOD_OPTIONS} onChange={(value) => onChange("food", value)} />
         </div>
       </div>
     </>
