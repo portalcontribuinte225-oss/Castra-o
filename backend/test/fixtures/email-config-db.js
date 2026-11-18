@@ -15,13 +15,14 @@ export function fakeEmailDatabase({ configs = {}, municipalities = {} } = {}) {
       audits.push({ userId: values[0], municipalityId: values[2], action: values[3], entityId: values[5], changes: values[6] ? JSON.parse(values[6]) : null });
       return { rows: [] };
     }
-    if (sql.includes("SELECT brasao")) {
+    const image = /^SELECT (brasao|department_logo) AS image FROM municipalities/.exec(sql);
+    if (image) {
       const row = municipalities[values[0]];
-      return { rows: row && row.active !== false ? [{ brasao: row.brasao, updated_at: row.updated_at }] : [] };
+      return { rows: row && row.active !== false ? [{ image: row[image[1]] }] : [] };
     }
     if (sql.includes("FROM municipalities WHERE id = $1")) {
       const row = municipalities[values[0]];
-      return { rows: row ? [{ id: values[0], has_brasao: Boolean(row.brasao), ...row }] : [] };
+      return { rows: row ? [{ id: values[0], has_brasao: Boolean(row.brasao), has_department_logo: Boolean(row.department_logo), ...row }] : [] };
     }
     throw new Error("Unexpected test database operation");
   };

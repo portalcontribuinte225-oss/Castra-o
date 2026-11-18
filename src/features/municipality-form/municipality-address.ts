@@ -8,6 +8,7 @@ export interface MunicipalityForm {
   state: string;
   active: boolean;
   brasao: string;
+  departmentLogo: string;
   contact: string;
   email: string;
   address: string;
@@ -19,7 +20,7 @@ export interface MunicipalityForm {
 }
 
 export const emptyMunicipalityForm: MunicipalityForm = {
-  name: "", state: "", active: true, brasao: "", contact: "", email: "", address: "", addressNumber: "", addressComplement: "",
+  name: "", state: "", active: true, brasao: "", departmentLogo: "", contact: "", email: "", address: "", addressNumber: "", addressComplement: "",
   neighborhood: "", cep: "", departmentName: "",
 };
 
@@ -30,6 +31,7 @@ export function formFromMunicipality(municipality: AnyRecord = {}): Municipality
     state: municipality.state || "",
     active: municipality.active !== false,
     brasao: municipality.brasao || "",
+    departmentLogo: municipality.department_logo || municipality.departmentLogo || "",
     contact: formatPhone(municipality.contact || ""),
     email: municipality.email || "",
     address: municipality.address || "",

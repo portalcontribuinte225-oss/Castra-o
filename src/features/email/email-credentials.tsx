@@ -23,7 +23,7 @@ export function EmailCredentials({ account, state }: { account: EmailAccountView
       <div className="whatsapp-fields-row">
         <Field label="Endereço público do sistema" value={form.publicUrl} placeholder="https://seu-sistema.exemplo.com.br" autoComplete="off" onChange={(value) => edit({ publicUrl: value })} />
       </div>
-      <p className="whatsapp-note">Usado para o brasão do município aparecer nos e-mails.</p>
+      <p className="whatsapp-note">Usado para o brasão e o logo do órgão aparecerem nos e-mails.</p>
       <SavedSecretField
         label="Chave privada (Private Key)"
         placeholder="Cole a chave privada do EmailJS"

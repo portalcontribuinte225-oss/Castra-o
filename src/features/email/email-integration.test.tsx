@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
+import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { emailUses } from "../../../shared/email-uses-contract.js";
 import { useMessageContract } from "../message-contract/use-message-contract";
 import { EmailIntegrationTab } from "./email-integration-tab";
@@ -22,7 +22,7 @@ const rows = (master: boolean): EmailUseRow[] => emailUses.map((use, index) => (
 }));
 const settingsOf = (overrides: Partial<EmailSettings> = {}, master = true): EmailSettings => ({
   account: master ? account : null, configured: true, municipal: true, uses: rows(master),
-  identity: { name: "Test Town", departmentName: "Animal Department", brasao: EmailBrasaoStatus.READY }, ...overrides,
+  identity: { name: "Test Town", departmentName: "Animal Department", brasao: EmailImageStatus.READY, departmentLogo: EmailImageStatus.READY }, ...overrides,
 });
 const emailState = (settings: EmailSettings | null, overrides = {}) => ({
   settings, drafts: {}, dirty: false, loading: false, saving: false, error: "", notice: "", ready: Boolean(settings), retry: noop, apply: noop,
@@ -106,6 +106,7 @@ describe("e-mail tab for the master", () => {
     expect(html).toContain("<th>ID do template</th>");
     expect(html).toContain('value="tpl_0"');
     expect(html).toContain("{{municipality_brasao_url}}");
+    expect(html).toContain("{{department_logo_url}}");
   });
 
   it("shows a saved private key by its start only, with removal, and the save button only when something changed", () => {
@@ -175,14 +176,20 @@ describe("e-mail tab for a municipal viewer", () => {
     expect((html.match(/whatsapp-switch whatsapp-switch--on/g) || []).length).toBe(2);
   });
 
-  it("says who the e-mails identify, and whether the brasão will appear", () => {
-    expect(tab({ master: false })).toContain("<strong>Test Town</strong> · Animal Department · Brasão: cadastrado");
-    for (const [brasao, text] of [[EmailBrasaoStatus.MISSING, "não cadastrado ⚠"], [EmailBrasaoStatus.NO_PUBLIC_URL, "endereço público do sistema ainda não foi configurado"]]) {
-      vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ identity: { name: "Test Town", departmentName: "", brasao } }, false)));
-      const html = tab({ master: false });
-      expect(html).toContain(text);
-      expect(html).not.toContain("Animal Department");
-    }
+  it("says who the e-mails identify, and whether the brasão and the department logo will appear", () => {
+    const ready = tab({ master: false });
+    expect(ready).toContain("<strong>Test Town</strong> · Animal Department · Brasão: cadastrado · Logo do órgão: cadastrado");
+    expect(ready).not.toContain("endereço público do sistema");
+    const identity = (brasao: string, departmentLogo: string) => settingsOf({ identity: { name: "Test Town", departmentName: "", brasao, departmentLogo } }, false);
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(identity(EmailImageStatus.READY, EmailImageStatus.MISSING)));
+    const noLogo = tab({ master: false });
+    expect(noLogo).toContain("Brasão: cadastrado · Logo do órgão: não cadastrado ⚠");
+    expect(noLogo).not.toContain("Animal Department");
+    expect(noLogo).not.toContain("endereço público do sistema");
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(identity(EmailImageStatus.MISSING, EmailImageStatus.NO_PUBLIC_URL)));
+    const noAddress = tab({ master: false });
+    expect(noAddress).toContain("Brasão: não cadastrado ⚠ · Logo do órgão: cadastrado");
+    expect(noAddress).toContain("As imagens ficam fora dos e-mails até o master configurar o endereço público do sistema ⚠");
   });
 
   it("has no shared option to send one notice through more than one channel", () => {

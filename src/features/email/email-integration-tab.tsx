@@ -1,6 +1,6 @@
 import React from "react";
 import { PanelHeader } from "../../components/ui";
-import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
+import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { MessageContractForm } from "../message-contract/message-contract-form";
 import { MessageContractStatus } from "../message-contract/message-contract-status";
@@ -10,10 +10,11 @@ import { EmailTemplatesTable } from "./email-templates-table";
 import { useEmailAccount } from "./use-email-account";
 import { useEmailSettings } from "./use-email-settings";
 
-const brasaoText: Record<string, string> = {
-  [EmailBrasaoStatus.READY]: "cadastrado",
-  [EmailBrasaoStatus.MISSING]: "não cadastrado ⚠",
-  [EmailBrasaoStatus.NO_PUBLIC_URL]: "o endereço público do sistema ainda não foi configurado pelo master ⚠",
+// How the identity line names the state of each image; a missing public address is said once, below the line.
+const imageText: Record<string, string> = {
+  [EmailImageStatus.READY]: "cadastrado",
+  [EmailImageStatus.MISSING]: "não cadastrado ⚠",
+  [EmailImageStatus.NO_PUBLIC_URL]: "cadastrado",
 };
 
 // E-mail tab: the master sets the platform account, the template ids, the municipality's contract and whether its service is on; whoever has the
@@ -45,7 +46,15 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
             </div>
           )}
           {email.notice && <p role="status">{email.notice}</p>}
-          {identity && <p>Identificação nos e-mails: <strong>{identity.name}</strong>{identity.departmentName ? ` · ${identity.departmentName}` : ""} · Brasão: {brasaoText[identity.brasao] || identity.brasao}</p>}
+          {identity && (
+            <p>
+              Identificação nos e-mails: <strong>{identity.name}</strong>{identity.departmentName ? ` · ${identity.departmentName}` : ""}
+              {` · Brasão: ${imageText[identity.brasao] || identity.brasao} · Logo do órgão: ${imageText[identity.departmentLogo] || identity.departmentLogo}`}
+            </p>
+          )}
+          {identity && [identity.brasao, identity.departmentLogo].includes(EmailImageStatus.NO_PUBLIC_URL) && (
+            <p className="whatsapp-note">As imagens ficam fora dos e-mails até o master configurar o endereço público do sistema ⚠</p>
+          )}
           {settings && !municipalityId && <p className="whatsapp-note">Selecione um município para ligar ou desligar as mensagens.</p>}
           {settings && (
             <EmailTemplatesTable

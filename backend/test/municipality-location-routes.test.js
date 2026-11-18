@@ -118,3 +118,26 @@ test("the permission group decides: the item lets an analyst edit, and its absen
   assert.equal(calls.filter(({ sql }) => sql.startsWith("UPDATE municipalities")).length, 1);
   assert.equal((await send("PATCH", `/${OTHER}`, tokens.analyst, location)).status, 403, "the item never reaches another municipality");
 });
+
+test("the brasão and the department logo are saved on creation and on edit, and an image its public link could not serve is refused", async (t) => {
+  const { calls, tokens, send } = await fixture(t);
+  const brasao = `data:image/png;base64,${Buffer.from("fake brasao").toString("base64")}`;
+  const logo = `data:image/webp;base64,${Buffer.from("fake logo").toString("base64")}`;
+  assert.equal((await send("POST", "", tokens.master, { name: "Test Town", state: "SC", brasao, departmentLogo: logo })).status, 201);
+  const insert = calls.find(({ sql }) => sql.includes("INSERT INTO municipalities"));
+  assert.match(insert.sql, /department_name, brasao, department_logo, active/);
+  assert.match(insert.sql, /brasao = EXCLUDED\.brasao,\s+department_logo = EXCLUDED\.department_logo/);
+  assert.deepEqual(insert.values.slice(11, 13), [brasao, logo]);
+
+  assert.equal((await send("PATCH", `/${MUNICIPALITY}`, tokens.admin, { brasao: "", departmentLogo: logo })).status, 200);
+  const update = calls.find(({ sql }) => sql.startsWith("UPDATE municipalities"));
+  assert.match(update.sql, /brasao = \$1, department_logo = \$2/);
+  assert.deepEqual(update.values.slice(0, 2), ["", logo]);
+
+  const svg = `data:image/svg+xml;base64,${Buffer.from("<svg></svg>").toString("base64")}`;
+  const refused = await send("PATCH", `/${MUNICIPALITY}`, tokens.master, { departmentLogo: svg });
+  assert.equal(refused.status, 400);
+  assert.equal(refused.body.error, "Não foi possível usar o logo do órgão. Envie uma imagem PNG, JPG ou WEBP de até 2 MB.");
+  assert.equal((await send("POST", "", tokens.master, { name: "Test Town", state: "SC", brasao: "https://example.test/brasao.png" })).status, 400);
+  assert.equal(calls.filter(({ sql }) => sql.includes("INSERT INTO municipalities") || sql.startsWith("UPDATE municipalities")).length, 2);
+});

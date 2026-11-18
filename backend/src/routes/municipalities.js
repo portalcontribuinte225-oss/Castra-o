@@ -7,6 +7,7 @@ import { GENERAL_DATA_CONFIG_ITEM } from "../../../shared/config-permission-cont
 import { MUNICIPALITY_ADMIN_ROLE, isGlobalUser } from "../tenant.js";
 import { upsertMunicipalityDefaultConfigs } from "../municipalityDefaults.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
+import { readMunicipalityImages } from "../services/municipality-images.js";
 import { readMunicipalityLocation } from "../services/municipality-location.js";
 
 const router = Router();
@@ -70,12 +71,15 @@ router.post("/", auth, async (req, res) => {
   const state = String(req.body?.state || "").trim().toUpperCase().slice(0, 2);
   const active = req.body?.active !== false;
   let location;
+  let images;
   try {
     location = readMunicipalityLocation(req.body);
+    images = readMunicipalityImages(req.body);
   } catch (error) {
     return res.status(error.status || 400).json({ error: error.message });
   }
   const { contact = "", cep = "", address = "", address_number: addressNumber = "", address_complement: addressComplement = "", neighborhood = "" } = location;
+  const { brasao = "", department_logo: departmentLogo = "" } = images;
   const email = String(req.body?.email || "").trim().toLowerCase();
   const departmentName = String(req.body?.department_name || req.body?.departmentName || "").trim();
   const slug = slugify(req.body?.slug || name);
@@ -86,8 +90,8 @@ router.post("/", auth, async (req, res) => {
     await client.query("BEGIN");
 
     const { rows } = await client.query(
-      `INSERT INTO municipalities (name, state, slug, contact, email, address, address_number, address_complement, neighborhood, cep, department_name, active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      `INSERT INTO municipalities (name, state, slug, contact, email, address, address_number, address_complement, neighborhood, cep, department_name, brasao, department_logo, active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        ON CONFLICT (slug)
        DO UPDATE SET
          name = EXCLUDED.name,
@@ -100,10 +104,12 @@ router.post("/", auth, async (req, res) => {
          neighborhood = EXCLUDED.neighborhood,
          cep = EXCLUDED.cep,
          department_name = EXCLUDED.department_name,
+         brasao = EXCLUDED.brasao,
+         department_logo = EXCLUDED.department_logo,
          active = EXCLUDED.active,
          updated_at = NOW()
        RETURNING *`,
-      [name, state, slug, contact, email, address, addressNumber, addressComplement, neighborhood, cep, departmentName, active],
+      [name, state, slug, contact, email, address, addressNumber, addressComplement, neighborhood, cep, departmentName, brasao, departmentLogo, active],
     );
     const municipality = rows[0];
 
@@ -190,7 +196,7 @@ router.post("/", auth, async (req, res) => {
 
 // Non-global staff can edit only contact/branding data for their own municipality, and only with the "Dados Gerais" item of their
 // permission group (a user with no group falls back to the manager role). Tenant identity and activation fields remain master/support-only.
-const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "contact", "email", "address", "address_number", "address_complement", "neighborhood", "cep", "department_name"];
+const MUNICIPALITY_SELF_EDIT_FIELDS = ["brasao", "department_logo", "contact", "email", "address", "address_number", "address_complement", "neighborhood", "cep", "department_name"];
 const MUNICIPALITY_GLOBAL_EDIT_FIELDS = ["name", "state", "active", ...MUNICIPALITY_SELF_EDIT_FIELDS];
 
 router.patch("/:id", auth, requireConfigItem(GENERAL_DATA_CONFIG_ITEM), async (req, res) => {
@@ -204,17 +210,17 @@ router.patch("/:id", auth, requireConfigItem(GENERAL_DATA_CONFIG_ITEM), async (r
     req.body.department_name = req.body.departmentName;
   }
 
-  let location;
+  let checked;
   try {
-    location = readMunicipalityLocation(req.body);
+    checked = { ...readMunicipalityLocation(req.body), ...readMunicipalityImages(req.body) };
   } catch (error) {
     return res.status(error.status || 400).json({ error: error.message });
   }
   const fields = [];
   const values = [];
   (isGlobal ? MUNICIPALITY_GLOBAL_EDIT_FIELDS : MUNICIPALITY_SELF_EDIT_FIELDS).forEach((field) => {
-    if (location[field] !== undefined) {
-      values.push(location[field]);
+    if (checked[field] !== undefined) {
+      values.push(checked[field]);
       fields.push(`${field} = $${values.length}`);
     } else if (req.body?.[field] !== undefined) {
       values.push(field === "state" ? String(req.body[field]).trim().toUpperCase().slice(0, 2) : field === "email" ? String(req.body[field] || "").trim().toLowerCase() : field === "active" ? req.body[field] : String(req.body[field] || "").trim());

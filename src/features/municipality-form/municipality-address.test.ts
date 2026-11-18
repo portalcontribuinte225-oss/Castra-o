@@ -18,8 +18,8 @@ describe("formatMunicipalityAddress", () => {
 describe("formFromMunicipality", () => {
   it("masks the contact and the CEP and reads the columns of the server", () => {
     expect(formFromMunicipality({ name: "Içara", state: "SC", contact: "48999990000", cep: "88820000", address: "Rua A", address_number: "10", address_complement: "Sala 1",
-      neighborhood: "Centro", department_name: "FUNDAI", email: "a@b.test", active: false })).toEqual({
-      name: "Içara", state: "SC", active: false, brasao: "", contact: "(48) 99999-0000", email: "a@b.test", address: "Rua A", addressNumber: "10",
+      neighborhood: "Centro", department_name: "FUNDAI", department_logo: "data:image/png;base64,AAAA", email: "a@b.test", active: false })).toEqual({
+      name: "Içara", state: "SC", active: false, brasao: "", departmentLogo: "data:image/png;base64,AAAA", contact: "(48) 99999-0000", email: "a@b.test", address: "Rua A", addressNumber: "10",
       addressComplement: "Sala 1", neighborhood: "Centro", cep: "88820-000", departmentName: "FUNDAI",
     });
   });

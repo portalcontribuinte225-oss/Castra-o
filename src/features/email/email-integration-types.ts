@@ -22,6 +22,7 @@ export interface EmailIdentitySummary {
   name: string;
   departmentName: string;
   brasao: string;
+  departmentLogo: string;
 }
 
 export interface EmailSettings {

@@ -1,7 +1,8 @@
-import { EmailBrasaoStatus } from "../../../shared/email-contract.js";
+import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { EMAIL_IDENTITY_VARIABLES, EmailVariable } from "../../../shared/email-uses-contract.js";
 import { loadMunicipalityIdentity } from "../repositories/municipality-identity.js";
 import { loadEmailAccount } from "./email-account.js";
+import { MunicipalityImage, hasMunicipalityImage, municipalityImageUrl } from "./municipality-images.js";
 
 const MAX_NAME_LENGTH = 200;
 const MAX_ADDRESS_LENGTH = 300;
@@ -9,16 +10,9 @@ const emptyIdentity = Object.freeze(Object.fromEntries(EMAIL_IDENTITY_VARIABLES.
 
 const text = (value, max) => String(value ?? "").trim().slice(0, max);
 
-export function brasaoStatus(identity, publicUrl) {
-  if (!identity?.has_brasao) return EmailBrasaoStatus.MISSING;
-  return publicUrl ? EmailBrasaoStatus.READY : EmailBrasaoStatus.NO_PUBLIC_URL;
-}
-
-// The link carries the last update, so a changed brasão is not served from a stale cache.
-export function brasaoUrl(identity, publicUrl) {
-  if (!identity?.has_brasao || !publicUrl) return "";
-  const version = new Date(identity.updated_at).getTime();
-  return `${publicUrl}/api/public/municipalities/${identity.id}/brasao${Number.isFinite(version) ? `?v=${version}` : ""}`;
+function imageStatus(identity, image, publicUrl) {
+  if (!hasMunicipalityImage(identity, image)) return EmailImageStatus.MISSING;
+  return publicUrl ? EmailImageStatus.READY : EmailImageStatus.NO_PUBLIC_URL;
 }
 
 // The identity is cosmetic: when it cannot be read the message still goes, just without it.
@@ -29,8 +23,9 @@ export async function loadEmailIdentityParams(municipalityId, { database } = {})
     if (!identity) return { ...emptyIdentity };
     return {
       [EmailVariable.MUNICIPALITY_NAME]: text(identity.name, MAX_NAME_LENGTH),
-      [EmailVariable.MUNICIPALITY_BRASAO_URL]: brasaoUrl(identity, account.publicUrl),
+      [EmailVariable.MUNICIPALITY_BRASAO_URL]: municipalityImageUrl(identity, MunicipalityImage.BRASAO, account.publicUrl),
       [EmailVariable.DEPARTMENT_NAME]: text(identity.department_name, MAX_NAME_LENGTH),
+      [EmailVariable.DEPARTMENT_LOGO_URL]: municipalityImageUrl(identity, MunicipalityImage.DEPARTMENT_LOGO, account.publicUrl),
       [EmailVariable.MUNICIPALITY_CONTACT]: text(identity.contact, MAX_NAME_LENGTH),
       [EmailVariable.MUNICIPALITY_EMAIL]: text(identity.email, MAX_NAME_LENGTH),
       [EmailVariable.MUNICIPALITY_ADDRESS]: text(identity.address, MAX_ADDRESS_LENGTH),
@@ -44,5 +39,10 @@ export async function loadEmailIdentityParams(municipalityId, { database } = {})
 export async function loadEmailIdentitySummary(municipalityId, publicUrl, { database } = {}) {
   const identity = await loadMunicipalityIdentity(municipalityId, database);
   if (!identity) return null;
-  return { name: text(identity.name, MAX_NAME_LENGTH), departmentName: text(identity.department_name, MAX_NAME_LENGTH), brasao: brasaoStatus(identity, publicUrl) };
+  return {
+    name: text(identity.name, MAX_NAME_LENGTH),
+    departmentName: text(identity.department_name, MAX_NAME_LENGTH),
+    brasao: imageStatus(identity, MunicipalityImage.BRASAO, publicUrl),
+    departmentLogo: imageStatus(identity, MunicipalityImage.DEPARTMENT_LOGO, publicUrl),
+  };
 }

@@ -152,7 +152,7 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
       if (sql.includes("INSERT INTO config")) { storedConfigs[`${values[0]}:${values[1]}`] = JSON.parse(values[2]); return { rows: [] }; }
       if (sql.startsWith("SELECT value FROM config")) return { rows: storedConfigs[`${values[0]}:${values[1]}`] ? [{ value: storedConfigs[`${values[0]}:${values[1]}`] }] : [] };
-      if (sql.includes("FROM municipalities WHERE id = $1")) return { rows: [{ id: values[0], name: "Test City", department_name: "Test Department", contact: "", email: "", address: "", updated_at: new Date(0), has_brasao: false }] };
+      if (sql.includes("FROM municipalities WHERE id = $1")) return { rows: [{ id: values[0], name: "Test City", department_name: "Test Department", contact: "", email: "", address: "", updated_at: new Date(0), has_brasao: false, has_department_logo: false }] };
       throw new Error(`Unhandled auth fixture SQL: ${sql}`);
     } };
   }

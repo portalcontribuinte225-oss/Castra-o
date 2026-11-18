@@ -180,6 +180,7 @@ import { RequestAcceptance, requestAcceptance } from "./features/request-documen
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
 import { MunicipalityAddressFields } from "./features/municipality-form/municipality-address-fields";
+import { MunicipalityImageField } from "./features/municipality-form/municipality-image-field";
 import { emptyMunicipalityForm, formFromMunicipality, formatMunicipalityAddress, municipalityContactIssue } from "./features/municipality-form/municipality-address";
 import type { MunicipalityForm } from "./features/municipality-form/municipality-address";
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
@@ -1848,6 +1849,9 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
               />
             )}
           </div>
+          {activeMunicipality?.department_logo && (
+            <img src={activeMunicipality.department_logo} alt="Logo do órgão" className="public-topbar-logo" />
+          )}
         </div>
         <nav className="public-topbar-nav" aria-label="Serviços públicos">
           {publicHomeServices.map((service) => {
@@ -8075,42 +8079,17 @@ function ConfigView({
                 <input type="email" value={newMunicipality.email} placeholder="contato@municipio.gov.br" onChange={(event) => setNewMunicipality((current) => ({ ...current, email: event.target.value }))} />
               </label>
             </div>
-            <div className="field">
-              <span>Brasão do município</span>
-              <label className="brasao-upload-label">
-                {newMunicipality.brasao ? (
-                  <div className="brasao-preview-wrap">
-                    <img src={newMunicipality.brasao} alt="Brasão" className="brasao-preview-img" />
-                    <button
-                      type="button"
-                      className="brasao-remove-btn"
-                      onClick={() => setNewMunicipality((c) => ({ ...c, brasao: "" }))}
-                      aria-label="Remover brasão"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="brasao-dropzone">
-                    <ImagePlus size={22} strokeWidth={1.4} />
-                    <span>Clique para selecionar imagem</span>
-                    <small>PNG ou JPG · recomendado 256×256px</small>
-                  </div>
-                )}
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                  style={{ display: "none" }}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (!file) return;
-                    const reader = new FileReader();
-                    reader.onload = () => setNewMunicipality((c) => ({ ...c, brasao: String(reader.result || "") }));
-                    reader.readAsDataURL(file);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
+            <div className="modal-form-grid">
+              <MunicipalityImageField
+                label="Brasão do município"
+                value={newMunicipality.brasao}
+                onChange={(brasao) => setNewMunicipality((current) => ({ ...current, brasao }))}
+              />
+              <MunicipalityImageField
+                label="Logo do órgão"
+                value={newMunicipality.departmentLogo}
+                onChange={(departmentLogo) => setNewMunicipality((current) => ({ ...current, departmentLogo }))}
+              />
             </div>
 
             {municipalitySaveStatus && (

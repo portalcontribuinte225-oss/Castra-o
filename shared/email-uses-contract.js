@@ -11,6 +11,7 @@ export const EmailVariable = Object.freeze({
   MUNICIPALITY_NAME: "municipality_name",
   MUNICIPALITY_BRASAO_URL: "municipality_brasao_url",
   DEPARTMENT_NAME: "department_name",
+  DEPARTMENT_LOGO_URL: "department_logo_url",
   MUNICIPALITY_CONTACT: "municipality_contact",
   MUNICIPALITY_EMAIL: "municipality_email",
   MUNICIPALITY_ADDRESS: "municipality_address",
@@ -31,7 +32,7 @@ export const EmailVariable = Object.freeze({
 
 // The identity of the municipality that sends the message; empty when there is no municipality (platform staff).
 export const EMAIL_IDENTITY_VARIABLES = Object.freeze([
-  EmailVariable.MUNICIPALITY_NAME, EmailVariable.MUNICIPALITY_BRASAO_URL, EmailVariable.DEPARTMENT_NAME,
+  EmailVariable.MUNICIPALITY_NAME, EmailVariable.MUNICIPALITY_BRASAO_URL, EmailVariable.DEPARTMENT_NAME, EmailVariable.DEPARTMENT_LOGO_URL,
   EmailVariable.MUNICIPALITY_CONTACT, EmailVariable.MUNICIPALITY_EMAIL, EmailVariable.MUNICIPALITY_ADDRESS,
 ]);
 

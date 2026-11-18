@@ -452,6 +452,11 @@ export async function runMigrations() {
     ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS neighborhood TEXT;
   `);
 
+  /* ── Logo do órgão/secretaria, ao lado do brasão do município ── */
+  await pool.query(`
+    ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS department_logo TEXT;
+  `);
+
   const adminEmail = process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL;
   const adminPassword = process.env.ADMIN_PASSWORD || process.env.VITE_ADMIN_PASSWORD;
   if (adminEmail && adminPassword) {

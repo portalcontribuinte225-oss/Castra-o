@@ -8,8 +8,8 @@ export const EMAIL_TEMPLATES_CONFIG_KEY = "email_templates";
 export const EMAIL_ACTIVE_USES_CONFIG_KEY = "email_active_uses";
 export const EMAIL_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;
 
-// What the screen says about the municipality brasão, which reaches the e-mail through a public address.
-export const EmailBrasaoStatus = Object.freeze({ READY: "ready", MISSING: "missing", NO_PUBLIC_URL: "no_public_url" });
+// What the screen says about each image of the municipality (brasão and department logo), which reaches the e-mail through a public address.
+export const EmailImageStatus = Object.freeze({ READY: "ready", MISSING: "missing", NO_PUBLIC_URL: "no_public_url" });
 
 const asObject = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
 

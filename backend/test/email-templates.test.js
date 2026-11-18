@@ -35,7 +35,7 @@ test("there are eleven uses, seven notices and four access messages; neither pho
 
 test("every use carries the recipient and the municipality identity, and only agenda notices carry the schedule fields", () => {
   for (const use of emailUses) {
-    for (const name of ["to_email", "to_name", "municipality_name", "municipality_brasao_url", "department_name", "municipality_contact", "municipality_email", "municipality_address"]) {
+    for (const name of ["to_email", "to_name", "municipality_name", "municipality_brasao_url", "department_name", "department_logo_url", "municipality_contact", "municipality_email", "municipality_address"]) {
       assert.ok(use.variables.includes(name), `${use.key} must carry ${name}`);
     }
   }
