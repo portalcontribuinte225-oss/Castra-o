@@ -402,6 +402,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [configMenuOpen, setConfigMenuOpen] = useState(false);
+  // The settings item whose tabs are listed open in the sidebar (Ambiente or Integrações); opening it does not change the screen.
+  const [expandedConfigItem, setExpandedConfigItem] = useState("");
   const [tenantConfigReady, setTenantConfigReady] = useState(false);
   const [loadedConfigKeys, setLoadedConfigKeys] = useState({});
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
@@ -896,13 +898,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                   title={sidebarCollapsed ? item.label : undefined}
                   onClick={() => {
                     if (item.id === "config") {
-                      if (active === "config" && configMenuOpen) {
-                        setConfigMenuOpen(false);
-                        setConfigArea("");
-                      } else {
-                        setConfigMenuOpen(true);
-                      }
-                      setActive("config");
+                      setConfigMenuOpen((open) => !open);
                       return;
                     }
                     setConfigMenuOpen(false);
@@ -917,7 +913,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                     <ChevronRight className={configMenuOpen ? "sidebar-chevron open" : "sidebar-chevron"} size={16} />
                   )}
                 </button>
-                {item.id === "config" && active === "config" && configMenuOpen && (
+                {item.id === "config" && configMenuOpen && (
                   <div className="sidebar-subnav" aria-label="Subabas de configurações">
                     {visibleConfigSidebarItems.map((subitem) => {
                       const subitemTabs = subitem.id === "environment"
@@ -926,14 +922,20 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                           ? visibleIntegrationsTabs
                           : [];
                       const hasTabs = subitemTabs.length > 0;
+                      const showing = active === "config" && configArea === subitem.id;
+                      const expanded = expandedConfigItem === subitem.id;
                       return (
                         <React.Fragment key={subitem.id}>
                           <button
-                            className={`config-nav-item${configArea === subitem.id ? " active" : ""}`}
+                            className={`config-nav-item${showing ? " active" : ""}`}
                             type="button"
                             onClick={() => {
+                              if (hasTabs) {
+                                setExpandedConfigItem(expanded ? "" : subitem.id);
+                                return;
+                              }
                               setActive("config");
-                              setConfigArea(configArea === subitem.id ? "" : subitem.id);
+                              setConfigArea(subitem.id);
                               setMobileOpen(false);
                             }}
                           >
@@ -942,15 +944,15 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                               <span className="config-nav-label">{subitem.label}</span>
                             </span>
                             {hasTabs && (
-                              <ChevronRight size={13} className={`config-nav-chevron${configArea === subitem.id ? " open" : ""}`} />
+                              <ChevronRight size={13} className={`config-nav-chevron${expanded ? " open" : ""}`} />
                             )}
                           </button>
-                          {hasTabs && configArea === subitem.id && (
+                          {hasTabs && expanded && (
                             <div className="config-nav-children">
                               {subitemTabs.map((tab) => (
                                 <button
                                   key={tab.id}
-                                  className={`config-nav-child${configTab === tab.id ? " active" : ""}`}
+                                  className={`config-nav-child${showing && configTab === tab.id ? " active" : ""}`}
                                   type="button"
                                   onClick={() => { setActive("config"); setConfigArea(subitem.id); setConfigTab(tab.id); setMobileOpen(false); }}
                                 >
