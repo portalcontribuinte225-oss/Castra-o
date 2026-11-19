@@ -6,6 +6,8 @@ import { hasValidDocumentReceipt, signDocumentReceipt } from "./document-provena
 import { describeStoredDocument } from "./stored-document.js";
 import { createReceivedDocument, definitionsForRequest } from "./request-documents.js";
 
+const MAX_REVIEW_NOTE = 500;
+
 function definitionFor(document, definitions) {
   return definitions.find((item) => item.id === document.documentId)
     || canonicalDocumentDefinition({ id: document.documentId, name: document.documentName || "Documento", required: false });
@@ -20,7 +22,7 @@ function normalizeExisting(previous, document, index, definition) {
     animalId: description.animalId, fileName: String(document.fileName || "documento").replace(/[\r\n\\/]/g, "_").slice(0, 180),
     fileType: description.content.contentType, fileSize: description.content.size, dataUrl: description.content.dataUrl,
     hash: description.hash, receivedAt: description.receivedAt, origin: description.origin,
-    status: description.status, ...(description.status === DocumentReviewStatus.APPROVED ? { review: document.review } : {}) };
+    status: description.status, ...([DocumentReviewStatus.APPROVED, DocumentReviewStatus.REJECTED].includes(description.status) ? { review: document.review } : {}) };
   return { ...normalized, receipt: signDocumentReceipt(normalized) };
 }
 
@@ -42,10 +44,13 @@ export function decorateRequestDocuments(request, settings = {}) {
 }
 
 export async function applyDocumentReviews(_client, { previous, patch, user, municipalityId, settings = {}, now = new Date() }) {
-  if (patch.documents === undefined && patch.documentReviews === undefined) return undefined;
+  if (patch.documents === undefined && patch.documentReviews === undefined && patch.documentEvidence === undefined) return undefined;
   if (!isInternalUser(user) || municipalityId !== previous.municipality_id) throw documentError("Revisão não autorizada.", 403);
   const oldDocuments = Array.isArray(previous.documents) ? previous.documents : [];
-  const supplied = patch.documents === undefined ? oldDocuments : patch.documents;
+  const evidence = patch.documentEvidence;
+  if (evidence !== undefined && (patch.documents !== undefined || !evidence || typeof evidence !== "object" || Array.isArray(evidence)
+    || typeof evidence.documentId !== "string" || !/^evidencia-[a-z\d-]{1,72}$/i.test(evidence.documentId))) throw documentError("Evidência inválida.");
+  const supplied = evidence ? [...oldDocuments, evidence] : patch.documents === undefined ? oldDocuments : patch.documents;
   const reviews = patch.documentReviews === undefined ? [] : patch.documentReviews;
   if (!Array.isArray(supplied) || !Array.isArray(reviews) || supplied.length > MAX_REQUEST_DOCUMENTS || reviews.length > MAX_REQUEST_DOCUMENTS) throw documentError("Anexos ou decisões inválidos.");
   const definitions = definitionsForRequest(settings, previous);
@@ -72,15 +77,18 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
     if (!review || ![DocumentReviewStatus.APPROVED, DocumentReviewStatus.REJECTED].includes(review.decision)
       || typeof review.attachmentId !== "string" || seenReviews.has(review.attachmentId)) throw documentError("Decisão de documento inválida.");
     seenReviews.add(review.attachmentId);
+    // Sending a document back for correction always says what has to be corrected; the tutor is told it.
+    const note = review.decision === DocumentReviewStatus.REJECTED && typeof review.note === "string" ? review.note.trim() : "";
+    if (review.decision === DocumentReviewStatus.REJECTED && (!note || note.length > MAX_REVIEW_NOTE)) throw documentError(`Informe o que precisa ser corrigido no documento (até ${MAX_REVIEW_NOTE} caracteres).`);
     const document = documents.find((item) => item.attachmentId === review.attachmentId);
     if (!document || isExcludedDocument(document)) throw documentError("O arquivo a revisar não está mais disponível.", 409);
     const definition = definitionFor(document, definitions);
     const content = decodeDocumentContent(document, definition);
     document.status = review.decision;
     document.review = { decision: review.decision, reviewedBy: user.id, reviewedAt: now.toISOString(),
-      hash: content.hash, criteriaFingerprint: documentCriteriaFingerprint(definition) };
+      hash: content.hash, criteriaFingerprint: documentCriteriaFingerprint(definition), ...(note ? { note } : {}) };
     document.receipt = signDocumentReceipt(document);
   }
-  assertMaterializedRequestSize({ ...previous, ...patch, documents });
+  assertMaterializedRequestSize({ ...previous, documents });
   return documents;
 }

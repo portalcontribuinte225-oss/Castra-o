@@ -38,7 +38,6 @@ import {
   Shield,
   UploadCloud,
   User,
-  UserCheck,
   Users,
   Building2,
   Mail,
@@ -87,7 +86,6 @@ import {
   normalizeDocumentType,
   normalizeRequest,
   normalizeRequestStatus,
-  normalizeRequestType,
   normalizeScheduleDateText,
   normalizeScheduleDay,
   normalizeScheduleSlots,
@@ -150,7 +148,8 @@ import {
 import { AccessRequestsView, accessStatusLabel } from "./features/accessRequests";
 import { AgendaView } from "./features/agenda";
 import { canEditRequests, useRequestActions } from "./features/request-actions";
-import { getSpecialRequestSection, specialRequestConfirmLabel } from "./features/request-analysis-sections";
+import { ProcessModal } from "./features/process-modal/process-modal";
+import { PDF_BASE_STYLES, printHtmlViaIframe } from "./features/process-report/print-html";
 import { ReportsView } from "./features/reports";
 import { ActiveFiltersBar } from "./features/request-filters/active-filters-bar";
 import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-filters/request-filters";
@@ -182,7 +181,7 @@ import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
 import { MunicipalityAddressFields } from "./features/municipality-form/municipality-address-fields";
 import { MunicipalityImageField } from "./features/municipality-form/municipality-image-field";
-import { emptyMunicipalityForm, formFromMunicipality, formatMunicipalityAddress, municipalityContactIssue } from "./features/municipality-form/municipality-address";
+import { emptyMunicipalityForm, formFromMunicipality, municipalityContactIssue } from "./features/municipality-form/municipality-address";
 import type { MunicipalityForm } from "./features/municipality-form/municipality-address";
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
 import { RequestStep, requestSteps } from "./features/request-steps/request-steps";
@@ -193,10 +192,9 @@ import { RequesterStep } from "./features/request-requester/requester-step";
 import { RequestDoneCard } from "./features/request-requester/request-done-card";
 import { MUNICIPALITY_OPTION } from "./features/registered-animals/use-request-options";
 import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
-import type { NotificationResult } from "./features/notifications/notification-results";
-import { REJECTION_REASONS } from "../shared/notification-contract.js";
 import { AnimalTutorship, tutorshipRequiresTutor } from "../shared/request-tutorship-contract.js";
-import { historyBlocks, prescriptionBlocks } from "./features/process-report/process-report";
+import { resolveRequestProcedures } from "../shared/request-procedure-contract.js";
+import { historyBlocks, reportPrescriptions } from "./features/process-report/process-report";
 import type { ReportBlock } from "./features/process-report/process-report";
 import { useSession } from "./features/tutor-access/use-session";
 import { AuthEntry } from "./features/tutor-access/auth-entry";
@@ -236,7 +234,6 @@ import { ReusableDocumentPreview } from "./features/registered-animals/reusable-
 import { getAvailableScheduleSlot, selectScheduleOccurrence, useScheduleAvailability } from "./features/registered-animals/use-schedule-availability";
 import { DocumentReuseScope, DocumentReviewStatus, normalizeDocumentReusePolicy } from "../shared/document-reuse-contract.js";
 import { documentPolicyFromForm } from "./features/registered-animals/document-policy-form";
-import { buildDocumentReviewDecisions } from "./features/registered-animals/document-review-decisions";
 import { buildDocumentSubmission, removeReusedDocument } from "./features/registered-animals/document-selection";
 
 // The dashboard and its chart library load only when someone opens it, so the public form does not carry them.
@@ -661,6 +658,12 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     }
   }
 
+  async function runProcedureAction(requestId, action) {
+    const updated = await api.runProcedureAction(requestId, action);
+    setRequests((current) => current.map((r) => (r.id === updated.id ? normalizeRequest(updated) : r)));
+    return updated;
+  }
+
   async function createRequest(payload) {
     try {
       const newRequest = await api.createRequest(buildRequestPayload(payload, currentUser));
@@ -1062,6 +1065,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             setSelectedId={setSelectedId}
             metrics={scopedMetrics}
             patchRequest={patchRequest}
+            runProcedureAction={runProcedureAction}
             createRequest={createRequest}
             adoptionAnimals={scopedAdoptionAnimals}
             setAdoptionAnimals={setAdoptionAnimals}
@@ -1158,7 +1162,7 @@ function getUserSectorIds(user: AnyRecord = {}) {
   return [...new Set([...ids, user.sectorId].filter(Boolean))];
 }
 
-function userBelongsToSector(user: AnyRecord = {}, sectorId = "") {
+export function userBelongsToSector(user: AnyRecord = {}, sectorId = "") {
   return Boolean(sectorId && getUserSectorIds(user).includes(sectorId));
 }
 
@@ -1268,26 +1272,6 @@ function resolveConfiguredDocument(document: AnyRecord = {}, documentTypes: AnyR
   ));
   return configured ? { ...document, ...configured } : document;
 }
-function parseConfigDate(value: any): number {
-  if (!value) return 0;
-  if (value instanceof Date) return value.getTime();
-  const text = String(value || "").trim();
-  const brMatch = text.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:,?\s*(\d{2}):(\d{2}))?/);
-  if (brMatch) {
-    const [, day, month, year, hour = "0", minute = "0"] = brMatch;
-    const time = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)).getTime();
-    return Number.isFinite(time) ? time : 0;
-  }
-  const time = new Date(text).getTime();
-  return Number.isFinite(time) ? time : 0;
-}
-
-function wasDocumentConfiguredForRequest(document: AnyRecord = {}, request: AnyRecord = {}): boolean {
-  const requestCreatedAt = parseConfigDate(request.createdAt || request.created_at);
-  const documentCreatedAt = parseConfigDate(document.createdAt || document.created_at);
-  return !requestCreatedAt || !documentCreatedAt || documentCreatedAt <= requestCreatedAt;
-}
-
 function ScheduleDayButton({
   hasVacancy,
   selected,
@@ -1313,7 +1297,7 @@ function ScheduleDayButton({
     </button>
   );
 }
-function PublicSchedulePicker({
+export function PublicSchedulePicker({
   scheduleDays = [],
   selectedDate = "",
   selectedOccurrenceKey = "",
@@ -2513,7 +2497,7 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }: A
         const animalBreed = animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "—");
         const microchip = animal.microchip || req.animalMicrochip || "—";
         const performed = wf.attendanceProcedure || wf.performedProcedures || req.performedProcedures || "";
-        const prescription = wf.attendancePrescription || "";
+        const prescriptions = reportPrescriptions(resolveRequestProcedures(req), wf.attendancePrescription, { completedOnly: true });
         const cancelReason = wf.cancelReason || req.rejectionReason || "";
         return (
           <div className="modal-backdrop">
@@ -2594,13 +2578,15 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }: A
                   </div>
                 </div>
 
-                {(performed || prescription || cancelReason) && (
+                {(performed || prescriptions.length > 0 || cancelReason) && (
                   <div className="prontuario-section">
                     <span className="prontuario-section-label">Atendimento</span>
                     <div className="prontuario-grid">
                       {performed && <InfoTile label="Procedimento realizado" value={performed} />}
                       {wf.attendanceMicrochip && <InfoTile label="Microchip aplicado" value={wf.attendanceMicrochip} />}
-                      {prescription && <InfoTile label="Receita / Prescrição" value={prescription} />}
+                      {prescriptions.map(({ id, subtitle, blocks }) => (
+                        <InfoTile key={id} label={id === "legacy" ? "Receita / Prescrição" : `Receita · ${subtitle}`} value={blocks.map(({ text }) => text).join("\n")} />
+                      ))}
                       {cancelReason && <InfoTile label="Motivo cancelamento" value={cancelReason} />}
                     </div>
                   </div>
@@ -3614,7 +3600,7 @@ function buildDeclarationPdfHtml(requestData, animals = [], declaration) {
   </body>
 </html>`;
 }
-function DocumentPreviewModal({ document, onClose }: AnyRecord) {
+export function DocumentPreviewModal({ document, onClose }: AnyRecord) {
   const dataUrl = getDocumentPreviewSource(document);
   const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
   const isImage = mimeType?.startsWith("image/");
@@ -3660,8 +3646,10 @@ function AdminDashboard({
   setSelectedId,
   currentUser,
   patchRequest,
+  runProcedureAction,
   createRequest,
   requestTypes = initialRequestTypes,
+  documentTypes = initialDocumentTypes,
   speciesOptions = initialSpecies,
   sizeOptions = initialSizes,
   breeds = initialBreeds,
@@ -3699,15 +3687,13 @@ function AdminDashboard({
     updatePreviewTutor,
     activeSectors,
     activeUsers,
-    approveRequest,
-    archiveWithTag,
-    rescheduleFromPreview,
+    applyProcedureAction,
+    updateDocuments,
     assignFromPreview,
     assumeFromPreview,
     rejectRequestFromProcess,
-    confirmAttendanceFromProcess,
     confirmSpecialRequest,
-  } = useRequestActions({ patchRequest, currentUser, teams, showToast, setSelectedId });
+  } = useRequestActions({ patchRequest, runProcedureAction, currentUser, teams, showToast, setSelectedId });
 
   const normalizedRequests = useMemo(
     () => (Array.isArray(requests) ? requests : []).map(normalizeRequest),
@@ -3754,14 +3740,6 @@ function AdminDashboard({
     today,
   });
   const emptyMessage = getEmptyListMessage(requestFilters);
-  async function notAttendedRequest(request) {
-    const patch = { status: "CANCELADA", workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: "Não compareceu" } };
-    try {
-      await patchRequest?.(request.id, patch, `Não comparecimento registrado por ${currentUser.name}`);
-      showToast("Não comparecimento registrado", "info");
-    } catch { showToast("Erro ao registrar não comparecimento", "error"); }
-  }
-
   return (
     <section className="request-workspace triage-workspace clean-requests-workspace">
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
@@ -3880,25 +3858,25 @@ function AdminDashboard({
       )}
 
       {previewRequest && (
-        <RequestPreviewModal
+        <ProcessModal
+          key={previewRequest.id}
           request={previewRequest}
           readOnly={!canEditRequests(currentUser?.role)}
           neighborhoods={neighborhoods}
           onTutorSaved={(tutor) => { updatePreviewTutor(tutor); refreshRequests?.(); }}
           requestTypes={requestTypes}
+          documentTypes={documentTypes}
           sectors={activeSectors}
           users={activeUsers}
           municipalities={municipalities}
+          currentUserName={currentUser?.name || ""}
           onClose={closeRequestPreview}
-          onApprove={approveRequest}
-          onReject={rejectRequestFromProcess}
-          onArchive={archiveWithTag}
-          onAttendance={confirmAttendanceFromProcess}
-          onReschedule={rescheduleFromPreview}
+          onRejectProcess={rejectRequestFromProcess}
           onAssign={assignFromPreview}
           onAssume={assumeFromPreview}
           onConfirmSpecial={confirmSpecialRequest}
-          patchRequest={patchRequest}
+          onProcedureAction={applyProcedureAction}
+          onUpdateDocuments={updateDocuments}
         />
       )}
 
@@ -3945,944 +3923,6 @@ function AdminDashboard({
       )}
 
     </section>
-  );
-}
-
-function isAnimalPhotoDocument(d: AnyRecord = {}) {
-  return d.documentId === "animal_photo" || d.documentName === "Foto de registro animal";
-}
-
-// One row of the attachments table of a request: the request itself, the photo, a required document (sent or not) or an extra one.
-type AttachmentRow = AnyRecord & { id: string; document?: AnyRecord };
-
-export function RequestPreviewModal({ request, readOnly = true, neighborhoods = [], onTutorSaved, onClose, onApprove, onReject, onArchive, onAttendance, onReschedule, onAssign, onAssume, onConfirmSpecial, patchRequest, requestTypes = [], sectors = [], users = [], municipalities = [] }: AnyRecord) {
-  const normalizedRequest = normalizeRequest(request);
-  const isInternal = normalizedRequest.origin === RequestOrigin.INTERNAL;
-  // The municipality of the request, whose name and department the request document and the declaration carry.
-  const requestMunicipality = municipalities.find((item) => item.id === normalizedRequest.municipalityId) || null;
-  const [previewAttachment, setPreviewAttachment] = useState(null);
-  const [previewLoadingId, setPreviewLoadingId] = useState("");
-  const [downloadLoadingId, setDownloadLoadingId] = useState("");
-  const [confirmingSchedule, setConfirmingSchedule] = useState(false);
-  const [reviewError, setReviewError] = useState("");
-  const [activePanel, setActivePanel] = useState<"reject" | "reschedule" | "assign" | "confirmComplaint" | null>(null);
-  const [rejectData, setRejectData] = useState({ category: "", note: "" });
-  const [complaintResolutionNote, setComplaintResolutionNote] = useState("");
-  const [uploadingEvidence, setUploadingEvidence] = useState(false);
-  const [docDecisions, setDocDecisions] = useState<AnyRecord>({});
-  const [modalTab, setModalTab] = useState<"procedimento" | "anexos" | "tutor">(
-    normalizedRequest.status === "AGENDADA" ? "procedimento" : "anexos",
-  );
-  const [rescheduleReason, setRescheduleReason] = useState("");
-  const [selectedRescheduleDate, setSelectedRescheduleDate] = useState("");
-  const [manualRescheduleDate, setManualRescheduleDate] = useState("");
-  const [selectedRescheduleOccurrence, setSelectedRescheduleOccurrence] = useState("");
-  const [selectedRescheduleTime, setSelectedRescheduleTime] = useState("");
-  const [rescheduling, setRescheduling] = useState(false);
-  const rescheduleAvailability = useScheduleAvailability(!readOnly && activePanel === "reschedule" ? normalizedRequest.municipalityId : "", selectedRescheduleDate);
-  const [attendanceData, setAttendanceData] = useState({
-    microchip: normalizedRequest.animals?.[0]?.confirmedMicrochip || "",
-    receita: normalizedRequest.workflow_data?.attendancePrescription || normalizedRequest.workflowData?.attendancePrescription || "",
-    note: normalizedRequest.attendanceNote || "",
-  });
-  const [confirmedAnimalChips, setConfirmedAnimalChips] = useState<Record<string, string>>(() => Object.fromEntries((normalizedRequest.animals || []).filter((animal) => animal.id).map((animal) => [animal.id, animal.confirmedMicrochip || ""])));
-  const [prescriptionModalOpen, setPrescriptionModalOpen] = useState(false);
-  const [reportLoading, setReportLoading] = useState(false);
-  const [reportError, setReportError] = useState("");
-  const [assignData, setAssignData] = useState({
-    sectorId: normalizedRequest.assignedSectorId || sectors[0]?.id || "",
-    userId: normalizedRequest.assignedUserId || "",
-  });
-
-  const isAwaitingReview = normalizedRequest.status === "NOVA";
-  const canAnalyze = !readOnly && isAwaitingReview;
-  const isScheduleConfirmed = normalizedRequest.status === "AGENDADA";
-  const specialSection = getSpecialRequestSection(normalizedRequest);
-  const isSpecialType = Boolean(specialSection);
-  const isComplaint = normalizeRequestType(normalizedRequest.request_type || normalizedRequest.type) === RequestType.COMPLAINT;
-  const canUseProcedureTab = isScheduleConfirmed || (isSpecialType && isAwaitingReview);
-  const canUseAttendanceActions = !readOnly && isScheduleConfirmed;
-  const procedureTabLabel = isSpecialType ? requestTypeLabel(normalizedRequest) : "Procedimento e saúde";
-  const procedureTabBlockReason = canUseProcedureTab ? procedureTabLabel : "Disponível após confirmar a agenda";
-  const hasProcessAssignment = Boolean(normalizedRequest.assignedSectorId && normalizedRequest.assignedUserId);
-  const blockWithoutAssignment = !hasProcessAssignment && !isInternal;
-  const assignmentRequiredTitle = isInternal ? "" : "Atribua um setor e um usuário ao processo antes de analisar";
-  const assumeDisabledTitle = "Assumir este processo";
-
-  const uploadedDocs = getUserUploadedProcessDocuments(request.documents);
-  const requestTypeConfigs = resolveRequestTypes({
-    animals: normalizedRequest.animals,
-    workflow: normalizedRequest.workflowData || normalizedRequest.workflow_data,
-    requestTypeId: request.requestTypeId,
-    requestType: request.type,
-  }, requestTypes);
-  const requiredDocTypes = mergeProcedureDocuments(requestTypeConfigs.map((type) => (type.documents || [])
-    .map(normalizeDocumentType)
-    .filter((dt) => dt.active !== false && wasDocumentConfiguredForRequest(dt, normalizedRequest))));
-
-  const normalizedRequestTypeValue = normalizeRequestType(normalizedRequest.request_type || normalizedRequest.type);
-  const requestDocumentKindByType: AnyRecord = {
-    [RequestType.TUTOR_TRANSFER]: "tutor-transfer-request",
-    [RequestType.ANIMAL_DEATH]: "death-registration-request",
-    [RequestType.COMPLAINT]: "complaint-request",
-  };
-  const requestDocumentKind = requestDocumentKindByType[normalizedRequestTypeValue] || "request";
-  const requestDocumentLabel = requestTypeDomainLabels[normalizedRequestTypeValue] || "Requerimento municipal";
-
-  const requerimento = {
-    id: `requerimento-${request.protocol || request.id || "processo"}`,
-    kind: requestDocumentKind,
-    nome: `${requestDocumentLabel} ${request.protocol || ""}.pdf`.trim(),
-    tipo: requestDocumentLabel,
-    status: "Gerado",
-    available: true,
-    required: false,
-  };
-
-  const requiredRows = requiredDocTypes.map((dt) => {
-    const uploaded = uploadedDocs.find(
-      (d) => d.documentName === dt.name || d.documentId === dt.id,
-    );
-    if (uploaded) {
-      return {
-        id: uploaded.documentId || uploaded.fileName || dt.id,
-        kind: "attachment",
-        nome: uploaded.fileName || uploaded.documentName || dt.name,
-        tipo: dt.name,
-        status: uploaded.status === "approved" ? "Aprovado" : uploaded.status === "rejected" ? "Recusado" : "Aguardando análise",
-        message: uploaded.message || "",
-        available: true,
-        document: uploaded,
-      };
-    }
-    return {
-      id: `missing-${dt.id}`,
-      kind: "missing",
-      nome: dt.name,
-      tipo: dt.name,
-      status: "Não enviado",
-      available: false,
-    };
-  });
-
-  const animalPhotoUpload = uploadedDocs.find(isAnimalPhotoDocument);
-  const animalPhotoRow = animalPhotoUpload ? {
-    id: animalPhotoUpload.documentId || animalPhotoUpload.fileName || "animal_photo",
-    kind: "photo",
-    nome: animalPhotoUpload.fileName || animalPhotoUpload.documentName || "Foto de registro animal",
-    tipo: animalPhotoUpload.documentName || "Foto de registro animal",
-    status: "Anexado",
-    message: "Foto de identificação do animal — usada como identidade 3x4 nos documentos de prontuário. Não requer validação.",
-    available: true,
-    document: animalPhotoUpload,
-  } : null;
-
-  const extraDocs = uploadedDocs
-    .filter((d) => !isAnimalPhotoDocument(d) && !requiredDocTypes.find((dt) => d.documentName === dt.name || d.documentId === dt.id))
-    .map((d, index) => ({
-      id: d.documentId || d.fileName || `extra-${index}`,
-      kind: "attachment",
-      nome: d.fileName || d.documentName || `Documento ${index + 1}`,
-      tipo: d.documentName || "Documento anexado",
-      status: d.status === "approved" ? "Aprovado" : d.status === "rejected" ? "Recusado" : "Aguardando análise",
-      message: d.message || "",
-      available: true,
-      document: d,
-    }));
-
-  const anexos: AttachmentRow[] = [requerimento, ...(animalPhotoRow ? [animalPhotoRow] : []), ...requiredRows, ...extraDocs];
-
-  const principalAnimal = normalizedRequest.animals?.[0] || {};
-  const wf = normalizedRequest.workflowData || normalizedRequest.workflow_data || {};
-  const [animalData, setAnimalData] = useState({
-    doencas: principalAnimal.doencas || wf.doencas || "",
-    alergias: principalAnimal.alergias || wf.alergias || "",
-  });
-
-  function statusClass(status) {
-    if (status === "Aprovado") return "approved";
-    if (status === "Recusado") return "rejected";
-    if (status === "Não enviado") return "missing";
-    if (status === "Gerado" || status === "Anexado") return "generated";
-    return "pending";
-  }
-
-  function getAiStatusLabel(anexo, decision) {
-    if (decision === "approved") return "Documento: aprovado manual";
-    if (decision === "rejected") return "Documento: recusado manual";
-    if (anexo.status === "Aprovado") return "Análise: aprovado";
-    if (anexo.status === "Recusado") return "Análise: recusado";
-    if (anexo.status === "Gerado") return "Sistema";
-    if (anexo.status === "Anexado") return "Sem validação necessária";
-    if (anexo.status === "Não enviado") return "Pendente";
-    return "Aguardando";
-  }
-
-  function getAttachmentConfidenceText(anexo) {
-    const numericConfidence = Number(anexo.document?.confidence);
-    if (!Number.isFinite(numericConfidence)) return "";
-    return `${Math.round(numericConfidence > 1 ? numericConfidence : numericConfidence * 100)}%`;
-  }
-
-  function getAttachmentDecision(anexo) {
-    return docDecisions[anexo.id] || "";
-  }
-
-  function isSystemDocument(anexo) {
-    return anexo.kind === "request" || anexo.status === "Gerado";
-  }
-
-  function isAnimalPhotoAttachment(anexo) {
-    return anexo.kind === "photo";
-  }
-
-  function isAttachmentAiApproved(anexo) {
-    return statusClass(anexo.status) === "approved" || anexo.document?.status === "approved";
-  }
-
-  function isAttachmentRejected(anexo) {
-    return statusClass(anexo.status) === "rejected" || anexo.document?.status === "rejected";
-  }
-
-  function isRequiredAttachment(anexo) {
-    return anexo.required === true || requiredRows.some((row) => row.id === anexo.id);
-  }
-
-  function isAttachmentAccepted(anexo) {
-    const decision = getAttachmentDecision(anexo);
-    if (decision === "approved") return true;
-    if (decision === "rejected") return false;
-    return isSystemDocument(anexo) || isAnimalPhotoAttachment(anexo) || isAttachmentAiApproved(anexo);
-  }
-
-  function requiresManualDocumentDecision(anexo) {
-    return canAnalyze
-      && anexo.available
-      && isRequiredAttachment(anexo)
-      && !isSystemDocument(anexo)
-      && !isAnimalPhotoAttachment(anexo)
-      && !isAttachmentAiApproved(anexo)
-      && !isAttachmentRejected(anexo);
-  }
-
-  function isAttachmentBlockingSchedule(anexo) {
-    if (!isRequiredAttachment(anexo) || isSystemDocument(anexo) || isAnimalPhotoAttachment(anexo)) return false;
-    const decision = getAttachmentDecision(anexo);
-    if (decision === "approved") return false;
-    if (decision === "rejected") return true;
-    return !isAttachmentAccepted(anexo);
-  }
-
-  function getAttachmentReviewMessage(anexo, decision) {
-    if (!anexo.available) return "Documento não enviado.";
-    if (decision === "approved") return "Documento aprovado manualmente na conferência.";
-    if (decision === "rejected") return "Documento recusado manualmente na conferência.";
-    if (isSystemDocument(anexo)) return "Documento gerado pelo sistema.";
-    if (isAnimalPhotoAttachment(anexo)) return "Anexo informativo, sem validação necessária.";
-    if (isAttachmentAiApproved(anexo)) return "IA aprovou este documento pelos critérios cadastrados. Revisão manual opcional.";
-    if (isAttachmentRejected(anexo)) return "Documento recusado pela análise automática.";
-    if (requiresManualDocumentDecision(anexo)) return "Documento precisa de conferência antes de confirmar agenda.";
-    return anexo.message || "Documento disponível para consulta.";
-  }
-
-  const blockingAttachments = canAnalyze ? anexos.filter(isAttachmentBlockingSchedule) : [];
-  const canConfirmSchedule = canAnalyze && !blockWithoutAssignment && blockingAttachments.length === 0;
-  const scheduleBlockReason = blockWithoutAssignment
-    ? assignmentRequiredTitle
-    : blockingAttachments.length
-      ? "Resolva os anexos obrigatórios: " + blockingAttachments.map((item) => item.tipo).join(", ")
-      : "Confirmar agenda";
-
-  useEffect(() => {
-    setModalTab(canUseProcedureTab ? "procedimento" : "anexos");
-  }, [canUseProcedureTab, normalizedRequest.id]);
-
-  async function handlePreview(item) {
-    setPreviewLoadingId(item.id);
-    try {
-      setPreviewAttachment(await prepareProcessDocumentPreview(item, request, requestMunicipality));
-    } catch (err) {
-      console.error("Erro ao preparar prévia do documento:", err);
-      setPreviewAttachment({
-        documentName: "Prévia indisponível",
-        fileName: item.tipo || "documento",
-        fileType: "",
-        dataUrl: "",
-      });
-    } finally {
-      setPreviewLoadingId("");
-    }
-  }
-
-  async function downloadProcessReport() {
-    setReportLoading(true);
-    setReportError("");
-    try {
-      const report = await generateProcessReportPdf(request, requestDocumentKind, requestMunicipality);
-      const anchor = window.document.createElement("a");
-      anchor.href = report.dataUrl;
-      anchor.download = report.fileName;
-      anchor.click();
-    } catch (err) {
-      console.error("Erro ao gerar o relatório do processo:", err);
-      setReportError("Não foi possível gerar o relatório do processo agora. Tente novamente em instantes.");
-    } finally {
-      setReportLoading(false);
-    }
-  }
-
-  async function handleDownload(item) {
-    setDownloadLoadingId(item.id);
-    try {
-      const prepared = await prepareProcessDocumentPreview(item, request, requestMunicipality);
-      if (prepared?.dataUrl) {
-        const anchor = window.document.createElement("a");
-        anchor.href = prepared.dataUrl;
-        anchor.download = prepared.fileName || item.nome || item.tipo || "documento";
-        anchor.click();
-      }
-    } catch (err) {
-      console.error("Erro ao baixar documento:", err);
-    } finally {
-      setDownloadLoadingId("");
-    }
-  }
-
-  function describeAttachmentBlock(anexo) {
-    if (!anexo.available) return `${anexo.tipo}: documento não enviado`;
-    const decision = getAttachmentDecision(anexo);
-    if (decision === "rejected" || isAttachmentRejected(anexo)) return `${anexo.tipo}: documento recusado`;
-    return `${anexo.tipo}: aguardando conferência`;
-  }
-
-  function buildDocumentRejectionNote(items = blockingAttachments) {
-    const targets = (items.length ? items : blockingAttachments).map(describeAttachmentBlock);
-    return targets.length
-      ? `Indeferimento por documentação obrigatória: ${targets.join("; ")}.`
-      : "Indeferimento por documentação obrigatória.";
-  }
-
-  function openDocumentRejectPanel(items = blockingAttachments) {
-    setRejectData((current) => ({
-      category: current.category || "Documentação incompleta",
-      note: current.note || buildDocumentRejectionNote(items),
-    }));
-    setActivePanel("reject");
-  }
-
-  function confirmRejectInline(event) {
-    event.preventDefault();
-    if (blockWithoutAssignment) return;
-    onReject?.(request, rejectData);
-  }
-
-  function confirmComplaintInline(event) {
-    event.preventDefault();
-    if (blockWithoutAssignment) return;
-    onConfirmSpecial?.(request, { note: complaintResolutionNote });
-  }
-
-  function confirmAttendanceInline(event) {
-    event.preventDefault();
-    onAttendance?.(request, { ...attendanceData, animalData, confirmedAnimalChips });
-  }
-
-  async function handleEvidenceUpload(event) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (readOnly || !file || !patchRequest) return;
-    setUploadingEvidence(true);
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const currentDocuments = Array.isArray(request.documents) ? request.documents : [];
-      const newDocument = {
-        documentId: `evidencia-${Date.now()}`,
-        documentName: "Evidência da apuração",
-        fileName: file.name,
-        fileType: file.type,
-        fileSize: file.size,
-        dataUrl,
-        status: "approved",
-        message: "Anexado pela equipe durante a apuração.",
-      };
-      await patchRequest(request.id, { documents: [...currentDocuments, newDocument] }, `Evidência anexada: ${file.name}`);
-    } catch {
-      // erro de upload é reportado via estado de disabled/loading; a lista de anexos não é atualizada em caso de falha
-    } finally {
-      setUploadingEvidence(false);
-    }
-  }
-
-  async function confirmSchedule() {
-    if (!canConfirmSchedule || confirmingSchedule) return;
-    setConfirmingSchedule(true);
-    setReviewError("");
-    try {
-      let documentNotificationResults: NotificationResult[] = [];
-      const decisions = buildDocumentReviewDecisions(anexos, docDecisions);
-      if (decisions.length && patchRequest) {
-        const reviewed = await patchRequest(request.id, { documentReviews: decisions }, "Documentos conferidos antes da agenda");
-        documentNotificationResults = Array.isArray(reviewed?.notificationResults) ? reviewed.notificationResults : [];
-      }
-      await onApprove?.(request, documentNotificationResults);
-    } catch (failure) {
-      setReviewError(failure?.message || "Não foi possível salvar a conferência. Tente novamente.");
-    } finally {
-      setConfirmingSchedule(false);
-    }
-  }
-
-  function renderAttachments() {
-    return (
-      <div className="process-attachments-list">
-        {anexos.map((anexo) => {
-          const decision = getAttachmentDecision(anexo);
-          const canManuallyDecide = requiresManualDocumentDecision(anexo);
-          const canRejectByAttachment = canAnalyze && isAttachmentBlockingSchedule(anexo);
-          const statusKind = decision === "approved" ? "approved" : decision === "rejected" ? "rejected" : statusClass(anexo.status);
-          const confidenceText = getAttachmentConfidenceText(anexo);
-          const reviewMessage = getAttachmentReviewMessage(anexo, decision);
-          const canOpenAttachment = anexo.available;
-          const rowClassName = `process-attachment-row process-attachment-row--${statusKind}${canRejectByAttachment ? " is-blocking" : ""}`;
-          return (
-            <article className={rowClassName} key={`${anexo.kind}-${anexo.id}`}>
-              <div className="process-attachment-main">
-                <span className="process-attachment-icon-box">
-                  <FileText size={15} className="process-attachment-icon" />
-                </span>
-                <div className="process-attachment-info">
-                  <div className="process-attachment-heading">
-                    <strong>{anexo.tipo}</strong>
-                    <span className={`attachment-status attachment-status--${statusKind}`}>
-                      {getAiStatusLabel(anexo, decision)}
-                    </span>
-                    {confidenceText && <span className="attachment-confidence">{confidenceText} confiança</span>}
-                  </div>
-                  <p className="attachment-ai-message">{reviewMessage}</p>
-                  {Boolean(anexo.document?.provider) && !anexo.document?.error && (
-                    <div className="attachment-ai-details">
-                      <AiAnalysisDetails
-                        show
-                        provider={anexo.document?.provider}
-                        model={anexo.document?.model}
-                        confidence={anexo.document?.confidence}
-                        criteriaResults={anexo.document?.criteriaResults}
-                        showMeta={false}
-                        criteriaClassName="doc-criteria-results attachment-ai-criteria"
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="process-attachment-actions">
-                {canManuallyDecide && (
-                  <div className="process-attachment-decision-actions" aria-label={`Conferência de ${anexo.tipo}`}>
-                    <button
-                      className={`doc-decision-btn doc-decision-btn--approve${decision === "approved" ? " doc-decision-btn--active-ok" : ""}`}
-                      type="button"
-                      title={blockWithoutAssignment ? assignmentRequiredTitle : "Aprovar documento"}
-                      disabled={blockWithoutAssignment}
-                      onClick={() => setDocDecisions((d) => ({ ...d, [anexo.id]: decision === "approved" ? undefined : "approved" }))}
-                    ><CheckCircle2 size={15} /></button>
-                    <button
-                      className={`doc-decision-btn doc-decision-btn--reject${decision === "rejected" ? " doc-decision-btn--active-reject" : ""}`}
-                      type="button"
-                      title={blockWithoutAssignment ? assignmentRequiredTitle : "Recusar documento"}
-                      disabled={blockWithoutAssignment}
-                      onClick={() => setDocDecisions((d) => ({ ...d, [anexo.id]: decision === "rejected" ? undefined : "rejected" }))}
-                    ><X size={15} /></button>
-                  </div>
-                )}
-                {canOpenAttachment ? (
-                  <div className="process-attachment-file-actions" aria-label={`Ações de ${anexo.tipo}`}>
-                    <button className="icon-action" title="Visualizar" type="button" disabled={previewLoadingId === anexo.id} onClick={() => handlePreview(anexo)}>
-                      <Eye size={16} />
-                    </button>
-                    <button className="icon-action" title="Baixar" type="button" disabled={downloadLoadingId === anexo.id} onClick={() => handleDownload(anexo)}>
-                      <Download size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <span className="attachment-unavailable"><X size={14} />Não enviado</span>
-                )}
-                {canRejectByAttachment && (
-                  <button
-                    className="prm-attachment-reject-btn"
-                    type="button"
-                    title={blockWithoutAssignment ? assignmentRequiredTitle : `Indeferir por ${anexo.tipo}`}
-                    disabled={blockWithoutAssignment}
-                    onClick={() => openDocumentRejectPanel([anexo])}
-                  >
-                    Indeferir
-                  </button>
-                )}
-              </div>
-            </article>
-          );
-        })}
-      </div>
-    );
-  }
-  function renderAssignModal() {
-    const sectorUsers = users.filter((u) => !assignData.sectorId || userBelongsToSector(u, assignData.sectorId));
-    return (
-      <div className="assign-modal-overlay" onClick={() => setActivePanel(null)}>
-        <div className="assign-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="assign-modal-header">
-            <strong><ClipboardList size={15} /> Atribuir responsável</strong>
-            <button className="assign-modal-close" type="button" onClick={() => setActivePanel(null)} aria-label="Fechar"><X size={16} /></button>
-          </div>
-          <label className="field">
-            <span>Setor</span>
-            <select value={assignData.sectorId} onChange={(e) => setAssignData((d) => ({ ...d, sectorId: e.target.value, userId: "" }))}>
-              <option value="">Selecione o setor...</option>
-              {sectors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>Usuário</span>
-            <select value={assignData.userId} onChange={(e) => setAssignData((d) => ({ ...d, userId: e.target.value }))}>
-              <option value="">Selecione o usuário...</option>
-              {sectorUsers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-            </select>
-          </label>
-          <div className="assign-modal-actions">
-            <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
-            <button
-              className="primary-action"
-              type="button"
-              disabled={!assignData.sectorId || !assignData.userId}
-              onClick={() => { onAssign?.(request, assignData); setActivePanel(null); }}
-            >
-              Confirmar
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  function renderInlineReschedule() {
-    function maskScheduleDateInput(value: string) {
-      const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
-      if (digits.length <= 2) return digits;
-      if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-      return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-    }
-
-    function isValidManualScheduleDate(value: string) {
-      if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return false;
-      const [day, month, year] = value.split("/").map(Number);
-      const date = new Date(year, month - 1, day);
-      return date.getFullYear() === year
-        && date.getMonth() === month - 1
-        && date.getDate() === day
-        && !isPastScheduleDay(value);
-    }
-
-    const count = Math.max(normalizedRequest.animals?.length || 0, 1);
-    const selectedDay = selectScheduleOccurrence(rescheduleAvailability.days, selectedRescheduleDate, selectedRescheduleOccurrence, count);
-    const selectedSlot = selectedDay?.slots.find((slot) => slot.time === selectedRescheduleTime && slot.remaining >= count);
-
-    function selectRescheduleDate(date: string, occurrenceKey: string) {
-      setSelectedRescheduleDate(date);
-      setManualRescheduleDate(date);
-      setSelectedRescheduleOccurrence(occurrenceKey);
-      const day = selectScheduleOccurrence(rescheduleAvailability.days, date, occurrenceKey, count);
-      setSelectedRescheduleTime(getAvailableScheduleSlot(day, count)?.time || "");
-    }
-
-    function updateManualRescheduleDate(value: string) {
-      const nextDate = maskScheduleDateInput(value);
-      setManualRescheduleDate(nextDate);
-      setSelectedRescheduleDate(isValidManualScheduleDate(nextDate) ? nextDate : "");
-      setSelectedRescheduleOccurrence(""); setSelectedRescheduleTime("");
-    }
-
-    function cancelReschedule() {
-      setSelectedRescheduleDate("");
-      setManualRescheduleDate("");
-      setRescheduleReason("");
-      setSelectedRescheduleOccurrence(""); setSelectedRescheduleTime("");
-      setActivePanel(null);
-    }
-
-    async function confirmReschedule() {
-      if (!selectedRescheduleDate || !selectedRescheduleOccurrence || !selectedSlot || rescheduling) return;
-      setRescheduling(true);
-      let confirmed;
-      try { confirmed = await onReschedule?.(request, selectedRescheduleDate, rescheduleReason, { occurrenceKey: selectedRescheduleOccurrence, time: selectedRescheduleTime }); }
-      finally { setRescheduling(false); }
-      if (confirmed === false) { rescheduleAvailability.refresh(); return; }
-      setSelectedRescheduleDate("");
-      setManualRescheduleDate("");
-      setRescheduleReason("");
-      setSelectedRescheduleOccurrence(""); setSelectedRescheduleTime("");
-      setActivePanel(null);
-    }
-
-    return (
-      <div className="prm-inline-panel">
-        <div className="prm-inline-panel-heading">
-          <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Reagendar atendimento</strong>
-          <div className="prm-reschedule-date-group">
-            <span className="prm-reschedule-current">Atual: {normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>
-            <input
-              className="prm-reschedule-date-input"
-              value={manualRescheduleDate}
-              onChange={(event) => updateManualRescheduleDate(event.target.value)}
-              placeholder="dd/mm/aaaa"
-              inputMode="numeric"
-              aria-label="Data especifica"
-            />
-          </div>
-        </div>
-        <label className="field prm-reschedule-reason">
-          <textarea
-            value={rescheduleReason}
-            onChange={(event) => setRescheduleReason(event.target.value)}
-            placeholder="Motivo operacional"
-            aria-label="Motivo do reagendamento"
-          />
-        </label>
-        {rescheduleAvailability.loading && <p role="status">Carregando vagas disponíveis...</p>}
-        {rescheduleAvailability.error && <p role="alert" className="form-error">{rescheduleAvailability.error} <button type="button" className="ghost-button" onClick={rescheduleAvailability.refresh}>Tentar novamente</button></p>}
-        <PublicSchedulePicker scheduleDays={rescheduleAvailability.days} selectedDate={selectedRescheduleDate} selectedOccurrenceKey={selectedRescheduleOccurrence} pendingReservation={{ date: selectedRescheduleDate, count }} onSelect={selectRescheduleDate} />
-        {selectedRescheduleOccurrence && selectedDay && <label className="field"><span>Horário no local selecionado</span><select value={selectedRescheduleTime} onChange={(event) => setSelectedRescheduleTime(event.target.value)}><option value="">Escolha o horário</option>{selectedDay.slots.map((slot) => <option key={slot.time} value={slot.time} disabled={slot.remaining < count}>{slot.time} · {slot.remaining} vagas</option>)}</select></label>}
-        <div className="prm-inline-actions">
-          <button className="ghost-button" type="button" onClick={cancelReschedule}>Cancelar</button>
-          <button className="primary-action" type="button" disabled={rescheduling || !rescheduleAvailability.ready || !selectedRescheduleOccurrence || !selectedSlot} onClick={confirmReschedule}>
-            {rescheduling ? "Reagendando..." : "Confirmar reagendamento"}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const isRescheduleMode = !readOnly && activePanel === "reschedule";
-
-  return (
-    <div className="modal-backdrop">
-      {activePanel === "assign" && renderAssignModal()}
-      <div className={`prm-modal${isRescheduleMode ? " prm-modal--reschedule" : ""}`} role="dialog" aria-modal="true">
-
-        <header className="prm-header">
-          <div className="prm-header-identity">
-            <div className="prm-header-identity-text">
-              <span className="prm-eyebrow">Processo #{normalizedRequest.protocol || request.protocol || "-"}</span>
-              <h2 className="prm-headline-name">{principalAnimal.name || "Animal sem nome"}</h2>
-              <p className="prm-animal-summary">
-                {[principalAnimal.species, principalAnimal.sex].filter(Boolean).join(" · ") || "Espécie não informada"}
-                <span className="prm-tutor-inline"> · Tutor: {displayText(normalizedRequest.tutor)}</span>
-              </p>
-            </div>
-            <div className="prm-header-actions">
-              <StatusBadge status={normalizedRequest.status} />
-              <button className="prm-pdf-btn" type="button" disabled={reportLoading} onClick={downloadProcessReport}>
-                <Download size={13} />
-                {reportLoading ? "Preparando..." : "Relatório"}
-              </button>
-              <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
-                <X size={17} />
-              </button>
-            </div>
-          </div>
-          {!isRescheduleMode && (
-            <div className="prm-header-meta" aria-label="Resumo do processo">
-              <span><strong>Tipo</strong>{requestTypeLabel(normalizedRequest)}</span>
-              {!isComplaint && <span><strong>Agenda</strong>{normalizedRequest.preferredSchedule || normalizedRequest.appointment || "-"}</span>}
-              <span><strong>Responsável</strong>{displayText(normalizedRequest.responsible) || "-"}</span>
-            </div>
-          )}
-        </header>
-        {reportError && <p className="form-error" role="alert">{reportError}</p>}
-
-        <div className="prm-body">
-
-          {canAnalyze && activePanel === "reject" && (
-            <div className="prm-inline-panel prm-inline-panel--reject">
-                <strong className="prm-inline-panel-title">Indeferir solicitação</strong>
-                <label className="field">
-                  <span>Motivo</span>
-                  <select value={rejectData.category} onChange={(e) => setRejectData((d) => ({ ...d, category: e.target.value }))}>
-                    <option value="">Selecione o motivo...</option>
-                    {REJECTION_REASONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </label>
-                <label className="field">
-                  <span>Observação</span>
-                  <textarea value={rejectData.note} onChange={(e) => setRejectData((d) => ({ ...d, note: e.target.value }))} placeholder="Detalhe o motivo se necessário..." />
-                </label>
-                <div className="prm-inline-actions">
-                  <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
-                  <button className="secondary-action danger-action" type="button" disabled={!rejectData.category} onClick={confirmRejectInline}>Confirmar indeferimento</button>
-                </div>
-              </div>
-          )}
-
-          {canAnalyze && activePanel === "confirmComplaint" && (
-            <div className="prm-inline-panel">
-                <strong className="prm-inline-panel-title">Deferir denúncia</strong>
-                <label className="field">
-                  <span>Conclusão da apuração</span>
-                  <textarea value={complaintResolutionNote} onChange={(e) => setComplaintResolutionNote(e.target.value)} placeholder="Descreva o que foi apurado..." />
-                </label>
-                <div className="prm-inline-actions">
-                  <button className="ghost-button" type="button" onClick={() => setActivePanel(null)}>Cancelar</button>
-                  <button className="secondary-action" type="button" onClick={confirmComplaintInline}>Confirmar deferimento</button>
-                </div>
-              </div>
-          )}
-
-          {isRescheduleMode && renderInlineReschedule()}
-
-          {!isRescheduleMode && (
-            <div className="prm-tabs">
-              <button
-                type="button"
-                className={`prm-tab${modalTab === "procedimento" ? " prm-tab--active" : ""}${!canUseProcedureTab ? " prm-tab--disabled" : ""}`}
-                disabled={!canUseProcedureTab}
-                aria-disabled={!canUseProcedureTab}
-                title={procedureTabBlockReason}
-                onClick={() => { if (canUseProcedureTab) setModalTab("procedimento"); }}
-              >
-                <FileText size={13} /> {procedureTabLabel}
-              </button>
-              <button
-                type="button"
-                className={`prm-tab${modalTab === "anexos" ? " prm-tab--active" : ""}`}
-                onClick={() => setModalTab("anexos")}
-              >
-                <Paperclip size={13} /> Anexos
-              </button>
-              <button
-                type="button"
-                className={`prm-tab${modalTab === "tutor" ? " prm-tab--active" : ""}`}
-                onClick={() => setModalTab("tutor")}
-              >
-                <User size={13} /> Dados do tutor
-              </button>
-            </div>
-          )}
-
-          {!isRescheduleMode && canUseProcedureTab && modalTab === "procedimento" && isSpecialType && specialSection && (
-            specialSection({ request: normalizedRequest })
-          )}
-          {!isRescheduleMode && canUseProcedureTab && modalTab === "procedimento" && !isSpecialType && (
-            <div className="prm-section prm-section--procedure">
-              <div className="prm-section-block">
-                <p className="prm-section-title">Procedimento</p>
-                <div className="prm-procedure-fields">
-                  <label className="field">
-                    <span>Microchip conferido do primeiro animal</span>
-                    <input
-                      value={attendanceData.microchip}
-                      readOnly={readOnly}
-                      onChange={(e) => setAttendanceData((d) => ({ ...d, microchip: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))}
-                      placeholder="Código aplicado ou lido"
-                    />
-                    <small>Preencha após ler ou aplicar o microchip. O código informado pelo tutor não é confirmação.</small>
-                  </label>
-                  {normalizedRequest.animals?.slice(1).map((animal, index) => animal.id && <label className="field" key={animal.id}><span>Microchip conferido: {animal.name || `animal ${index + 2}`}</span><input readOnly={readOnly} value={confirmedAnimalChips[animal.id] || ""} onChange={(event) => setConfirmedAnimalChips((current) => ({ ...current, [animal.id]: event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") }))} placeholder="Código aplicado ou lido" /></label>)}
-                  <label className="field">
-                    <span>Observação</span>
-                    <input
-                      type="text"
-                      value={attendanceData.note}
-                      readOnly={readOnly}
-                      onChange={(e) => setAttendanceData((d) => ({ ...d, note: e.target.value }))}
-                      placeholder="Observações do atendimento"
-                    />
-                  </label>
-                </div>
-              </div>
-              <div className="prm-section-block">
-                <p className="prm-section-title">Saúde do animal</p>
-                <div className="prm-animal-data-grid">
-                  <label className="field">
-                    <span>Doenças pré-existentes</span>
-                    <textarea
-                      value={animalData.doencas}
-                      readOnly={readOnly}
-                      onChange={(e) => setAnimalData((d) => ({ ...d, doencas: e.target.value }))}
-                      placeholder="Ex: diabetes, displasia, cardiopatia..."
-                      rows={2}
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Alergias conhecidas</span>
-                    <textarea
-                      value={animalData.alergias}
-                      readOnly={readOnly}
-                      onChange={(e) => setAnimalData((d) => ({ ...d, alergias: e.target.value }))}
-                      placeholder="Ex: alergia a penicilina, sensibilidade a frango..."
-                      rows={2}
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
-          {!isRescheduleMode && modalTab === "tutor" && (
-            <TutorDataTab
-              requestId={normalizedRequest.id}
-              municipalityId={normalizedRequest.municipalityId}
-              neighborhoodNames={neighborhoodNames(neighborhoods)}
-              readOnly={readOnly}
-              onSaved={onTutorSaved}
-            />
-          )}
-          {!isRescheduleMode && modalTab === "anexos" && (
-            <div className="prm-section prm-section--documents">
-              {reviewError && <p className="form-error" role="alert">{reviewError}</p>}
-              <div className="prm-section-head">
-                <p className="prm-section-label">Documentos</p>
-                <span className="prm-section-count">{anexos.length} {anexos.length === 1 ? "item" : "itens"}</span>
-              </div>
-              {!readOnly && <label className="ghost-button prm-evidence-upload-btn">
-                <input type="file" onChange={handleEvidenceUpload} disabled={uploadingEvidence} hidden />
-                {uploadingEvidence ? "Anexando..." : "Anexar evidência"}
-              </label>}
-              {anexos.length > 0 ? (
-                <>
-                  {renderAttachments()}
-                  {canAnalyze && blockingAttachments.length > 0 && (
-                    <p className="prm-documents-warning">{scheduleBlockReason}</p>
-                  )}
-                </>
-              ) : (
-                <p className="prm-muted-note" style={{ padding: "20px" }}>Nenhum documento anexado.</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        {!isRescheduleMode && (
-          <footer className="prm-footer">
-          {canAnalyze && (
-            <>
-              <div className="prm-footer-start">
-                <button
-                  className={`prm-action-btn prm-action-btn--secondary${activePanel === "assign" ? " is-active" : ""}`}
-                  type="button"
-                  onClick={() => setActivePanel(activePanel === "assign" ? null : "assign")}
-                >
-                  <User size={15} />{hasProcessAssignment ? "Reatribuir" : "Atribuir"}
-                </button>
-                {onAssume && (
-                  <button
-                    className="prm-action-btn prm-action-btn--secondary"
-                    type="button"
-                    title={assumeDisabledTitle}
-                    onClick={() => onAssume?.(request)}
-                  >
-                    <UserCheck size={15} /> Assumir
-                  </button>
-                )}
-                {activePanel !== "reject" && (
-                  <button
-                    className="prm-action-btn prm-action-btn--danger"
-                    type="button"
-                    disabled={blockWithoutAssignment}
-                    title={blockWithoutAssignment ? assignmentRequiredTitle : "Indeferir solicitação"}
-                    onClick={() => openDocumentRejectPanel(blockingAttachments)}
-                  >
-                    <AlertCircle size={15} /> Indeferir
-                  </button>
-                )}
-              </div>
-              {activePanel !== "reject" && activePanel !== "confirmComplaint" && isSpecialType && (
-                <button
-                  className="prm-action-btn prm-action-btn--primary"
-                  type="button"
-                  disabled={blockWithoutAssignment}
-                  title={blockWithoutAssignment ? assignmentRequiredTitle : specialRequestConfirmLabel(normalizedRequest)}
-                  onClick={() => (isComplaint ? setActivePanel("confirmComplaint") : onConfirmSpecial?.(request))}
-                >
-                  <CheckCircle2 size={15} /> {specialRequestConfirmLabel(normalizedRequest)}
-                </button>
-              )}
-              {activePanel !== "reject" && !isSpecialType && (
-                <button
-                  className="prm-action-btn prm-action-btn--primary"
-                  type="button"
-                  disabled={!canConfirmSchedule || confirmingSchedule}
-                  title={scheduleBlockReason}
-                  onClick={confirmSchedule}
-                >
-                  <CheckCircle2 size={15} /> {confirmingSchedule ? "Confirmando..." : "Confirmar agenda"}
-                </button>
-              )}
-            </>
-          )}
-          {canUseAttendanceActions && (
-            <>
-              {onAssume && (
-                <button
-                  className="prm-action-btn prm-action-btn--secondary"
-                  type="button"
-                  title={assumeDisabledTitle}
-                  onClick={() => onAssume?.(request)}
-                >
-                  <UserCheck size={15} /> Assumir
-                </button>
-              )}
-              <button
-                className="prm-action-btn prm-action-btn--warning"
-                type="button"
-                onClick={() => onArchive?.(request, "NAO_COMPARECEU", "Não comparecimento registrado")}
-              >
-                Não compareceu
-              </button>
-              <button
-                className="prm-action-btn prm-action-btn--ghost"
-                type="button"
-                onClick={() => setActivePanel("reschedule")}
-              >
-                <RefreshCw size={15} /> Reagendar
-              </button>
-              <button
-                className="prm-action-btn prm-action-btn--secondary"
-                type="button"
-                onClick={() => setPrescriptionModalOpen(true)}
-              >
-                <FileText size={15} /> Emitir Receita{attendanceData.receita && <CheckCircle2 size={13} style={{ marginLeft: 5, color: "#15803d" }} />}
-              </button>
-              <button
-                className="prm-action-btn prm-action-btn--primary"
-                type="button"
-                disabled={blockWithoutAssignment}
-                title={blockWithoutAssignment ? assignmentRequiredTitle : "Confirmar atendimento"}
-                onClick={confirmAttendanceInline}
-              >
-                <CheckCircle2 size={15} /> Confirmar atendimento
-              </button>
-            </>
-          )}
-          {!canAnalyze && !canUseAttendanceActions && (
-            <p className="prm-muted-note">{readOnly ? "Visualização somente leitura." : "Nenhuma ação pendente."}</p>
-          )}
-          </footer>
-        )}
-
-        {previewAttachment && (
-          <DocumentPreviewModal
-            document={previewAttachment}
-            onClose={() => setPreviewAttachment(null)}
-          />
-        )}
-      </div>
-
-      {prescriptionModalOpen && (
-        <PrescriptionModal
-          request={request}
-          municipality={getPrescriptionMunicipality(request, municipalities)}
-          initialText={attendanceData.receita}
-          onSave={(text) => setAttendanceData((d) => ({ ...d, receita: text }))}
-          onClose={() => setPrescriptionModalOpen(false)}
-        />
-      )}
-    </div>
   );
 }
 
@@ -4966,160 +4006,6 @@ function PwaInstallPrompt() {
 }
 
 
-function getPrescriptionMunicipality(request: AnyRecord = {}, municipalities: AnyRecord[] = []) {
-  const normalizedRequest = normalizeRequest(request);
-  const municipalityId = normalizedRequest.municipalityId || getItemMunicipalityId(request);
-  const municipalityName = normalizedRequest.municipalityName || normalizedRequest.scheduleMunicipality || "";
-  return municipalities.find((item) => String(item.id || "") === String(municipalityId || ""))
-    || municipalities.find((item) => normalizeText(item.name || "") === normalizeText(municipalityName))
-    || { name: municipalityName };
-}
-
-function buildPrescriptionInstitutionName(municipality: AnyRecord = {}, request: AnyRecord = {}) {
-  const normalizedRequest = normalizeRequest(request);
-  const name = displayText(municipality.name || normalizedRequest.municipalityName || normalizedRequest.scheduleMunicipality || "");
-  if (!name) return "Sistema Municipal de Bem-Estar Animal";
-  return /^prefeitura/i.test(name) ? name : `Prefeitura Municipal de ${name}`;
-}
-
-function buildPrescriptionFooterLines(municipality: AnyRecord = {}) {
-  const location = [formatMunicipalityAddress(municipality), municipality.cep ? `CEP ${formatCep(municipality.cep)}` : ""].filter(Boolean).join(" - ");
-  const contact = [municipality.contact, municipality.email].filter(Boolean).join(" | ");
-  return [location, contact].filter(Boolean);
-}
-
-function buildPrescriptionPrintHtml(request: AnyRecord = {}, prescriptionText = "", municipality: AnyRecord = {}) {
-  const normalizedRequest = normalizeRequest(request);
-  const animal = normalizedRequest.animals?.[0] || {};
-  const microchip = normalizedRequest.animalMicrochip || animal.microchip || "";
-  const institutionName = buildPrescriptionInstitutionName(municipality, normalizedRequest);
-  const municipalityName = displayText(municipality.name || normalizedRequest.municipalityName || normalizedRequest.scheduleMunicipality || "");
-  const footerLines = buildPrescriptionFooterLines(municipality);
-  const logo = municipality.brasao
-    ? `<img class="rx-logo" src="${escapeHtml(municipality.brasao)}" alt="Brasão" />`
-    : `<div class="rx-logo-fallback">SM</div>`;
-  const animalLine = [animal.name || "Animal sem nome", animal.species, animal.sex, microchip ? `Chip: ${microchip}` : ""].filter(Boolean).join(" · ");
-  const prescriptionHtml = escapeHtml(prescriptionText).replace(/\n/g, "<br />");
-
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Receita Veterinária${normalizedRequest.protocol ? ` - ${escapeHtml(normalizedRequest.protocol)}` : ""}</title>
-    <style>
-      ${PDF_BASE_STYLES}
-      body { padding: 26px; }
-      .rx-page { min-height: calc(100vh - 52px); display: flex; flex-direction: column; }
-      .rx-header { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid #dbeaf3; }
-      .rx-logo, .rx-logo-fallback { width: 56px; height: 56px; object-fit: contain; }
-      .rx-logo-fallback { display: grid; place-items: center; border: 1px solid #dbeaf3; border-radius: 12px; color: #0f5132; font-weight: 800; background: #f8fafc; }
-      .rx-heading h1 { margin: 0; font-size: 21px; color: #172026; }
-      .rx-heading p { margin: 4px 0 0; color: #64748b; font-size: 11px; }
-      .rx-protocol { min-width: 132px; border: 1px solid #c9efd7; background: #eefbf3; border-radius: 10px; padding: 9px 11px; text-align: right; color: #0f5132; }
-      .rx-protocol span { display: block; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-      .rx-protocol strong { display: block; margin-top: 3px; font-size: 13px; }
-      .rx-patient { margin-top: 18px; color: #334155; font-size: 12px; line-height: 1.5; }
-      .rx-patient strong { color: #172026; }
-      .rx-symbol { margin-top: 30px; font-family: Georgia, serif; font-size: 38px; font-weight: 800; font-style: italic; color: #15803d; line-height: 1; }
-      .rx-prescription { margin-top: 8px; padding-top: 16px; border-top: 1px solid #dbeaf3; color: #172026; font-size: 14px; line-height: 1.75; white-space: normal; }
-      .rx-footer { margin-top: auto; padding-top: 18px; border-top: 1px solid #dbeaf3; display: flex; justify-content: space-between; gap: 16px; color: #64748b; font-size: 10px; }
-      .rx-footer span { display: block; }
-      @media print { body { padding: 0; } .rx-page { min-height: 100vh; } }
-    </style>
-  </head>
-  <body>
-    <main class="rx-page">
-      <header class="rx-header">
-        ${logo}
-        <div class="rx-heading">
-          <h1>${escapeHtml(institutionName)}</h1>
-          <p>Receita Veterinária${municipalityName ? ` · ${escapeHtml(municipalityName)}` : ""}</p>
-        </div>
-        <div class="rx-protocol"><span>Protocolo</span><strong>${escapeHtml(normalizedRequest.protocol ? `#${normalizedRequest.protocol}` : "-")}</strong></div>
-      </header>
-
-      <section class="rx-patient">
-        <div><strong>Paciente:</strong> ${escapeHtml(animalLine || "Animal sem nome")}</div>
-        <div><strong>Tutor:</strong> ${escapeHtml(normalizedRequest.tutor || "-")}</div>
-      </section>
-
-      <section>
-        <div class="rx-symbol">Rx</div>
-        <div class="rx-prescription">${prescriptionHtml || "-"}</div>
-      </section>
-
-      <footer class="rx-footer">
-        <div>
-          <span>${escapeHtml(footerLines[0] || "Sistema Municipal de Bem-Estar Animal")}</span>
-          <span>${escapeHtml(footerLines[1] || "Receita emitida pelo sistema municipal")}</span>
-        </div>
-        <span>Emitido em ${new Date().toLocaleDateString("pt-BR")}</span>
-      </footer>
-    </main>
-  </body>
-</html>`;
-}
-
-function PrescriptionModal({ request, municipality, initialText, onSave, onClose }: AnyRecord) {
-  const normalizedRequest = normalizeRequest(request);
-  const principalAnimal = normalizedRequest.animals?.[0] || {};
-  const [text, setText] = useState(initialText || "");
-
-  function handleGenerate() {
-    if (!text.trim()) return;
-    onSave?.(text);
-    printHtmlViaIframe(buildPrescriptionPrintHtml(request, text, municipality));
-  }
-
-  const animalLabel = [displayText(principalAnimal.name) || "Animal sem nome", principalAnimal.species, principalAnimal.sex]
-    .filter(Boolean)
-    .join(" · ");
-
-  return (
-    <div className="modal-backdrop">
-      <div className="prescription-modal" role="dialog" aria-modal="true">
-        <header className="prescription-modal-header">
-          <div className="prescription-modal-title">
-            <h2>Receita Veterinária</h2>
-            <p>{[animalLabel, displayText(normalizedRequest.tutor) && `Tutor: ${displayText(normalizedRequest.tutor)}`].filter(Boolean).join(" · ")}</p>
-          </div>
-          <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}>
-            <X size={17} />
-          </button>
-        </header>
-
-        <div className="prescription-modal-body">
-          <div className="prescription-rx-area">
-            <span className="prescription-rx-symbol">Rx</span>
-            <label className="field prescription-field">
-              <span>Prescrição</span>
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder={"1. Amoxicilina 50mg - 1 comprimido a cada 8h por 7 dias\n2. Meloxicam 0,5mg/kg - 1x ao dia por 3 dias\n\nOrientações: manter em repouso nas primeiras 24h..."}
-                rows={12}
-                autoFocus
-              />
-            </label>
-          </div>
-        </div>
-
-        <footer className="prescription-modal-footer">
-          <button className="ghost-button" type="button" onClick={onClose}>Cancelar</button>
-          <button
-            className="prm-action-btn prm-action-btn--primary"
-            type="button"
-            disabled={!text.trim()}
-            onClick={handleGenerate}
-          >
-            <FileText size={15} />
-            Gerar PDF
-          </button>
-        </footer>
-      </div>
-    </div>
-  );
-}
 function AdoptionView({
   adoptionAnimals,
   setAdoptionAnimals,
@@ -8717,7 +7603,7 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
   );
 }
 
-function AiAnalysisDetails({ show, provider, model, confidence, criteriaResults, metaClassName = "doc-row-meta", criteriaClassName = "doc-criteria-results", showMeta = true }: AnyRecord) {
+export function AiAnalysisDetails({ show, provider, model, confidence, criteriaResults, metaClassName = "doc-row-meta", criteriaClassName = "doc-criteria-results", showMeta = true }: AnyRecord) {
   if (!show) return null;
   const numericConfidence = Number(confidence);
   const hasConfidence = Number.isFinite(numericConfidence);
@@ -8903,28 +7789,6 @@ function getRequestMicrochips(request: AnyRecord = {}) {
 
 
 
-function printHtmlViaIframe(html) {
-  const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0";
-  document.body.appendChild(iframe);
-  const cleanup = () => setTimeout(() => iframe.remove(), 300);
-  iframe.onload = () => {
-    iframe.contentWindow?.focus();
-    iframe.contentWindow?.print();
-    iframe.contentWindow?.addEventListener("afterprint", cleanup, { once: true });
-    setTimeout(cleanup, 30000);
-  };
-  const doc = iframe.contentWindow?.document;
-  if (!doc) { iframe.remove(); return; }
-  try {
-    doc.open();
-    doc.write(html);
-    doc.close();
-  } catch {
-    iframe.remove();
-  }
-}
-
 function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, history = []) {
   const typeLabels = {
     ANIMAL_OBITO: "Registro de óbito",
@@ -9035,50 +7899,6 @@ function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, his
   printHtmlViaIframe(html);
 }
 
-const PDF_BASE_STYLES = `
-  * { box-sizing: border-box; }
-  body { margin: 0; padding: 28px; color: #172026; font-family: Arial, sans-serif; background: #ffffff; }
-  .pdf-header { background: #10364f; color: #ffffff; border-radius: 14px; padding: 18px; display: flex; justify-content: space-between; gap: 18px; }
-  .section-title, .header-box span, .data-item span { font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
-  h1 { margin: 4px 0 0; font-size: 22px; }
-  .header-box { min-width: 130px; border: 1px solid rgba(255,255,255,.28); border-radius: 10px; padding: 10px; text-align: right; }
-  .header-box strong { display: block; margin-top: 4px; font-size: 16px; }
-  .section { margin-top: 14px; border: 1px solid #dbeaf3; border-radius: 12px; padding: 14px; }
-  .section-title { color: #10364f; margin-bottom: 10px; }
-  .data-grid { display: grid; gap: 8px; }
-  .data-grid.three { grid-template-columns: repeat(3, 1fr); }
-  .data-grid.four { grid-template-columns: repeat(4, 1fr); }
-  .data-item { border: 1px solid #e8f1f5; border-radius: 8px; background: #f8fbfd; padding: 8px; }
-  .data-item span { display: block; color: #64748b; margin-bottom: 4px; }
-  .data-item strong { font-size: 12px; }
-  .animal-card { margin-top: 10px; border: 1px solid #dbe5f1; border-radius: 10px; padding: 10px; background: #f8fafc; }
-  .animal-card-title { color: #0f172a; font-weight: 800; margin-bottom: 8px; }
-  .footer { margin-top: 14px; padding-top: 10px; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; color: #64748b; font-size: 10px; }
-  @page { size: A4; margin: 12mm; }
-  .pdf-page { page-break-after: always; min-height: 250mm; display: flex; flex-direction: column; }
-  .pdf-page:last-child { page-break-after: auto; }
-  .compact-header { padding: 13px 14px; border-radius: 10px; }
-  .compact-header h1 { font-size: 18px; }
-  .compact-header .header-box { padding: 8px; }
-  .compact-section { margin-top: 8px; padding: 9px; border-radius: 9px; }
-  .compact-four { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; }
-  .compact-four .data-item { min-height: 36px; padding: 5px 6px; border-radius: 6px; }
-  .compact-four .data-item span { margin-bottom: 2px; font-size: 7px; }
-  .compact-four .data-item strong { font-size: 9px; line-height: 1.18; word-break: break-word; }
-  .pdf-page--compact .animal-card { margin-top: 6px; padding: 7px; border-radius: 8px; }
-  .pdf-page--compact .animal-card-title { margin-bottom: 5px; font-size: 10px; }
-  .declaration-page { justify-content: space-between; }
-  .declaration-document { color: #111827; font-size: 12px; line-height: 1.45; }
-  .declaration-document h1, .declaration-document h2 { margin: 0; text-align: center; font-weight: 800; letter-spacing: .02em; }
-  .declaration-document h1 { margin-top: 12px; font-size: 18px; }
-  .declaration-document h2 { margin-top: 4px; font-size: 16px; }
-  .declaration-lead { margin: 28px 0 14px; font-weight: 700; }
-  .responsibility-list { margin: 0; padding-left: 22px; }
-  .responsibility-list > li { margin-bottom: 8px; }
-  .recommendation-list { margin-top: 7px; padding-left: 18px; }
-  .recommendation-list > li { margin-bottom: 4px; }
-`;
-
 const PROCESS_REPORT_FOOTER = "Relatório do processo emitido pelo sistema municipal";
 
 // Pages of text for the process report (the tramitação, the prescription): a header, a section and the blocks wrapped and placed one after
@@ -9118,14 +7938,12 @@ async function appendProcessTextPages(output: AnyRecord, request: AnyRecord, { d
   drawRequestPdfFooter(page, PROCESS_REPORT_FOOTER, `Página ${pageNumber}`, ctx);
 }
 
-// The whole process in one PDF: its request document, the tramitação, every attachment the tutor sent and, when one was issued, the
-// prescription. An attachment that cannot be shown becomes a page that says so, never a failure of the report.
-async function generateProcessReportPdf(request: AnyRecord = {}, requestDocumentKind = "request", municipality: AnyRecord | null = null) {
+// The whole process in one PDF, with its request document, history, attachments and issued prescriptions.
+export async function generateProcessReportPdf(request: AnyRecord = {}, requestDocumentKind = "request", municipality: AnyRecord | null = null, requestTypes: AnyRecord[] = []) {
   const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
   const output = await PDFDocument.create();
   const req = normalizeRequest(request);
   const workflow: AnyRecord = req.workflowData || req.workflow_data || {};
-  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
   try {
     const requestDocument = await prepareProcessDocumentPreview({ kind: requestDocumentKind }, request, municipality);
     await appendPdfDataUrl(output, requestDocument.dataUrl);
@@ -9160,13 +7978,13 @@ async function generateProcessReportPdf(request: AnyRecord = {}, requestDocument
     await appendUnsupportedAttachmentPage(output, { title: attachment.documentName || "Documento anexado", fileName: attachment.fileName || "Arquivo sem prévia", StandardFonts, rgb });
   }
 
-  const prescription = prescriptionBlocks(workflow.attendancePrescription);
-  if (prescription.length) {
+  const animals = resolveRequestProcedures(request, requestTypes);
+  for (const prescription of reportPrescriptions(animals.length ? animals : req.animals, workflow.attendancePrescription)) {
     await appendProcessTextPages(output, request, {
       docTitle: "RECEITA VETERINÁRIA",
-      subtitle: [`Protocolo: #${req.protocol || "-"}`, animal.name && `Animal: ${animal.name}`].filter(Boolean).join("  ·  "),
+      subtitle: [`Protocolo: #${req.protocol || "-"}`, prescription.subtitle].filter(Boolean).join("  ·  "),
       section: "PRESCRIÇÃO",
-      blocks: prescription,
+      blocks: prescription.blocks,
       emptyText: "",
     });
   }
@@ -9177,7 +7995,7 @@ async function generateProcessReportPdf(request: AnyRecord = {}, requestDocument
   };
 }
 
-async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord, municipality: AnyRecord | null = null) {
+export async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord, municipality: AnyRecord | null = null) {
   if (item.kind === "request") {
     return {
       documentName: "Requerimento municipal",
@@ -9749,6 +8567,12 @@ async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRe
     }
   }
 
+  if (hasRealRequest) {
+    for (const { subtitle, blocks } of reportPrescriptions(resolveRequestProcedures(req), "", { completedOnly: true })) {
+      const text = blocks.map((block) => block.text).join("\n");
+      tlEvents.push({ date: "", title: "Receita prescrita", details: [subtitle, ...wrapPdfText(pdfText(text), 72).slice(0, 4)].filter(Boolean), done: true, tone: "neutral", iconLabel: "•" });
+    }
+  }
   const timelineResult = drawProntuarioTimeline(output, page, tlEvents, y, ctx, pageSize);
   const finalPage = timelineResult.page;
 

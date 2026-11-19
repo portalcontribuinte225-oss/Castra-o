@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { historyBlocks, prescriptionBlocks } from "./process-report";
+import { ProcedureStatus, resolveRequestProcedures } from "../../../shared/request-procedure-contract.js";
+import { historyBlocks, prescriptionBlocks, reportPrescriptions } from "./process-report";
 
 const label = (status: string) => ({ NOVA: "Nova", CANCELADA: "Cancelada" }[status] || status);
 const date = (value: string) => `em ${value}`;
@@ -40,5 +41,24 @@ describe("the prescription of the process report", () => {
 
   it("is empty when no prescription was issued", () => {
     for (const prescription of [undefined, null, "", "   \n ", 5]) expect(prescriptionBlocks(prescription)).toEqual([]);
+  });
+
+  it("keeps the legacy prescription and identifies each animal, procedure and professional in the process report", () => {
+    const prescription = { text: "Orientações de teste", professionalName: "Veterinária", professionalRegistry: "CRMV 1234" };
+    const animals = resolveRequestProcedures({
+      request_type: "Castração, Microchipagem",
+      animals: [
+        { name: "Bidu", requestTypeIds: ["castration"], requestTypeNames: ["Castração"],
+          procedures: [{ requestTypeId: "castration", status: ProcedureStatus.DONE, prescription }] },
+        { name: "Mel", requestTypeIds: ["chip"], requestTypeNames: ["Microchipagem"],
+          procedures: [{ requestTypeId: "chip", status: ProcedureStatus.SCHEDULED, prescription }] },
+      ],
+    });
+    expect(reportPrescriptions(animals, "Receita antiga")).toEqual([
+      { id: "legacy", subtitle: "Animal: Bidu", blocks: prescriptionBlocks("Receita antiga") },
+      { id: "0:0", subtitle: "Animal: Bidu  ·  Procedimento: Castração  ·  Profissional: Veterinária, CRMV 1234", blocks: prescriptionBlocks(prescription.text) },
+      { id: "1:0", subtitle: "Animal: Mel  ·  Procedimento: Microchipagem  ·  Profissional: Veterinária, CRMV 1234", blocks: prescriptionBlocks(prescription.text) },
+    ]);
+    expect(reportPrescriptions(animals, "Receita antiga", { completedOnly: true }).map(({ id }) => id)).toEqual(["legacy", "0:0"]);
   });
 });

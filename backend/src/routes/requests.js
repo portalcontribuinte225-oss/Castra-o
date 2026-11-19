@@ -16,14 +16,18 @@ import { applyAnimalRequestTransition } from "../services/registered-animals/ani
 import { prepareRequestDocuments, assertMaterializedRequestSize } from "../services/documents/request-documents.js";
 import { applyDocumentReviews, decorateRequestDocuments } from "../services/documents/document-reviews.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
+import { lockRequestForUpdate } from "../services/locked-request.js";
+import { appendRequestHistory } from "../repositories/request-history.js";
+import { handleProcedureAction } from "../services/procedure-actions/procedure-action-handler.js";
+import { assertProcedurePatchPreservesState, protectStoredProcedures, stripSuppliedProcedures } from "../services/procedure-actions/procedure-request-state.js";
 import { reserveRequestSchedule, bookingChanged } from "../services/schedule/schedule-booking.js";
-import { isProcedureRequest, RequestOrigin, RequestStatus } from "../../../shared/request-contract.js";
+import { isProcedureRequest, RequestOrigin, RequestStatus, RequestTag } from "../../../shared/request-contract.js";
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(Object.values(RequestStatus));
 const ALLOWED_REQUEST_TAGS = new Set([
   "ATRIBUIDA",
-  "REAGENDADA",
+  RequestTag.RESCHEDULED,
   "PRIORIDADE",
   "RETORNO_TUTOR",
   "MUTIRAO",
@@ -90,14 +94,6 @@ function validateTags(value) {
   return parseJsonArray(value).every((tag) => ALLOWED_REQUEST_TAGS.has(tag));
 }
 
-// The notices sent about a request are kept in its history, after the request itself was saved.
-function appendRequestHistory(entries, id, municipalityId) {
-  return pool.query(
-    "UPDATE requests SET history = COALESCE(history, '[]'::jsonb) || $1::jsonb WHERE id = $2 AND municipality_id = $3",
-    [JSON.stringify(entries), id, municipalityId],
-  );
-}
-
 router.get("/", auth, async (req, res) => {
   try {
     const query = req.user.role === "tutor"
@@ -145,9 +141,10 @@ router.post("/", optionalAuth, async (req, res) => {
     const tutorId = await resolveRequestTutor(client, { cpf, municipalityId, user: req.user });
     const protocol = await nextProtocol(client);
     const requestId = crypto.randomUUID();
-    const animals = Array.isArray(body.animals) ? body.animals : [];
+    const animals = stripSuppliedProcedures(body.animals);
     const firstAnimal = animals[0] || {};
     const scheduleDate = pick(body.schedule_date, body.preferredSchedule, body.appointment);
+    if (isProcedureRequest(requestType)) workflow.procedureScheduleDates = scheduleDate ? [scheduleDate] : [];
 
     const { rows } = await client.query(
       `INSERT INTO requests (
@@ -241,7 +238,7 @@ router.post("/", optionalAuth, async (req, res) => {
       ]
     );
 
-    rows[0] = await registerRequestAnimals(client, { body, request: rows[0], user: req.user, tutorId, municipalityId });
+    rows[0] = await registerRequestAnimals(client, { body, request: rows[0], user: req.user, tutorId, municipalityId, requestTypes: settings.requestTypes });
     rows[0].documents = await prepareRequestDocuments(client, {
       body, user: req.user, tutorId, municipalityId, settings, requestId,
       animalIds: (rows[0].animals || []).map((animal) => animal.id).filter(Boolean),
@@ -320,7 +317,7 @@ router.patch("/:id", auth, async (req, res) => {
     "target_tutor_city", "target_tutor_state", "target_tutor_cep",
     "death_date", "death_cause", "origin",
   ];
-  const ignoredKeys = new Set(["history_note", "historyNote", "documentReviews"]);
+  const ignoredKeys = new Set(["history_note", "historyNote", "documentReviews", "documentEvidence"]);
   const workflowPatch = {};
   const entries = [];
 
@@ -343,7 +340,8 @@ router.patch("/:id", auth, async (req, res) => {
 
   const dedupedEntries = Array.from(new Map(entries).entries());
 
-  if (!dedupedEntries.length && !Object.keys(workflowPatch).length && !historyNote && body.documentReviews === undefined) {
+  const changesDocuments = body.documents !== undefined || body.documentReviews !== undefined || body.documentEvidence !== undefined;
+  if (!dedupedEntries.length && !Object.keys(workflowPatch).length && !historyNote && !changesDocuments) {
     return res.status(400).json({ error: "Nenhum campo válido." });
   }
 
@@ -354,16 +352,8 @@ router.patch("/:id", auth, async (req, res) => {
   try {
     client = await pool.connect();
     await client.query("BEGIN");
-    const scope = isGlobalUser(req.user) ? "" : " AND municipality_id = $2";
-    const scopeValues = isGlobalUser(req.user) ? [req.params.id] : [req.params.id, req.user.municipalityId];
-    const lockMunicipality = isGlobalUser(req.user)
-      ? (await client.query("SELECT municipality_id FROM requests WHERE id = $1", [req.params.id])).rows[0]?.municipality_id
-      : req.user.municipalityId;
-    if (lockMunicipality) await lockMunicipalSchedule(client, lockMunicipality);
-    const { rows: existingRows } = await client.query(
-      `SELECT * FROM requests WHERE id = $1${scope} FOR UPDATE`,
-      scopeValues,
-    );
+    const existing = await lockRequestForUpdate(client, { id: req.params.id, user: req.user });
+    const existingRows = existing ? [existing] : [];
     if (!existingRows[0]) {
       await client.query("ROLLBACK");
       return res.status(404).json({ error: "Não encontrado" });
@@ -383,6 +373,11 @@ router.patch("/:id", auth, async (req, res) => {
       nextWorkflow.scheduleSlotTime = incomingWorkflow.scheduleTime;
     } else if (Object.hasOwn(incomingWorkflow, "scheduleSlotTime")) nextWorkflow.scheduleTime = incomingWorkflow.scheduleSlotTime;
     let nextRequest = { ...existingRows[0], ...normalizedPatch, workflow_data: nextWorkflow };
+    if (Object.hasOwn(normalizedPatch, "animals")) {
+      nextRequest = protectStoredProcedures(existingRows[0], nextRequest);
+      dedupedEntries[dedupedEntries.findIndex(([key]) => key === "animals")] = ["animals", nextRequest.animals];
+    }
+    assertProcedurePatchPreservesState(existingRows[0], nextRequest);
     if (dedupedEntries.some(([key]) => ["animals", "animal_id"].includes(key))) {
       await validateRequestAnimalLink(client, { body: nextRequest, user: req.user, municipalityId: existingRows[0].municipality_id });
     }
@@ -405,14 +400,15 @@ router.patch("/:id", auth, async (req, res) => {
       if (nextType) nextWorkflow.requestTypeId = nextType.id;
       else delete nextWorkflow.requestTypeId;
     }
-    if (body.documents !== undefined || body.documentReviews !== undefined) {
+    if (changesDocuments) {
       const documents = await applyDocumentReviews(client, { previous: existingRows[0], patch: body, user: req.user, municipalityId: existingRows[0].municipality_id, settings });
       const position = dedupedEntries.findIndex(([key]) => key === "documents");
       if (position >= 0) dedupedEntries[position] = ["documents", documents];
       else dedupedEntries.push(["documents", documents]);
       nextRequest.documents = documents;
     }
-    if (bookingChanged(existingRows[0], nextRequest)) {
+    const changesBooking = bookingChanged(existingRows[0], nextRequest);
+    if (changesBooking) {
       nextRequest = await reserveRequestSchedule(client, {
         body: nextRequest, user: req.user,
         internal: existingRows[0].origin === RequestOrigin.INTERNAL, municipalityId: existingRows[0].municipality_id, excludeId: req.params.id,
@@ -432,12 +428,12 @@ router.patch("/:id", auth, async (req, res) => {
       return [key, value];
     });
 
-    if ((Object.keys(workflowPatch).length || procedureUpdate || bookingChanged(existingRows[0], nextRequest)) && !dedupedEntries.some(([key]) => key === "workflow_data")) {
+    if ((Object.keys(workflowPatch).length || procedureUpdate || changesBooking) && !dedupedEntries.some(([key]) => key === "workflow_data")) {
       preparedEntries.push(["workflow_data", JSON.stringify(nextWorkflow)]);
     }
 
     const historyEntry = historyNote
-      ? [{ status: body.status, notes: historyNote, by: req.user.id, at: new Date() }]
+      ? [{ status: nextRequest.status, notes: historyNote, by: req.user.id, at: new Date() }]
       : [];
     const keys = preparedEntries.map(([k]) => k);
     const values = preparedEntries.map(([, v]) => v);
@@ -475,6 +471,8 @@ router.patch("/:id", auth, async (req, res) => {
     if (client && !released) client.release();
   }
 });
+
+router.post("/:id/procedures/action", auth, handleProcedureAction);
 
 router.delete("/:id", auth, async (req, res) => {
   if (!isInternalUser(req.user)) return res.status(403).json({ error: "Operação restrita à equipe de atendimento." });

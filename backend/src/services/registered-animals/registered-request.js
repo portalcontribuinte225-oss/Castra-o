@@ -6,6 +6,8 @@ import { findOwnedAnimal, insertCanonicalAnimal, recordAnimalRequest, saveReques
 import { animalView, requireLiveAnimal, registrationGap } from "./animal-data.js";
 import { animalRequestTypeIds } from "../../../../shared/request-types-contract.js";
 import { isAnimalTutorship } from "../../../../shared/request-tutorship-contract.js";
+import { resolveRequestProcedures } from "../../../../shared/request-procedure-contract.js";
+import { storeResolvedProcedures } from "../procedure-actions/procedure-request-state.js";
 
 export function isProcedureRequest(body) {
   return isProcedureKind(body.request_type || body.requestType || body.requestTypeId || body.type);
@@ -47,7 +49,7 @@ export async function prepareRegisteredRequest(client, { body, user, municipalit
     workflow_data: { ...(body.workflow_data || body.workflowData || {}), tutorship } };
 }
 
-export async function registerRequestAnimals(client, { body, request, user, tutorId, municipalityId }) {
+export async function registerRequestAnimals(client, { body, request, user, tutorId, municipalityId, requestTypes = [] }) {
   if (!isProcedureRequest(body)) return request;
   const input = Array.isArray(body.animals) ? body.animals : [];
   if (!input.length || input.length > 25) throw authError(400, "Informe de 1 a 25 animais por solicitação.");
@@ -68,6 +70,7 @@ export async function registerRequestAnimals(client, { body, request, user, tuto
     snapshots.push({ ...animalView(animal), ...(requestTypeIds.length ? { requestTypeIds } : {}) });
     await recordAnimalRequest(client, { animalId: animal.id, request, municipalityId, index, actorId: user?.id });
   }
-  await saveRequestAnimalIds(client, request, snapshots);
+  const animals = storeResolvedProcedures(resolveRequestProcedures({ ...request, animals: snapshots }, requestTypes));
+  await saveRequestAnimalIds(client, request, animals);
   return request;
 }

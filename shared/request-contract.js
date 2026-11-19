@@ -3,6 +3,7 @@ export const RequestStatus = Object.freeze({
 });
 // Who registered the request: the person, on the public form, or the staff, at the counter.
 export const RequestOrigin = Object.freeze({ PUBLIC: "PUBLICA", INTERNAL: "INTERNA" });
+export const RequestTag = Object.freeze({ RESCHEDULED: "REAGENDADA" });
 export const RequestKind = Object.freeze({
   PROCEDURE: "PROCEDIMENTO", DEATH: "ANIMAL_OBITO", TRANSFER: "TROCA_TUTOR", COMPLAINT: "DENUNCIA",
 });

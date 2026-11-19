@@ -1,4 +1,5 @@
 import { RequestStatus } from "./request-contract.js";
+import { hasStoredProcedures, holdsSchedulePlace } from "./request-procedure-contract.js";
 
 const DAY_MS = 86400000;
 export function scheduleDate(value) {
@@ -83,22 +84,42 @@ export function buildScheduleOccurrences(stored, rules, from, to) {
   }
   return [...days.values()].sort((a, b) => scheduleDate(a.date).localeCompare(scheduleDate(b.date)) || a.occurrenceKey.localeCompare(b.occurrenceKey));
 }
-export function allocateScheduleAvailability(days, requests) {
+// The places a request holds in the agenda. With procedures stored, each date, location and time of a procedure that holds a place
+// counts each animal once; a request saved before that holds one place per animal on its own date, unless cancelled.
+export function requestScheduleBookings(request) {
+  if (hasStoredProcedures(request)) {
+    const groups = new Map();
+    (request.animals || []).forEach((animal, index) => {
+      for (const procedure of Array.isArray(animal?.procedures) ? animal.procedures : []) {
+        if (!holdsSchedulePlace(procedure)) continue;
+        const { date, occurrenceKey = "", slotTime = "" } = procedure.schedule;
+        const key = JSON.stringify([scheduleDate(date), occurrenceKey, slotTime]);
+        const group = groups.get(key) || { date, occurrenceKey, slotTime, animals: new Set() };
+        group.animals.add(index);
+        groups.set(key, group);
+      }
+    });
+    return [...groups.values()].map(({ animals, ...booking }) => ({ ...booking, count: animals.size, exactSlot: true }));
+  }
+  if (request.status === RequestStatus.CANCELLED || !request.schedule_date) return [];
+  const workflow = request.workflow_data || {};
+  return [{ date: request.schedule_date, occurrenceKey: workflow.scheduleOccurrenceKey || "", slotTime: workflow.scheduleSlotTime || workflow.scheduleTime || "",
+    count: Math.max(Array.isArray(request.animals) ? request.animals.length : 0, 1) }];
+}
+export function allocateScheduleBookings(days, bookings) {
   const output = days.map((day) => ({ ...day, slots: day.slots.map((slot) => ({ ...slot, remaining: slot.vacancies })) }));
-  for (const request of requests) {
-    if (request.status === RequestStatus.CANCELLED) continue;
-    const workflow = request.workflow_data || {};
-    const date = scheduleDate(request.schedule_date);
+  for (const booking of bookings) {
+    const date = scheduleDate(booking.date);
     const matches = output.filter((day) => scheduleDate(day.date) === date);
-    const exact = workflow.scheduleOccurrenceKey ? matches.filter((day) => day.occurrenceKey === workflow.scheduleOccurrenceKey) : [];
+    const exact = booking.occurrenceKey ? matches.filter((day) => day.occurrenceKey === booking.occurrenceKey) : [];
     // Unknown/ambiguous legacy occurrence consumes conservatively in every matching location.
     const targets = exact.length ? exact : matches;
     for (const day of targets) {
-      let count = Math.max(Array.isArray(request.animals) ? request.animals.length : 0, 1);
-      const time = workflow.scheduleSlotTime || workflow.scheduleTime;
-      const slot = day.slots.find((candidate) => candidate.time === time);
+      let count = booking.count;
+      const slot = day.slots.find((candidate) => candidate.time === booking.slotTime);
       if (slot) {
         const used = Math.min(slot.remaining, count); slot.remaining -= used; count -= used;
+        if (booking.exactSlot && exact.length) continue;
       }
       for (const candidate of day.slots.filter((candidate) => candidate !== slot)) {
         const used = Math.min(candidate.remaining, count); candidate.remaining -= used; count -= used;
@@ -106,4 +127,7 @@ export function allocateScheduleAvailability(days, requests) {
     }
   }
   return output.map((day) => ({ ...day, remaining: day.slots.reduce((sum, slot) => sum + slot.remaining, 0) }));
+}
+export function allocateScheduleAvailability(days, requests) {
+  return allocateScheduleBookings(days, requests.flatMap(requestScheduleBookings));
 }

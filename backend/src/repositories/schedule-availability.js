@@ -11,7 +11,8 @@ export async function loadScheduleAvailability(database, { municipalityId, from,
   const { rows: configuration } = await database.query("SELECT value FROM config WHERE key = $1 AND municipality_id = $2", ["castragestao:schedule-rules", municipalityId]);
   const { rows: requests } = await database.query(
     `SELECT id, status, schedule_date, animals, workflow_data FROM requests
-     WHERE municipality_id = $1 AND schedule_date = ANY($2::text[]) AND ($3::uuid IS NULL OR id <> $3::uuid)`,
+     WHERE municipality_id = $1 AND (schedule_date = ANY($2::text[]) OR COALESCE(workflow_data->'procedureScheduleDates', '[]'::jsonb) ?| $2::text[])
+       AND ($3::uuid IS NULL OR id <> $3::uuid)`,
     [municipalityId, dates, excludeId],
   );
   return { days, rules: Array.isArray(configuration[0]?.value) ? configuration[0].value : [], requests };

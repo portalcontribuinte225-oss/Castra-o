@@ -11,7 +11,7 @@ import { AnimalTutorship } from "../../../shared/request-tutorship-contract.js";
 import { RegisteredRequestSelection } from "./registered-request-selection";
 import { ReusableDocumentChoices } from "./reusable-document-choices";
 import { documentPolicyFromForm } from "./document-policy-form";
-import { buildDocumentReviewDecisions } from "./document-review-decisions";
+import { buildDocumentReviewDecision } from "./document-review-decisions";
 import { buildRequestPayload } from "./request-payload";
 import { buildDocumentSubmission, removeReusedDocument } from "./document-selection";
 import { availabilityPeriod, getAvailableScheduleSlot, selectScheduleOccurrence } from "./use-schedule-availability";
@@ -92,9 +92,9 @@ describe("document reuse boundaries", () => {
   });
 
   it("sends only explicit review decisions tied to an attachment, never client review provenance", () => {
-    expect(buildDocumentReviewDecisions([{ id: "row", document: { attachmentId: "stable-id" } }], { row: DocumentReviewStatus.APPROVED })).toEqual([{ attachmentId: "stable-id", decision: DocumentReviewStatus.APPROVED }]);
-    expect(() => buildDocumentReviewDecisions([{ id: "row" }], { row: DocumentReviewStatus.APPROVED })).toThrow("Atualize o processo");
-    expect(buildDocumentReviewDecisions([{ id: "row" }], { row: DocumentReviewStatus.ATTACHED })).toEqual([]);
+    expect(buildDocumentReviewDecision("stable-id", DocumentReviewStatus.APPROVED)).toEqual({ attachmentId: "stable-id", decision: DocumentReviewStatus.APPROVED });
+    expect(buildDocumentReviewDecision("stable-id", DocumentReviewStatus.REJECTED, " Envie uma foto legível. ")).toEqual({ attachmentId: "stable-id", decision: DocumentReviewStatus.REJECTED, note: "Envie uma foto legível." });
+    expect(() => buildDocumentReviewDecision(undefined, DocumentReviewStatus.APPROVED)).toThrow("Atualize o processo");
   });
 
   it("forwards new acceptance and separate reuse refs, without credentials or status proof", () => {

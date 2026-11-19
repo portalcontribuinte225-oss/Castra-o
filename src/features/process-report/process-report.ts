@@ -1,5 +1,6 @@
-// What the process report prints besides the documents: the tramitação (what the history of the request recorded) and the prescription.
-// Both come as blocks of text for the PDF drawing to wrap and place; nothing here touches the PDF.
+import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
+
+// The process history and prescriptions come as text blocks for the PDF renderer.
 export interface ReportBlock {
   heading: string;
   text: string;
@@ -25,4 +26,41 @@ export function historyBlocks(history: unknown, statusLabel: (status: string) =>
 export function prescriptionBlocks(prescription: unknown): ReportBlock[] {
   const text = typeof prescription === "string" ? prescription.trim() : "";
   return text ? text.split(/\r?\n/).map((line) => ({ heading: "", text: line.trim() })) : [];
+}
+
+export interface ReportPrescription {
+  id: string;
+  subtitle: string;
+  blocks: ReportBlock[];
+}
+
+const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {});
+
+// Keep the original process-level prescription alongside prescriptions recorded per procedure.
+export function reportPrescriptions(animals: unknown, legacyText: unknown, { completedOnly = false } = {}): ReportPrescription[] {
+  const list = (Array.isArray(animals) ? animals : []).map(record);
+  const legacy = prescriptionBlocks(legacyText);
+  const found: ReportPrescription[] = legacy.length
+    ? [{ id: "legacy", subtitle: list[0]?.name ? `Animal: ${list[0].name}` : "", blocks: legacy }]
+    : [];
+  for (const [animalIndex, animal] of list.entries()) {
+    const procedures = Array.isArray(animal.procedures) ? animal.procedures.map(record) : [];
+    for (const [procedureIndex, procedure] of procedures.entries()) {
+      if (completedOnly && procedure.status !== ProcedureStatus.DONE) continue;
+      const prescription = record(procedure.prescription);
+      const blocks = prescriptionBlocks(prescription.text);
+      if (!blocks.length) continue;
+      const professional = [prescription.professionalName, prescription.professionalRegistry].filter(Boolean).join(", ");
+      found.push({
+        id: `${animalIndex}:${procedureIndex}`,
+        subtitle: [
+          animal.name && `Animal: ${animal.name}`,
+          procedure.name && `Procedimento: ${procedure.name}`,
+          professional && `Profissional: ${professional}`,
+        ].filter(Boolean).join("  ·  "),
+        blocks,
+      });
+    }
+  }
+  return found;
 }

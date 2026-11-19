@@ -4839,6 +4839,7 @@ main {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -4865,8 +4866,8 @@ main {
 
 @media (max-width: 760px) {
   .prescription-modal {
-    width: calc(100vw - 10px);
-    max-height: calc(100vh - 10px);
+    width: 100%;
+    max-height: calc(100dvh - 24px);
     border-radius: 14px;
   }
 
@@ -4876,11 +4877,6 @@ main {
     padding-left: 14px;
     padding-right: 14px;
   }
-}
-.reschedule-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 10px;
 }
 
 
@@ -11569,10 +11565,11 @@ body * {
   border-radius: 14px;
   box-shadow: 0 8px 32px rgba(15, 23, 42, 0.18);
   padding: 20px;
-  width: 340px;
+  width: min(100%, 420px);
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: auto;
 }
 
 
@@ -11596,6 +11593,7 @@ body * {
 .assign-modal-close {
   width: 30px;
   height: 30px;
+  flex: 0 0 30px;
   border: 1px solid #fecdd3;
   border-radius: 8px;
   background: #fff1f2;
@@ -11618,6 +11616,7 @@ body * {
 .assign-modal-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 4px;
 }
@@ -16472,17 +16471,12 @@ main {
   font-weight: 760;
 }
 
-.modal-backdrop {
-  background: rgba(15, 23, 42, 0.42);
-}
-
-.prm-modal {
+.modal-backdrop > .prm-modal {
   position: relative;
   display: flex;
   flex-direction: column;
   width: min(1080px, calc(100vw - 48px));
-  height: 90dvh;
-  max-height: 90dvh;
+  height: min(90dvh, calc(100dvh - 48px));
   overflow: hidden;
   border: 1px solid var(--ui-border, #e5e7eb);
   border-radius: 20px;
@@ -16493,7 +16487,7 @@ main {
 
 .prm-header {
   flex-shrink: 0;
-  padding: 22px 26px 0;
+  padding: 16px 26px 0;
   border-bottom: 1px solid #eef0f3;
   background: #ffffff;
 }
@@ -16513,7 +16507,7 @@ main {
 }
 
 .prm-eyebrow {
-  color: #9ca3af;
+  color: #64748b;
   font-family: "IBM Plex Mono", monospace;
   font-size: 0.7rem;
   font-weight: 600;
@@ -16528,11 +16522,12 @@ main {
   font-weight: 800;
   letter-spacing: -0.01em;
   line-height: 1.2;
+  overflow-wrap: anywhere;
 }
 
 .prm-animal-summary {
   margin: 0;
-  color: #9ca3af;
+  color: #64748b;
   font-size: 0.82rem;
   font-weight: 600;
 }
@@ -16634,72 +16629,34 @@ main {
   opacity: 0.48;
 }
 
-.prm-header-meta {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 16px;
-  border: 1px solid #eef0f3;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.prm-header-meta span {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  padding: 12px 16px;
-  border-right: 1px solid #eef0f3;
-  background: #ffffff;
-  color: #0f172a;
-  font-size: 0.86rem;
-  font-weight: 700;
-}
-
-.prm-header-meta span:last-child {
-  border-right: none;
-}
-
-.prm-header-meta strong {
-  color: #9ca3af;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
 .prm-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 20px 26px 22px;
   background: #ffffff;
-}
-
-.prm-section,
-.prm-inline-panel--reject {
-  margin-top: 16px;
 }
 
 .prm-tabs {
   display: flex;
   gap: 22px;
-  margin-top: 18px;
-  border-bottom: 1px solid #eef0f3;
+  margin-top: 12px;
 }
 
 .prm-tab {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 0 0 12px;
-  border: none;
+  min-height: 38px;
+  padding: 5px 0 8px;
+  border: 0;
   background: transparent;
-  color: #9ca3af;
+  color: #64748b;
   font-size: 0.86rem;
   font-weight: 700;
   cursor: pointer;
   border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
   border-radius: 0;
   transition: color 0.15s, border-color 0.15s;
 }
@@ -16708,20 +16665,22 @@ main {
   color: #475569;
 }
 
-.prm-tab:disabled,
-.prm-tab--disabled {
-  color: #cbd5e1;
-  cursor: not-allowed;
-}
-
-.prm-tab:disabled svg,
-.prm-tab--disabled svg {
-  opacity: 0.58;
-}
-
 .prm-tab--active {
   color: #2563eb;
   border-bottom-color: #2563eb;
+}
+
+.prm-tab-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  min-height: 20px;
+  padding-inline: 5px;
+  border-radius: 999px;
+  background: #fff1db;
+  color: #92400e;
+  font-size: 0.69rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .prm-section-block + .prm-section-block {
@@ -16735,29 +16694,136 @@ main {
   font-weight: 700;
 }
 
-.prm-section-divider {
-  height: 1px;
-  margin: 18px 0;
-  background: #f1f4f8;
-  border: 0;
-}
-
 .prm-procedure-fields,
 .prm-animal-data-grid {
   display: grid;
-  grid-template-columns: 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 
+.prm-animal-selector {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 3px 3px 9px;
+  margin: -3px -3px 11px;
+}
 
-.prm-section,
-.prm-section--procedure,
-.prm-section--documents {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+.prm-animal-option,
+.prm-procedure-item {
+  min-width: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #1e293b;
+  text-align: left;
+  cursor: pointer;
+}
+
+.prm-animal-option {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(240px, 75%);
+  padding: 9px 12px;
+}
+
+.prm-animal-option span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.prm-animal-option svg {
+  flex: none;
+  color: #475569;
+}
+
+.prm-animal-option strong,
+.prm-procedure-item strong {
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.prm-animal-option small,
+.prm-procedure-item small {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+
+.prm-animal-option:hover:not(:disabled),
+.prm-procedure-item:hover:not(:disabled) {
+  border-color: #9ab7de;
+  background: #f8fafc;
+}
+
+.prm-animal-option.is-active,
+.prm-procedure-item.is-active {
+  border-color: #9ab7de;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.prm-animal-option:focus-visible,
+.prm-procedure-item:focus-visible,
+.prm-evidence-drop:focus-within {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.prm-procedure-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) minmax(0, 2.6fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.prm-procedure-list,
+.prm-procedure-detail {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+
+.prm-procedure-list {
+  background: #f8fafc;
+}
+
+.prm-procedure-list .prm-section-title {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.prm-procedure-item {
+  display: grid;
+  gap: 6px;
+  padding: 9px 11px;
+}
+
+.prm-procedure-item-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+}
+
+.prm-procedure-detail {
+  gap: 14px;
+  padding: 16px;
+}
+
+.prm-procedure-detail .prm-section-head {
+  margin: 0;
+}
+
+.prm-procedure-detail .prm-section-block {
+  padding-top: 14px;
+  border-top: 1px solid #eef0f3;
 }
 
 .prm-section-label {
@@ -16784,6 +16850,8 @@ main {
 .prm-modal .field input,
 .prm-modal .field select,
 .prm-modal .field textarea {
+  min-width: 0;
+  width: 100%;
   min-height: 42px;
   padding: 0 12px;
   border: 1px solid #e5e7eb;
@@ -16798,6 +16866,7 @@ main {
 .prm-modal .field textarea {
   min-height: 72px;
   padding: 10px 12px;
+  resize: vertical;
 }
 
 .prm-modal .field input:focus,
@@ -16937,13 +17006,6 @@ main {
   color: #be123c;
 }
 
-.prm-modal .attachment-confidence {
-  color: #64748b;
-  font-size: 0.72rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
 .prm-modal .attachment-ai-message {
   margin: 0;
   color: #64748b;
@@ -16982,7 +17044,6 @@ main {
 }
 
 .prm-modal .process-attachment-actions,
-.prm-modal .process-attachment-decision-actions,
 .prm-modal .process-attachment-file-actions {
   display: flex;
   align-items: center;
@@ -16995,7 +17056,6 @@ main {
   min-width: max-content;
 }
 
-.prm-modal .process-attachment-decision-actions,
 .prm-modal .process-attachment-file-actions {
   padding: 2px;
   border: 1px solid #eef2f7;
@@ -17003,8 +17063,7 @@ main {
   background: #ffffff;
 }
 
-.prm-modal .icon-action,
-.prm-modal .doc-decision-btn {
+.prm-modal .icon-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -17018,79 +17077,15 @@ main {
   cursor: pointer;
 }
 
-.prm-modal .icon-action:hover:not(:disabled),
-.prm-modal .doc-decision-btn:hover:not(:disabled) {
+.prm-modal .icon-action:hover:not(:disabled) {
   border-color: #dbe3ee;
   background: #f8fafc;
   color: #111827;
 }
 
-.prm-modal .doc-decision-btn--approve:hover:not(:disabled) {
-  border-color: #bbf7d0;
-  background: #f0fdf4;
-  color: #15803d;
-}
-
-.prm-modal .doc-decision-btn--reject:hover:not(:disabled) {
-  border-color: #fecdd3;
-  background: #fff1f2;
-  color: #be123c;
-}
-
-.prm-modal .doc-decision-btn--active-ok {
-  border-color: #86efac;
-  background: #dcfce7;
-  color: #15803d;
-}
-
-.prm-modal .doc-decision-btn--active-reject {
-  border-color: #fca5a5;
-  background: #fee2e2;
-  color: #dc2626;
-}
-
-.prm-modal .prm-attachment-reject-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 34px;
-  padding: 0 11px;
-  border: 1px solid #fecdd3;
-  border-radius: 9px;
-  background: #fff1f2;
-  color: #be123c;
-  font-size: 0.74rem;
-  font-weight: 650;
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.prm-modal .prm-attachment-reject-btn:hover:not(:disabled) {
-  border-color: #fda4af;
-  background: #ffe4e6;
-  color: #9f1239;
-}
-
-.prm-modal .icon-action:disabled,
-.prm-modal .doc-decision-btn:disabled,
-.prm-modal .prm-attachment-reject-btn:disabled {
+.prm-modal .icon-action:disabled {
   cursor: default;
   opacity: 0.45;
-}
-
-.prm-modal .attachment-unavailable {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  min-height: 34px;
-  padding: 0 10px;
-  border: 1px solid #e2e8f0;
-  border-radius: 9px;
-  color: #64748b;
-  font-size: 0.74rem;
-  font-weight: 650;
-  white-space: nowrap;
 }
 
 .prm-modal .process-attachment-row.is-blocking {
@@ -17099,17 +17094,23 @@ main {
   border-left: 2px solid #fdba74;
   background: #fffaf5;
 }
+
 .prm-documents-warning {
-  margin: 12px 0 0;
+  margin: 0;
   padding: 10px 12px;
-  border: 1px solid #dbe5f1;
+  border: 1px solid #fed7aa;
   border-radius: 10px;
-  background: #f8fafc;
-  color: #0f172a;
+  background: #fffaf5;
+  color: #92400e;
   font-size: 0.78rem;
-  font-weight: 600;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
+.process-attachments-list + .prm-documents-warning,
+.prm-evidence-drop + .prm-documents-warning {
+  margin-top: 12px;
+}
 
 .prm-section-head {
   display: flex;
@@ -17119,55 +17120,48 @@ main {
   margin-bottom: 12px;
 }
 
-.prm-evidence-upload-btn {
-  margin-bottom: 12px;
+.prm-evidence-drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px dashed #bac8d8;
+  border-radius: 10px;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 0.84rem;
   cursor: pointer;
 }
 
-.prm-section-count {
-  color: #9ca3af;
-  font-size: 0.76rem;
-  font-weight: 600;
-  white-space: nowrap;
+.prm-evidence-drop:hover:not(:has(input:disabled)) {
+  border-color: #64748b;
+  background: #f1f5f9;
 }
 
-.prm-inline-panel {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  background: #ffffff;
+.prm-evidence-drop:has(input:disabled),
+.prm-evidence-drop:has(input:disabled) .prm-action-btn {
+  cursor: wait;
 }
 
-.prm-inline-panel-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
-  color: #111827;
-  font-size: 0.86rem;
-  font-weight: 700;
+.prm-evidence-drop input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
-.prm-inline-panel .reschedule-grid {
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 8px;
-  max-height: 260px;
-  overflow-y: auto;
-}
-
-.prm-inline-panel .reschedule-grid .calendar-day-button {
-  min-height: 62px;
-  padding: 7px;
-  border-radius: 8px;
-}
-
-.prm-inline-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 2px;
+.prm-evidence-drop small {
+  display: block;
+  margin-top: 3px;
+  color: #64748b;
+  font-size: 0.74rem;
 }
 
 .prm-footer {
@@ -17182,11 +17176,21 @@ main {
   background: #ffffff;
 }
 
-.prm-footer-start {
+.prm-footer-start,
+.prm-footer-end {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: 8px;
+}
+
+.prm-footer-start {
   margin-right: auto;
+}
+
+.prm-footer-end {
+  justify-content: flex-end;
 }
 
 .prm-action-btn {
@@ -17195,7 +17199,7 @@ main {
   justify-content: center;
   gap: 6px;
   min-height: 38px;
-  padding: 0 16px;
+  padding: 6px 12px;
   border: 1px solid #e5e7eb;
   border-radius: 9px;
   background: #ffffff;
@@ -17204,6 +17208,16 @@ main {
   font-weight: 700;
   box-shadow: none;
   cursor: pointer;
+}
+
+.prm-action-btn svg {
+  flex: none;
+}
+
+.prm-modal .process-attachment-actions .prm-action-btn {
+  min-height: 34px;
+  padding-inline: 9px;
+  font-size: 0.76rem;
 }
 
 .prm-action-btn:disabled {
@@ -17222,16 +17236,7 @@ main {
   background: #111827;
 }
 
-.prm-action-btn--secondary,
-.prm-action-btn--ghost {
-  background: #ffffff;
-  color: #374151;
-}
-
-.prm-action-btn--secondary:hover:not(:disabled),
-.prm-action-btn--ghost:hover:not(:disabled),
-.prm-action-btn--secondary.is-active,
-.prm-action-btn--ghost.is-active {
+.prm-action-btn--secondary:hover:not(:disabled) {
   border-color: #d1d5db;
   background: #f9fafb;
 }
@@ -17260,8 +17265,9 @@ main {
 
 .prm-muted-note {
   margin: 0;
-  color: #9ca3af;
+  color: #64748b;
   font-size: 0.82rem;
+  overflow-wrap: anywhere;
 }
 
 @media (max-width: 920px) {
@@ -17300,10 +17306,9 @@ main {
     padding: 14px;
   }
 
-  .prm-modal {
-    width: min(100%, calc(100vw - 20px));
-    height: 90dvh;
-    max-height: 90dvh;
+  .modal-backdrop > .prm-modal {
+    width: 100%;
+    height: min(94dvh, calc(100dvh - 24px));
     border-radius: 14px;
   }
 
@@ -17312,43 +17317,44 @@ main {
     padding-inline: 14px;
   }
 
-  .prm-header-identity,
-  .prm-footer,
-  .prm-footer-start,
-  .prm-section-head {
-    align-items: stretch;
-    flex-direction: column;
+  .prm-header-identity {
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
-  .prm-footer-start {
-    margin-right: 0;
+  .prm-headline-name {
+    font-size: 1.22rem;
   }
 
   .prm-header-actions {
-    width: 100%;
     flex-wrap: wrap;
+    max-width: 100%;
   }
 
-  .prm-header-meta {
-    grid-template-columns: 1fr;
+  .prm-tabs {
+    gap: 12px;
+    margin-top: 8px;
   }
 
-  .prm-header-meta span {
-    border-right: 0;
-    border-bottom: 1px solid #eef0f3;
-  }
-
-  .prm-header-meta span:last-child {
-    border-bottom: 0;
+  .prm-tab {
+    gap: 4px;
+    padding-bottom: 5px;
+    font-size: 0.76rem;
+    text-align: left;
   }
 
   .prm-body {
     padding: 14px;
   }
 
-  .prm-procedure-fields,
-  .prm-animal-data-grid {
-    grid-template-columns: 1fr;
+  .prm-procedure-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .prm-procedure-list,
+  .prm-procedure-detail {
+    padding: 12px;
   }
 
   .prm-modal .process-attachment-row {
@@ -17365,33 +17371,38 @@ main {
     white-space: normal;
   }
 
-  .prm-modal .attachment-ai-criteria {
+  .prm-modal .process-attachment-actions {
+    min-width: 0;
     justify-content: flex-start;
-  }
-
-  .prm-modal .process-attachment-actions,
-  .prm-inline-actions {
-    justify-content: stretch;
     flex-wrap: wrap;
   }
 
-  .prm-modal .process-attachment-actions {
-    min-width: 0;
+  .prm-footer {
+    padding-block: 9px;
   }
 
-  .prm-modal .process-attachment-decision-actions,
-  .prm-modal .process-attachment-file-actions {
-    flex: 1 1 auto;
-    justify-content: center;
-  }
-
-  .prm-modal .prm-attachment-reject-btn,
-  .prm-modal .attachment-unavailable {
-    flex: 1 1 100%;
-  }
-.prm-action-btn,
-  .prm-inline-actions > * {
+  .prm-footer-start,
+  .prm-footer-end {
     width: 100%;
+    gap: 6px;
+  }
+
+  .prm-footer-start .prm-action-btn,
+  .prm-footer-end .prm-action-btn {
+    padding-inline: 8px;
+    font-size: 0.76rem;
+  }
+
+  .prm-footer-end .prm-action-btn {
+    flex: 1 1 108px;
+  }
+
+  .prm-footer-end .prm-muted-note {
+    flex: 1 1 128px;
+  }
+
+  .prm-evidence-drop {
+    padding: 10px;
   }
 }
 
@@ -18223,7 +18234,7 @@ form textarea:focus,
 }
 
 /* Focused reschedule modal */
-.prm-modal--reschedule {
+.modal-backdrop > .prm-modal--reschedule {
   width: min(960px, calc(100vw - 48px));
 }
 
@@ -18231,32 +18242,14 @@ form textarea:focus,
   padding: 16px 20px;
 }
 
-.prm-modal--reschedule .prm-header-actions .status-badge,
-.prm-modal--reschedule .prm-pdf-btn {
-  display: none;
-}
-
 .prm-modal--reschedule .prm-body {
-  display: flex;
-  min-height: 0;
-  padding: 14px 20px 14px;
-  overflow: hidden;
-  background: #ffffff;
+  padding: 14px 20px;
 }
 
 .prm-modal--reschedule .prm-inline-panel {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
 }
 
 .prm-modal--reschedule .prm-inline-panel-heading {
@@ -18317,13 +18310,8 @@ form textarea:focus,
   box-shadow: 0 0 0 3px rgba(2, 8, 23, 0.08);
 }
 
-.prm-modal--reschedule .field.prm-reschedule-reason {
-  margin: 0;
-}
-
 .prm-modal--reschedule .field.prm-reschedule-reason textarea {
   min-height: 58px;
-  resize: vertical;
 }
 
 .prm-modal--reschedule .field.prm-reschedule-reason textarea:focus {
@@ -18331,15 +18319,8 @@ form textarea:focus,
   box-shadow: 0 0 0 3px rgba(2, 8, 23, 0.08);
 }
 
-.prm-modal--reschedule .reschedule-grid {
-  flex: 1;
-  grid-template-columns: repeat(auto-fill, minmax(124px, 1fr));
-  align-content: start;
-  gap: 10px;
-  min-height: 0;
-  max-height: none;
-  padding-right: 4px;
-  overflow: auto;
+.prm-modal--reschedule .calendar-availability {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
 .prm-modal--reschedule .calendar-day-button,
@@ -18415,42 +18396,18 @@ form textarea:focus,
   content: none;
 }
 
-.prm-modal--reschedule .prm-inline-actions {
-  flex-shrink: 0;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--ui-border, #e2e8f0);
-}
-
 @media (max-width: 760px) {
-  .prm-modal--reschedule {
-    width: min(100%, calc(100vw - 20px));
+  .modal-backdrop > .prm-modal--reschedule {
+    width: 100%;
   }
 
   .prm-modal--reschedule .prm-header-identity {
-    align-items: flex-start;
-    flex-direction: row;
+    flex-wrap: nowrap;
   }
 
-  .prm-modal--reschedule .prm-header-actions {
-    width: auto;
-    align-items: center;
-    flex-direction: row;
-  }
-
-  .prm-modal--reschedule .prm-close-btn {
-    width: 38px;
-    flex: 0 0 38px;
-  }
-
+  .prm-modal--reschedule .prm-header,
   .prm-modal--reschedule .prm-body {
     padding: 12px;
-  }
-
-  .prm-modal--reschedule .prm-inline-panel {
-    height: 100%;
   }
 
   .prm-modal--reschedule .prm-inline-panel-heading {
@@ -18472,9 +18429,27 @@ form textarea:focus,
     width: 148px;
   }
 
-  .prm-modal--reschedule .reschedule-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    max-height: none;
+  .prm-modal--reschedule .public-schedule-picker {
+    padding: 8px;
+  }
+
+  .prm-modal--reschedule .calendar-day-button,
+  .prm-modal--reschedule .calendar-day-button.has-vacancy {
+    min-height: 62px;
+    padding: 4px 2px;
+    border-radius: 8px;
+  }
+
+  .prm-modal--reschedule .calendar-day-button.has-vacancy::after {
+    top: 4px;
+    right: 4px;
+    width: 4px;
+    height: 4px;
+  }
+
+  .prm-modal--reschedule .calendar-day-button small,
+  .prm-modal--reschedule .calendar-day-button.has-vacancy small {
+    font-size: 0.6rem;
   }
 }
 

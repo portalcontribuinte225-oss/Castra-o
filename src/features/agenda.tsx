@@ -12,7 +12,8 @@ import {
   requestTypeLabel,
   requestTypeLabels,
 } from "../domain";
-import { RequestPreviewModal, ToastContainer } from "../App";
+import { ToastContainer } from "../App";
+import { ProcessModal } from "./process-modal/process-modal";
 import { canEditRequests, useRequestActions } from "./request-actions";
 
 
@@ -116,8 +117,10 @@ export function AgendaView({
   requests = [],
   scheduleDays = [],
   requestTypes = [],
+  documentTypes = [],
   setSelectedId,
   patchRequest,
+  runProcedureAction,
   currentUser,
   teams = { sectors: [], users: [] },
   municipalities = [],
@@ -144,14 +147,13 @@ export function AgendaView({
     updatePreviewTutor,
     activeSectors,
     activeUsers,
-    approveRequest,
-    archiveWithTag,
-    rescheduleFromPreview,
+    applyProcedureAction,
+    updateDocuments,
     assignFromPreview,
     assumeFromPreview,
     rejectRequestFromProcess,
-    confirmAttendanceFromProcess,
-  } = useRequestActions({ patchRequest, currentUser, teams, showToast, setSelectedId });
+    confirmSpecialRequest,
+  } = useRequestActions({ patchRequest, runProcedureAction, currentUser, teams, showToast, setSelectedId });
 
   const normalized = useMemo(() => requests.map(normalizeRequest), [requests]);
 
@@ -350,24 +352,25 @@ export function AgendaView({
       )}
 
       {previewRequest && (
-        <RequestPreviewModal
+        <ProcessModal
+          key={previewRequest.id}
           request={previewRequest}
           readOnly={!canEditRequests(currentUser?.role)}
           neighborhoods={neighborhoods}
           onTutorSaved={(tutor) => { updatePreviewTutor(tutor); refreshRequests?.(); }}
           requestTypes={requestTypes}
+          documentTypes={documentTypes}
           sectors={activeSectors}
           users={activeUsers}
           municipalities={municipalities}
+          currentUserName={currentUser?.name || ""}
           onClose={closePreview}
-          onApprove={approveRequest}
-          onReject={rejectRequestFromProcess}
-          onArchive={archiveWithTag}
-          onAttendance={confirmAttendanceFromProcess}
-          onReschedule={rescheduleFromPreview}
+          onRejectProcess={rejectRequestFromProcess}
           onAssign={assignFromPreview}
           onAssume={assumeFromPreview}
-          patchRequest={patchRequest}
+          onConfirmSpecial={confirmSpecialRequest}
+          onProcedureAction={applyProcedureAction}
+          onUpdateDocuments={updateDocuments}
         />
       )}
 

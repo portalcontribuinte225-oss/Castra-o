@@ -133,7 +133,7 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
             const value = values[Number(parameter) - 1];
             requestRow[key] = ["workflow_data", "documents", "animals", "tags"].includes(key) ? JSON.parse(value) : value;
           }
-          const history = sql.match(/history = history \|\| \$(\d+)::jsonb/);
+          const history = sql.match(/history = (?:history|COALESCE\(history, '\[\]'::jsonb\)) \|\| \$(\d+)::jsonb/);
           if (history) requestRow.history.push(...JSON.parse(values[Number(history[1]) - 1]));
           return { rows: [clone(requestRow)] };
         }
@@ -345,6 +345,33 @@ test("concurrent identical PATCHes serialize snapshots and produce only one noti
   assert.equal(stats.calls.slice(0, firstNotificationRead).some(({ sql }) => sql === "COMMIT"), true);
 });
 
+test("concurrent evidence uploads append both files to the locked request without replacing existing documents", async (t) => {
+  const dataUrl = `data:application/pdf;base64,${Buffer.from("%PDF-1.4\nevidence\n").toString("base64")}`;
+  const existing = { ...pendingRequest(), documents: [{ documentId: "identity", fileName: "identidade.pdf", dataUrl }] };
+  const { request, row } = await fixture(t, { existing });
+  const uploads = await Promise.all([1, 2].map((index) => request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN,
+    body: { documentEvidence: { documentId: `evidencia-${index}`, fileName: `evidencia-${index}.pdf`, dataUrl } },
+  })));
+  assert.deepEqual(uploads.map((upload) => upload.status), [200, 200]);
+  assert.deepEqual(row().documents.map((document) => document.documentId).sort(), ["evidencia-1", "evidencia-2", "identity"]);
+  assert.equal(row().documents.filter((document) => document.internalEvidence).length, 2);
+});
+
+test("confirming a second procedure keeps the same general status and does not repeat the schedule notice", async (t) => {
+  const configured = pendingRequest({ enabled: true, email: "own@example.test" });
+  const existing = { ...configured, origin: "INTERNA", request_type: "Castração, Microchipagem", schedule_date: FUTURE_DATE,
+    animals: [{ name: "Luna", requestTypeIds: ["castration", "microchip"] }], workflow_data: { ...configured.workflow_data, scheduleSlotTime: "08:00" } };
+  const { request, row, stats } = await fixture(t, { existing });
+  const confirm = (requestTypeId) => request({ method: "POST", path: `/requests/${REQUEST_ID}/procedures/action`, user: ADMIN,
+    body: { action: "confirm_schedule", animalIndex: 0, requestTypeId },
+  });
+  assert.equal((await confirm("castration")).status, 200);
+  assert.equal((await confirm("microchip")).status, 200);
+  assert.equal(row().status, "AGENDADA");
+  assert.equal(stats.historyAppends, 1);
+  assert.equal(row().history.filter((item) => item.notification?.event === NotificationEvent.SCHEDULE_CONFIRMED).length, 1);
+});
+
 test("post-commit history failure keeps PATCH successful and preserves the saved operation", async (t) => {
   const { request, stats, row } = await fixture(t, { existing: pendingRequest({ enabled: true, email: "tutor@example.test", phone: "" }), failHistory: true });
   const response = await request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "AGENDADA" } });
@@ -408,11 +435,14 @@ const dog = { species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefi
 
 test("public POST with procedures per animal stores the derived type, the animals and the procedures, ignoring the single type sent", async (t) => {
   const { request, row } = await fixture(t);
-  const animals = [{ ...dog, requestTypeIds: ["microchip", "castration"] }, { ...dog, requestTypeIds: ["microchip", "microchip"] }];
+  const animals = [{ ...dog, requestTypeIds: ["microchip", "castration"], procedures: [{ requestTypeId: "microchip", status: "REALIZADO" }] },
+    { ...dog, requestTypeIds: ["microchip", "microchip"] }];
   const response = await request({ body: procedureBody({ animals, type: "Castração", requestTypeId: "castration" }) });
   assert.equal(response.status, 201);
   assert.equal(row().request_type, "Microchipagem, Castração");
   assert.deepEqual(row().animals.map(({ requestTypeIds }) => requestTypeIds), [["microchip", "castration"], ["microchip"]]);
+  assert.deepEqual(row().animals.map(({ procedures }) => procedures.map(({ status, schedule }) => [status, schedule.date, schedule.slotTime])),
+    [[["AGUARDANDO", FUTURE_DATE, "08:00"], ["AGUARDANDO", FUTURE_DATE, "08:00"]], [["AGUARDANDO", FUTURE_DATE, "08:00"]]]);
   assert.deepEqual(row().workflow_data.requestTypeIds, ["microchip", "castration"]);
   assert.deepEqual(row().workflow_data.requestTypeNames, ["Microchipagem", "Castração"]);
   assert.equal(Object.hasOwn(row().workflow_data, "requestTypeId"), false);

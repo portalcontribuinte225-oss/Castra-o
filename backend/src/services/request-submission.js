@@ -27,6 +27,7 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   const nextWorkflow = withDerivedProcedures(workflow, procedures?.fields);
   delete nextWorkflow.notificationDispatches;
   delete nextWorkflow.notificationResults;
+  delete nextWorkflow.procedureScheduleDates;
 
   // The answer to "does the animal have a tutor?": one of the two values of AnimalTutorship, and no answer means with a tutor. It is the
   // only thing that dispenses the tutor, and the animals of the request have to say the same.

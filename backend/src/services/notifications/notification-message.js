@@ -41,8 +41,10 @@ export function buildNotificationMessage(event, request) {
   const rejected = documents.filter((document) => document?.status === "rejected").length;
   const reason = rejectionReasonText(workflow);
   const isRejection = event === NotificationEvent.REQUEST_REJECTED;
+  const corrections = documents.filter((document) => document?.status === "rejected" && document.review?.note)
+    .map((document) => ` ${document.documentName || "Documento"}: ${document.review.note}.`).join("");
   const documentSummary = event === NotificationEvent.DOCUMENTS_REVIEWED
-    ? ` Aprovados: ${approved}. Precisam de correção: ${rejected}.` : "";
+    ? ` Aprovados: ${approved}. Precisam de correção: ${rejected}.${corrections}` : "";
   const rejectionSummary = isRejection && reason ? ` Motivo: ${reason}.` : "";
   return {
     subject: notificationEventLabels[event] || "Atualização da solicitação",

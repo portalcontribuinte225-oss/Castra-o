@@ -29,7 +29,8 @@ export function registeredAnimalDatabase() {
     }
     if (sql.includes("INSERT INTO animal_records")) {
       const type = sql.includes("'CIRURGIA_REALIZADA'") ? "CIRURGIA_REALIZADA" : sql.includes("'TROCA_TUTOR_EFETIVADA'") ? "TROCA_TUTOR_EFETIVADA" : sql.includes("'MICROCHIP_CONFIRMADO'") ? "MICROCHIP_CONFIRMADO" : "SOLICITACAO_PROCEDIMENTO";
-      if (!state.records.some((row) => row.animal_id === values[0] && row.request_id === values[1] && row.type === type)) {
+      if (!state.records.some((row) => row.animal_id === values[0] && row.request_id === values[1] && row.type === type
+        && (type !== "CIRURGIA_REALIZADA" || !values[6] || row.data.requestTypeId === values[6]))) {
         state.records.push({ animal_id: values[0], request_id: values[1], municipality_id: values[2], type,
           data: JSON.parse(values[type === "CIRURGIA_REALIZADA" ? 4 : 3] || "{}") });
       }

@@ -5,7 +5,7 @@ import { registerRequestAnimals, prepareRegisteredRequest } from "../src/service
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { materializeOwnRequestAnimal } from "../src/services/registered-animals/from-request.js";
 import { animalFingerprint } from "../src/services/registered-animals/animal-data.js";
-import { confirmAnimalMicrochip, applyAnimalRequestTransition } from "../src/services/registered-animals/animal-transitions.js";
+import { confirmAnimalMicrochip, applyAnimalRequestTransition, applyProcedureAttendance } from "../src/services/registered-animals/animal-transitions.js";
 import { registeredAnimalDatabase, ANIMAL_TEST_MUNICIPALITY as MUNICIPALITY, ANIMAL_TEST_OTHER as OTHER,
   ANIMAL_TEST_USER as USER, ANIMAL_TEST_REQUEST as REQUEST } from "./fixtures/registered-animal-db.js";
 
@@ -86,6 +86,21 @@ test("multi-animal attendance writes each record and repeated PATCH transition i
   assert.equal(db.records.filter((row) => row.type === "CIRURGIA_REALIZADA").length, 2);
   const count = db.calls.length;
   await applyAnimalRequestTransition(db, { previous: { status: "REALIZADA" }, request, user: staff }); assert.equal(db.calls.length, count);
+});
+
+test("procedure attendance records only the selected animal and confirms its chip before the process closes", async () => {
+  const db = registeredAnimalDatabase();
+  const request = await seed(db, 2);
+  const [untouched, attended] = request.animals;
+  const input = { request, user: staff, animalId: attended.id, animalIndex: 1 };
+  await applyProcedureAttendance(db, { ...input, procedure: { requestTypeId: "microchip", name: "Microchipagem" }, chip: "CHIP987" });
+  await applyProcedureAttendance(db, { ...input, procedure: { requestTypeId: "castration", name: "Castração" } });
+  await applyProcedureAttendance(db, { ...input, procedure: { requestTypeId: "castration", name: "Castração" } });
+  assert.equal(db.animals.get(untouched.id).microchip, null);
+  assert.equal(db.animals.get(attended.id).microchip, "CHIP987");
+  assert.deepEqual(db.records.filter((row) => row.type === "CIRURGIA_REALIZADA").map((row) => [row.animal_id, row.data.requestTypeId]),
+    [[attended.id, "microchip"], [attended.id, "castration"]]);
+  assert.equal(request.status, "NOVA");
 });
 
 test("completing a legacy declaration never confirms its chip without explicit staff evidence", async () => {

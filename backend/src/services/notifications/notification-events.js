@@ -8,8 +8,8 @@ function scheduleSignature(request) {
   const data = workflow(request);
   return JSON.stringify([
     request.schedule_date || request.preferredSchedule || "",
-    data.scheduleTime || request.schedule_time || "",
-    data.scheduleSlotTime || request.schedule_slot_time || "",
+    data.scheduleSlotTime || data.scheduleTime || request.schedule_slot_time || request.schedule_time || "",
+    data.scheduleOccurrenceKey || "",
     request.schedule_location_name || request.scheduleLocationName || "",
     request.schedule_address || request.scheduleAddress || "",
     request.schedule_address_url || request.scheduleAddressUrl || "",

@@ -66,13 +66,31 @@ async function transferAnimal(client, { animal, request, user }) {
   await auditAnimal(client, { animalId: animal.id, request, user, action: AUDIT_ACTIONS.ANIMAL_TUTOR_TRANSFER });
 }
 
+async function recordAnimalAttendance(client, { animalId, request, user, note = null, performedProcedures, requestTypeId = null, animalIndex }) {
+  const data = { performedProcedures, ...(requestTypeId ? { requestTypeId, sourceAnimalIndex: animalIndex } : {}) };
+  await client.query(`INSERT INTO animal_records (animal_id,request_id,municipality_id,record_type,title,notes,data,created_by)
+    SELECT $1,$2,$3,'CIRURGIA_REALIZADA','Atendimento realizado',$4,$5::jsonb,$6
+    WHERE NOT EXISTS (SELECT 1 FROM animal_records WHERE animal_id=$1 AND request_id=$2 AND municipality_id=$3
+      AND record_type='CIRURGIA_REALIZADA' AND ($7::text IS NULL OR data->>'requestTypeId'=$7))`,
+  [animalId, request.id, request.municipality_id, note, JSON.stringify(data), user.id, requestTypeId]);
+}
+
+export async function applyProcedureAttendance(client, { request, user, animalId, animalIndex, procedure, chip }) {
+  if (!isInternalUser(user)) throw authError(403, "Operação restrita à equipe de atendimento.");
+  const municipalityId = request.municipality_id;
+  const animal = await findOwnedAnimal(client, { id: animalId, municipalityId, internal: true, lock: true });
+  if (animal.status === AnimalStatus.DECEASED) throw authError(409, "Animal em óbito não pode receber procedimento.");
+  if (chip) await confirmAnimalMicrochip(client, { animal, microchip: chip, municipalityId, user, requestId: request.id });
+  await recordAnimalAttendance(client, { animalId, request, user, performedProcedures: procedure.name, requestTypeId: procedure.requestTypeId, animalIndex });
+}
+
 export async function applyAnimalRequestTransition(client, { previous, request, user }) {
   if (request.status !== RequestStatus.COMPLETED || previous.status === RequestStatus.COMPLETED) return;
   if (request.request_type === RequestKind.COMPLAINT) return;
   if (!isInternalUser(user)) throw authError(403, "Operação restrita à equipe de atendimento.");
   const ids = [...new Set([request.animal_id, ...(Array.isArray(request.animals) ? request.animals.map((animal) => animal?.id) : [])].filter(Boolean))].sort();
   for (const id of ids) {
-    let animal = await findOwnedAnimal(client, { id, municipalityId: request.municipality_id, internal: true, lock: true });
+    const animal = await findOwnedAnimal(client, { id, municipalityId: request.municipality_id, internal: true, lock: true });
     if (request.request_type === RequestKind.DEATH) {
       if (animal.status === AnimalStatus.DECEASED) continue;
       await client.query("UPDATE animals SET status=$2,updated_at=NOW() WHERE id=$1", [id, AnimalStatus.DECEASED]);
@@ -84,12 +102,9 @@ export async function applyAnimalRequestTransition(client, { previous, request, 
       if (animal.status === AnimalStatus.DECEASED) throw authError(409, "Animal em óbito não pode receber procedimento.");
       const data = request.animals?.find((item) => item.id === id);
       const chip = (id === request.animal_id ? request.workflow_data?.attendanceMicrochip : "") || data?.confirmedMicrochip;
-      if (chip) animal = await confirmAnimalMicrochip(client, { animal, microchip: chip, municipalityId: request.municipality_id, user, requestId: request.id });
-      await client.query(`INSERT INTO animal_records (animal_id,request_id,municipality_id,record_type,title,notes,data,created_by)
-        SELECT $1,$2,$3,'CIRURGIA_REALIZADA','Atendimento realizado',$4,$5::jsonb,$6
-        WHERE NOT EXISTS (SELECT 1 FROM animal_records WHERE animal_id=$1 AND request_id=$2 AND record_type='CIRURGIA_REALIZADA')`,
-      [id, request.id, request.municipality_id, request.workflow_data?.attendanceNote || null,
-        JSON.stringify({ performedProcedures: request.workflow_data?.performedProcedures || "" }), user.id]);
+      if (chip) await confirmAnimalMicrochip(client, { animal, microchip: chip, municipalityId: request.municipality_id, user, requestId: request.id });
+      await recordAnimalAttendance(client, { animalId: id, request, user, note: request.workflow_data?.attendanceNote || null,
+        performedProcedures: request.workflow_data?.performedProcedures || "" });
     }
   }
 }

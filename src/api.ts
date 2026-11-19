@@ -103,6 +103,7 @@ export const api = {
     return readSubmittedRequest(await request("POST", "/requests", body));
   },
   patchRequest: (id, patch) => request("PATCH", `/requests/${id}`, patch),
+  runProcedureAction: (id, action) => request("POST", `/requests/${id}/procedures/action`, action),
   deleteRequest: (id) => request("DELETE", `/requests/${id}`),
 
   lookupAnimalByMicrochip: (microchip) => request("POST", "/animals/lookup", { microchip }),

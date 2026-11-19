@@ -1,3 +1,5 @@
+import { useId } from "react";
+import { createPortal } from "react-dom";
 import { formatCep, formatCpf, formatPhone } from "../../utils";
 import { neighborhoodChoices } from "../neighborhoods/neighborhoods";
 import { hasTutorChanges, tutorFormIssues } from "./tutor-data";
@@ -11,10 +13,13 @@ interface TutorDataTabProps {
   neighborhoodNames: string[];
   readOnly: boolean;
   onSaved?: (tutor: TutorData) => void;
+  // Where the save button goes: the fixed footer of the process.
+  actionsSlot: HTMLElement | null;
 }
 
 // The "Dados do tutor" tab of the attendance: the staff corrects the tutor's data and may set a new password for the account.
-export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, readOnly, onSaved }: TutorDataTabProps) {
+export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, readOnly, onSaved, actionsSlot }: TutorDataTabProps) {
+  const formId = useId();
   const { tutor, form, loading, error, saving, saveError, notice, change, save, retry } = useTutorData(requestId, municipalityId, onSaved);
   if (loading && !tutor) return <p className="prm-muted-note" role="status">Carregando os dados do tutor...</p>;
   if (error) return <div className="prm-section"><p className="form-error" role="alert">{error}</p><button type="button" className="ghost-button" onClick={retry}>Tentar novamente</button></div>;
@@ -23,7 +28,7 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
   const invalid = Object.keys(issues).length > 0;
   const locked = readOnly || saving;
   return (
-    <form className="prm-section prm-tutor-data" onSubmit={(event) => { event.preventDefault(); if (!invalid && !readOnly) void save(); }}>
+    <form id={formId} className="prm-section prm-tutor-data" onSubmit={(event) => { event.preventDefault(); if (!invalid && !readOnly) void save(); }}>
       <div className="prm-section-block">
         <p className="prm-section-title">Tutor</p>
         <div className="two-column-fields">
@@ -73,10 +78,9 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
       )}
       {saveError && <p className="form-error" role="alert">{saveError}</p>}
       {notice && <p className="prm-muted-note" role="status">{notice}</p>}
-      {!readOnly && (
-        <div className="prm-inline-actions">
-          <button type="submit" className="primary-action" disabled={saving || invalid || !hasTutorChanges(tutor, form)}>{saving ? "Salvando..." : "Salvar dados do tutor"}</button>
-        </div>
+      {!readOnly && actionsSlot && createPortal(
+        <button type="submit" form={formId} className="prm-action-btn prm-action-btn--primary" disabled={saving || invalid || !hasTutorChanges(tutor, form)}>{saving ? "Salvando..." : "Salvar dados do tutor"}</button>,
+        actionsSlot,
       )}
     </form>
   );
