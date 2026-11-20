@@ -1,5 +1,8 @@
+import { useRef } from "react";
 import { CheckCircle2, Download, Eye, FileText, Plus, X } from "lucide-react";
 import { AiAnalysisDetails } from "../../App";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
 import type { AttachmentRow } from "./attachment-rows";
 import { attachmentDescription, attachmentStateClasses, attachmentStateLabels, canReviewAttachment, isBlockingAttachment, AttachmentState } from "./attachment-rows";
 import { plural } from "./process-labels";
@@ -14,7 +17,7 @@ interface AttachmentsTabProps {
   busyId: string;
   uploadingEvidence: boolean;
   error: string;
-  onPreview: (row: AttachmentRow) => void;
+  onPreview: (row: AttachmentRow, trigger: HTMLButtonElement) => void;
   onDownload: (row: AttachmentRow) => void;
   onApprove: (row: AttachmentRow) => void;
   onReject: (row: AttachmentRow) => void;
@@ -24,6 +27,7 @@ interface AttachmentsTabProps {
 export function AttachmentsTab({ rows, pendingCount, canReview, canAttach, reviewBlockedReason, busyId, uploadingEvidence, error, onPreview, onDownload, onApprove, onReject, onEvidence }: AttachmentsTabProps) {
   const blocking = rows.filter(isBlockingAttachment);
   const busy = Boolean(busyId) || uploadingEvidence;
+  const evidenceInput = useRef<HTMLInputElement>(null);
   return (
     <div className="prm-section">
       {error && <p className="form-error" role="alert">{error}</p>}
@@ -38,7 +42,7 @@ export function AttachmentsTab({ rows, pendingCount, canReview, canAttach, revie
           const stateClass = attachmentStateClasses[row.state];
           const reviewable = canReview && canReviewAttachment(row);
           return (
-            <article key={`${row.kind}-${row.id}`} className={`process-attachment-row process-attachment-row--${stateClass}${isBlockingAttachment(row) ? " is-blocking" : ""}`}>
+            <Card as="article" key={`${row.kind}-${row.id}`} className={`process-attachment-row process-attachment-row--${stateClass}${isBlockingAttachment(row) ? " is-blocking tw:border-orange-200 tw:bg-orange-50" : ""}`}>
               <div className="process-attachment-main">
                 <span className="process-attachment-icon-box"><FileText size={15} /></span>
                 <div className="process-attachment-info">
@@ -58,36 +62,38 @@ export function AttachmentsTab({ rows, pendingCount, canReview, canAttach, revie
               <div className="process-attachment-actions">
                 {row.available && (
                   <div className="process-attachment-file-actions" aria-label={`Arquivo de ${row.title}`}>
-                    <button className="icon-action" aria-label={`Visualizar ${row.title}`} title="Visualizar" type="button" disabled={busy} onClick={() => onPreview(row)}><Eye size={16} /></button>
-                    <button className="icon-action" aria-label={`Baixar ${row.title}`} title="Baixar" type="button" disabled={busy} onClick={() => onDownload(row)}><Download size={16} /></button>
+                    <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" aria-label={`Visualizar ${row.title}`} title="Visualizar" disabled={busy} onClick={(event) => onPreview(row, event.currentTarget)}><Eye size={16} aria-hidden="true" /></Button>
+                    <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" aria-label={`Baixar ${row.title}`} title="Baixar" disabled={busy} onClick={() => onDownload(row)}><Download size={16} aria-hidden="true" /></Button>
                   </div>
                 )}
                 {reviewable && (
                   <div className="process-attachment-review-actions">
-                    <button className="prm-action-btn prm-action-btn--approve-document" type="button" aria-label={`Deferir ${row.title}`} title={reviewBlockedReason || "Deferir documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onApprove(row)}>
+                    <Button variant="custom" className="tw:border-green-200 tw:bg-green-50 tw:text-green-700 tw:enabled:hover:border-green-300 tw:enabled:hover:bg-green-100" aria-label={`Deferir ${row.title}`} title={reviewBlockedReason || "Deferir documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onApprove(row)}>
                       <CheckCircle2 size={15} aria-hidden="true" /> Deferir
-                    </button>
+                    </Button>
                     {row.state !== AttachmentState.REJECTED && (
-                      <button className="prm-action-btn prm-action-btn--reject-document" type="button" aria-label={`Indeferir ${row.title}`} title={reviewBlockedReason || "Indeferir documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onReject(row)}>
+                      <Button variant="custom" className="tw:border-rose-200 tw:bg-rose-50 tw:text-rose-700 tw:enabled:hover:border-rose-300 tw:enabled:hover:bg-rose-100" aria-label={`Indeferir ${row.title}`} title={reviewBlockedReason || "Indeferir documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onReject(row)}>
                         <X size={15} aria-hidden="true" /> Indeferir
-                      </button>
+                      </Button>
                     )}
                   </div>
                 )}
               </div>
-            </article>
+            </Card>
           );
         })}
       </div>
       {canAttach && (
-        <label className="prm-evidence-drop">
-          <input type="file" accept="application/pdf,image/jpeg,image/png" aria-label="Anexar evidência" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) onEvidence(file); }} />
-          <span>
-            <strong>Anexar evidência</strong>
-            <small>Arquivo complementar do processo · PDF ou imagem</small>
-          </span>
-          <span className="prm-action-btn prm-action-btn--secondary"><Plus size={15} /> {uploadingEvidence ? "Anexando..." : "Adicionar arquivo"}</span>
-        </label>
+        <>
+          <input ref={evidenceInput} type="file" hidden accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) onEvidence(file); }} />
+          <Card as="button" aria-label="Anexar evidência" aria-busy={uploadingEvidence || undefined} className="prm-evidence-drop tw:w-full tw:text-left tw:enabled:hover:border-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent" disabled={busy} onClick={() => evidenceInput.current?.click()}>
+            <span>
+              <strong>Anexar evidência</strong>
+              <small>Arquivo complementar do processo · PDF ou imagem</small>
+            </span>
+            <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-sm tw:font-semibold"><Plus size={15} aria-hidden="true" /> {uploadingEvidence ? "Anexando..." : "Adicionar arquivo"}</span>
+          </Card>
+        </>
       )}
       {blocking.length > 0 && (
         <p className="prm-documents-warning">

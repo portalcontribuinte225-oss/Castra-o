@@ -1,5 +1,6 @@
 import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, FileText, Save, User, UserCheck } from "lucide-react";
 import { ProcedureAction, canApplyProcedureAction } from "../../../shared/request-procedure-contract.js";
+import { Button } from "../../components/button";
 import type { AnyRecord } from "../../types";
 import { ProcessTab } from "./process-labels";
 
@@ -27,29 +28,32 @@ function Note({ children }: { children: string }) {
   return <p className="prm-muted-note">{children}</p>;
 }
 
+const rejectActionStyle = "tw:border-rose-700 tw:bg-rose-700 tw:font-semibold tw:text-white tw:enabled:hover:border-rose-800 tw:enabled:hover:bg-rose-800";
+const noShowActionStyle = "tw:border-card-border tw:bg-card-page tw:font-semibold tw:text-blue-600 tw:enabled:hover:bg-orange-100";
+
 function procedureActions({ procedure, busy, currentChanged, assignmentBlock, documentsBlock, on }: ProcessFooterProps) {
   const status = procedure?.status;
   if (!procedure) return <Note>Selecione um procedimento.</Note>;
   if (!canApplyProcedureAction(status, ProcedureAction.SAVE)) {
     return procedure.prescription
-      ? <div className="prm-footer-end"><button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy} onClick={on.prescription}><FileText size={15} /> Consultar receita</button></div>
+      ? <div className="prm-footer-end"><Button variant="outline" disabled={busy} onClick={on.prescription}><FileText size={15} aria-hidden="true" /> Consultar receita</Button></div>
       : <Note>Procedimento encerrado.</Note>;
   }
   const scheduleBlock = assignmentBlock || documentsBlock;
   return (
     <>
       <div className="prm-footer-start">
-        {canApplyProcedureAction(status, ProcedureAction.NO_SHOW) && <button className="prm-action-btn prm-action-btn--warning" type="button" disabled={busy} onClick={on.noShow}>Não compareceu</button>}
-        <button className="prm-action-btn prm-action-btn--danger" type="button" disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || "Indeferir este procedimento"} onClick={on.reject}><AlertCircle size={15} /> Indeferir</button>
+        {canApplyProcedureAction(status, ProcedureAction.NO_SHOW) && <Button variant="custom" className={noShowActionStyle} disabled={busy} onClick={on.noShow}>Não compareceu</Button>}
+        <Button variant="custom" className={rejectActionStyle} disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || "Indeferir este procedimento"} onClick={on.reject}><AlertCircle size={15} aria-hidden="true" /> Indeferir</Button>
       </div>
       <div className="prm-footer-end">
-        <button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy || !currentChanged} onClick={on.save}><Save size={15} /> Salvar alterações</button>
-        <button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy || Boolean(documentsBlock)} title={documentsBlock || "Reagendar este procedimento"} onClick={on.reschedule}><CalendarDays size={15} /> Reagendar</button>
-        <button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy} onClick={on.prescription}><FileText size={15} /> Emitir receita</button>
+        <Button variant="outline" disabled={busy || !currentChanged} onClick={on.save}><Save size={15} aria-hidden="true" /> Salvar alterações</Button>
+        <Button variant="outline" disabled={busy || Boolean(documentsBlock)} title={documentsBlock || "Reagendar este procedimento"} onClick={on.reschedule}><CalendarDays size={15} aria-hidden="true" /> Reagendar</Button>
+        <Button variant="outline" disabled={busy} onClick={on.prescription}><FileText size={15} aria-hidden="true" /> Emitir receita</Button>
         {canApplyProcedureAction(status, ProcedureAction.CONFIRM_SCHEDULE) ? (
-          <button className="prm-action-btn prm-action-btn--primary" type="button" disabled={busy || Boolean(scheduleBlock)} title={scheduleBlock || "Confirmar a agenda deste procedimento"} onClick={on.confirmSchedule}><CheckCircle2 size={15} /> Confirmar agenda</button>
+          <Button disabled={busy || Boolean(scheduleBlock)} title={scheduleBlock || "Confirmar a agenda deste procedimento"} onClick={on.confirmSchedule}><CheckCircle2 size={15} aria-hidden="true" /> Confirmar agenda</Button>
         ) : (
-          <button className="prm-action-btn prm-action-btn--primary" type="button" disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || "Registrar a realização deste procedimento"} onClick={on.attend}><CheckCircle2 size={15} /> Confirmar atendimento</button>
+          <Button disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || "Registrar a realização deste procedimento"} onClick={on.attend}><CheckCircle2 size={15} aria-hidden="true" /> Confirmar atendimento</Button>
         )}
       </div>
     </>
@@ -67,13 +71,13 @@ export function ProcessFooter(props: ProcessFooterProps) {
       <>
         {!readOnly && processOpen && (
           <div className="prm-footer-start">
-            <button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy} onClick={on.assign}><User size={15} /> {hasAssignment ? "Reatribuir" : "Atribuir"}</button>
-            {canAssume && <button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy} onClick={on.assume}><UserCheck size={15} /> Assumir</button>}
+            <Button variant="outline" disabled={busy} onClick={on.assign}><User size={15} aria-hidden="true" /> {hasAssignment ? "Reatribuir" : "Atribuir"}</Button>
+            {canAssume && <Button variant="outline" disabled={busy} onClick={on.assume}><UserCheck size={15} aria-hidden="true" /> Assumir</Button>}
           </div>
         )}
         <div className="prm-footer-end">
           <span className="prm-muted-note">{hasPendingAttachments ? "Aguardando conferência dos anexos" : "Documentos conferidos"}</span>
-          <button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy} onClick={on.showProcedures}>Ver {isSpecial ? procedureTabLabel.toLowerCase() : "procedimentos"} <ArrowRight size={15} /></button>
+          <Button variant="outline" disabled={busy} onClick={on.showProcedures}>Ver {isSpecial ? procedureTabLabel.toLowerCase() : "procedimentos"} <ArrowRight size={15} aria-hidden="true" /></Button>
         </div>
       </>
     );
@@ -83,10 +87,10 @@ export function ProcessFooter(props: ProcessFooterProps) {
     content = processOpen ? (
       <>
         <div className="prm-footer-start">
-          <button className="prm-action-btn prm-action-btn--danger" type="button" disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || "Indeferir solicitação"} onClick={on.rejectProcess}><AlertCircle size={15} /> Indeferir</button>
+          <Button variant="custom" className={rejectActionStyle} disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || "Indeferir solicitação"} onClick={on.rejectProcess}><AlertCircle size={15} aria-hidden="true" /> Indeferir</Button>
         </div>
         <div className="prm-footer-end">
-          <button className="prm-action-btn prm-action-btn--primary" type="button" disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || specialConfirmLabel} onClick={on.confirmSpecial}><CheckCircle2 size={15} /> {specialConfirmLabel}</button>
+          <Button disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || specialConfirmLabel} onClick={on.confirmSpecial}><CheckCircle2 size={15} aria-hidden="true" /> {specialConfirmLabel}</Button>
         </div>
       </>
     ) : <Note>Nenhuma ação pendente.</Note>;

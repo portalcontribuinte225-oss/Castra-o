@@ -1,5 +1,6 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
+import { topModalLayer } from "./modal-focus";
 import { CHECKLIST_SEARCH_THRESHOLD, filterChecklistGroups, toggleSelection } from "./scroll-checklist";
 import type { ChecklistItem } from "./scroll-checklist";
 
@@ -30,15 +31,18 @@ export function MultiSelectDropdown({ label, placeholder, items, selectedIds, on
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      const modal = topModalLayer();
+      if (modal && !modal.contains(rootRef.current)) return;
+      event.preventDefault();
       setOpen(false);
       triggerRef.current?.focus();
     };
     document.addEventListener("pointerdown", closeOutside);
-    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("keydown", closeOnEscape, true);
     return () => {
       document.removeEventListener("pointerdown", closeOutside);
-      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("keydown", closeOnEscape, true);
     };
   }, [open]);
 

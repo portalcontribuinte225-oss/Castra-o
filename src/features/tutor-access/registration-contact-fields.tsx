@@ -1,4 +1,5 @@
 import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../shared/phone-contract.js";
+import { Card } from "../../components/card";
 import { RequestTextField } from "../request-steps/request-text-field";
 
 // The tutor's mobile is required (it is how the municipality reaches them); the e-mail is optional, but must be valid when given. When the
@@ -12,7 +13,6 @@ export function registrationContactIssues(email: string, phone: string, active =
 }
 
 interface RegistrationContactFieldsProps {
-  internal?: boolean;
   email: string;
   phone: string;
   onEmailChange: (value: string) => void;
@@ -22,15 +22,14 @@ interface RegistrationContactFieldsProps {
   notices?: boolean;
 }
 
-export function RegistrationContactFields({ internal, email, phone, onEmailChange, onPhoneChange, showErrors = false, notices = false }: RegistrationContactFieldsProps) {
+export function RegistrationContactFields({ email, phone, onEmailChange, onPhoneChange, showErrors = false, notices = false }: RegistrationContactFieldsProps) {
   const issues = registrationContactIssues(email, phone, showErrors, !notices);
   const purpose = notices ? "para os avisos" : "de cadastro";
   return (
-    <div className="form-sub-card">
+    <Card className="form-sub-card">
       <span className="form-sub-card-title">{notices ? "Contato para os avisos" : "Contato de cadastro"}</span>
       <div className="two-column-fields">
         <RequestTextField
-          internal={internal && !notices}
           label={notices ? "E-mail" : "E-mail (opcional)"}
           error={issues.email}
           aria-label={`E-mail ${purpose}`}
@@ -42,7 +41,6 @@ export function RegistrationContactFields({ internal, email, phone, onEmailChang
           onChange={(event) => onEmailChange(event.target.value)}
         />
         <RequestTextField
-          internal={internal && !notices}
           label={notices ? "Celular" : "Celular *"}
           error={issues.phone}
           aria-label={`Celular ${purpose}`}
@@ -55,6 +53,6 @@ export function RegistrationContactFields({ internal, email, phone, onEmailChang
           required={!notices}
         />
       </div>
-    </div>
+    </Card>
   );
 }

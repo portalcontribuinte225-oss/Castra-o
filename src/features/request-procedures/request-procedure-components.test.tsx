@@ -132,7 +132,7 @@ describe("AnimalAccordionCard", () => {
     expect(html).toContain("Mel · Felino");
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("conteúdo");
-    expect(html).toContain('<div class="animal-title-badge" aria-hidden="true">2</div>');
+    expect(html).toContain('<span class="animal-title-badge" aria-hidden="true">2</span>');
   });
 
   it("hides the content when folded, and has no header when there is a single animal", () => {
@@ -140,7 +140,7 @@ describe("AnimalAccordionCard", () => {
     expect(folded).toContain('aria-expanded="false"');
     expect(folded).not.toContain("conteúdo");
     const single = render({ collapsible: false });
-    expect(single).not.toContain("animal-form-header");
+    expect(single).not.toContain("aria-expanded");
     expect(single).toContain("conteúdo");
   });
 
@@ -203,7 +203,7 @@ describe("AnimalFields", () => {
   it("adds the microchip only for staff", () => {
     const html = renderToStaticMarkup(<AnimalFields {...props} internal />);
     expect(html).toContain("Microchipado");
-    expect(html).toContain('aria-label="Microchip" placeholder="Não informado"');
+    expect(html).toMatch(/<input(?=[^>]*aria-label="Microchip")(?=[^>]*readonly="")(?=[^>]*placeholder="Não informado")(?=[^>]*data-ui-input)/i);
   });
 
 });

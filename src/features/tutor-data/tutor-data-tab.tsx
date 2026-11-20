@@ -1,5 +1,8 @@
 import { useId } from "react";
 import { createPortal } from "react-dom";
+import { Button } from "../../components/button";
+import { Input } from "../../components/input";
+import { ConfigField, configFieldStyle } from "../../components/ui";
 import { formatCep, formatCpf, formatPhone } from "../../utils";
 import { neighborhoodChoices } from "../neighborhoods/neighborhoods";
 import { hasTutorChanges, tutorFormIssues } from "./tutor-data";
@@ -22,7 +25,7 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
   const formId = useId();
   const { tutor, form, loading, error, saving, saveError, notice, change, save, retry } = useTutorData(requestId, municipalityId, onSaved);
   if (loading && !tutor) return <p className="prm-muted-note" role="status">Carregando os dados do tutor...</p>;
-  if (error) return <div className="prm-section"><p className="form-error" role="alert">{error}</p><button type="button" className="ghost-button" onClick={retry}>Tentar novamente</button></div>;
+  if (error) return <div className="prm-section"><p className="form-error" role="alert">{error}</p><Button variant="outline" onClick={retry}>Tentar novamente</Button></div>;
   if (!tutor || !form) return <p className="prm-muted-note">Esta solicitação não tem um tutor com acesso cadastrado.</p>;
   const contactOnly = tutor.contactOnly === true;
   const issues = tutorFormIssues(form, contactOnly);
@@ -34,47 +37,47 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
       <div className="prm-section-block">
         <p className="prm-section-title">Tutor</p>
         <div className="two-column-fields">
-          <label className={`field${issues.name ? " invalid" : ""}`}><span>Nome</span><input value={form.name} maxLength={160} readOnly={locked} onChange={(event) => change({ name: event.target.value })} /></label>
-          <label className={`field${issues.cpf ? " invalid" : ""}`}><span>CPF</span><input value={form.cpf} inputMode="numeric" readOnly={locked || !contactOnly} onChange={(event) => change({ cpf: formatCpf(event.target.value) })} /></label>
+          <ConfigField label="Nome" value={form.name} maxLength={160} invalid={Boolean(issues.name)} readOnly={locked} onChange={(value) => change({ name: value })} />
+          <ConfigField label="CPF" value={form.cpf} inputMode="numeric" invalid={Boolean(issues.cpf)} readOnly={locked || !contactOnly} onChange={(value) => change({ cpf: formatCpf(value) })} />
         </div>
         {(issues.name || issues.cpf) && <small className="field-error-message">{issues.name || issues.cpf}</small>}
         <div className="two-column-fields">
-          <label className={`field${issues.email ? " invalid" : ""}`}><span>E-mail</span><input type="email" value={form.email} readOnly={locked} onChange={(event) => change({ email: event.target.value })} /></label>
-          <label className={`field${issues.phone ? " invalid" : ""}`}><span>Telefone</span><input value={form.phone} readOnly={locked} onChange={(event) => change({ phone: formatPhone(event.target.value) })} /></label>
+          <ConfigField label="E-mail" type="email" value={form.email} invalid={Boolean(issues.email)} readOnly={locked} onChange={(value) => change({ email: value })} />
+          <ConfigField label="Telefone" value={form.phone} invalid={Boolean(issues.phone)} readOnly={locked} onChange={(value) => change({ phone: formatPhone(value) })} />
         </div>
         {(issues.email || issues.phone) && <small className="field-error-message">{issues.email || issues.phone}</small>}
       </div>
       <div className="prm-section-block">
         <p className="prm-section-title">Endereço</p>
         <div className="two-column-fields">
-          <label className={`field${issues.cep ? " invalid" : ""}`}><span>CEP</span><input value={form.cep} readOnly={locked} onChange={(event) => change({ cep: formatCep(event.target.value) })} /></label>
-          <label className={`field${issues.state ? " invalid" : ""}`}><span>UF</span><input value={form.state} maxLength={2} readOnly={locked} onChange={(event) => change({ state: event.target.value.toUpperCase() })} /></label>
+          <ConfigField label="CEP" value={form.cep} invalid={Boolean(issues.cep)} readOnly={locked} onChange={(value) => change({ cep: formatCep(value) })} />
+          <ConfigField label="UF" value={form.state} maxLength={2} invalid={Boolean(issues.state)} readOnly={locked} onChange={(value) => change({ state: value.toUpperCase() })} />
         </div>
         {(issues.cep || issues.state) && <small className="field-error-message">{issues.cep || issues.state}</small>}
-        <label className="field"><span>Endereço</span><input value={form.address} maxLength={200} readOnly={locked} onChange={(event) => change({ address: event.target.value })} /></label>
+        <ConfigField label="Endereço" value={form.address} maxLength={200} readOnly={locked} onChange={(value) => change({ address: value })} />
         <div className="two-column-fields">
-          <label className="field">
-            <span>Bairro</span>
-            {neighborhoodNames.length > 0 && !readOnly ? (
+          {neighborhoodNames.length > 0 && !readOnly ? (
+            <label className="field">
+              <span>Bairro</span>
               <select value={form.neighborhood} disabled={saving} onChange={(event) => change({ neighborhood: event.target.value })}>
                 <option value="">Selecione o bairro</option>
                 {neighborhoodChoices(neighborhoodNames, form.neighborhood).map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
-            ) : (
-              <input value={form.neighborhood} maxLength={120} readOnly={locked} onChange={(event) => change({ neighborhood: event.target.value })} />
-            )}
-          </label>
-          <label className="field"><span>Cidade</span><input value={form.city} maxLength={120} readOnly={locked} onChange={(event) => change({ city: event.target.value })} /></label>
+            </label>
+          ) : (
+            <ConfigField label="Bairro" value={form.neighborhood} maxLength={120} readOnly={locked} onChange={(value) => change({ neighborhood: value })} />
+          )}
+          <ConfigField label="Cidade" value={form.city} maxLength={120} readOnly={locked} onChange={(value) => change({ city: value })} />
         </div>
       </div>
       {!readOnly && !contactOnly && !tutor.hasAccess && <p className="prm-muted-note">Este tutor ainda não tem acesso ao sistema.</p>}
       {!readOnly && tutor.hasAccess && (
         <div className="prm-section-block">
           <p className="prm-section-title">Acesso</p>
-          <label className={`field${issues.password ? " invalid" : ""}`}>
+          <label className={configFieldStyle}>
             <span>Nova senha</span>
-            <input type="password" autoComplete="new-password" value={form.password} disabled={saving} placeholder="Deixe em branco para manter a senha atual" onChange={(event) => change({ password: event.target.value })} />
-            <small>O tutor passa a entrar com esta senha, sem precisar trocá-la.</small>
+            <Input type="password" autoComplete="new-password" value={form.password} disabled={saving} aria-invalid={issues.password ? true : undefined} aria-describedby={`${formId}-password-hint`} placeholder="Deixe em branco para manter a senha atual" onChange={(event) => change({ password: event.target.value })} />
+            <small id={`${formId}-password-hint`}>O tutor passa a entrar com esta senha, sem precisar trocá-la.</small>
           </label>
           {issues.password && <small className="field-error-message">{issues.password}</small>}
         </div>
@@ -82,7 +85,7 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
       {saveError && <p className="form-error" role="alert">{saveError}</p>}
       {notice && <p className="prm-muted-note" role="status">{notice}</p>}
       {!readOnly && actionsSlot && createPortal(
-        <button type="submit" form={formId} className="prm-action-btn prm-action-btn--primary" disabled={saving || invalid || !hasTutorChanges(tutor, form)}>{saving ? "Salvando..." : "Salvar dados do tutor"}</button>,
+        <Button type="submit" form={formId} disabled={saving || invalid || !hasTutorChanges(tutor, form)}>{saving ? "Salvando..." : "Salvar dados do tutor"}</Button>,
         actionsSlot,
       )}
     </form>

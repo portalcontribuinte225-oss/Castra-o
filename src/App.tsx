@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "./api";
 import {
   Activity,
@@ -128,6 +129,7 @@ import { Card } from "./components/card";
 import { CloseButton } from "./components/close-button";
 import { ConfigDialogBackdrop } from "./components/config-dialog";
 import { Input } from "./components/input";
+import { useModalFocus } from "./components/modal-focus";
 import {
   dataUrlToUint8Array,
   escapeHtml,
@@ -1315,9 +1317,11 @@ export function PublicSchedulePicker({
   title = "",
   hint = "",
   external = false,
+  internal = false,
 }) {
   const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
+  const monthSelector = useRef<HTMLDivElement>(null);
   const requiredVacancies = Math.max(Number(pendingReservation?.count) || 1, 1);
   const scheduleWithUsage = scheduleDays.filter((day) => day.active !== false).map((day) => {
     const confirmed = Math.max(day.vacancies - day.remaining, 0);
@@ -1363,32 +1367,53 @@ export function PublicSchedulePicker({
     setScheduleMonthIndex(Math.max(scheduleMonths.indexOf(getCurrentScheduleMonthKey()), 0));
   }, [scheduleMonths.join("|")]);
 
+  const MonthButton = internal ? Button : "button";
+  const hasMonthChoice = scheduleMonths.length > 1;
+
+  function closeMonthDropdown() {
+    setMonthDropdownOpen(false);
+    monthSelector.current?.querySelector<HTMLButtonElement>("button")?.focus();
+  }
+
   return (
     <section className="panel public-schedule-picker">
       <div className="schedule-picker-controls">
         {title && <span className="form-sub-card-title">{title}</span>}
         {hint && <p className="form-hint">{hint}</p>}
-        <div className="sched-month-selector">
-          <button
+        <div className="sched-month-selector" ref={internal ? monthSelector : undefined} onBlur={internal ? (event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setMonthDropdownOpen(false);
+        } : undefined} onKeyDown={(event) => {
+          if (!internal || !hasMonthChoice || !monthDropdownOpen || event.key !== "Escape") return;
+          event.preventDefault();
+          event.stopPropagation();
+          closeMonthDropdown();
+        }}>
+          <MonthButton
             type="button"
-            className="sched-month-trigger"
+            variant={internal ? "custom" : undefined}
+            className={internal ? "tw:border-card-border tw:bg-card-page tw:font-semibold tw:text-ui-ink tw:hover:bg-[var(--accent-blue-soft)] tw:[&>svg:first-child]:text-[color:var(--blue)]" : "sched-month-trigger"}
+            aria-expanded={internal && hasMonthChoice ? monthDropdownOpen : undefined}
             onClick={() => setMonthDropdownOpen((open) => !open)}
           >
             <CalendarDays size={14} />
             <span>{formatMonthYear(activeScheduleMonth)}</span>
-            {scheduleMonths.length > 1 && <ChevronDown size={14} className={monthDropdownOpen ? "sched-chevron-open" : ""} />}
-          </button>
-          {scheduleMonths.length > 1 && monthDropdownOpen && (
+            {hasMonthChoice && <ChevronDown size={14} className={monthDropdownOpen ? "sched-chevron-open" : ""} />}
+          </MonthButton>
+          {hasMonthChoice && monthDropdownOpen && (
             <div className="sched-month-dropdown">
               {scheduleMonths.map((month, i) => (
-                <button
+                <MonthButton
                   key={month}
                   type="button"
-                  className={`sched-month-tab${i === scheduleMonthIndex ? " is-active" : ""}`}
-                  onClick={() => { setScheduleMonthIndex(i); setMonthDropdownOpen(false); }}
+                  variant={internal ? "custom" : undefined}
+                  className={internal
+                    ? "tw:w-full tw:whitespace-normal tw:border-card-border tw:bg-card-surface tw:px-2 tw:font-medium tw:text-ui-text tw:hover:bg-[var(--accent-blue-soft)] tw:aria-pressed:border-[color:var(--blue)] tw:aria-pressed:bg-[var(--accent-blue-soft)] tw:aria-pressed:text-[color:var(--blue)]"
+                    : `sched-month-tab${i === scheduleMonthIndex ? " is-active" : ""}`}
+                  aria-pressed={internal ? i === scheduleMonthIndex : undefined}
+                  onClick={() => { setScheduleMonthIndex(i); closeMonthDropdown(); }}
                 >
                   {formatMonthYear(month)}
-                </button>
+                </MonthButton>
               ))}
             </div>
           )}
@@ -3087,8 +3112,8 @@ function NewRequest({
     }
   }
 
-  const RequestButton = internalSimple ? "button" : Button;
-  const animalActionStyle = internalSimple ? "anm-add-btn" : "tw:min-w-0 tw:flex-1 tw:whitespace-normal tw:text-center tw:text-[color:var(--ui-action)]";
+  const animalActionColor = internalSimple ? "tw:text-[color:var(--blue)]" : "tw:text-[color:var(--ui-action)]";
+  const animalActionStyle = `tw:min-w-0 tw:flex-1 tw:whitespace-normal tw:text-center ${animalActionColor}`;
   const uploadedPhoto = documentUploads.animal_photo;
 
   return (
@@ -3106,14 +3131,14 @@ function NewRequest({
         error={submissionError}
         actions={formStep === RequestStep.ANIMAL && !registered && (
           <>
-            <RequestButton className={animalActionStyle} variant={internalSimple ? undefined : "outline"} type="button" onClick={addAnimal}>
+            <Button className={animalActionStyle} variant="outline" onClick={addAnimal}>
               <PlusCircle size={18} aria-hidden="true" />
               Adicionar outro animal
-            </RequestButton>
-            <RequestButton className={animalActionStyle} variant={internalSimple ? undefined : "outline"} type="button" onClick={duplicatePreviousAnimal}>
+            </Button>
+            <Button className={animalActionStyle} variant="outline" onClick={duplicatePreviousAnimal}>
               <RefreshCw size={18} aria-hidden="true" />
               Repetir os dados do anterior
-            </RequestButton>
+            </Button>
           </>
         )}
       >
@@ -3131,7 +3156,6 @@ function NewRequest({
               }}
               tutorFields={{
                 data: requestData,
-                internal: internalSimple,
                 nameInvalid: showInvalid("tutor"),
                 nameIssue: validateTutorName(requestData.tutor),
                 cpfInvalid: showInvalid("cpf"),
@@ -3160,7 +3184,6 @@ function NewRequest({
                   detail={header.detail}
                   open={animals.length === 1 || expandedAnimal === index}
                   collapsible={animals.length > 1}
-                  internal={internalSimple}
                   onToggle={() => setExpandedAnimal(expandedAnimal === index ? -1 : index)}
                 >
                   <AnimalFields
@@ -3183,18 +3206,18 @@ function NewRequest({
                     onSelectSpecies={(value) => selectSpecies(index, value)}
                   />
                   {animals.length > 1 && (
-                    <RequestButton className={internalSimple ? "animal-remove-inline" : "tw:self-start"} variant={internalSimple ? undefined : "danger"} type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
+                    <Button className="tw:self-start" variant="danger" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
                       Remover animal {index + 1}
-                    </RequestButton>
+                    </Button>
                   )}
                 </AnimalAccordionCard>
               );
             })}
             {animals.length > 1 && hasConfiguredTypes && (
-              <div className="anm-actions-row">
-                <RequestButton className={internalSimple ? "ghost-button" : "tw:whitespace-normal"} variant={internalSimple ? undefined : "outline"} type="button" onClick={applyFirstProceduresToAll} disabled={animalRequestTypeIds(animals[0]).length === 0}>
+              <div className="tw:flex tw:gap-2.5">
+                <Button className="tw:whitespace-normal" variant="outline" onClick={applyFirstProceduresToAll} disabled={animalRequestTypeIds(animals[0]).length === 0}>
                   Aplicar os procedimentos do Animal 1 a todos
-                </RequestButton>
+                </Button>
               </div>
             )}
             </>}
@@ -3202,9 +3225,10 @@ function NewRequest({
 
           {formStep === RequestStep.SCHEDULE && <div className="form-section">
             {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
-            {availability.error && <p className="form-error" role="alert">{availability.error} <RequestButton type="button" className={internalSimple ? "ghost-button" : undefined} variant={internalSimple ? undefined : "outline"} onClick={availability.refresh}>Tentar novamente</RequestButton></p>}
+            {availability.error && <p className="form-error" role="alert">{availability.error} <Button variant="outline" onClick={availability.refresh}>Tentar novamente</Button></p>}
             <PublicSchedulePicker
-              external={!internalSimple}
+              external
+              internal={internalSimple}
               scheduleDays={scheduleDays}
               selectedDate={requestData.schedule}
               selectedOccurrenceKey={requestData.scheduleOccurrenceKey}
@@ -3214,9 +3238,11 @@ function NewRequest({
               hint="Os dias em destaque têm vagas. Toque em um para escolher."
             />
             {internalSimple && (
-              <label className="field internal-notes-field">
+              <label className="tw:grid tw:min-w-0 tw:gap-1.5 tw:text-sm tw:font-medium tw:text-ui-text">
                 <span>Observações internas</span>
                 <textarea
+                  data-ui-input=""
+                  className={`${configTextareaStyle} tw:min-h-24 tw:resize-y`}
                   value={requestData.notes}
                   onChange={(event) => updateRequestField("notes", event.target.value)}
                   placeholder="Registre orientações, atendimento no balcão ou ponto de atenção para a equipe."
@@ -3226,7 +3252,7 @@ function NewRequest({
           </div>}
 
           {formStep === RequestStep.DOCUMENTS && <div className="form-section">
-            <div className="form-sub-card documents-step-card">
+            <Card className="form-sub-card documents-step-card">
               <div className="documents-step-header">
                 <span className="form-sub-card-title">{internalSimple ? "Documentos" : "Quase lá! Faltam só os documentos"}</span>
                 {internalSimple && <small>Anexe os comprovantes do tutor. Os pendentes ficam para conferência da equipe.</small>}
@@ -3234,39 +3260,21 @@ function NewRequest({
 
               <div className="documents-step-grid">
                 <aside className="documents-photo-column">
-                  {internalSimple ? <label className="doc-photo-zone doc-photo-zone--compact">
-                    {documentUploads.animal_photo?.dataUrl ? (
-                      <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
-                    ) : (
-                      <div className="doc-photo-placeholder">
-                        <ImagePlus size={22} />
-                        <span>{animalPhotoLoading ? "Carregando foto..." : reusedDocuments.animal_photo?.fileName || "Foto do animal"}</span>
-                        <small>{reusedDocuments.animal_photo ? "Foto reaproveitada" : "Opcional"}</small>
-                      </div>
-                    )}
-                    <input type="file" accept="image/*" onClick={(e) => { e.currentTarget.value = ""; }} onChange={(e) => handleAnimalPhotoFile(e.target.files?.[0])} />
-                    {documentUploads.animal_photo && (
-                      <button className="doc-photo-remove" type="button" onClick={(e) => { e.preventDefault(); removeDocumentFile("animal_photo"); }}>
-                        <Trash2 size={13} />
-                      </button>
-                    )}
-                  </label> : (
-                    <Card className="tw:grid tw:justify-items-center tw:gap-3 tw:p-3 tw:text-center">
-                      {uploadedPhoto?.dataUrl ? (
-                        <img className="tw:max-h-40 tw:w-full tw:rounded-[var(--ui-radius-md)] tw:object-contain" src={uploadedPhoto.dataUrl} alt="Foto do animal" />
-                      ) : <ImagePlus size={22} aria-hidden="true" className="tw:text-ui-accent" />}
-                      <span className="tw:text-sm tw:font-medium" role={animalPhotoLoading ? "status" : undefined}>
-                        {animalPhotoLoading ? "Carregando foto..." : reusedDocuments.animal_photo?.fileName || "Foto do animal"}
-                      </span>
-                      <small className="tw:text-ui-muted">{reusedDocuments.animal_photo ? "Foto reaproveitada" : "Opcional"}</small>
-                      <input ref={animalPhotoInput} type="file" accept="image/*" hidden onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
-                      <div className="tw:flex tw:flex-wrap tw:justify-center tw:gap-2">
-                        <Button variant="outline" disabled={animalPhotoLoading} onClick={() => animalPhotoInput.current?.click()}>{uploadedPhoto ? "Substituir foto" : "Anexar foto"}</Button>
-                        {uploadedPhoto?.dataUrl && <Button variant="outline" onClick={() => setPreviewDocument(uploadedPhoto)}>Ver foto</Button>}
-                        {uploadedPhoto && <Button variant="danger" onClick={() => removeDocumentFile("animal_photo")}>Remover foto</Button>}
-                      </div>
-                    </Card>
-                  )}
+                  <Card className="tw:grid tw:justify-items-center tw:gap-3 tw:p-3 tw:text-center">
+                    {uploadedPhoto?.dataUrl ? (
+                      <img className="tw:max-h-40 tw:w-full tw:rounded-[var(--ui-radius-md)] tw:object-contain" src={uploadedPhoto.dataUrl} alt="Foto do animal" />
+                    ) : <ImagePlus size={22} aria-hidden="true" className="tw:text-ui-accent" />}
+                    <span className="tw:text-sm tw:font-medium" role={animalPhotoLoading ? "status" : undefined}>
+                      {animalPhotoLoading ? "Carregando foto..." : reusedDocuments.animal_photo?.fileName || "Foto do animal"}
+                    </span>
+                    <small className="tw:text-ui-muted">{reusedDocuments.animal_photo ? "Foto reaproveitada" : "Opcional"}</small>
+                    <input ref={animalPhotoInput} type="file" accept="image/*" hidden onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
+                    <div className="tw:flex tw:flex-wrap tw:justify-center tw:gap-2">
+                      <Button variant="outline" disabled={animalPhotoLoading} onClick={() => animalPhotoInput.current?.click()}>{uploadedPhoto ? "Substituir foto" : "Anexar foto"}</Button>
+                      {uploadedPhoto?.dataUrl && <Button variant="outline" onClick={() => setPreviewDocument(uploadedPhoto)}>Ver foto</Button>}
+                      {uploadedPhoto && <Button variant="danger" onClick={() => removeDocumentFile("animal_photo")}>Remover foto</Button>}
+                    </div>
+                  </Card>
                   {registeredContext && !contextLoading && <ReusableDocumentChoices candidates={registeredContext.documents.filter((candidate) => candidate.documentId === "animal_photo")} selected={reusedDocuments.animal_photo} onSelect={(candidate) => { animalPhotoGeneration.current += 1; setAnimalPhotoLoading(false); removeDocumentFile("animal_photo"); setReusedDocuments((current) => ({ ...current, animal_photo: candidate })); }} onPreview={setReusedPreview} onRemove={() => setReusedDocuments((current) => removeReusedDocument(current, "animal_photo"))} />}
                 </aside>
 
@@ -3309,7 +3317,7 @@ function NewRequest({
                   </div>}
                 </div>
               </div>
-            </div>
+            </Card>
           </div>}
       </RequestFormLayout>
       {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} external={!internalSimple} />}
@@ -3414,8 +3422,10 @@ function buildDeclarationPdfHtml(requestData, animals = [], declaration) {
   </body>
 </html>`;
 }
-export function DocumentPreviewModal({ document, onClose, external = false }: AnyRecord) {
+export function DocumentPreviewModal({ document, onClose, external = false, returnFocus }: AnyRecord) {
+  const previewLayer = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  useModalFocus(previewLayer, !external, returnFocus);
   const dataUrl = getDocumentPreviewSource(document);
   const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
   const isImage = mimeType?.startsWith("image/");
@@ -3430,14 +3440,14 @@ export function DocumentPreviewModal({ document, onClose, external = false }: An
     return () => { if (trigger instanceof HTMLElement) trigger.focus(); };
   }, [external]);
 
-  return (
-    <div className="modal-backdrop">
+  const preview = (
+    <div className="modal-backdrop" ref={previewLayer} data-managed-dialog={external ? undefined : ""}>
       <div
         ref={dialogRef}
         className="document-preview-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={external ? title : undefined}
+        aria-label={title || "Prévia do documento"}
         onKeyDown={external ? (event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } } : undefined}
       >
         {external ? (
@@ -3448,11 +3458,11 @@ export function DocumentPreviewModal({ document, onClose, external = false }: An
             </div>
             <CloseButton onClick={onClose} />
           </header>
-        ) : <ModalHeader title={title} subtitle={document.fileName !== title ? document.fileName : undefined} onClose={onClose} />}
+        ) : <ModalHeader appearance="config" title={title} subtitle={document.fileName !== title ? document.fileName : undefined} onClose={onClose} />}
         <div className="document-preview-frame">
           {isImage && <img src={dataUrl} alt={document.documentName || document.fileName} />}
           {isPdf && (
-            <object title={document.fileName} data={dataUrl} type="application/pdf">
+            <object title={document.fileName} data={dataUrl} type="application/pdf" tabIndex={external ? undefined : 0}>
               <embed src={dataUrl} type="application/pdf" />
             </object>
           )}
@@ -3463,6 +3473,7 @@ export function DocumentPreviewModal({ document, onClose, external = false }: An
       </div>
     </div>
   );
+  return external || typeof window === "undefined" ? preview : createPortal(preview, window.document.body);
 }
 
 export function ToastContainer({ toasts, onDismiss }: AnyRecord) {
@@ -3579,24 +3590,25 @@ function AdminDashboard({
   });
   const emptyMessage = getEmptyListMessage(requestFilters);
   return (
-    <section className="request-workspace triage-workspace clean-requests-workspace">
+    <section className="tw:grid tw:min-w-0 tw:gap-3.5">
       <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
-      <div className="page-toolbar request-page-controls">
-          <div className="page-actions workspace-heading-actions">
-            <button className="primary-action" type="button" onClick={() => setCreateRequestOpen(true)}>
-              <Plus size={18} />
-              Criar Solicitação
-            </button>
-          </div>
-
-          <RequestFiltersToolbar
-            todayOnly={requestFilters.todayOnly}
-            todayCount={filterCounts.today}
-            activePillCount={filterPills.length}
-            drawerOpen={filtersDrawerOpen}
-            onToggleToday={requestFilterActions.toggleToday}
-            onOpenDrawer={() => setFiltersDrawerOpen(true)}
-          />
+      <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
+        <Button
+          variant="custom"
+          className="tw:border-[color:var(--action-primary-border)] tw:bg-[var(--action-primary)] tw:font-semibold tw:text-[color:var(--action-primary-ink)] tw:enabled:hover:bg-[var(--action-primary-hover)] tw:max-[760px]:w-full"
+          onClick={() => setCreateRequestOpen(true)}
+        >
+          <Plus size={18} aria-hidden="true" />
+          Criar Solicitação
+        </Button>
+        <RequestFiltersToolbar
+          todayOnly={requestFilters.todayOnly}
+          todayCount={filterCounts.today}
+          activePillCount={filterPills.length}
+          drawerOpen={filtersDrawerOpen}
+          onToggleToday={requestFilterActions.toggleToday}
+          onOpenDrawer={() => setFiltersDrawerOpen(true)}
+        />
       </div>
       <ActiveFiltersBar
         filters={requestFilters}
@@ -3605,14 +3617,15 @@ function AdminDashboard({
         onClearDimension={requestFilterActions.clearDimension}
         onClearAll={requestFilterActions.clearAll}
       />
-      <div className="triage-card-grid">
+      <div className="tw:grid tw:min-w-0 tw:gap-2.5">
         {activeRequests.length === 0 && (
-          <EmptyState
-            title={emptyMessage.title}
-            text={emptyMessage.text}
-            action={emptyMessage.canClear ? "Limpar filtros" : undefined}
-            onAction={requestFilterActions.clearAll}
-          />
+          <Card className="tw:grid tw:min-h-[86px] tw:content-center tw:justify-items-start tw:gap-2 tw:px-5 tw:py-4">
+            <strong className="tw:text-base tw:font-semibold tw:text-ui-ink">{emptyMessage.title}</strong>
+            <p className="tw:m-0 tw:text-sm tw:text-ui-muted">{emptyMessage.text}</p>
+            {emptyMessage.canClear && (
+              <Button variant="outline" onClick={requestFilterActions.clearAll}>Limpar filtros</Button>
+            )}
+          </Card>
         )}
         {activeRequests.map((request) => {
           const isAccessRequest = request.__source === ACCESS_REQUEST_SOURCE;
@@ -3620,47 +3633,34 @@ function AdminDashboard({
             if (isAccessRequest) setActive?.("credenciamento");
             else openRequestPreview(request);
           }
+          const fields = [
+            { label: "Protocolo", value: `#${request.protocol}` },
+            { label: "Tutor", value: displayText(request.tutor) },
+            { label: "Animal", value: request.animals.map((animal) => displayText(animal.name)).join(", ") || "-" },
+            { label: "Tipo", value: isAccessRequest ? "Credenciamento" : requestTypeLabel(request) },
+            { label: "Responsável", value: displayText(request.responsible) || "-" },
+            { label: "Agenda", value: request.preferredSchedule || request.appointment || "-" },
+          ];
           return (
-          <article
-            className="triage-card clickable-triage-card"
-            key={request.id}
-            role="button"
-            tabIndex={0}
-            aria-label={`Abrir solicitação #${request.protocol}`}
-            onClick={openCard}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                openCard();
-              }
-            }}
-          >
-            <div className="tc-row">
-              <div className="tc-col tc-col--protocol">
-                <span className="tc-label">Protocolo</span>
-                <span className="tc-value tc-protocol">#{request.protocol}</span>
-              </div>
-              <div className="tc-col tc-col--tutor">
-                <span className="tc-label">Tutor</span>
-                <span className="tc-value">{displayText(request.tutor)}</span>
-              </div>
-              <div className="tc-col tc-col--animal">
-                <span className="tc-label">Animal</span>
-                <span className="tc-value">{request.animals.map((a) => displayText(a.name)).join(", ") || "-"}</span>
-              </div>
-              <div className="tc-col tc-col--tipo">
-                <span className="tc-label">Tipo</span>
-                <span className="tc-value">{isAccessRequest ? "Credenciamento" : requestTypeLabel(request)}</span>
-              </div>
-              <div className="tc-col tc-col--responsavel">
-                <span className="tc-label">Responsável</span>
-                <span className="tc-value">{displayText(request.responsible) || "-"}</span>
-              </div>
-              <div className="tc-col tc-col--agenda">
-                <span className="tc-label">Agenda</span>
-                <span className="tc-value">{request.preferredSchedule || request.appointment || "-"}</span>
-              </div>
-              <div className="tc-col tc-col--status">
+            <Card
+              as="button"
+              key={request.id}
+              aria-label={`Abrir solicitação #${request.protocol}`}
+              onClick={openCard}
+              className="tw:grid tw:min-h-[76px] tw:min-w-0 tw:w-full tw:items-center tw:gap-3 tw:px-4 tw:py-3.5 tw:text-left tw:touch-manipulation tw:hover:border-ui-accent tw:hover:bg-card-page tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent tw:min-[761px]:grid-cols-2 tw:min-[1101px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,auto)]"
+            >
+              {fields.map(({ label, value }) => (
+                <span key={label} className="tw:grid tw:min-w-0 tw:gap-1">
+                  <span className="tw:text-xs tw:font-medium tw:text-ui-muted">{label}</span>
+                  <span className={label === "Protocolo"
+                    ? "tw:wrap-anywhere tw:text-sm tw:font-semibold tw:text-ui-accent-strong"
+                    : "tw:wrap-anywhere tw:text-sm tw:text-ui-ink"}
+                  >
+                    {value}
+                  </span>
+                </span>
+              ))}
+              <span className="tw:flex tw:min-w-0 tw:flex-col tw:items-start tw:gap-1.5 tw:min-[1101px]:items-end">
                 {(request.status === "REALIZADA" || request.status === "CANCELADA") ? (
                   <span className={`tc-result-badge tc-result-badge--${request.status === "REALIZADA" ? "success" : "canceled"}`}>
                     {request.status === "REALIZADA" ? "Realizada" : "Cancelada"}
@@ -3673,9 +3673,8 @@ function AdminDashboard({
                     {request.rescheduleCount === 1 ? "Reagendado" : `Reagendado ${request.rescheduleCount}x`}
                   </span>
                 )}
-              </div>
-            </div>
-          </article>
+              </span>
+            </Card>
           );
         })}
       </div>
@@ -3719,20 +3718,15 @@ function AdminDashboard({
       )}
 
       {createRequestOpen && (
-        <div className="modal-backdrop">
-          <div className="internal-request-modal" role="dialog" aria-modal="true" aria-labelledby="internal-request-title">
-            <div className="irm-header">
-              <div className="irm-header-text">
-                <strong id="internal-request-title">Nova solicitação</strong>
-              </div>
-              <button className="irm-close-btn" type="button" aria-label="Fechar" onClick={closeCreateRequest}>
-                <X size={18} />
-              </button>
-            </div>
+        <ConfigDialogBackdrop>
+          <Card className="internal-request-modal" role="dialog" aria-modal="true" aria-labelledby="internal-request-title">
+            <header className="tw:flex tw:shrink-0 tw:items-center tw:justify-between tw:gap-3 tw:px-2 tw:py-1">
+              <h2 id="internal-request-title" className="tw:m-0 tw:text-base tw:font-semibold tw:text-ui-ink">Nova solicitação</h2>
+              <CloseButton onClick={closeCreateRequest} />
+            </header>
             {createdRequest ? (
               <div className="nr-body">
                 <RequestDoneCard
-                  internal
                   protocol={createdRequest.protocol}
                   followUp={(createdRequest.workflow_data || createdRequest.workflowData)?.followUp}
                   createRequirement={() => createRequestPdfDataUrl(createdRequest, municipalities.find((item) => item.id === createdRequest.municipalityId))}
@@ -3757,8 +3751,8 @@ function AdminDashboard({
                 neighborhoods={neighborhoods}
               />
             )}
-          </div>
-        </div>
+          </Card>
+        </ConfigDialogBackdrop>
       )}
 
     </section>
@@ -7410,7 +7404,7 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove,
 
   return (
     <>
-      <article className={`doc-row ${upload?.status || "empty"}${needsReplacement ? " needs-replacement" : ""}${onPreview ? " tw:flex-wrap" : ""}`}>
+      <Card as="article" className={`doc-row tw:flex-wrap ${upload?.status || "empty"}${needsReplacement ? " needs-replacement" : ""}`}>
         <div className="doc-row-icon">{statusIcon}</div>
         <div className="doc-row-info">
           <strong>{document.name}{document.required && <span className="doc-required">*</span>}</strong>
@@ -7420,32 +7414,15 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove,
           }
           {publicMessage && <small className="doc-row-msg">{publicMessage}</small>}
         </div>
-        <div className={onPreview ? "tw:flex tw:w-full tw:flex-wrap tw:gap-2" : "doc-row-actions"}>
-          {onPreview ? <>
-            <input ref={fileInput} type="file" hidden accept={(document.accept || []).join(",")} onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => onUpload(event.target.files?.[0])} />
-            <Button variant="outline" onClick={() => fileInput.current?.click()} aria-label={`${upload ? "Substituir" : "Anexar"} ${document.name}`}>
-              <Paperclip size={15} aria-hidden="true" />{upload ? "Substituir" : "Anexar"}
-            </Button>
-            {upload?.dataUrl && <Button variant="outline" onClick={() => onPreview(upload)} aria-label={`Ver ${document.name}`}>Ver arquivo</Button>}
-            {upload && <Button variant="danger" onClick={onRemove} aria-label={`Remover ${document.name}`}><Trash2 size={14} aria-hidden="true" />Remover</Button>}
-          </> : <>
-            <label className="doc-attach-btn" title={upload ? "Substituir arquivo" : "Anexar arquivo"}>
-              <Paperclip size={15} />
-              <input
-                type="file"
-                accept={(document.accept || []).join(",")}
-                onClick={(event) => { event.currentTarget.value = ""; }}
-                onChange={(event) => onUpload(event.target.files?.[0])}
-              />
-            </label>
-            {upload && (
-              <button className="doc-remove-btn" type="button" onClick={onRemove} title="Remover">
-                <Trash2 size={14} />
-              </button>
-            )}
-          </>}
+        <div className="tw:flex tw:w-full tw:flex-wrap tw:gap-2">
+          <input ref={fileInput} type="file" hidden accept={(document.accept || []).join(",")} onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => onUpload(event.target.files?.[0])} />
+          <Button variant="outline" onClick={() => fileInput.current?.click()} aria-label={`${upload ? "Substituir" : "Anexar"} ${document.name}`}>
+            <Paperclip size={15} aria-hidden="true" />{upload ? "Substituir" : "Anexar"}
+          </Button>
+          {onPreview && upload?.dataUrl && <Button variant="outline" onClick={() => onPreview(upload)} aria-label={`Ver ${document.name}`}>Ver arquivo</Button>}
+          {upload && <Button variant="danger" onClick={onRemove} aria-label={`Remover ${document.name}`}><Trash2 size={14} aria-hidden="true" />Remover</Button>}
         </div>
-      </article>
+      </Card>
       {upload?.status === "checking" && upload?.dataUrl && (
         <DocumentScanningPreview dataUrl={upload.dataUrl} fileType={upload.fileType} />
       )}

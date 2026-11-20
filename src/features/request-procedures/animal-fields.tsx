@@ -1,4 +1,5 @@
 import React from "react";
+import { Card } from "../../components/card";
 import { OptionCardGroup } from "../../components/option-card-group";
 import type { OptionCardChoice } from "../../components/option-card-group";
 import type { AnyRecord } from "../../types";
@@ -31,14 +32,14 @@ interface AnimalFieldsProps {
 export function AnimalFields({ procedures, animal, speciesNames, sizeChoices, breedOptions, neighborhoodNames = [], submitAttempted, internal = false, onChange, onSelectSpecies }: AnimalFieldsProps) {
   return (
     <div className="animal-form-sections">
-      {procedures && <div className="form-sub-card animal-procedures-card">{procedures}</div>}
-      <div className="form-sub-card animal-profile-card">
+      {procedures && <Card className="form-sub-card animal-procedures-card">{procedures}</Card>}
+      <Card className="form-sub-card animal-profile-card">
         <span className="form-sub-card-title">Como ele é?</span>
         <div className="option-card-grid">
-          <OptionCardGroup label="Espécie" external={!internal} value={animal.species} options={speciesNames} onChange={onSelectSpecies} invalid={submitAttempted && !animal.species} required stacked />
-          <OptionCardGroup label="Sexo" external={!internal} value={animal.sex} options={SEX_OPTIONS} onChange={(value) => onChange("sex", value)} invalid={submitAttempted && !animal.sex} required stacked />
-          <OptionCardGroup label="Tem raça definida?" external={!internal} value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required stacked />
-          <OptionCardGroup label="Qual o porte?" external={!internal} value={animal.size} options={sizeChoices} onChange={(value) => onChange("size", value)} invalid={submitAttempted && !animal.size} required />
+          <OptionCardGroup label="Espécie" value={animal.species} options={speciesNames} onChange={onSelectSpecies} invalid={submitAttempted && !animal.species} required stacked />
+          <OptionCardGroup label="Sexo" value={animal.sex} options={SEX_OPTIONS} onChange={(value) => onChange("sex", value)} invalid={submitAttempted && !animal.sex} required stacked />
+          <OptionCardGroup label="Tem raça definida?" value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required stacked />
+          <OptionCardGroup label="Qual o porte?" value={animal.size} options={sizeChoices} onChange={(value) => onChange("size", value)} invalid={submitAttempted && !animal.size} required />
         </div>
         <div className="text-field-row">
           {animal.breedType === "Definida" && (
@@ -52,30 +53,28 @@ export function AnimalFields({ procedures, animal, speciesNames, sizeChoices, br
                 </select>
               </div>
             ) : (
-              <RequestTextField internal={internal} className="animal-breed-field" label="Raça" type="text" placeholder="Ex.: Poodle" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)} />
+              <RequestTextField className="animal-breed-field" label="Raça" type="text" placeholder="Ex.: Poodle" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)} />
             )
           )}
-          <RequestTextField internal={internal} label="Como ele se chama?" type="text" placeholder="Ex.: Bidu" value={animal.name} onChange={(event) => onChange("name", event.target.value)} />
-          <RequestTextField internal={internal} label="Cor da pelagem" type="text" placeholder="Ex.: caramelo" value={animal.coat} onChange={(event) => onChange("coat", event.target.value)} />
-          <RequestTextField internal={internal} label="Idade aproximada" type="text" placeholder="Ex.: 2 anos" value={animal.age || ""} onChange={(event) => onChange("age", event.target.value)} />
+          <RequestTextField label="Como ele se chama?" type="text" placeholder="Ex.: Bidu" value={animal.name} onChange={(event) => onChange("name", event.target.value)} />
+          <RequestTextField label="Cor da pelagem" type="text" placeholder="Ex.: caramelo" value={animal.coat} onChange={(event) => onChange("coat", event.target.value)} />
+          <RequestTextField label="Idade aproximada" type="text" placeholder="Ex.: 2 anos" value={animal.age || ""} onChange={(event) => onChange("age", event.target.value)} />
         </div>
         <div className="animal-location-row">
           <div className="animal-neighborhood">
-            <NeighborhoodField internal={internal} label="Em que bairro ele vive?" placeholder="Ex.: Centro" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
+            <NeighborhoodField label="Em que bairro ele vive?" placeholder="Ex.: Centro" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
             <small className="form-hint">Ajuda a organizar os atendimentos.</small>
           </div>
           {internal && (
             <div className="internal-microchip-row">
-              <div className="access-field" data-label="Microchip">
-                <input
-                  type="text"
-                  aria-label="Microchip"
-                  placeholder={animal.hasChip === "Sim" ? "Código" : "Não informado"}
-                  value={animal.microchip}
-                  onChange={(event) => onChange("microchip", event.target.value)}
-                  readOnly={animal.hasChip !== "Sim"}
-                />
-              </div>
+              <RequestTextField
+                label="Microchip"
+                type="text"
+                placeholder={animal.hasChip === "Sim" ? "Código" : "Não informado"}
+                value={animal.microchip}
+                onChange={(event) => onChange("microchip", event.target.value)}
+                readOnly={animal.hasChip !== "Sim"}
+              />
               <label className="doc-accept-check internal-chip-check">
                 <input
                   type="checkbox"
@@ -91,19 +90,19 @@ export function AnimalFields({ procedures, animal, speciesNames, sizeChoices, br
             </div>
           )}
         </div>
-      </div>
-      <div className="form-sub-card animal-health-card">
+      </Card>
+      <Card className="form-sub-card animal-health-card">
         <div className="form-sub-card-heading">
           <span className="form-sub-card-title">Saúde e cuidados</span>
           <small className="form-hint">Responda só o que souber.</small>
         </div>
         <div className="option-card-grid">
-          <OptionCardGroup label="Já tomou vermífugo?" external={!internal} value={animal.dewormed} options={YES_NO_OPTIONS} onChange={(value) => onChange("dewormed", value)} />
-          <OptionCardGroup label="As vacinas estão em dia?" external={!internal} value={animal.vaccinated} options={YES_NO_OPTIONS} onChange={(value) => onChange("vaccinated", value)} />
-          <OptionCardGroup label="Já teve alguma doença?" external={!internal} value={animal.illnessHistory} options={YES_NO_OPTIONS} onChange={(value) => onChange("illnessHistory", value)} />
-          <OptionCardGroup label="Come só ração?" external={!internal} value={animal.food} options={FOOD_OPTIONS} onChange={(value) => onChange("food", value)} />
+          <OptionCardGroup label="Já tomou vermífugo?" value={animal.dewormed} options={YES_NO_OPTIONS} onChange={(value) => onChange("dewormed", value)} />
+          <OptionCardGroup label="As vacinas estão em dia?" value={animal.vaccinated} options={YES_NO_OPTIONS} onChange={(value) => onChange("vaccinated", value)} />
+          <OptionCardGroup label="Já teve alguma doença?" value={animal.illnessHistory} options={YES_NO_OPTIONS} onChange={(value) => onChange("illnessHistory", value)} />
+          <OptionCardGroup label="Come só ração?" value={animal.food} options={FOOD_OPTIONS} onChange={(value) => onChange("food", value)} />
         </div>
-      </div>
+      </Card>
     </div>
   );
 }

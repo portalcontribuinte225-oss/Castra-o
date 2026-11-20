@@ -36,7 +36,7 @@ export function RequesterStep({ entry, tutorship, tutorshipFixed, tutorKnown, sh
   const noticeIssue = followUp.enabled ? getFollowUpIssues(followUp, contacts, policy.phoneEnabled)[0] || "" : "";
   // The contacts are known before the answer with a tutor, and asked after a yes without one (null).
   const question = (known: TutorContacts | null) => (
-    <FollowUpQuestion value={followUp} onChange={onFollowUpChange} reachable={known} phoneEnabled={policy.phoneEnabled} internal={tutorFields.internal}
+    <FollowUpQuestion value={followUp} onChange={onFollowUpChange} reachable={known} phoneEnabled={policy.phoneEnabled}
       loading={policy.loading} error={policy.error} onRetry={policy.retry} invalid={showErrors && followUp.enabled === null} />
   );
   const issue = showErrors && noticeIssue ? <p className="form-error" role="alert">{noticeIssue}</p> : null;

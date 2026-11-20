@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from "react";
-import { Search, X } from "lucide-react";
+import { useRef, useState } from "react";
+import { Search } from "lucide-react";
+import { Button } from "../../components/button";
+import { CloseButton } from "../../components/close-button";
+import { Input } from "../../components/input";
+import { useModalFocus } from "../../components/modal-focus";
 import { normalizeText } from "../../utils";
 import {
   RequestFilterDimension,
@@ -10,7 +14,6 @@ import {
 import type { RequestFacetCounts, RequestFilterOption, RequestListFilters } from "./request-filters";
 import { requestStageOptions } from "./request-stage";
 import type { RequestStage } from "./request-stage";
-import "./request-filters.css";
 
 const SEARCH_MIN_OPTIONS = 7;
 
@@ -39,32 +42,34 @@ function FilterGroup<T extends string>({
     : options;
 
   return (
-    <section className="request-filters-group" aria-label={title}>
-      <h4 className="request-filters-group-title">{title}</h4>
+    <section className="tw:grid tw:gap-2" aria-label={title}>
+      <h4 className="tw:m-0 tw:text-xs tw:font-semibold tw:uppercase tw:tracking-wide tw:text-ui-muted">{title}</h4>
       {searchable && (
-        <label className="request-filters-search">
-          <Search size={14} />
-          <input
+        <div className="tw:relative">
+          <Search size={14} aria-hidden="true" className="tw:pointer-events-none tw:absolute tw:left-3 tw:top-1/2 tw:-translate-y-1/2 tw:text-ui-muted" />
+          <Input
             type="text"
             value={query}
             placeholder={searchPlaceholder}
+            aria-label={searchPlaceholder}
+            className="tw:pl-9"
             onChange={(event) => setQuery(event.target.value)}
           />
-        </label>
+        </div>
       )}
-      <div className="request-filters-list">
-        {visibleOptions.length === 0 && <p className="request-filters-empty">Nenhuma opção encontrada</p>}
+      <div className="tw:grid tw:max-h-[264px] tw:gap-0.5 tw:overflow-y-auto">
+        {visibleOptions.length === 0 && <p className="tw:m-0 tw:px-2.5 tw:py-1.5 tw:text-sm tw:text-ui-muted" role="status">Nenhuma opção encontrada</p>}
         {visibleOptions.map((option) => {
           const checked = selected.includes(option.value);
           const count = counts[option.value] ?? 0;
           return (
             <label
               key={option.value}
-              className={`request-filters-option${count === 0 && !checked ? " is-empty" : ""}`}
+              className={`tw:flex tw:min-h-9 tw:cursor-pointer tw:items-center tw:gap-2.5 tw:rounded-lg tw:px-2.5 tw:py-1.5 tw:text-sm tw:text-ui-text tw:hover:bg-card-page${count === 0 && !checked ? " tw:opacity-60" : ""}`}
             >
-              <input type="checkbox" checked={checked} onChange={() => onToggle(option.value)} />
-              <span>{option.label}</span>
-              <small>{count}</small>
+              <input type="checkbox" className="tw:size-4 tw:shrink-0 tw:accent-[#0f766e]" checked={checked} onChange={() => onToggle(option.value)} />
+              <span className="tw:min-w-0 tw:flex-1 tw:wrap-anywhere">{option.label}</span>
+              <small className="tw:text-xs tw:font-semibold tw:text-ui-muted tw:tabular-nums">{count}</small>
             </label>
           );
         })}
@@ -98,43 +103,26 @@ export function RequestFiltersDrawer({
   onClearAll,
   onClose,
 }: RequestFiltersDrawerProps) {
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    closeButtonRef.current?.focus();
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onCloseRef.current();
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("keydown", handleKeyDown);
-      previouslyFocused?.focus?.();
-    };
-  }, []);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  useModalFocus(drawerRef);
 
   return (
-    <>
-      <div className="ag-drawer-overlay request-filters-overlay" onClick={onClose} />
-      <aside className="ag-drawer request-filters-drawer" role="dialog" aria-modal="true" aria-labelledby="request-filters-title">
-        <div className="ag-drawer-head">
-          <div className="ag-drawer-head-info">
-            <span className="ag-drawer-kicker">Solicitações</span>
-            <h3 className="ag-drawer-date" id="request-filters-title">Filtros</h3>
+    <div className="tw:contents" data-managed-dialog="" ref={drawerRef}>
+      <div aria-hidden="true" className="tw:fixed tw:inset-0 tw:z-[210] tw:bg-slate-900/30 tw:backdrop-blur-[3px]" onClick={onClose} />
+      <aside
+        className="tw:fixed tw:inset-y-0 tw:right-0 tw:z-[211] tw:flex tw:w-full tw:max-w-[420px] tw:flex-col tw:border-l tw:border-solid tw:border-card-border tw:bg-card-surface tw:shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="request-filters-title"
+      >
+        <div className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:border-b tw:border-solid tw:border-card-border tw:px-5 tw:pb-4 tw:pt-5">
+          <div className="tw:grid tw:gap-1">
+            <span className="tw:text-xs tw:font-semibold tw:text-ui-muted">Solicitações</span>
+            <h3 className="tw:m-0 tw:text-lg tw:font-semibold tw:text-ui-ink" id="request-filters-title">Filtros</h3>
           </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="ag-drawer-close"
-            aria-label="Fechar filtros"
-            onClick={onClose}
-          >
-            <X size={15} />
-          </button>
+          <CloseButton aria-label="Fechar filtros" onClick={onClose} />
         </div>
-        <div className="request-filters-body">
+        <div className="tw:grid tw:min-h-0 tw:flex-1 tw:content-start tw:gap-5 tw:overflow-y-auto tw:px-5 tw:pb-6 tw:pt-4">
           <FilterGroup
             title={requestFilterDimensionLabels[RequestFilterDimension.STAGES]}
             options={requestStageOptions}
@@ -158,20 +146,19 @@ export function RequestFiltersDrawer({
             searchPlaceholder="Buscar responsável..."
           />
         </div>
-        <div className="request-filters-footer">
-          <button
-            type="button"
-            className="request-filters-clear-all"
-            disabled={isRequestFiltersEmpty(filters)}
-            onClick={onClearAll}
-          >
+        <div className="tw:flex tw:shrink-0 tw:gap-2.5 tw:border-t tw:border-solid tw:border-card-border tw:px-5 tw:pb-[max(0.875rem,env(safe-area-inset-bottom))] tw:pt-3.5">
+          <Button variant="outline" disabled={isRequestFiltersEmpty(filters)} onClick={onClearAll}>
             Limpar
-          </button>
-          <button type="button" className="request-filters-apply" onClick={onClose}>
+          </Button>
+          <Button
+            variant="custom"
+            className="tw:flex-1 tw:border-transparent tw:bg-[#0f766e] tw:font-semibold tw:text-white tw:enabled:hover:bg-[#115e59]"
+            onClick={onClose}
+          >
             Ver {formatRequestCount(resultCount)}
-          </button>
+          </Button>
         </div>
       </aside>
-    </>
+    </div>
   );
 }

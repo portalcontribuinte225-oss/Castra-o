@@ -1,7 +1,8 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { ProcedureAction, canApplyProcedureAction, holdsSchedulePlace } from "../../../shared/request-procedure-contract.js";
 import { RequestOrigin, RequestStatus } from "../../../shared/request-contract.js";
 import { DocumentPreviewModal, generateProcessReportPdf } from "../../App";
+import { useModalFocus } from "../../components/modal-focus";
 import { RequestType, displayText, getItemMunicipalityId, normalizeRequest, normalizeRequestType, requestTypeDomainLabels, requestTypeLabel } from "../../domain";
 import type { AnyRecord } from "../../types";
 import { getUserUploadedProcessDocuments } from "../../utils";
@@ -33,7 +34,7 @@ const REQUEST_DOCUMENT_KINDS: Record<string, string> = {
 
 // The work area of one process: its documents, the procedures of each of its animals and the tutor's data.
 export function ProcessModal({ request, readOnly = true, neighborhoods = [], requestTypes = [], documentTypes = [], sectors = [], users = [], municipalities = [], currentUserName = "",
-  onClose, onTutorSaved, onAssign, onAssume, onRejectProcess, onConfirmSpecial, onProcedureAction, onUpdateDocuments }: AnyRecord) {
+  returnFocus, onClose, onTutorSaved, onAssign, onAssume, onRejectProcess, onConfirmSpecial, onProcedureAction, onUpdateDocuments }: AnyRecord) {
   const normalized = normalizeRequest(request);
   const municipality = municipalities.find((item: AnyRecord) => item.id === normalized.municipalityId) || null;
   const matchesMunicipality = (item: AnyRecord) => !getItemMunicipalityId(item) || getItemMunicipalityId(item) === normalized.municipalityId;
@@ -45,6 +46,9 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const kind = normalizeRequestType(normalized.request_type || normalized.type);
   const [tab, setTab] = useState(ProcessTab.ATTACHMENTS);
   const panelId = useId();
+  const overlay = useRef<HTMLDivElement>(null);
+  const attachmentTrigger = useRef<HTMLButtonElement | null>(null);
+  useModalFocus(overlay, true, returnFocus);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [rejectingDocument, setRejectingDocument] = useState<AttachmentRow | null>(null);
   const [busy, setBusy] = useState(false);
@@ -125,8 +129,8 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const closeDialog = () => { if (!pending) setDialog(null); };
 
   return (
-    <div className="modal-backdrop">
-      <div className="prm-modal" role="dialog" aria-modal="true" aria-labelledby={`${panelId}-title`}>
+    <div className="modal-backdrop" data-managed-dialog="" ref={overlay}>
+      <div className="prm-modal tw:[--ui-action:#020817] tw:[--ui-action-hover:#111827]" role="dialog" aria-modal="true" aria-labelledby={`${panelId}-title`}>
         <ProcessHeader
           protocol={normalized.protocol}
           title={isSpecial ? requestTypeLabel(normalized) : "Atendimento de animais"}
@@ -145,7 +149,8 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
           {reportError && <p className="form-error" role="alert">{reportError}</p>}
           {tab === ProcessTab.ATTACHMENTS && (
             <AttachmentsTab rows={rows} pendingCount={pendingAttachmentCount} canReview={!readOnly && processOpen} canAttach={!readOnly} reviewBlockedReason={assignmentBlock} busyId={attachments.busyId}
-              uploadingEvidence={attachments.uploadingEvidence} error={attachments.error} onPreview={attachments.open} onDownload={attachments.save}
+              uploadingEvidence={attachments.uploadingEvidence} error={attachments.error}
+              onPreview={(row, trigger) => { attachmentTrigger.current = trigger; void attachments.open(row); }} onDownload={attachments.save}
               onApprove={attachments.approve} onReject={(row) => { setRejectingDocument(row); setDialog(Dialog.REJECT_DOCUMENT); }} onEvidence={attachments.attachEvidence} />
           )}
           {tab === ProcessTab.PROCEDURES && isSpecial && specialSection?.({ request: normalized })}
@@ -177,9 +182,9 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
             confirmSpecial: () => (kind === RequestType.COMPLAINT ? setDialog(Dialog.COMPLAINT) : onConfirmSpecial?.(request)),
           }}
         />
-        {attachments.preview && <DocumentPreviewModal document={attachments.preview} onClose={attachments.closePreview} />}
       </div>
 
+      {attachments.preview && <DocumentPreviewModal document={attachments.preview} onClose={attachments.closePreview} returnFocus={attachmentTrigger.current} />}
       {dialog === Dialog.ASSIGN && (
         <AssignDialog sectors={localSectors} users={localUsers} initial={{ sectorId: normalized.assignedSectorId || localSectors[0]?.id || "", userId: normalized.assignedUserId || "" }}
           onClose={closeDialog} busy={busy} onConfirm={async (assignment) => {

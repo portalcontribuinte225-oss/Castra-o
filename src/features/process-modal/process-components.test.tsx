@@ -46,9 +46,10 @@ describe("ProcessModal", () => {
     expect(html).toContain('class="prm-tab-count">1</span>');
     expect(html).toContain("Aguardando conferência dos anexos");
     expect(html).not.toContain("Pendência documental");
+    expect(html).toMatch(/<button\b[^>]*aria-label="Anexar evidência"/);
 
     const viewOnly = renderToStaticMarkup(<ProcessModal request={request} readOnly onClose={noop} />);
-    expect(viewOnly).not.toMatch(/aria-label="(?:Deferir|Indeferir) /);
+    expect(viewOnly).not.toMatch(/aria-label="(?:(?:Deferir|Indeferir) |Anexar evidência")/);
   });
 });
 
@@ -142,6 +143,7 @@ describe("ProceduresTab", () => {
     expect(html).toContain("Mel");
     expect(html).toContain("2 procedimentos");
     expect(html).toContain("Microchipagem");
+    expect(html.match(/<button\b[^>]*aria-pressed="true"/g)).toHaveLength(2);
     expect(html).toMatch(/Doenças preexistentes.*Displasia.*Alergias conhecidas.*Penicilina/);
     expect(html).not.toMatch(/Código do microchip aplicado ou lido|Data do agendamento|Observação do atendimento/);
     expect(html.match(/<textarea\b/g)).toHaveLength(2);

@@ -63,10 +63,9 @@ describe("the Tutor step", () => {
     expect(html({ data: { ...data, latitude: "-28.6", longitude: "-49.3" } })).toContain("Localização registrada: -28.6, -49.3.");
   });
 
-  it("is one copy: the staff's form has no other markup for the same step", () => {
-    const markup = html({ internal: true });
-    expect(markup).toContain('data-label="Celular *"');
-    expect(markup).not.toContain("data-ui-input");
+  it("uses the shared input with its accessible label in the same step for staff and tutors", () => {
+    const markup = html();
+    expect(markup).toMatch(/<input(?=[^>]*aria-label="Celular de cadastro")(?=[^>]*data-ui-input)/);
     expect(markup).not.toContain("cadunico-row"); expect(markup).not.toContain("Se aplica"); expect(markup).not.toContain("Identificação");
     expect(markup).not.toContain("CadÚnico"); expect(markup).not.toContain("cadunico-square-toggle");
   });

@@ -1,8 +1,12 @@
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { scheduleDate } from "../../../shared/schedule-contract.js";
 import { PublicSchedulePicker } from "../../App";
+import { Button } from "../../components/button";
 import { CloseButton } from "../../components/close-button";
+import { Input } from "../../components/input";
+import { useModalFocus } from "../../components/modal-focus";
+import { configTextareaStyle } from "../../components/ui";
 import { isPastScheduleDay } from "../../domain";
 import { getAvailableScheduleSlot, selectScheduleOccurrence, useScheduleAvailability } from "../registered-animals/use-schedule-availability";
 
@@ -39,6 +43,9 @@ function isValidScheduleDate(value: string) {
 
 // The window to move one procedure to another date: one place for its animal, at a location and time with vacancy.
 export function RescheduleDialog({ municipalityId, subject, currentDate, reservedSlots, busy, onConfirm, onClose }: RescheduleDialogProps) {
+  const overlay = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalFocus(overlay);
   const [date, setDate] = useState("");
   const [typedDate, setTypedDate] = useState("");
   const [occurrenceKey, setOccurrenceKey] = useState("");
@@ -73,16 +80,16 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
   }
 
   return (
-    <div className="modal-backdrop">
-      <div className="prm-modal prm-modal--reschedule" role="dialog" aria-modal="true">
+    <div className="modal-backdrop" ref={overlay} data-managed-dialog="">
+      <div className="prm-modal prm-modal--reschedule" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <header className="prm-header">
           <div className="prm-header-identity">
             <div className="prm-header-identity-text">
-              <span className="prm-eyebrow">Reagendar</span>
+              <span className="prm-eyebrow" id={titleId}>Reagendar {subject && <span className="tw:sr-only">{subject}</span>}</span>
               <h2 className="prm-headline-name">{subject}</h2>
             </div>
             <div className="prm-header-actions">
-              <CloseButton onClick={onClose} />
+              <CloseButton disabled={busy} onClick={onClose} />
             </div>
           </div>
         </header>
@@ -92,14 +99,12 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
               <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Nova data</strong>
               <div className="prm-reschedule-date-group">
                 <span className="prm-reschedule-current">Atual: {currentDate || "-"}</span>
-                <input className="prm-reschedule-date-input" value={typedDate} onChange={(event) => typeDate(event.target.value)} placeholder="dd/mm/aaaa" inputMode="numeric" aria-label="Data específica" />
+                <Input className="tw:max-w-[134px]" type="text" value={typedDate} onChange={(event) => typeDate(event.target.value)} placeholder="dd/mm/aaaa" inputMode="numeric" aria-label="Data específica" />
               </div>
             </div>
-            <label className="field prm-reschedule-reason">
-              <textarea value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} placeholder="Motivo do reagendamento (opcional)" aria-label="Motivo do reagendamento" />
-            </label>
+            <textarea data-ui-input="" className={`${configTextareaStyle} tw:resize-y`} value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} placeholder="Motivo do reagendamento (opcional)" aria-label="Motivo do reagendamento" />
             {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
-            {availability.error && <p role="alert" className="form-error">{availability.error} <button type="button" className="ghost-button" onClick={availability.refresh}>Tentar novamente</button></p>}
+            {availability.error && <p role="alert" className="form-error">{availability.error} <Button variant="outline" onClick={availability.refresh}>Tentar novamente</Button></p>}
             <PublicSchedulePicker scheduleDays={days} selectedDate={date} selectedOccurrenceKey={occurrenceKey} pendingReservation={{ date, count: 1 }} onSelect={chooseDate} />
             {occurrenceKey && day && (
               <label className="field">
@@ -115,10 +120,10 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
           </div>
         </div>
         <footer className="prm-footer">
-          <button className="ghost-button" type="button" onClick={onClose}>Cancelar</button>
-          <button className="primary-action" type="button" disabled={busy || !availability.ready || !occurrenceKey || !slot} onClick={() => onConfirm({ date, occurrenceKey, time, reason: reason.trim() })}>
+          <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
+          <Button disabled={busy || !availability.ready || !occurrenceKey || !slot} onClick={() => onConfirm({ date, occurrenceKey, time, reason: reason.trim() })}>
             {busy ? "Reagendando..." : "Confirmar reagendamento"}
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

@@ -55,7 +55,7 @@ describe("TutorDataTab", () => {
     });
     const html = renderToStaticMarkup(<TutorDataTab requestId="request-a" municipalityId="city-a" neighborhoodNames={[]} readOnly={false} actionsSlot={footer} />);
     expect(html).toMatch(/O tutor ainda não se identificou nesta solicitação\.[\s\S]*<span>Nome<\/span>/);
-    expect(html).toContain('CPF</span><input inputMode="numeric" value=""');
+    expect(html).toMatch(/CPF<\/span><input\b(?=[^>]*inputMode="numeric")(?=[^>]*value="")(?=[^>]*data-ui-input="")[^>]*>/);
     expect(html).not.toContain('readonly=""');
     expect(html).not.toContain("Nova senha");
     const [button] = vi.mocked(createPortal).mock.calls[0];

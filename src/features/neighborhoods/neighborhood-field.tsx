@@ -10,13 +10,12 @@ interface NeighborhoodFieldProps {
   invalid?: boolean;
   required?: boolean;
   placeholder?: string;
-  internal?: boolean;
 }
 
-export function NeighborhoodField({ label = "Bairro", value, names, onChange, invalid = false, required = false, placeholder = "Bairro", internal }: NeighborhoodFieldProps) {
+export function NeighborhoodField({ label = "Bairro", value, names, onChange, invalid = false, required = false, placeholder = "Bairro" }: NeighborhoodFieldProps) {
   const fieldLabel = required ? `${label} *` : label;
   if (!names.length) {
-    return <RequestTextField internal={internal} label={fieldLabel} type="text" aria-label={label} aria-invalid={invalid} placeholder={placeholder} maxLength={120} value={value || ""} onChange={(event) => onChange(event.target.value)} />;
+    return <RequestTextField label={fieldLabel} type="text" aria-label={label} aria-invalid={invalid} placeholder={placeholder} maxLength={120} value={value || ""} onChange={(event) => onChange(event.target.value)} />;
   }
   return (
     <div className={`access-field${invalid ? " is-invalid" : ""}`} data-label={fieldLabel}>

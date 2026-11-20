@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { ClipboardList } from "lucide-react";
 import { REJECTION_REASONS } from "../../../shared/notification-contract.js";
+import { Button } from "../../components/button";
+import { configFieldStyle, configTextareaStyle } from "../../components/ui";
 import type { AnyRecord } from "../../types";
 import { userBelongsToSector } from "../../App";
 import { ProcessDialog } from "./process-dialog";
@@ -10,11 +12,12 @@ export function AssignDialog({ sectors, users, initial, busy, onConfirm, onClose
   const sectorUsers = users.filter((user) => !assignment.sectorId || userBelongsToSector(user, assignment.sectorId));
   return (
     <ProcessDialog
-      title={<><ClipboardList size={15} /> Atribuir responsável</>}
+      title={<><ClipboardList size={15} aria-hidden="true" /> Atribuir responsável</>}
       onClose={onClose}
+      busy={busy}
       actions={<>
-        <button className="ghost-button" type="button" disabled={busy} onClick={onClose}>Cancelar</button>
-        <button className="primary-action" type="button" disabled={busy || !assignment.sectorId || !assignment.userId} onClick={() => onConfirm(assignment)}>{busy ? "Atribuindo..." : "Confirmar"}</button>
+        <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
+        <Button disabled={busy || !assignment.sectorId || !assignment.userId} onClick={() => onConfirm(assignment)}>{busy ? "Atribuindo..." : "Confirmar"}</Button>
       </>}
     >
       <label className="field">
@@ -43,11 +46,12 @@ export function RejectDialog({ title, subject, busy, onConfirm, onClose }: { tit
     <ProcessDialog
       title={title}
       onClose={onClose}
+      busy={busy}
       actions={<>
-        <button className="ghost-button" type="button" onClick={onClose}>Cancelar</button>
-        <button className="secondary-action danger-action" type="button" disabled={busy || !reason || !note.trim()} onClick={() => onConfirm({ reason, note: note.trim() })}>
+        <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
+        <Button variant="danger" disabled={busy || !reason || !note.trim()} onClick={() => onConfirm({ reason, note: note.trim() })}>
           {busy ? "Indeferindo..." : "Confirmar indeferimento"}
-        </button>
+        </Button>
       </>}
     >
       {subject && <p className="prm-muted-note">{subject}</p>}
@@ -58,9 +62,9 @@ export function RejectDialog({ title, subject, busy, onConfirm, onClose }: { tit
           {REJECTION_REASONS.map((item: string) => <option key={item} value={item}>{item}</option>)}
         </select>
       </label>
-      <label className="field">
+      <label className={configFieldStyle}>
         <span>Justificativa</span>
-        <textarea value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} placeholder="Explique o motivo do indeferimento" />
+        <textarea data-ui-input="" className={`${configTextareaStyle} tw:resize-y`} value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} placeholder="Explique o motivo do indeferimento" />
       </label>
     </ProcessDialog>
   );
@@ -73,14 +77,15 @@ export function NoteDialog({ title, label, placeholder, confirmLabel, busy, maxL
     <ProcessDialog
       title={title}
       onClose={onClose}
+      busy={busy}
       actions={<>
-        <button className="ghost-button" type="button" onClick={onClose}>Cancelar</button>
-        <button className="primary-action" type="button" disabled={busy || !note.trim()} onClick={() => onConfirm(note.trim())}>{busy ? "Salvando..." : confirmLabel}</button>
+        <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
+        <Button disabled={busy || !note.trim()} onClick={() => onConfirm(note.trim())}>{busy ? "Salvando..." : confirmLabel}</Button>
       </>}
     >
-      <label className="field">
+      <label className={configFieldStyle}>
         <span>{label}</span>
-        <textarea value={note} maxLength={maxLength} onChange={(event) => setNote(event.target.value)} placeholder={placeholder} autoFocus />
+        <textarea data-ui-input="" data-dialog-initial-focus="" className={`${configTextareaStyle} tw:resize-y`} value={note} maxLength={maxLength} onChange={(event) => setNote(event.target.value)} placeholder={placeholder} />
       </label>
     </ProcessDialog>
   );
@@ -91,10 +96,11 @@ export function UnsavedChangesDialog({ busy, onDiscard, onClose, onSave }: { bus
     <ProcessDialog
       title="Alterações não salvas"
       onClose={onClose}
+      busy={busy}
       actions={<>
-        <button className="ghost-button" type="button" disabled={busy} onClick={onDiscard}>Descartar</button>
-        <button className="ghost-button" type="button" disabled={busy} onClick={onClose}>Continuar editando</button>
-        <button className="primary-action" type="button" disabled={busy} onClick={onSave}>{busy ? "Salvando..." : "Salvar e fechar"}</button>
+        <Button variant="outline" disabled={busy} onClick={onDiscard}>Descartar</Button>
+        <Button variant="outline" disabled={busy} onClick={onClose}>Continuar editando</Button>
+        <Button disabled={busy} onClick={onSave}>{busy ? "Salvando..." : "Salvar e fechar"}</Button>
       </>}
     >
       <p className="prm-muted-note">Há alterações nos dados de saúde ou de microchip.</p>

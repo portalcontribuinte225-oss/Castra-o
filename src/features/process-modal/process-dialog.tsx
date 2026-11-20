@@ -1,21 +1,28 @@
+import { useId, useRef } from "react";
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
+import { CloseButton } from "../../components/close-button";
+import { useModalFocus } from "../../components/modal-focus";
 
 interface ProcessDialogProps {
   title: ReactNode;
   children: ReactNode;
   actions: ReactNode;
   onClose: () => void;
+  busy: boolean;
 }
 
-// A small window over the process, with the look the assignment window already has.
-export function ProcessDialog({ title, children, actions, onClose }: ProcessDialogProps) {
+export function ProcessDialog({ title, children, actions, onClose, busy }: ProcessDialogProps) {
+  const overlay = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalFocus(overlay);
   return (
-    <div className="assign-modal-overlay" onClick={onClose}>
-      <div className="assign-modal" role="dialog" aria-modal="true" onClick={(event) => event.stopPropagation()}>
+    <div className="assign-modal-overlay" ref={overlay} data-managed-dialog="" onClick={(event) => {
+      if (!busy && event.target === event.currentTarget) onClose();
+    }}>
+      <div className="assign-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="assign-modal-header">
-          <strong>{title}</strong>
-          <button className="assign-modal-close" type="button" onClick={onClose} aria-label="Fechar"><X size={16} /></button>
+          <strong id={titleId}>{title}</strong>
+          <CloseButton disabled={busy} onClick={onClose} />
         </div>
         {children}
         <div className="assign-modal-actions">{actions}</div>

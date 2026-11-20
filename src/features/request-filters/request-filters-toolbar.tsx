@@ -1,4 +1,8 @@
 import { CalendarDays, SlidersHorizontal } from "lucide-react";
+import { Button } from "../../components/button";
+
+const filterButtonStyle = "tw:min-w-0 tw:flex-1 tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:data-[active=true]:border-ui-accent tw:data-[active=true]:bg-[var(--selected-bg)] tw:data-[active=true]:text-[color:var(--selected-ink)]";
+const filterCountStyle = "tw:rounded-full tw:bg-[var(--ink-200)] tw:px-1.5 tw:py-0.5 tw:text-xs tw:text-ui-text tw:tabular-nums";
 
 interface RequestFiltersToolbarProps {
   todayOnly: boolean;
@@ -18,30 +22,24 @@ export function RequestFiltersToolbar({
   onOpenDrawer,
 }: RequestFiltersToolbarProps) {
   return (
-    <nav className="request-nav" aria-label="Filtros de solicitações">
-      <div className="request-today-segment">
-        <button
-          type="button"
-          className={todayOnly ? "selected" : ""}
-          aria-pressed={todayOnly}
-          onClick={onToggleToday}
-        >
-          <CalendarDays size={14} />
-          Hoje
-          <span>{todayCount}</span>
-        </button>
-        <button
-          type="button"
-          className={activePillCount > 0 ? "selected" : ""}
-          aria-haspopup="dialog"
-          aria-expanded={drawerOpen}
-          onClick={onOpenDrawer}
-        >
-          <SlidersHorizontal size={14} />
-          Filtros
-          {activePillCount > 0 && <span>{activePillCount}</span>}
-        </button>
-      </div>
+    <nav className="tw:flex tw:flex-wrap tw:gap-2 tw:max-[760px]:w-full" aria-label="Filtros de solicitações">
+      <Button variant="custom" className={filterButtonStyle} data-active={todayOnly} aria-pressed={todayOnly} onClick={onToggleToday}>
+        <CalendarDays size={14} aria-hidden="true" />
+        Hoje
+        <span className={filterCountStyle}>{todayCount}</span>
+      </Button>
+      <Button
+        variant="custom"
+        className={filterButtonStyle}
+        data-active={activePillCount > 0}
+        aria-haspopup="dialog"
+        aria-expanded={drawerOpen}
+        onClick={onOpenDrawer}
+      >
+        <SlidersHorizontal size={14} aria-hidden="true" />
+        Filtros
+        {activePillCount > 0 && <span className={filterCountStyle}>{activePillCount}</span>}
+      </Button>
     </nav>
   );
 }

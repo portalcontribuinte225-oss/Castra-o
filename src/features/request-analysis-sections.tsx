@@ -1,3 +1,4 @@
+import { ConfigField } from "../components/ui";
 import type { AnyRecord } from "../types";
 import { RequestType, normalizeRequestType } from "../domain";
 
@@ -11,14 +12,8 @@ export function DeathAnalysisSection({ request }: { request: AnyRecord }) {
       <div className="prm-section-block">
         <p className="prm-section-title">Óbito do animal</p>
         <div className="prm-procedure-fields">
-          <label className="field">
-            <span>Data do óbito</span>
-            <input value={deathDate} readOnly />
-          </label>
-          <label className="field">
-            <span>Causa mortis</span>
-            <input value={deathCause} readOnly placeholder="Não informado" />
-          </label>
+          <ConfigField label="Data do óbito" value={deathDate} readOnly />
+          <ConfigField label="Causa mortis" value={deathCause} readOnly placeholder="Não informado" />
         </div>
       </div>
     </div>
@@ -41,22 +36,10 @@ export function TutorTransferAnalysisSection({ request }: { request: AnyRecord }
       <div className="prm-section-block">
         <p className="prm-section-title">Novo tutor</p>
         <div className="prm-procedure-fields">
-          <label className="field">
-            <span>Nome</span>
-            <input value={targetTutor.name} readOnly placeholder="Não informado" />
-          </label>
-          <label className="field">
-            <span>CPF</span>
-            <input value={targetTutor.cpf} readOnly placeholder="Não informado" />
-          </label>
-          <label className="field">
-            <span>Telefone</span>
-            <input value={targetTutor.phone} readOnly placeholder="Não informado" />
-          </label>
-          <label className="field">
-            <span>E-mail</span>
-            <input value={targetTutor.email} readOnly placeholder="Não informado" />
-          </label>
+          <ConfigField label="Nome" value={targetTutor.name} readOnly placeholder="Não informado" />
+          <ConfigField label="CPF" value={targetTutor.cpf} readOnly placeholder="Não informado" />
+          <ConfigField label="Telefone" value={targetTutor.phone} readOnly placeholder="Não informado" />
+          <ConfigField label="E-mail" value={targetTutor.email} readOnly placeholder="Não informado" />
         </div>
         {targetTutor.address && (
           <p className="prm-muted-note">Endereço: {targetTutor.address}</p>
@@ -76,22 +59,10 @@ export function ComplaintAnalysisSection({ request }: { request: AnyRecord }) {
       <div className="prm-section-block">
         <p className="prm-section-title">Denunciante</p>
         <div className="prm-procedure-fields">
-          <label className="field">
-            <span>Nome</span>
-            <input value={request.tutor || ""} readOnly placeholder="Não informado" />
-          </label>
-          <label className="field">
-            <span>CPF</span>
-            <input value={request.cpf || ""} readOnly placeholder="Não informado" />
-          </label>
-          <label className="field">
-            <span>Telefone</span>
-            <input value={request.phone || ""} readOnly placeholder="Não informado" />
-          </label>
-          <label className="field">
-            <span>E-mail</span>
-            <input value={request.email || ""} readOnly placeholder="Não informado" />
-          </label>
+          <ConfigField label="Nome" value={request.tutor || ""} readOnly placeholder="Não informado" />
+          <ConfigField label="CPF" value={request.cpf || ""} readOnly placeholder="Não informado" />
+          <ConfigField label="Telefone" value={request.phone || ""} readOnly placeholder="Não informado" />
+          <ConfigField label="E-mail" value={request.email || ""} readOnly placeholder="Não informado" />
         </div>
         {location && <p className="prm-muted-note">Local da ocorrência: {location}</p>}
       </div>

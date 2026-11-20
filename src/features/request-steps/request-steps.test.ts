@@ -53,8 +53,7 @@ describe("RequestFormLayout", () => {
       stepIndex: RequestStep.DOCUMENTS, stepInvalid: false, internal: true, onNavigate: noop, onSubmit: noop,
       submitting: false, submitDisabled: true, error: "", children: "Documentos da equipe",
     }));
-    expect(html).toContain('class="nr-nav-row"');
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Encerrar<\/button>/);
-    expect(html).not.toContain("data-ui-button");
+    expect(html).toContain('aria-label="Navegação da solicitação"');
+    expect(html).toMatch(/<button(?=[^>]*disabled="")(?=[^>]*data-ui-button="")[^>]*>Encerrar</);
   });
 });

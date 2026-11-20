@@ -17,7 +17,7 @@ describe("the last screen of a request", () => {
 
   it("closes with the label of the place it is in", () => {
     expect(markup({ closeLabel: "Voltar ao início" })).toContain("Voltar ao início");
-    expect(markup({ closeLabel: "Fechar", internal: true })).toMatch(/class="primary-action"[^>]*>Fechar</);
+    expect(markup({ closeLabel: "Fechar" })).toMatch(/data-ui-button=""[^>]*>Fechar</);
   });
 
   it("tells what was chosen about the notices, with the contacts masked, and says nothing when nothing was chosen", () => {

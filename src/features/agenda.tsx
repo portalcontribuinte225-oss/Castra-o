@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CalendarDays, ChevronLeft, ChevronRight,
   Clock, MapPin, X,
@@ -133,6 +133,8 @@ export function AgendaView({
   const [filterType, setFilterType] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
+  const activeViewButton = useRef<HTMLButtonElement>(null);
+  const processReturnFocus = useRef<HTMLButtonElement>(null);
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
     const id = Date.now() + Math.random();
@@ -299,6 +301,7 @@ export function AgendaView({
           {viewTabs.map((tab) => (
             <button
               key={tab.id}
+              ref={view === tab.id ? activeViewButton : undefined}
               className={`ag-view-btn${view === tab.id ? " is-active" : ""}`}
               onClick={() => setView(tab.id)}
             >
@@ -347,7 +350,11 @@ export function AgendaView({
           dateStr={selectedDay}
           getDayInfo={getDayInfo}
           onClose={() => setSelectedDay(null)}
-          onOpenRequest={(r: AnyRecord) => { setSelectedDay(null); openRequest(r); }}
+          onOpenRequest={(r: AnyRecord) => {
+            processReturnFocus.current = activeViewButton.current;
+            setSelectedDay(null);
+            openRequest(r);
+          }}
         />
       )}
 
@@ -364,7 +371,11 @@ export function AgendaView({
           users={activeUsers}
           municipalities={municipalities}
           currentUserName={currentUser?.name || ""}
-          onClose={closePreview}
+          returnFocus={processReturnFocus.current}
+          onClose={() => {
+            processReturnFocus.current = null;
+            closePreview();
+          }}
           onRejectProcess={rejectRequestFromProcess}
           onAssign={assignFromPreview}
           onAssume={assumeFromPreview}
