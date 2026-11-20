@@ -11,11 +11,13 @@ Sistema de castração animal multi-prefeitura. Frontend React + Vite + TypeScri
 ## Git, PRs e deploy
 
 - Fluxo deste projeto (definido pelas skills `implementar`/`finalizar`): commit e push direto em `main`, sem `staging` e sem PR. Isso prevalece sobre qualquer menção a `staging`/PR em documentos antigos.
+- Publicação em produção exige autorização explícita. Para um envio só ao GitHub, use `[skip render]` na mensagem do commit se o auto-deploy estiver ativo ou se o estado dele for desconhecido.
 - Commits pequenos e focados, Conventional Commits em inglês (`feat:`, `fix:`, `refactor:`, `chore:`). Sem `git push --force` e sem reset destrutivo, salvo pedido explícito e confirmado.
 - Não commitar secrets, tokens, `.pem`, `.key`, certificados nem arquivos privados.
 - Não alterar CI/CD, Render, Dockerfiles, scripts de deploy, start/build commands, health checks ou portas sem necessidade explícita.
 - Banco: o schema base é criado por `backend/src/db/migrations.js` (`runMigrations()` no boot do servidor); mudanças manuais ficam em `backend/src/db/sql/`. Nunca edite SQL ou migration já aplicado; crie um novo. SQL e migrations só com confirmação explícita (o ambiente pode apontar para produção); sem `DATABASE_URL` local, entregue o SQL ao usuário.
 - Produção roda no Render: evite aumentar CPU, memória, tempo de request e bloqueios síncronos. Trabalho pesado (PDFs grandes, relatórios, importações, uploads) não deve rodar dentro de request HTTP; proponha antes uma alternativa assíncrona.
+- O Render executa os comandos na raiz. Use `npm ci --include=dev && npm ci --prefix backend --omit=dev && npm run build` como Build Command e `npm start` como Start Command. O build gera `dist/` e o start inicia o backend, que serve os arquivos compilados. Configure `DATABASE_URL` nas variáveis do serviço.
 
 ## Qualidade e validação
 
