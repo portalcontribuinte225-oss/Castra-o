@@ -22784,15 +22784,7 @@ small,
     --animal-card-padding: 8px 12px;
     --animal-card-gap: 6px;
     --microchip-toggle-width: auto;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
-    grid-template-areas: "health profile";
-    align-items: start;
     gap: 8px;
-  }
-
-  .animal-form-sections:has(> .animal-procedures-card) {
-    grid-template-areas: "procedures profile" "health profile";
-    grid-template-rows: auto 1fr;
   }
 
   .nr-shell--public .animal-form-sections .form-sub-card {
@@ -22800,24 +22792,8 @@ small,
     gap: var(--animal-card-gap);
   }
 
-  .animal-procedures-card {
-    grid-area: procedures;
-  }
-
-  .animal-profile-card {
-    grid-area: profile;
-  }
-
-  .animal-health-card {
-    grid-area: health;
-  }
-
   .animal-form-sections .form-sub-card-heading {
     gap: 2px;
-  }
-
-  .animal-profile-card .option-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(152px, 1fr) minmax(124px, 1fr);
   }
 
   .animal-form-sections .option-card-grid,
@@ -22837,26 +22813,6 @@ small,
 
   .animal-profile-card .option-card-choice {
     padding: 2px 4px;
-  }
-
-  .animal-health-card .option-card-grid {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 4px;
-  }
-
-  .animal-health-card .option-card {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 100px;
-    align-items: center;
-    padding: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .animal-health-card .option-card + .option-card {
-    padding-top: 2px;
-    border-top: 1px solid #dbe5f1;
   }
 
   .animal-health-card .option-card-tiles {
@@ -22954,10 +22910,12 @@ small,
   @container animal-form (min-width: 760px) {
     .nr-shell--public .animal-form-sections {
       flex: 1 0 auto;
-      align-items: stretch;
+      display: flex;
+      flex-direction: column;
     }
 
     .nr-shell--public .animal-profile-card {
+      flex: 1 0 auto;
       display: flex;
       flex-direction: column;
     }
@@ -22974,10 +22932,6 @@ small,
     .nr-shell--public .animal-profile-card .option-card-tiles {
       flex: 1;
       grid-auto-rows: minmax(min-content, 1fr);
-    }
-
-    .nr-shell--public .animal-health-card {
-      grid-template-rows: auto minmax(min-content, 1fr);
     }
   }
 }
