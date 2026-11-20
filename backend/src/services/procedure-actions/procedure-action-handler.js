@@ -2,7 +2,7 @@ import { pool } from "../../db/index.js";
 import { isInternalUser } from "../../tenant.js";
 import { DeliveryStatus } from "../../../../shared/notification-contract.js";
 import { ProcedureAction, canApplyProcedureAction, isMicrochipProcedure, resolveRequestProcedures } from "../../../../shared/request-procedure-contract.js";
-import { RequestOrigin, RequestTag, isProcedureRequest } from "../../../../shared/request-contract.js";
+import { RequestOrigin, RequestTag, isProcedureRequest, withoutRequestContactCpf } from "../../../../shared/request-contract.js";
 import { loadRequestSettings } from "../../repositories/request-settings.js";
 import { appendRequestHistory } from "../../repositories/request-history.js";
 import { isUuid } from "../../repositories/request-tracking.js";
@@ -96,9 +96,10 @@ export async function handleProcedureAction(req, res) {
     client.release();
     client = null;
     saved.notificationResults = await notifyRequestChanges(request, saved, { appendHistory: appendRequestHistory });
-    res.json(decorateRequestDocuments(saved, settings));
+    res.json(decorateRequestDocuments({ ...saved, workflow_data: withoutRequestContactCpf(saved.workflow_data) }, settings));
   } catch (err) {
-    if (committed) return res.json({ ...saved, notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
+    if (committed) return res.json({ ...saved, workflow_data: withoutRequestContactCpf(saved.workflow_data),
+      notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
     if (client) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível atualizar o procedimento." });
   } finally {

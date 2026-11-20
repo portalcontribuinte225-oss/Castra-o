@@ -4,11 +4,12 @@ import { pool } from "../../db/index.js";
 import { isInternalUser, pickMunicipalityId } from "../../tenant.js";
 import { findAuthUser, savePassword, strictAuthAudit, withAuthTransaction } from "../../repositories/auth-users.js";
 import { consumeAuthLimit } from "../../repositories/auth-limits.js";
+import { isValidCpf, normalizeCpf } from "../../utils.js";
 import { authError, requireNewPassword } from "./auth-security.js";
 import { normalizeAuthEmail, normalizeAuthPhone } from "./auth-contacts.js";
 import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../../shared/phone-contract.js";
+import { REQUEST_CONTACT_CPF_KEY } from "../../../../shared/request-contract.js";
 
-// What the staff edits of a tutor, with the limits the form shows; the CPF is the identity of the account and is never edited here.
 const TEXT_LIMITS = { address: 200, neighborhood: 120, city: 120 };
 const ADDRESS_FIELDS = ["address", "neighborhood", "city", "state", "cep"];
 
@@ -19,13 +20,15 @@ function staffMunicipality(req) {
   return municipalityId;
 }
 
+const isRequestContactOnly = (request) => !request.tutor_id && !request.cpf;
+
 // The request and its tutor: the account linked to it or, for a request sent before the account existed, the one with the same CPF.
-// A request registered by the staff has no account, so the tutor comes back null and the data is the one of the request.
 async function findRequestTutor(client, { requestId, municipalityId, lock = false }) {
-  const { rows: requests } = await client.query(`SELECT id, tutor_id, cpf, tutor_name, tutor_email, phone, address, neighborhood, city, state, cep
+  const { rows: requests } = await client.query(`SELECT id, tutor_id, cpf, tutor_name, tutor_email, phone, address, neighborhood, city, state, cep, workflow_data
     FROM requests WHERE id = $1 AND municipality_id = $2`, [requestId, municipalityId]);
   const request = requests[0];
   if (!request) throw authError(404, "Solicitação não encontrada.");
+  if (isRequestContactOnly(request)) return { request, tutor: null };
   const { rows } = await client.query(`SELECT u.id, u.name, u.active, p.cpf, p.email, p.phone, p.email_verified_at, p.phone_verified_at,
       p.address, p.neighborhood, p.city, p.state, p.cep
     FROM users u JOIN tutor_profiles p ON p.user_id = u.id AND p.municipality_id = u.municipality_id
@@ -53,9 +56,12 @@ async function publicTutor(client, tutor, municipalityId) {
   };
 }
 
-// The data of a tutor who has no account yet is the one registered with the request.
+// A contact CPF stays separate from the request's tutor identity.
 function requestTutor(request) {
-  return { id: null, hasAccess: false, name: request.tutor_name || "", cpf: request.cpf || "", email: request.tutor_email || "", phone: request.phone || "",
+  const contactOnly = isRequestContactOnly(request);
+  return { id: null, hasAccess: false, name: request.tutor_name || "",
+    cpf: contactOnly ? request.workflow_data?.[REQUEST_CONTACT_CPF_KEY] || "" : request.cpf || "",
+    ...(contactOnly ? { contactOnly } : {}), email: request.tutor_email || "", phone: request.phone || "",
     emailVerified: false, phoneVerified: false, ...addressView(request) };
 }
 
@@ -64,7 +70,7 @@ export async function getRequestTutor(req, res) {
   const { request, tutor } = await findRequestTutor(pool, { requestId: req.params.requestId, municipalityId });
   res.set("Cache-Control", "no-store");
   if (tutor) return res.json({ tutor: await publicTutor(pool, tutor, municipalityId) });
-  res.json({ tutor: request.cpf ? requestTutor(request) : null });
+  res.json({ tutor: request.cpf || isRequestContactOnly(request) ? requestTutor(request) : null });
 }
 
 function cleanText(value, limit, label) {
@@ -76,12 +82,12 @@ function cleanText(value, limit, label) {
 // Validates what the staff typed; the password is optional and only changes when it comes filled.
 function readTutorInput(body = {}) {
   const name = cleanText(body.name, 160, "Nome");
-  if (name.length < 2) throw authError(400, "Informe o nome do tutor.");
+  if (name && name.length < 2) throw authError(400, "Informe o nome do tutor.");
   const emailText = typeof body.email === "string" ? body.email.trim() : "";
   const email = emailText ? normalizeAuthEmail(emailText) : "";
   if (emailText && !email) throw authError(400, "Informe um e-mail válido.");
   const phoneText = typeof body.phone === "string" ? body.phone.trim() : "";
-  if (!isMobilePhone(phoneText)) throw authError(400, MOBILE_PHONE_MESSAGE);
+  if (phoneText && !isMobilePhone(phoneText)) throw authError(400, MOBILE_PHONE_MESSAGE);
   const phone = normalizeAuthPhone(phoneText);
   const state = cleanText(body.state, 2, "UF").toUpperCase();
   if (state && !/^[A-Z]{2}$/.test(state)) throw authError(400, "Informe a UF com duas letras.");
@@ -155,6 +161,30 @@ async function saveRequestData(client, { req, request, input, municipalityId }) 
     neighborhood: input.neighborhood, city: input.city, state: input.state, cep: input.cep });
 }
 
+async function saveRequestContact(client, { req, request, input, municipalityId }) {
+  const submittedCpf = req.body?.cpf;
+  const workflowPatch = {};
+  if (submittedCpf !== undefined) {
+    if (typeof submittedCpf !== "string" || (submittedCpf.trim() && !isValidCpf(submittedCpf))) throw authError(400, "Informe um CPF válido.");
+    workflowPatch[REQUEST_CONTACT_CPF_KEY] = normalizeCpf(submittedCpf);
+  }
+  const { rows } = await client.query(`UPDATE requests SET tutor_name = $3, tutor_email = $4, phone = $5, address = $6,
+      neighborhood = $7, city = $8, state = $9, cep = $10,
+      workflow_data = COALESCE(workflow_data, '{}'::jsonb) || $11::jsonb, updated_at = NOW()
+    WHERE municipality_id = $1 AND id = $2 AND tutor_id IS NULL AND NULLIF(cpf, '') IS NULL
+    RETURNING id, tutor_id, cpf, tutor_name, tutor_email, phone, address, neighborhood, city, state, cep, workflow_data`,
+  [municipalityId, request.id, input.name || null, input.email || null, input.phone || null, input.address || null,
+    input.neighborhood || null, input.city || null, input.state || null, input.cep || null, JSON.stringify(workflowPatch)]);
+  if (!rows[0]) throw authError(409, "A solicitação foi atualizada. Reabra os dados antes de salvar.");
+  const before = requestTutor(request);
+  const saved = requestTutor(rows[0]);
+  const fields = changedFields(before, input);
+  if (before.cpf !== saved.cpf) fields.push("cpf");
+  await strictAuthAudit(client, { actorId: req.user.id, municipalityId, action: AUDIT_ACTIONS.TUTOR_DATA_UPDATE, entityType: "request", entityId: request.id,
+    changes: { requestId: request.id, fields, passwordChanged: false } });
+  return saved;
+}
+
 export async function updateRequestTutor(req, res) {
   const municipalityId = staffMunicipality(req);
   const input = readTutorInput(req.body);
@@ -162,8 +192,11 @@ export async function updateRequestTutor(req, res) {
   const result = await withAuthTransaction(async (client) => {
     const { request, tutor } = await findRequestTutor(client, { requestId: req.params.requestId, municipalityId, lock: true });
     if (tutor && tutor.active === false) throw authError(404, "O acesso deste tutor está desativado.");
-    if (!tutor && !request.cpf) throw authError(404, "Esta solicitação não tem um tutor identificado.");
     if (!tutor && input.password) throw authError(400, "Este tutor ainda não tem acesso ao sistema: não há senha para definir.");
+    if (isRequestContactOnly(request)) return saveRequestContact(client, { req, request, input, municipalityId });
+    if (!tutor && !request.cpf) throw authError(404, "Tutor não encontrado neste município.");
+    if (!input.name) throw authError(400, "Informe o nome do tutor.");
+    if (!input.phone) throw authError(400, MOBILE_PHONE_MESSAGE);
     return tutor ? saveAccount(client, { req, tutor, input, municipalityId }) : saveRequestData(client, { req, request, input, municipalityId });
   });
   res.set("Cache-Control", "no-store").json({ tutor: result, passwordChanged: Boolean(input.password) });

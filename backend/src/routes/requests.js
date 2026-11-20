@@ -21,7 +21,7 @@ import { appendRequestHistory } from "../repositories/request-history.js";
 import { handleProcedureAction } from "../services/procedure-actions/procedure-action-handler.js";
 import { assertProcedurePatchPreservesState, protectStoredProcedures, stripSuppliedProcedures } from "../services/procedure-actions/procedure-request-state.js";
 import { reserveRequestSchedule, bookingChanged } from "../services/schedule/schedule-booking.js";
-import { isProcedureRequest, RequestOrigin, RequestStatus, RequestTag } from "../../../shared/request-contract.js";
+import { isProcedureRequest, RequestOrigin, RequestStatus, RequestTag, withoutRequestContactCpf } from "../../../shared/request-contract.js";
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(Object.values(RequestStatus));
@@ -103,7 +103,10 @@ router.get("/", auth, async (req, res) => {
       : { text: "SELECT * FROM requests WHERE municipality_id = $1 ORDER BY created_at DESC", values: [req.user.municipalityId] };
     const { rows } = await pool.query(query.text, query.values);
     const catalogs = await loadDocumentReviewSettings(rows.filter((row) => row.documents?.length).map((row) => row.municipality_id));
-    const visible = rows.map((row) => row.documents?.length ? decorateRequestDocuments(row, catalogs.get(row.municipality_id)) : row);
+    const visible = rows.map((row) => {
+      const request = { ...row, workflow_data: withoutRequestContactCpf(row.workflow_data) };
+      return request.documents?.length ? decorateRequestDocuments(request, catalogs.get(request.municipality_id)) : request;
+    });
     res.json(visible);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -462,9 +465,10 @@ router.patch("/:id", auth, async (req, res) => {
     client.release();
     released = true;
     rows[0].notificationResults = await notifyRequestChanges(existingRows[0], rows[0], { appendHistory: appendRequestHistory });
-    res.json(decorateRequestDocuments(rows[0], settings));
+    res.json(decorateRequestDocuments({ ...savedRequest, workflow_data: withoutRequestContactCpf(savedRequest.workflow_data) }, settings));
   } catch (err) {
-    if (committed) return res.json({ ...savedRequest, notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
+    if (committed) return res.json({ ...savedRequest, workflow_data: withoutRequestContactCpf(savedRequest.workflow_data),
+      notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
     if (client && !committed) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível atualizar a solicitação." });
   } finally {

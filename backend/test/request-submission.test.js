@@ -4,6 +4,7 @@ import { prepareRequestSubmission, mergeProtectedWorkflow } from "../src/service
 import { loadRequestSettings } from "../src/repositories/request-settings.js";
 import { SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
+import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
 
 const cpf = "52998224725";
 const phone = "(48) 99999-1234";
@@ -22,9 +23,12 @@ function prepare(overrides = {}) {
 }
 
 test("an animal without a tutor accepts no CPF, and an explicit refusal of the notices is normalized", () => {
-  const result = prepare({ body: { requestTypeId: "surgery" }, workflow: { tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false, email: "discard@example.com" } } });
+  const result = prepare({ body: { requestTypeId: "surgery" }, workflow: {
+    tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false, email: "discard@example.com" }, [REQUEST_CONTACT_CPF_KEY]: cpf,
+  } });
   assert.equal(result.cpf, null);
   assert.deepEqual(result.workflow.followUp, { enabled: false, email: "", phone: "" });
+  assert.equal(Object.hasOwn(result.workflow, REQUEST_CONTACT_CPF_KEY), false);
 });
 
 test("only the answer about the tutor can dispense it: the toggles of the request type never do", () => {
@@ -137,9 +141,9 @@ test("complaints preserve name, CPF and phone requirements without new step", ()
   }
 });
 
-test("PATCH cannot overwrite consent, recipients or server delivery metadata", () => {
-  const current = { followUp: { enabled: false }, notificationDispatches: { version: 1 } };
-  assert.deepEqual(mergeProtectedWorkflow(current, { followUp: { enabled: true }, notificationDispatches: {}, notes: "allowed" }), { ...current, notes: "allowed" });
+test("PATCH preserves consent, recipients, delivery metadata and the contact's CPF", () => {
+  const current = { followUp: { enabled: false }, notificationDispatches: { version: 1 }, [REQUEST_CONTACT_CPF_KEY]: cpf };
+  assert.deepEqual(mergeProtectedWorkflow(current, { followUp: { enabled: true }, notificationDispatches: {}, [REQUEST_CONTACT_CPF_KEY]: "", notes: "allowed" }), { ...current, notes: "allowed" });
   assert.deepEqual(mergeProtectedWorkflow({}, { followUp: { enabled: true }, notificationResults: { status: "sent" }, notes: "allowed" }), { notes: "allowed" });
 });
 

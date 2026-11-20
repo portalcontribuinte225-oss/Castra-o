@@ -6,6 +6,7 @@ import { pool } from "../src/db/index.js";
 import { ProcedureAction, ProcedureStatus, deriveRequestStatus, resolveRequestProcedures } from "../../shared/request-procedure-contract.js";
 import { allocateScheduleAvailability, buildScheduleOccurrences, requestScheduleBookings } from "../../shared/schedule-contract.js";
 import { NO_SHOW_CANCEL_REASON, REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
+import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
 import { decorateRequestDocuments } from "../src/services/documents/document-reviews.js";
 import { deriveProcedureRequestState } from "../src/services/procedure-actions/procedure-request-state.js";
 import { bookingChanged } from "../src/services/schedule/schedule-booking.js";
@@ -254,6 +255,16 @@ test("once stored, the generic PATCH keeps the procedures and cannot change the 
     assert.equal((await call(body, { method: "PATCH", path: `/requests/${REQUEST_ID}` })).status, 409);
   }
   assert.equal(row().status, "NOVA");
+});
+
+test("a procedure action keeps the contact CPF in storage and omits it from the response", async (t) => {
+  const request = twoAnimalRequest();
+  request.workflow_data[REQUEST_CONTACT_CPF_KEY] = "52998224725";
+  const { call, row } = await fixture(t, request);
+  const response = await call({ action: ProcedureAction.SAVE, animalIndex: 0, requestTypeId: "castration" });
+  assert.equal(response.status, 200);
+  assert.equal(Object.hasOwn(response.body.workflow_data, REQUEST_CONTACT_CPF_KEY), false);
+  assert.equal(row().workflow_data[REQUEST_CONTACT_CPF_KEY], request.workflow_data[REQUEST_CONTACT_CPF_KEY]);
 });
 
 test("a stored procedure stays discoverable when a legacy request has only a workflow type id", async (t) => {

@@ -125,6 +125,15 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
         if (values[9]) user.email_verified_at = new Date(); if (values[10]) user.phone_verified_at = new Date(); user.profile_version += 1;
         return { rows: [] };
       }
+      if (sql.startsWith("UPDATE requests SET tutor_name") && sql.includes("tutor_id IS NULL")) {
+        const request = requestRows.find((row) => row.municipality_id === values[0] && row.id === values[1] && !row.tutor_id && !row.cpf);
+        if (!request) return { rows: [] };
+        Object.assign(request, {
+          tutor_name: values[2], tutor_email: values[3], phone: values[4], address: values[5], neighborhood: values[6],
+          city: values[7], state: values[8], cep: values[9], workflow_data: { ...request.workflow_data, ...JSON.parse(values[10]) },
+        });
+        return { rows: [structuredClone(request)] };
+      }
       if (sql.startsWith("UPDATE requests SET tutor_name")) {
         for (const request of requestRows) if (request.municipality_id === values[0] && ((["NOVA", "AGENDADA"].includes(request.status)
           && (request.tutor_id === values[1] || request.cpf === values[10])) || (values[11] && request.id === values[11]))) Object.assign(request, { tutor_name: values[2], tutor_email: values[3], phone: values[4], address: values[5], neighborhood: values[6], city: values[7], state: values[8], cep: values[9] });

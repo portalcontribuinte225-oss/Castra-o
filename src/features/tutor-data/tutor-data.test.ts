@@ -6,8 +6,8 @@ const tutor: TutorData = { id: "t1", hasAccess: true, name: "Maria Silva", cpf: 
   address: "Rua Velha, 10", neighborhood: "Centro", city: "Criciúma", state: "SC", cep: "88800000" };
 
 describe("formFromTutor", () => {
-  it("formats the phone and the CEP and starts without a password", () => {
-    expect(formFromTutor(tutor)).toEqual({ name: "Maria Silva", email: "maria@example.test", phone: "(48) 99999-0000", address: "Rua Velha, 10", neighborhood: "Centro",
+  it("formats the CPF, phone and CEP and starts without a password", () => {
+    expect(formFromTutor(tutor)).toEqual({ name: "Maria Silva", cpf: "529.982.247-25", email: "maria@example.test", phone: "(48) 99999-0000", address: "Rua Velha, 10", neighborhood: "Centro",
       city: "Criciúma", state: "SC", cep: "88800-000", password: "" });
   });
 });
@@ -30,6 +30,15 @@ describe("tutorFormIssues", () => {
   it("accepts only a complete mobile as the tutor's phone", () => {
     for (const phone of ["(48) 3333-4444", "(48) 8999-1234", "(48) 99999-12", "123"]) expect(tutorFormIssues({ ...formFromTutor(tutor), phone }).phone, phone).toMatch(/celular completo/);
     for (const phone of ["(48) 99999-1234", "48999991234"]) expect(tutorFormIssues({ ...formFromTutor(tutor), phone }).phone, phone).toBeUndefined();
+  });
+
+  it("accepts partial data for a request contact and validates a CPF when filled", () => {
+    const form = { ...formFromTutor(tutor), name: "", phone: "", cpf: "", address: "Rua do contato" };
+    expect(tutorFormIssues(form, true)).toEqual({});
+    expect(tutorFormIssues({ ...form, cpf: "123" }, true)).toEqual({ cpf: "Informe um CPF válido." });
+    const updated = { ...form, cpf: "529.982.247-25" };
+    expect(tutorFormIssues(updated, true)).toEqual({});
+    expect(tutorPayload(updated, true)).toMatchObject({ name: "", phone: "", cpf: "52998224725", address: "Rua do contato" });
   });
 });
 

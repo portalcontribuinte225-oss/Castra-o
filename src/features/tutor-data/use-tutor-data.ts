@@ -30,10 +30,10 @@ export function useTutorData(requestId: string, municipalityId: string, onSaved?
   }
 
   async function save() {
-    if (!form || saving) return;
+    if (!tutor || !form || saving) return;
     setSaving(true); setSaveError(""); setNotice("");
     try {
-      const result = await api.updateRequestTutor(requestId, tutorPayload(form), municipalityId);
+      const result = await api.updateRequestTutor(requestId, tutorPayload(form, tutor.contactOnly), municipalityId);
       setTutor(result.tutor); setForm(formFromTutor(result.tutor));
       setNotice(result.passwordChanged ? "Dados e senha atualizados." : "Dados atualizados.");
       onSaved?.(result.tutor);

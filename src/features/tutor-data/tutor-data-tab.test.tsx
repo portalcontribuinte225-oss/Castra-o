@@ -30,6 +30,7 @@ describe("TutorDataTab", () => {
     const formId = html.match(/<form\b[^>]*id="([^"]+)"/)?.[1];
     expect(formId).toBeTruthy();
     expect(html).not.toContain("Salvar dados do tutor");
+    expect(html).not.toContain("O tutor ainda não se identificou nesta solicitação.");
     expect(createPortal).toHaveBeenCalledOnce();
     const [button, target] = vi.mocked(createPortal).mock.calls[0];
     expect(target).toBe(footer);
@@ -44,5 +45,20 @@ describe("TutorDataTab", () => {
     const html = renderToStaticMarkup(<TutorDataTab requestId="request-a" municipalityId="city-a" neighborhoodNames={[]} readOnly actionsSlot={footer} />);
     expect(html).toContain('readonly=""');
     expect(createPortal).not.toHaveBeenCalled();
+  });
+
+  it("shows editable contact fields and allows partial saves for a request without a tutor", () => {
+    const contact = { ...tutor, id: null, hasAccess: false, contactOnly: true, name: "", cpf: "", email: "", phone: "" };
+    vi.mocked(useTutorData).mockReturnValue({
+      tutor: contact, form: { ...formFromTutor(contact), address: "Rua do contato" }, loading: false,
+      error: "", saving: false, saveError: "", notice: "", change: vi.fn(), save: vi.fn(), retry: vi.fn(),
+    });
+    const html = renderToStaticMarkup(<TutorDataTab requestId="request-a" municipalityId="city-a" neighborhoodNames={[]} readOnly={false} actionsSlot={footer} />);
+    expect(html).toMatch(/O tutor ainda não se identificou nesta solicitação\.[\s\S]*<span>Nome<\/span>/);
+    expect(html).toContain('CPF</span><input inputMode="numeric" value=""');
+    expect(html).not.toContain('readonly=""');
+    expect(html).not.toContain("Nova senha");
+    const [button] = vi.mocked(createPortal).mock.calls[0];
+    expect(renderToStaticMarkup(button)).not.toContain("disabled");
   });
 });

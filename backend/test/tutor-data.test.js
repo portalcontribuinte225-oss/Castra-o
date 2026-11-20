@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
 import { authHttpFixture, authUser, AUTH_TEST_MUNICIPALITY as MUNICIPALITY, AUTH_TEST_OTHER_MUNICIPALITY as OTHER } from "./fixtures/auth-http.js";
+import { REQUEST_CONTACT_CPF_KEY, withoutRequestContactCpf } from "../../shared/request-contract.js";
+import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 
 const REQUEST = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const FINISHED = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -77,12 +79,38 @@ test("a request registered by the staff has no account: its own data is read and
   assert.equal((await fixture.request(path("99999999-9999-4999-8999-999999999999"), { token })).status, 404);
 });
 
-test("a request without a CPF has no tutor to show or edit", async (t) => {
-  const { fixture, analyst, path } = await fixtureWithTutor(t);
-  fixture.requestRows.push({ id: "aaaaaaaa-0000-4000-8000-000000000000", municipality_id: MUNICIPALITY, tutor_id: null, cpf: null, status: "NOVA", tutor_name: "Denunciante" });
+test("a request without a tutor exposes editable contact data and saves it only for that request", async (t) => {
+  const { fixture, tutor, analyst, path } = await fixtureWithTutor(t);
+  const request = { id: "aaaaaaaa-0000-4000-8000-000000000000", municipality_id: MUNICIPALITY, tutor_id: null, cpf: null, status: "NOVA",
+    workflow_data: { tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false } } };
+  const untouched = { ...request, id: "aaaaaaaa-0000-4000-8000-000000000001", cpf: "", address: "Outra rua" };
+  const linked = { ...request, id: "aaaaaaaa-0000-4000-8000-000000000002", tutor_id: "aaaaaaaa-0000-4000-8000-000000000003" };
+  fixture.requestRows.push(request, untouched, linked);
   const token = fixture.token(analyst);
-  assert.equal((await fixture.request(path("aaaaaaaa-0000-4000-8000-000000000000"), { token })).body.tutor, null);
-  assert.equal((await fixture.request(path("aaaaaaaa-0000-4000-8000-000000000000"), { method: "PUT", token, body: changes })).status, 404);
+  const linkedResult = await fixture.request(path(linked.id), { token });
+  assert.equal(linkedResult.status, 200);
+  assert.deepEqual(linkedResult.body, { tutor: null });
+  const read = await fixture.request(path(request.id), { token });
+  assert.equal(read.status, 200);
+  assert.deepEqual(read.body.tutor, { id: null, hasAccess: false, contactOnly: true, name: "", cpf: "", email: "", phone: "",
+    emailVerified: false, phoneVerified: false, address: "", neighborhood: "", city: "", state: "", cep: "" });
+  const save = (body) => fixture.request(path(request.id), { method: "PUT", token, body });
+  assert.equal((await save({ cpf: "123" })).status, 400);
+  assert.equal((await save({ password: "senha digitada pelo atendente" })).status, 400);
+  const saved = await save({ address: "Rua do contato", cpf: "529.982.247-25" });
+  assert.equal(saved.status, 200);
+  assert.deepEqual(saved.body.tutor, { ...read.body.tutor, address: "Rua do contato", cpf: tutor.cpf });
+  assert.equal(saved.body.passwordChanged, false);
+  assert.deepEqual([request.cpf, request.tutor_id, untouched.address], [null, null, "Outra rua"]);
+  assert.equal(request.workflow_data[REQUEST_CONTACT_CPF_KEY], tutor.cpf);
+  assert.deepEqual(withoutRequestContactCpf(request.workflow_data), { tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false } });
+  assert.deepEqual((await fixture.request(path(request.id), { token })).body.tutor, saved.body.tutor);
+  assert.equal((await save({ address: "Rua atualizada" })).body.tutor.cpf, tutor.cpf);
+  assert.equal((await save({ address: "Rua atualizada", cpf: "" })).body.tutor.cpf, "");
+  assert.equal(fixture.users.get(tutor.id).name, tutor.name);
+  assert.deepEqual(fixture.animalTutorUpdates, []);
+  const fields = fixture.calls.filter(({ sql }) => sql.includes("INSERT INTO audit_logs")).map(({ values }) => JSON.parse(values[4]).fields);
+  assert.deepEqual(fields, [["address", "cpf"], ["address"], ["cpf"]]);
 });
 
 test("without a password the current one is kept and no session is revoked", async (t) => {

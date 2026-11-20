@@ -5,6 +5,7 @@ import { normalizeCpf, isValidCpf } from "../utils.js";
 import { isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { mine, fromRequest, requestContext, documentContent, confirmMicrochip, animalEndpoint } from "../services/registered-animals/animal-handlers.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
+import { withoutRequestContactCpf } from "../../../shared/request-contract.js";
 
 const router = Router();
 router.get("/mine", auth, animalEndpoint(mine));
@@ -303,9 +304,9 @@ async function buildAnimalHistory(client, animal, req) {
         signed_at: request.signed_at,
         created_at: request.created_at,
         updated_at: request.updated_at,
-        workflow_data: request.workflow_data || {},
+        workflow_data: withoutRequestContactCpf(request.workflow_data) || {},
       },
-      workflow_data: request.workflow_data || {},
+      workflow_data: withoutRequestContactCpf(request.workflow_data) || {},
       history: request.history || [],
       schedule_date: request.schedule_date,
       schedule_location_name: request.schedule_location_name,

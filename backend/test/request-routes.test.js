@@ -5,6 +5,7 @@ import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
+import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { EMAIL_ACTIVE_USES_CONFIG_KEY } from "../../shared/email-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
@@ -294,10 +295,12 @@ test("authenticated tutor cannot submit a different CPF or delete requests", asy
 
 test("tutor request reads require authenticated owner and municipality", async (t) => {
   const existing = { ...pendingRequest(), tutor_id: ADMIN.id };
+  existing.workflow_data[REQUEST_CONTACT_CPF_KEY] = VALID_CPF;
   const { request } = await fixture(t, { existing });
   const response = await request({ user: { ...ADMIN, role: "tutor" }, method: "GET" });
   assert.equal(response.status, 200);
   assert.equal(response.body.length, 1);
+  assert.equal(Object.hasOwn(response.body[0].workflow_data, REQUEST_CONTACT_CPF_KEY), false);
 });
 
 test("tutor cannot use operational PATCH to trigger notifications", async (t) => {
@@ -316,19 +319,22 @@ test("operational PATCH cannot select a request from a different municipality", 
   assert.equal(stats.calls.some(({ sql }) => sql === "ROLLBACK"), true);
 });
 
-test("generic PATCH preserves refusal and server delivery metadata while applying operational changes", async (t) => {
+test("generic PATCH preserves protected workflow data and keeps the contact CPF private", async (t) => {
   const existing = pendingRequest();
   existing.workflow_data.notificationDispatches = { previous: true };
+  existing.workflow_data[REQUEST_CONTACT_CPF_KEY] = VALID_CPF;
   const { request, row, stats } = await fixture(t, { existing });
   const response = await request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "AGENDADA", workflow_data: {
     followUp: { enabled: true, email: "attacker@example.test" }, notificationDispatches: { forged: true },
-    notificationResults: [{ status: "sent" }], assignedUserId: ADMIN.id,
+    notificationResults: [{ status: "sent" }], assignedUserId: ADMIN.id, [REQUEST_CONTACT_CPF_KEY]: "",
   } } });
   assert.equal(response.status, 200);
   assert.deepEqual(row().workflow_data.followUp, existing.workflow_data.followUp);
   assert.deepEqual(row().workflow_data.notificationDispatches, { previous: true });
   assert.equal(row().workflow_data.notificationResults, undefined);
   assert.equal(row().workflow_data.assignedUserId, ADMIN.id);
+  assert.equal(row().workflow_data[REQUEST_CONTACT_CPF_KEY], VALID_CPF);
+  assert.equal(Object.hasOwn(response.body.workflow_data, REQUEST_CONTACT_CPF_KEY), false);
   assert.deepEqual(response.body.notificationResults, []);
   assert.equal(stats.channelReads, 0, "A refused follow-up reads no channel setting");
 });

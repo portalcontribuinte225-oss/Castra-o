@@ -24,17 +24,20 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
   if (loading && !tutor) return <p className="prm-muted-note" role="status">Carregando os dados do tutor...</p>;
   if (error) return <div className="prm-section"><p className="form-error" role="alert">{error}</p><button type="button" className="ghost-button" onClick={retry}>Tentar novamente</button></div>;
   if (!tutor || !form) return <p className="prm-muted-note">Esta solicitação não tem um tutor com acesso cadastrado.</p>;
-  const issues = tutorFormIssues(form);
+  const contactOnly = tutor.contactOnly === true;
+  const issues = tutorFormIssues(form, contactOnly);
   const invalid = Object.keys(issues).length > 0;
   const locked = readOnly || saving;
   return (
     <form id={formId} className="prm-section prm-tutor-data" onSubmit={(event) => { event.preventDefault(); if (!invalid && !readOnly) void save(); }}>
+      {contactOnly && <p className="prm-section-block prm-muted-note">O tutor ainda não se identificou nesta solicitação.</p>}
       <div className="prm-section-block">
         <p className="prm-section-title">Tutor</p>
         <div className="two-column-fields">
           <label className={`field${issues.name ? " invalid" : ""}`}><span>Nome</span><input value={form.name} maxLength={160} readOnly={locked} onChange={(event) => change({ name: event.target.value })} /></label>
-          <label className="field"><span>CPF</span><input value={formatCpf(tutor.cpf)} readOnly aria-readonly="true" /></label>
+          <label className={`field${issues.cpf ? " invalid" : ""}`}><span>CPF</span><input value={form.cpf} inputMode="numeric" readOnly={locked || !contactOnly} onChange={(event) => change({ cpf: formatCpf(event.target.value) })} /></label>
         </div>
+        {(issues.name || issues.cpf) && <small className="field-error-message">{issues.name || issues.cpf}</small>}
         <div className="two-column-fields">
           <label className={`field${issues.email ? " invalid" : ""}`}><span>E-mail</span><input type="email" value={form.email} readOnly={locked} onChange={(event) => change({ email: event.target.value })} /></label>
           <label className={`field${issues.phone ? " invalid" : ""}`}><span>Telefone</span><input value={form.phone} readOnly={locked} onChange={(event) => change({ phone: formatPhone(event.target.value) })} /></label>
@@ -64,7 +67,7 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
           <label className="field"><span>Cidade</span><input value={form.city} maxLength={120} readOnly={locked} onChange={(event) => change({ city: event.target.value })} /></label>
         </div>
       </div>
-      {!readOnly && !tutor.hasAccess && <p className="prm-muted-note">Este tutor ainda não tem acesso ao sistema: as alterações valem para esta solicitação e não há senha para definir.</p>}
+      {!readOnly && !contactOnly && !tutor.hasAccess && <p className="prm-muted-note">Este tutor ainda não tem acesso ao sistema.</p>}
       {!readOnly && tutor.hasAccess && (
         <div className="prm-section-block">
           <p className="prm-section-title">Acesso</p>
