@@ -7,8 +7,8 @@
     "dev": "concurrently -n FRONT,BACK -c cyan,green \"npm run dev:frontend\" \"node backend/src/server.js\"",
     "dev:frontend": "vite --host 0.0.0.0 --port 5175",
     "start": "npm --prefix backend start",
+    "prebuild": "node scripts/prepare-build.mjs",
     "build": "vite build",
-    "build:render": "npm ci --include=dev && npm ci --prefix backend --omit=dev && npm run build",
     "typecheck": "tsc --project tsconfig.json --noEmit",
     "generate:pwa-icons": "node scripts/generate-pwa-icons.mjs",
     "test": "vitest run --dir src"
