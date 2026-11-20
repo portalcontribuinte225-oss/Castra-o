@@ -18265,9 +18265,7 @@ form textarea:focus,
 .nr-shell--public {
   container: request-form / inline-size;
   min-width: 0;
-  border: 1px solid #dbe5f1;
-  border-radius: 14px;
-  background: var(--surface);
+  background: transparent;
 }
 
 .nr-shell--public .nr-topbar {
@@ -18275,7 +18273,8 @@ form textarea:focus,
   min-height: 46px;
   flex-wrap: nowrap;
   padding: 4px 10px;
-  border-bottom: 1px solid #dbe5f1;
+  background: transparent;
+  border-bottom: 0;
 }
 
 .nr-shell--public .nr-body {
@@ -18703,7 +18702,7 @@ form textarea:focus,
 
 .nr-shell--public .nr-nav-row {
   padding: 6px 10px;
-  border-top: 1px solid #dbe5f1;
+  background: transparent;
   gap: 8px;
 }
 
