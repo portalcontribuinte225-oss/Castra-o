@@ -587,7 +587,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.documentTypes]) api.setConfig(CONFIG_KEYS.documentTypes, documentTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, documentTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
-  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.breeds]) api.setConfig(CONFIG_KEYS.breeds, breeds).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, breeds]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.neighborhoods]) api.setConfig(CONFIG_KEYS.neighborhoods, neighborhoods).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, neighborhoods]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
@@ -4737,6 +4736,8 @@ function ConfigView({
   const [agendaLocationStatus, setAgendaLocationStatus] = useState("");
   const [newRequestType, setNewRequestType] = useState<AnyRecord>(emptyRequestType);
   const [editingRequestTypeId, setEditingRequestTypeId] = useState(null);
+  const [requestTypeSaving, setRequestTypeSaving] = useState(false);
+  const [requestTypeSaveError, setRequestTypeSaveError] = useState("");
   const [editingSizeId, setEditingSizeId] = useState(null);
   const [newSpecies, setNewSpecies] = useState({ name: "", active: true });
   const [newSize, setNewSize] = useState({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true });
@@ -4908,32 +4909,74 @@ function ConfigView({
     setConfigStatusFilters((current) => ({ ...current, [currentConfigKey]: value }));
   }
 
-  function createRequestType(payload: AnyRecord = {}) {
+  async function saveScopedConfigCatalog(
+    key: string,
+    municipalityId: string,
+    update: (current: AnyRecord[]) => AnyRecord[],
+    setItems: React.Dispatch<React.SetStateAction<AnyRecord[]>>,
+  ) {
+    if (!municipalityId) throw new Error("Selecione um município para salvar esta configuração.");
+    const municipality = municipalities.find((item) => item.id === municipalityId) || { id: municipalityId };
+    const current = await api.getConfig(key, municipalityId);
+    if (current !== null && !Array.isArray(current)) throw new Error("Não foi possível carregar a configuração atual do município.");
+    const saved = await api.setConfig(key, update(scopeConfigItems(current, municipality)), municipalityId);
+    if (!Array.isArray(saved?.value)) throw new Error("Não foi possível confirmar o salvamento.");
+    setItems((items) => mergeScopedConfigItems(items, scopeConfigItems(saved.value, municipality), municipalityId));
+  }
+
+  function buildRequestType(payload: AnyRecord, municipalityId: string) {
     const billingAmount = payload.billingAmount || payload.fee || "";
     const selectedDocuments = payload.documents?.length
       ? payload.documents
-      : documentTypes.filter((document) => document.active !== false);
-    setRequestTypes?.((current) => [
-      ...current,
-      {
-        id: `tipo_${Date.now()}`,
-        name: payload.name || "",
-        fee: payload.charged ? billingAmount : "Gratuito",
-        charged: Boolean(payload.charged),
-        billingDescription: payload.charged ? payload.billingDescription || "" : "",
-        billingAmount: payload.charged ? billingAmount : "",
-        billingDueDate: payload.charged ? payload.billingDueDate || "" : "",
-        active: payload.active !== false,
-        overrideDailyLimit: Boolean(payload.overrideDailyLimit),
-        municipalityId: payload.municipalityId || configMunicipalityScopeId,
-        documents: selectedDocuments,
-        breedIds: Array.isArray(payload.breedIds) ? payload.breedIds : [],
-      },
-    ]);
+      : filterByMunicipalityScope(documentTypes, municipalityId).filter((document) => document.active !== false);
+    return {
+      id: `tipo_${Date.now()}`,
+      name: payload.name || "",
+      fee: payload.charged ? billingAmount : "Gratuito",
+      charged: Boolean(payload.charged),
+      billingDescription: payload.charged ? payload.billingDescription || "" : "",
+      billingAmount: payload.charged ? billingAmount : "",
+      billingDueDate: payload.charged ? payload.billingDueDate || "" : "",
+      active: payload.active !== false,
+      overrideDailyLimit: Boolean(payload.overrideDailyLimit),
+      municipalityId,
+      documents: selectedDocuments,
+      breedIds: Array.isArray(payload.breedIds) ? payload.breedIds : [],
+    };
   }
 
-  function patchRequestType(typeId, patch) {
-    setRequestTypes?.((current) => current.map((type) => (matchesScopedConfigItem(type, typeId) ? { ...type, ...patch } : type)));
+  function closeRequestTypeEditor() {
+    setNewRequestType(emptyRequestType);
+    setEditingRequestTypeId(null);
+    setRequestTypeSaveError("");
+    setConfigModal(null);
+  }
+
+  async function saveRequestType(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (requestTypeSaving) return;
+    const municipalityId = newRequestType.municipalityId || configMunicipalityScopeId;
+    const update = (current: AnyRecord[]) => editingRequestTypeId
+      ? current.map((type) => (
+        type.id === editingRequestTypeId && getItemMunicipalityId(type) === municipalityId
+          ? { ...type, ...newRequestType }
+          : type
+      ))
+      : [...current, buildRequestType(newRequestType, municipalityId)];
+    setRequestTypeSaving(true);
+    setRequestTypeSaveError("");
+    try {
+      if (isGlobalRole(currentUser?.role)) {
+        await saveScopedConfigCatalog(CONFIG_KEYS.requestTypes, municipalityId, update, setRequestTypes);
+      } else {
+        setRequestTypes?.(update);
+      }
+      closeRequestTypeEditor();
+    } catch (error) {
+      setRequestTypeSaveError(error instanceof Error ? error.message : "Não foi possível salvar o tipo de solicitação.");
+    } finally {
+      setRequestTypeSaving(false);
+    }
   }
 
   function toggleRequestDocument(typeId, document) {
@@ -6240,7 +6283,12 @@ function ConfigView({
       )}
 
       {configArea === "environment" && configTab === "breeds" && (
-        <BreedsConfig items={breeds} setItems={setBreeds} municipalityScopeId={configMunicipalityScopeId} speciesOptions={speciesOptions} />
+        <BreedsConfig
+          items={breeds}
+          onSave={(municipalityId, update) => saveScopedConfigCatalog(CONFIG_KEYS.breeds, municipalityId, update, setBreeds)}
+          municipalityScopeId={configMunicipalityScopeId}
+          speciesOptions={speciesOptions}
+        />
       )}
 
       {configArea === "environment" && configTab === "neighborhoods" && (
@@ -7028,21 +7076,11 @@ function ConfigView({
         <div className="modal-backdrop">
           <form
             className="config-modal compact request-type-modal config-environment-modal"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (editingRequestTypeId) {
-                patchRequestType(editingRequestTypeId, newRequestType);
-              } else {
-                createRequestType(newRequestType);
-              }
-              setNewRequestType(emptyRequestType);
-              setEditingRequestTypeId(null);
-              setConfigModal(null);
-            }}
+            onSubmit={saveRequestType}
           >
             <ModalHeader
               title={editingRequestTypeId ? "Editar tipo de solicitação" : "Criar tipo de solicitação"}
-              onClose={() => { setConfigModal(null); setEditingRequestTypeId(null); setNewRequestType(emptyRequestType); }}
+              onClose={() => { if (!requestTypeSaving) closeRequestTypeEditor(); }}
             />
             <div className="config-modal-options">
               <ConfigActiveToggle
@@ -7080,7 +7118,7 @@ function ConfigView({
               </div>
             )}
             <DocumentButtonPicker
-              documents={documentTypes}
+              documents={filterByMunicipalityScope(documentTypes, newRequestType.municipalityId || configMunicipalityScopeId)}
               selectedDocuments={newRequestType.documents || []}
               onToggle={(document) =>
                 setNewRequestType((current) => {
@@ -7097,8 +7135,9 @@ function ConfigView({
               selectedIds={newRequestType.breedIds || []}
               onChange={(breedIds) => setNewRequestType((current) => ({ ...current, breedIds }))}
             />
+            {requestTypeSaveError && <p className="form-error" role="alert">{requestTypeSaveError}</p>}
             <div className="form-actions">
-              <button className="primary-action" type="submit">Salvar</button>
+              <button className="primary-action" type="submit" disabled={requestTypeSaving}>{requestTypeSaving ? "Salvando..." : "Salvar"}</button>
             </div>
           </form>
         </div>

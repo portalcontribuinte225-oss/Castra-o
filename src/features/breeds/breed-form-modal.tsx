@@ -17,13 +17,15 @@ interface BreedFormModalProps {
   isEditing: boolean;
   form: BreedFormValues;
   errors: BreedFormErrors;
+  saving: boolean;
+  saveError: string;
   species: AnyRecord[];
   onChange: (patch: Partial<BreedFormValues>) => void;
   onSubmit: (event: FormEvent) => void;
   onClose: () => void;
 }
 
-export function BreedFormModal({ isEditing, form, errors, species, onChange, onSubmit, onClose }: BreedFormModalProps) {
+export function BreedFormModal({ isEditing, form, errors, saving, saveError, species, onChange, onSubmit, onClose }: BreedFormModalProps) {
   return (
     <div className="modal-backdrop">
       <form className="config-modal compact config-environment-modal" onSubmit={onSubmit}>
@@ -49,8 +51,9 @@ export function BreedFormModal({ isEditing, form, errors, species, onChange, onS
           onChange={(value) => onChange({ name: value })}
         />
         {errors.name && <small className="field-error-message">{errors.name}</small>}
+        {saveError && <p className="form-error" role="alert">{saveError}</p>}
         <div className="form-actions">
-          <button className="primary-action" type="submit">Salvar</button>
+          <button className="primary-action" type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar"}</button>
         </div>
       </form>
     </div>

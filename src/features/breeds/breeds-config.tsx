@@ -9,7 +9,7 @@ import { hasDuplicateBreedName } from "./breeds";
 
 interface BreedsConfigProps {
   items: AnyRecord[];
-  setItems: (updater: (current: AnyRecord[]) => AnyRecord[]) => void;
+  onSave: (municipalityId: string, update: (current: AnyRecord[]) => AnyRecord[]) => Promise<void>;
   municipalityScopeId: string;
   speciesOptions: AnyRecord[];
 }
@@ -30,12 +30,14 @@ function compareText(left: string, right: string) {
   return left.localeCompare(right, "pt-BR", { sensitivity: "base" });
 }
 
-export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOptions }: BreedsConfigProps) {
+export function BreedsConfig({ items, onSave, municipalityScopeId, speciesOptions }: BreedsConfigProps) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AnyRecord | null>(null);
   const [form, setForm] = useState<BreedFormValues>(emptyForm);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const formMunicipalityId = editingItem ? getItemMunicipalityId(editingItem) : municipalityScopeId;
   const formSpecies = filterByMunicipalityScope(speciesOptions, formMunicipalityId).filter((item) => item.active !== false && item.name);
@@ -65,6 +67,7 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
     setEditingItem(item);
     setForm(item ? { name: item.name || "", speciesId: item.speciesId || "", active: item.active !== false } : emptyForm);
     setSubmitAttempted(false);
+    setSaveError("");
     setModalOpen(true);
   }
 
@@ -74,20 +77,31 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
     setSubmitAttempted(false);
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (saving) return;
     if (hasErrors) {
       setSubmitAttempted(true);
       return;
     }
     const values = { name: trimmedName, speciesId: form.speciesId, active: form.active };
-    if (editingItem) {
-      setItems((current) => current.map((item) => (isSameItem(item, editingItem) ? { ...item, ...values } : item)));
-    } else {
-      const created = { id: `breed_${Date.now()}`, ...values, municipalityId: municipalityScopeId };
-      setItems((current) => [...current, created]);
+    setSaving(true);
+    setSaveError("");
+    try {
+      await onSave(formMunicipalityId, (current) => {
+        if (hasDuplicateBreedName(current, trimmedName, form.speciesId, editingItem?.id)) {
+          throw new Error("Já existe uma raça com este nome para esta espécie.");
+        }
+        if (!editingItem) return [...current, { id: `breed_${Date.now()}`, ...values, municipalityId: formMunicipalityId }];
+        if (!current.some((item) => isSameItem(item, editingItem))) throw new Error("Esta raça não está mais disponível.");
+        return current.map((item) => (isSameItem(item, editingItem) ? { ...item, ...values } : item));
+      });
+      closeModal();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Não foi possível salvar a raça.");
+    } finally {
+      setSaving(false);
     }
-    closeModal();
   }
 
   return (
@@ -134,10 +148,12 @@ export function BreedsConfig({ items, setItems, municipalityScopeId, speciesOpti
           isEditing={editingItem !== null}
           form={form}
           errors={submitAttempted ? errors : noErrors}
+          saving={saving}
+          saveError={saveError}
           species={formSpecies}
           onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
           onSubmit={handleSubmit}
-          onClose={closeModal}
+          onClose={() => { if (!saving) closeModal(); }}
         />
       )}
     </>
