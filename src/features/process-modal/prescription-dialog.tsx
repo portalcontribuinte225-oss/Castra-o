@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { FileText, X } from "lucide-react";
+import { FileText } from "lucide-react";
 import { MAX_PRESCRIPTION_TEXT, MAX_PROFESSIONAL_TEXT } from "../../../shared/request-procedure-contract.js";
+import { CloseButton } from "../../components/close-button";
 import { displayText } from "../../domain";
 import type { AnyRecord } from "../../types";
 import { printHtmlViaIframe } from "../process-report/print-html";
@@ -51,7 +52,7 @@ export function PrescriptionDialog({ request, animal, procedure, municipality, d
             <h2>Receita veterinária</h2>
             <p>{[procedure.name, animalLabel].filter(Boolean).join(" · ")}</p>
           </div>
-          <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}><X size={17} /></button>
+          <CloseButton onClick={onClose} />
         </header>
         <div className="prescription-modal-body">
           <div className="two-column-fields">

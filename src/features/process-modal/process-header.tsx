@@ -1,4 +1,5 @@
-import { Download, X } from "lucide-react";
+import { Download } from "lucide-react";
+import { CloseButton } from "../../components/close-button";
 import { StatusBadge } from "../../components/ui";
 import { ProcessTab } from "./process-labels";
 
@@ -32,7 +33,7 @@ export function ProcessHeader({ protocol, title, subtitle, status, reportLoading
           <button className="prm-pdf-btn" type="button" disabled={reportLoading} onClick={onReport}>
             <Download size={13} /> {reportLoading ? "Preparando..." : "Relatório"}
           </button>
-          <button className="prm-close-btn" type="button" aria-label="Fechar" disabled={busy} onClick={onClose}><X size={17} /></button>
+          <CloseButton disabled={busy} onClick={onClose} />
         </div>
       </div>
       <div className="prm-tabs" role="tablist" aria-label="Abas do processo" onKeyDown={(event) => {

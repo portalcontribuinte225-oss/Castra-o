@@ -26,6 +26,7 @@ describe("ProcessModal", () => {
     expect(tabs.map((match) => match[2])).toEqual(["Anexos", "Procedimento e saúde", "Dados do tutor"]);
     expect(tabs[0][1]).toContain('aria-selected="true"');
     expect(tabs.every((match) => !match[1].includes("disabled"))).toBe(true);
+    expect(html).toMatch(/<button type="button" aria-label="Fechar"[^>]*><svg\b/);
     expect(html).toContain("Processo 123/2026");
     expect(html).toContain("Tutor: Maria Silva · 1 animal");
     expect(html).toContain("Identidade");

@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { CalendarDays, X } from "lucide-react";
+import { CalendarDays } from "lucide-react";
 import { scheduleDate } from "../../../shared/schedule-contract.js";
 import { PublicSchedulePicker } from "../../App";
+import { CloseButton } from "../../components/close-button";
 import { isPastScheduleDay } from "../../domain";
 import { getAvailableScheduleSlot, selectScheduleOccurrence, useScheduleAvailability } from "../registered-animals/use-schedule-availability";
 
@@ -81,7 +82,7 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
               <h2 className="prm-headline-name">{subject}</h2>
             </div>
             <div className="prm-header-actions">
-              <button className="prm-close-btn" type="button" aria-label="Fechar" onClick={onClose}><X size={17} /></button>
+              <CloseButton onClick={onClose} />
             </div>
           </div>
         </header>

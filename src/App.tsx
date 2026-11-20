@@ -123,6 +123,7 @@ import {
   PanelHeader,
   StatusBadge,
 } from "./components/ui";
+import { Button } from "./components/button";
 import {
   dataUrlToUint8Array,
   escapeHtml,
@@ -1817,6 +1818,9 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   ].filter((item) => String(item.value || "").trim());
   const procedureService = activePublicService === "procedure_form";
   const requestFormOpen = procedureService && selectedMunicipalityId && !publicServiceDone;
+  const scrollableMenuButton = "tw:[@media(max-width:820px),(max-height:480px)]:flex-none";
+  const serviceButtonLayout = requestFormOpen ? scrollableMenuButton : "tw:[@media(max-width:820px)]:flex-[1_1_calc(50%-6px)]";
+  const enterButtonLayout = requestFormOpen ? scrollableMenuButton : "tw:[@media(max-width:820px)]:w-full";
   return (
     <main className={`login-page${requestFormOpen ? " login-page--request" : ""}`}>
       <div className="public-topbar">
@@ -1849,21 +1853,26 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
             const Icon = service.icon;
             const active = activePublicService === service.id;
             return (
-              <button
+              <Button
                 key={service.id}
-                type="button"
-                className={`public-topbar-link${active ? " is-active" : ""}${service.danger ? " is-danger" : ""}`}
+                variant="menu"
+                aria-current={active || undefined}
+                className={`tw:gap-1.5 tw:text-[0.85rem] tw:text-[color:var(--ink-700)] ${serviceButtonLayout}`}
                 onClick={() => openPublicService(service.id)}
               >
-                <Icon size={14} />
+                <Icon size={14} aria-hidden="true" className={service.danger ? "tw:shrink-0 tw:text-[#b5482f]" : "tw:shrink-0 tw:text-[color:var(--ui-action)]"} />
                 <span>{service.label}</span>
-              </button>
+              </Button>
             );
           })}
-          <button type="button" className="public-topbar-enter" onClick={() => openAuthEntry(AuthEntryOrigin.STAFF)}>
-            <User size={15} />
+          <Button
+            variant="menu"
+            className={`tw:gap-2 tw:text-[0.83rem] tw:text-[color:var(--selected-ink)] ${enterButtonLayout}`}
+            onClick={() => openAuthEntry(AuthEntryOrigin.STAFF)}
+          >
+            <User size={15} aria-hidden="true" />
             Entrar
-          </button>
+          </Button>
         </nav>
       </div>
 

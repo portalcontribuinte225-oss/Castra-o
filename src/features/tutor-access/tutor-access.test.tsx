@@ -79,6 +79,25 @@ describe("tutor entry and validation", () => {
     expect(tutor).toContain("Selecione o município na página"); expect(tutor).not.toContain("<form");
   });
 
+  it("labels the staff credentials and keeps the close and password controls separate from submission", () => {
+    const html = renderToStaticMarkup(<AuthEntry audience={AuthAudience.STAFF} municipalityId="" onLogin={() => {}} onClose={() => {}} />);
+    const email = html.match(/<label\b[^>]*><span\b[^>]*>E-mail da equipe<\/span>(<input\b[^>]*>)/)?.[1];
+    const passwordLabel = html.match(/<label for="([^"]+)">Senha<\/label>/)?.[1];
+    const password = html.match(/<input\b[^>]*type="password"[^>]*>/)?.[0];
+    const submit = html.match(/<button\b[^>]*>Entrar<\/button>/)?.[0];
+
+    expect(email).toContain('type="email"');
+    expect(email).toMatch(/autocomplete="username"/i);
+    expect(passwordLabel).toBeDefined();
+    expect(password).toContain(`id="${passwordLabel}"`);
+    expect(password).toMatch(/autocomplete="current-password"/i);
+    expect(submit).toContain('type="submit"');
+    expect(submit).toContain("disabled");
+    expect(html).toMatch(/<button type="button" aria-label="Fechar acesso"[^>]*><svg\b/);
+    expect(html).toMatch(/<button\b[^>]*type="button"[^>]*aria-label="Mostrar senha"[^>]*>/);
+    expect(html).toMatch(/<button\b[^>]*type="button"[^>]*>Esqueceu a senha\?<\/button>/);
+  });
+
   it("enforces names and password length without artificial composition", () => {
     expect(validateTutorName(" ")).not.toBe(""); expect(validateTutorName("A")).not.toBe("");
     expect(validateTutorName("Ana Maria")).toBe(""); expect(validateTutorName("x".repeat(161))).not.toBe("");
