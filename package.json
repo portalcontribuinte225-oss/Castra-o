@@ -13,21 +13,21 @@
     "test": "vitest run --dir src"
   },
   "dependencies": {
-    "@tailwindcss/vite": "^4.3.5",
     "lucide-react": "^0.468.0",
     "pdf-lib": "^1.17.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-is": "^18.3.1",
     "recharts": "^3.11.0",
-    "tailwindcss": "^4.3.5",
     "vite": "^5.4.21"
   },
   "devDependencies": {
+    "@tailwindcss/vite": "^4.3.5",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "concurrently": "^9.2.1",
     "sharp": "^0.35.3",
+    "tailwindcss": "^4.3.5",
     "typescript": "^6.0.3",
     "vitest": "^2.1.9"
   }
