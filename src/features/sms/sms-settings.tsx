@@ -22,7 +22,7 @@ export function SmsSettings({ municipalityId, master, canManage, canEditContract
   return (
     <div className="config-panel wide">
       <PanelHeader title="SMS" />
-      {state.ready && municipalityId && <MessageContractStatus active={state.config.active && serviceOn} live={contract.live} />}
+      {state.ready && municipalityId && <MessageContractStatus active={contract.ready ? state.config.active && serviceOn : null} live={contract.live} />}
       {state.loading && <p role="status">Carregando configuração de SMS...</p>}
       {state.error && <p role="alert" className="form-error">{state.error}</p>}
       {state.notice && <p role="status">{state.notice}</p>}

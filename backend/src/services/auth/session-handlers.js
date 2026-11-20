@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { AUDIT_ACTIONS } from "../audit.js";
-import { AuthAudience } from "../../../../shared/auth-contract.js";
+import { AuthAudience, AuthErrorCode } from "../../../../shared/auth-contract.js";
 import { pool } from "../../db/index.js";
 import { findLoginCandidates, findAuthUser, savePassword, strictAuthAudit, withAuthTransaction } from "../../repositories/auth-users.js";
 import { allowAuthAttempt } from "../../repositories/auth-limits.js";
@@ -50,7 +50,7 @@ export async function changePassword(req, res) {
   const updated = await withAuthTransaction(async (client) => {
     const user = await findAuthUser(req.user.id, client, true);
     if (!isActiveAccount(user) || user.role !== req.authUser.role || user.municipality_id !== req.authUser.municipality_id
-      || user.session_version !== req.authUser.session_version || user.password !== req.authUser.password) throw authError(401, "Sessão expirada.");
+      || user.session_version !== req.authUser.session_version || user.password !== req.authUser.password) throw authError(401, "Sessão expirada.", AuthErrorCode.SESSION_INVALID);
     if (!await bcrypt.compare(currentPassword, user.password)) throw authError(400, "Senha atual inválida.");
     if (await bcrypt.compare(password, user.password)) throw authError(400, "Escolha uma senha diferente da atual.");
     await savePassword(client, user.id, await bcrypt.hash(password, 10));

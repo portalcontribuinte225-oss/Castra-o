@@ -13,6 +13,10 @@ const ENC_PREFIX = "enc:v1:";
 const ALGORITHM = "aes-256-gcm";
 const IV_LENGTH = 12;
 
+export function isEncryptedSecret(value) {
+  return typeof value === "string" && value.startsWith(ENC_PREFIX);
+}
+
 function strictEncryptionKey() {
   const raw = process.env.CONFIG_ENCRYPTION_KEY || "";
   if (!/^[A-Za-z0-9+/]{43}=$/.test(raw)) return null;
@@ -33,7 +37,7 @@ export function encryptSecretStrict(plainText) {
 
 export function decryptSecretStrict(storedValue) {
   const key = strictEncryptionKey();
-  if (!key || typeof storedValue !== "string" || !storedValue.startsWith(ENC_PREFIX)) throw secureStorageError();
+  if (!key || !isEncryptedSecret(storedValue)) throw secureStorageError();
   try {
     const encoded = storedValue.slice(ENC_PREFIX.length); const payload = Buffer.from(encoded, "base64");
     if (payload.length < IV_LENGTH + 17 || payload.toString("base64") !== encoded) throw secureStorageError();
@@ -77,7 +81,7 @@ export function encryptSecret(plainText = "") {
  */
 export function decryptSecret(storedValue = "") {
   const value = String(storedValue || "");
-  if (!value.startsWith(ENC_PREFIX)) return value;
+  if (!isEncryptedSecret(value)) return value;
   const key = getEncryptionKey();
   if (!key) {
     console.warn("[config-secret-cipher] Valor cifrado encontrado mas CONFIG_ENCRYPTION_KEY ausente; retornando vazio.");

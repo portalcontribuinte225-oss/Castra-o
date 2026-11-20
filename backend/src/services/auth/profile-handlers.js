@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { AUDIT_ACTIONS } from "../audit.js";
-import { AuthAudience, AuthPurpose, AUTH_CHALLENGE_SECONDS, AUTH_RETRY_SECONDS } from "../../../../shared/auth-contract.js";
+import { AuthAudience, AuthErrorCode, AuthPurpose, AUTH_CHALLENGE_SECONDS, AUTH_RETRY_SECONDS } from "../../../../shared/auth-contract.js";
 import { getTutorProfile, publicTutorProfile, saveVerifiedContact } from "../../repositories/tutor-profiles.js";
 import { findAuthUser, strictAuthAudit, withAuthTransaction } from "../../repositories/auth-users.js";
 import { createChallenge, findChallenge, consumeChallenge, recordChallengeDelivery } from "../../repositories/auth-challenges.js";
@@ -35,7 +35,7 @@ export async function requestContactChallenge(req, res) {
   const pending = await withAuthTransaction(async (client) => {
     const user = await findAuthUser(req.user.id, client, true);
     if (!isActiveAccount(user) || user.role !== req.authUser.role || user.municipality_id !== req.authUser.municipality_id
-      || user.password !== req.authUser.password || user.session_version !== req.authUser.session_version) throw authError(401, "Sessão expirada.");
+      || user.password !== req.authUser.password || user.session_version !== req.authUser.session_version) throw authError(401, "Sessão expirada.", AuthErrorCode.SESSION_INVALID);
     if (!await bcrypt.compare(currentPassword, user.password)) throw authError(400, "Senha atual inválida.");
     return { ...await createChallenge(client, { user, purpose, destination: value }), user };
   });
@@ -57,7 +57,7 @@ export async function confirmContactChallenge(req, res) {
   const result = await withAuthTransaction(async (client) => {
     const user = await findAuthUser(req.user.id, client, true);
     if (!isActiveAccount(user) || user.role !== req.authUser.role || user.municipality_id !== req.authUser.municipality_id
-      || user.session_version !== req.authUser.session_version || user.password !== req.authUser.password) throw authError(401, "Sessão expirada.");
+      || user.session_version !== req.authUser.session_version || user.password !== req.authUser.password) throw authError(401, "Sessão expirada.", AuthErrorCode.SESSION_INVALID);
     const challenge = await findChallenge(candidate.id, client, true);
     const purpose = challenge?.purpose;
     if (purpose !== AuthPurpose.VERIFY_EMAIL && purpose !== AuthPurpose.VERIFY_PHONE) return null;

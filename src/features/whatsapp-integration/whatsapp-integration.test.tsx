@@ -33,11 +33,13 @@ const tableProps = { syncing: false, busy: false, readOnly: false, canSync: true
 const templatesState = { list: listOf(), loading: false, ready: true, syncing: false, saving: false, error: "", notice: "", retry: noop, sync: noop, toggle: vi.fn(), saveLink: vi.fn() };
 const credentialsState = {
   settings: { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true, tokenPreview: "EAAFAKE0" }, setSettings: noop, saveStatus: "",
+  ready: true, loadFailed: false, retry: noop, saving: false,
   testPhone: "", setTestPhone: noop, testStatus: "", testing: false, hasCredentials: true, isActive: true, canSync: true, idsChanged: false,
   confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, toggleActive: noop, removeToken: noop, sendTest: noop,
 };
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
+  ready: true, loadFailed: false, retry: noop, saving: false,
   live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
   confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop,
 };
@@ -227,6 +229,19 @@ describe("access token", () => {
   const credentials = (settings = {}, extra = {}) => renderToStaticMarkup(
     <WhatsappCredentials municipalityId="municipality-a" credentials={{ ...credentialsState, settings: { ...credentialsState.settings, ...settings }, ...extra }} />,
   );
+
+  it("shows a retry and keeps credential controls hidden when configuration could not be loaded", () => {
+    const pending = credentials({}, { ready: false });
+    const failed = credentials({}, { ready: false, loadFailed: true });
+    expect(pending).toContain("Carregando configuração do WhatsApp...");
+    expect(failed).toContain("Não foi possível carregar as credenciais do WhatsApp.");
+    expect(failed).toContain("Carregar novamente");
+    for (const html of [pending, failed]) {
+      expect(html).not.toContain("Salvar credenciais");
+      expect(html).not.toContain("Remover token");
+      expect(html).not.toContain("ID da conta do WhatsApp Business");
+    }
+  });
 
   it("keeps the saved token inside its own field, start visible and the rest masked, with only the removal beside it", () => {
     const html = credentials();

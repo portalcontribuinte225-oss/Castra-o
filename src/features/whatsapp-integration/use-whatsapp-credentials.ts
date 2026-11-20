@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import { CONFIG_KEYS, initialWhatsappSettings } from "../../domain";
 import type { AnyRecord } from "../../types";
@@ -10,113 +10,130 @@ export function useWhatsappCredentials(municipalityId: string) {
   const [settings, setSettings] = useState<AnyRecord>(initialWhatsappSettings);
   // The account and number ids as stored, to know when the screen holds something not saved yet.
   const [savedIds, setSavedIds] = useState(savedIdsOf(initialWhatsappSettings));
+  const [attempt, setAttempt] = useState(0);
+  const [loadedId, setLoadedId] = useState("");
+  const [failedId, setFailedId] = useState("");
+  const [saving, setSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState("");
   const [testPhone, setTestPhoneValue] = useState("");
   const [testStatus, setTestStatus] = useState("");
   const [testing, setTesting] = useState(false);
   const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const activeScope = useRef(municipalityId);
+  const revision = useRef(0);
+  activeScope.current = municipalityId;
+  const current = (captured: number) => revision.current === captured && activeScope.current === municipalityId;
+  const ready = Boolean(municipalityId) && loadedId === municipalityId;
+  const loadFailed = Boolean(municipalityId) && failedId === municipalityId;
+
+  function retry() {
+    setFailedId("");
+    setAttempt((previous) => previous + 1);
+  }
+
+  function apply(value: AnyRecord) {
+    setSettings({ ...initialWhatsappSettings, ...value, accessToken: "" });
+    setSavedIds(savedIdsOf(value));
+  }
 
   useEffect(() => {
+    const captured = ++revision.current;
+    setLoadedId("");
+    setFailedId("");
+    setSaving(false);
+    setTesting(false);
+    apply({});
+    setSaveStatus(municipalityId ? "" : "Selecione um município para configurar o WhatsApp.");
     setTestPhoneValue("");
     setTestStatus("");
     setConfirmingRemoval(false);
-    if (!municipalityId) {
-      setSettings(initialWhatsappSettings);
-      setSavedIds(savedIdsOf(initialWhatsappSettings));
-      setSaveStatus("Selecione um município para configurar o WhatsApp.");
-      return;
-    }
-    let cancelled = false;
-    setSaveStatus("Carregando configuração...");
-    api.getConfig(CONFIG_KEYS.whatsapp, municipalityId).catch(() => null).then((whatsapp) => {
-      if (cancelled) return;
-      setSettings({ ...initialWhatsappSettings, ...(whatsapp || {}) });
-      setSavedIds(savedIdsOf(whatsapp || {}));
-      setSaveStatus("");
+    if (!municipalityId) return;
+    api.getConfig(CONFIG_KEYS.whatsapp, municipalityId).then((whatsapp) => {
+      if (!current(captured)) return;
+      if (whatsapp !== null && (typeof whatsapp?.hasAccessToken !== "boolean"
+        || typeof whatsapp.wabaId !== "string" || typeof whatsapp.phoneNumberId !== "string")) {
+        throw new Error("Incomplete WhatsApp settings");
+      }
+      apply(whatsapp || {});
+      setLoadedId(municipalityId);
+    }).catch(() => {
+      if (current(captured)) setFailedId(municipalityId);
     });
-    return () => { cancelled = true; };
-  }, [municipalityId]);
+    return () => { revision.current += 1; };
+  }, [municipalityId, attempt]);
 
   const hasToken = Boolean(settings.accessToken || settings.hasAccessToken);
   const hasCredentials = hasToken && Boolean(settings.phoneNumberId);
-  const isActive = hasCredentials && settings.active !== false;
+  const isActive = ready && hasCredentials && settings.active !== false;
   // The catalog can only be read from Meta with the token and the account id.
-  const canSync = hasToken && Boolean(settings.wabaId);
+  const canSync = ready && hasToken && Boolean(settings.wabaId);
   const idsChanged = settings.wabaId !== savedIds.wabaId || settings.phoneNumberId !== savedIds.phoneNumberId;
 
-  async function save() {
-    if (!municipalityId) {
-      setSaveStatus("Selecione um município antes de salvar.");
-      return;
-    }
-    const nextSettings = {
-      ...settings,
-      // Ativa automaticamente quando credenciais estão preenchidas; só salva false se explicitamente desativado pelo toggle
-      active: hasCredentials ? (settings.active !== false) : false,
-      provider: settings.provider || "cloud_api",
-      phoneNumberId: settings.phoneNumberId || "",
-      wabaId: settings.wabaId || "",
-      accessToken: settings.accessToken || "",
-    };
-    setSaveStatus("Salvando configuração...");
+  async function persist(input: AnyRecord, pending: string, done: string, onSaved: (value: AnyRecord) => void) {
+    if (!ready || saving) return;
+    const captured = revision.current;
+    setSaving(true);
+    setSaveStatus(pending);
     try {
-      const saved = await api.setConfig(CONFIG_KEYS.whatsapp, nextSettings, municipalityId);
-      setSettings({
-        ...nextSettings,
-        ...(saved?.value || {}),
-        accessToken: "",
-        hasAccessToken: Boolean(saved?.value?.hasAccessToken || nextSettings.accessToken || settings.hasAccessToken),
-      });
-      setSavedIds(savedIdsOf({ ...nextSettings, ...(saved?.value || {}) }));
-      setSaveStatus("Configuração salva com sucesso.");
-    } catch (err) {
-      setSaveStatus(`Não foi possível salvar: ${err.message}`);
+      const saved = await api.setConfig(CONFIG_KEYS.whatsapp, input, municipalityId);
+      if (!current(captured)) return;
+      if (!saved?.value) throw new Error("Configuração indisponível.");
+      onSaved(saved.value);
+      setSaveStatus(done);
+    } catch (error) {
+      if (current(captured)) setSaveStatus(`Não foi possível salvar: ${error instanceof Error ? error.message : "tente novamente."}`);
+    } finally {
+      if (current(captured)) setSaving(false);
     }
+  }
+
+  function save() {
+    return persist({
+      active: hasCredentials && settings.active !== false,
+      ...(settings.phoneNumberId !== savedIds.phoneNumberId ? { phoneNumberId: settings.phoneNumberId } : {}),
+      ...(settings.wabaId !== savedIds.wabaId ? { wabaId: settings.wabaId } : {}),
+      ...(settings.accessToken ? { accessToken: settings.accessToken } : {}),
+    }, "Salvando configuração...", "Configuração salva com sucesso.", apply);
   }
 
   // With a token saved the switch is stored at once, so it is still there after reloading the page.
-  async function toggleActive(checked: boolean) {
-    const previous = Boolean(settings.active);
-    setSettings((current) => ({ ...current, active: checked }));
-    if (!municipalityId || !settings.hasAccessToken) return;
-    setSaveStatus(checked ? "Ativando..." : "Desativando...");
-    try {
-      const saved = await api.setConfig(CONFIG_KEYS.whatsapp, { provider: settings.provider || "cloud_api", ...savedIds, active: checked }, municipalityId);
-      setSettings((current) => ({ ...current, active: Boolean(saved?.value?.active) }));
-      setSaveStatus(checked ? "WhatsApp ativado com sucesso." : "WhatsApp desativado com sucesso.");
-    } catch (err) {
-      setSettings((current) => ({ ...current, active: previous }));
-      setSaveStatus(`Não foi possível alterar: ${err.message}`);
+  function toggleActive(checked: boolean) {
+    if (!ready || saving) return;
+    if (!settings.hasAccessToken) {
+      setSettings((previous) => ({ ...previous, active: checked }));
+      return;
     }
+    return persist(
+      { active: checked },
+      checked ? "Ativando..." : "Desativando...",
+      checked ? "WhatsApp ativado com sucesso." : "WhatsApp desativado com sucesso.",
+      (value) => setSettings((previous) => ({ ...previous, active: Boolean(value.active) })),
+    );
   }
 
   // Removing the token also turns the channel off on the server.
-  async function removeToken() {
-    if (!municipalityId) return;
-    setSaveStatus("Removendo token...");
-    try {
-      const saved = await api.setConfig(CONFIG_KEYS.whatsapp, { ...settings, accessToken: "", clearAccessToken: true }, municipalityId);
-      setSettings({ ...initialWhatsappSettings, ...(saved?.value || {}), accessToken: "" });
-      setSavedIds(savedIdsOf(saved?.value || {}));
+  function removeToken() {
+    return persist({ clearAccessToken: true }, "Removendo token...", "Token removido com sucesso. O WhatsApp foi desativado.", (value) => {
+      apply(value);
       setConfirmingRemoval(false);
-      setSaveStatus("Token removido com sucesso. O WhatsApp foi desativado.");
-    } catch (err) {
-      setSaveStatus(`Não foi possível remover o token: ${err.message}`);
-    }
+    });
   }
 
   async function sendTest() {
+    if (!ready || saving || testing) return;
     if (!testPhone.trim()) { setTestStatus("Informe um número para o teste."); return; }
+    const captured = revision.current;
     setTesting(true);
     setTestStatus("Enviando...");
     try {
       const result = await api.sendWhatsappTest(municipalityId, testPhone.trim());
+      if (!current(captured)) return;
       if (result.status === "sent") setTestStatus("Mensagem de teste enviada com sucesso!");
       else setTestStatus(`Não enviado: ${result.reason || "erro desconhecido"}`);
-    } catch (err) {
-      setTestStatus(`Erro: ${err.message}`);
+    } catch (error) {
+      if (current(captured)) setTestStatus(`Erro: ${error instanceof Error ? error.message : "tente novamente."}`);
     } finally {
-      setTesting(false);
+      if (current(captured)) setTesting(false);
     }
   }
 
@@ -126,7 +143,7 @@ export function useWhatsappCredentials(municipalityId: string) {
   }
 
   return {
-    settings, setSettings, saveStatus, testPhone, setTestPhone, testStatus, testing, hasCredentials, isActive, canSync, idsChanged,
+    settings, setSettings, ready, loadFailed, retry, saving, saveStatus, testPhone, setTestPhone, testStatus, testing, hasCredentials, isActive, canSync, idsChanged,
     confirmingRemoval, setConfirmingRemoval, save, toggleActive, removeToken, sendTest,
   };
 }

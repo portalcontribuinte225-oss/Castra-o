@@ -35,6 +35,7 @@ const accountState = (overrides = {}) => ({
 
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
+  ready: true, loadFailed: false, retry: noop, saving: false,
   live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
   confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop,
 };

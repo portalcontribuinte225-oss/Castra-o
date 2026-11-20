@@ -75,10 +75,10 @@ export function ConfigRow({ className = "", children, ...props }: ComponentProps
   );
 }
 
-export function ConfigActiveToggle({ checked, onChange, onText = "Ativo", offText = "Inativo" }: AnyRecord) {
+export function ConfigActiveToggle({ checked, onChange, onText = "Ativo", offText = "Inativo", disabled = false }: AnyRecord) {
   return (
     <label className="tw:inline-flex tw:min-h-10 tw:w-fit tw:max-w-full tw:cursor-pointer tw:items-center tw:gap-2 tw:rounded-full tw:border tw:border-solid tw:border-card-border tw:bg-card-surface tw:px-3 tw:text-sm tw:font-medium tw:text-ui-text">
-      <input className="tw:peer tw:sr-only" type="checkbox" checked={!!checked} onChange={(event) => onChange(event.target.checked)} />
+      <input className="tw:peer tw:sr-only" type="checkbox" checked={!!checked} onChange={(event) => onChange(event.target.checked)} disabled={disabled} />
       <span aria-hidden="true" className="tw:relative tw:h-5 tw:w-9 tw:shrink-0 tw:rounded-full tw:bg-[var(--ink-200)] tw:peer-checked:bg-ui-accent tw:peer-checked:[&>span]:translate-x-4 tw:peer-focus-visible:outline-2 tw:peer-focus-visible:outline-offset-2 tw:peer-focus-visible:outline-ui-accent">
         <span className="tw:absolute tw:start-0.5 tw:top-0.5 tw:size-4 tw:rounded-full tw:bg-white tw:motion-safe:transition-transform" />
       </span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../../api";
 import type { MessageQuotaInput, MessageQuotaStatus } from "./message-contract-types";
 
@@ -22,80 +22,103 @@ function localToday() {
 export function useMessageContract(channel: string, municipalityId: string) {
   const [settings, setSettings] = useState(emptySettings);
   const [saveStatus, setSaveStatus] = useState("");
-  const [live, setLive] = useState<MessageQuotaStatus | null>(null);
+  const [status, setStatus] = useState<MessageQuotaStatus | null>(null);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const [loadedScope, setLoadedScope] = useState("");
+  const [failedScope, setFailedScope] = useState("");
+  const [saving, setSaving] = useState(false);
+  const scope = `${channel}:${municipalityId}`;
+  const activeScope = useRef(scope);
+  const revision = useRef(0);
+  activeScope.current = scope;
+  const current = (captured: number) => revision.current === captured && activeScope.current === scope;
+  const ready = Boolean(municipalityId) && loadedScope === scope;
+  const loadFailed = Boolean(municipalityId) && failedScope === scope;
+  const live = ready ? status : undefined;
+
+  function retry() {
+    setFailedScope("");
+    setAttempt((previous) => previous + 1);
+  }
 
   useEffect(() => {
+    const captured = ++revision.current;
+    setLoadedScope("");
+    setFailedScope("");
+    setSaving(false);
     setConfirmingEnd(false);
     setSaveStatus("");
-    if (!municipalityId) {
-      setSettings(emptySettings);
-      setLive(null);
-      return;
-    }
-    let cancelled = false;
-    api.getMessageQuota(channel, municipalityId).catch(() => null).then((status) => {
-      if (cancelled) return;
-      setLive(status);
-      setSettings(settingsOf(status));
+    setSettings(emptySettings);
+    setStatus(null);
+    if (!municipalityId) return;
+    api.getMessageQuota(channel, municipalityId).then((loaded) => {
+      if (!current(captured)) return;
+      if (loaded !== null && typeof loaded?.active !== "boolean") throw new Error("Incomplete message quota");
+      setStatus(loaded);
+      setSettings(settingsOf(loaded));
+      setLoadedScope(scope);
+    }).catch(() => {
+      if (current(captured)) setFailedScope(scope);
     });
-    return () => { cancelled = true; };
-  }, [channel, municipalityId]);
+    return () => { revision.current += 1; };
+  }, [scope, attempt]);
 
-  async function persist(input: MessageQuotaInput, done: string) {
+  async function persist(
+    request: () => Promise<MessageQuotaStatus | null>,
+    done: string,
+    failure: string,
+    refreshForm = false,
+  ) {
+    if (!ready || saving) return;
+    const captured = revision.current;
+    setSaving(true);
     setSaveStatus("Salvando...");
     try {
-      const status = await api.saveMessageQuota(channel, municipalityId, input);
-      setLive(status);
-      setSettings(settingsOf(status));
-      setConfirmingEnd(false);
+      const saved = await request();
+      if (!current(captured)) return;
+      setStatus(saved);
+      if (refreshForm) {
+        setSettings(settingsOf(saved));
+        setConfirmingEnd(false);
+      }
       setSaveStatus(done);
     } catch (error) {
-      setSaveStatus(`Não foi possível salvar: ${messageOf(error)}`);
+      if (current(captured)) setSaveStatus(`${failure}: ${messageOf(error)}`);
+    } finally {
+      if (current(captured)) setSaving(false);
     }
   }
 
-  async function save() {
-    if (!municipalityId) {
-      setSaveStatus("Selecione um município antes de salvar.");
-      return;
-    }
+  function saveQuota(input: MessageQuotaInput, done: string) {
+    return persist(() => api.saveMessageQuota(channel, municipalityId, input), done, "Não foi possível salvar", true);
+  }
+
+  function save() {
+    if (!ready || saving) return;
     const plan = Number(settings.plan);
     if (!Number.isSafeInteger(plan) || plan <= 0) {
       setSaveStatus("Informe um limite mensal válido.");
       return;
     }
-    await persist({ plan, contractStart: settings.contractStart, contractEnd: settings.contractEnd }, "Cota salva com sucesso.");
+    return saveQuota({ plan, contractStart: settings.contractStart, contractEnd: settings.contractEnd }, "Cota salva com sucesso.");
   }
 
-  async function endContractToday() {
-    if (!municipalityId) return;
-    await persist({ plan: Number(settings.plan), contractStart: settings.contractStart, contractEnd: localToday() }, "Contrato encerrado hoje.");
+  function endContractToday() {
+    return saveQuota({ plan: Number(settings.plan), contractStart: settings.contractStart, contractEnd: localToday() }, "Contrato encerrado hoje.");
   }
 
   // The service of SMS or e-mail for the municipality, on or off; only the platform's administrator may.
-  async function setEnabled(enabled: boolean) {
-    if (!municipalityId) return;
-    setSaveStatus("Salvando...");
-    try {
-      setLive(await api.setMessageService(channel, municipalityId, enabled));
-      setSaveStatus(enabled ? "Serviço ativado." : "Serviço desativado.");
-    } catch (error) {
-      setSaveStatus(`Não foi possível alterar o serviço: ${messageOf(error)}`);
-    }
+  function setEnabled(enabled: boolean) {
+    return persist(() => api.setMessageService(channel, municipalityId, enabled),
+      enabled ? "Serviço ativado." : "Serviço desativado.", "Não foi possível alterar o serviço");
   }
 
-  async function resetUsed() {
-    if (!municipalityId) return;
-    try {
-      setLive(await api.resetMessageQuota(channel, municipalityId));
-      setSaveStatus("Cota do mês zerada.");
-    } catch (error) {
-      setSaveStatus(`Erro ao zerar cota: ${messageOf(error)}`);
-    }
+  function resetUsed() {
+    return persist(() => api.resetMessageQuota(channel, municipalityId), "Cota do mês zerada.", "Erro ao zerar cota");
   }
 
-  return { settings, setSettings, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed, setEnabled };
+  return { settings, setSettings, ready, loadFailed, retry, saving, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed, setEnabled };
 }
 
 export type MessageContract = ReturnType<typeof useMessageContract>;

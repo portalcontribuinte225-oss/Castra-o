@@ -1,4 +1,4 @@
-import { AuthAudience } from "../shared/auth-contract.js";
+import { AuthAudience, AuthErrorCode } from "../shared/auth-contract.js";
 import { readSubmittedRequest } from "./features/tutor-access/submission-envelope";
 import type { AuthChallenge, AuthRequestOptions, RecoveryContext, SessionUser } from "./features/tutor-access/auth-types";
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
@@ -28,6 +28,12 @@ export class ApiError extends Error {
   }
 }
 
+export function isInvalidSession(error: unknown) {
+  return error instanceof ApiError && error.status === 401 && (error.code === AuthErrorCode.SESSION_INVALID
+    // Accept the backend's previous responses while the two builds are being updated.
+    || error.message === "Sessão inválida ou expirada." || error.message === "Sessão expirada.");
+}
+
 function getToken() {
   return localStorage.getItem("castragestao:token");
 }
@@ -50,11 +56,15 @@ async function request(method: string, path: string, body?: unknown, responseTyp
     ...(options?.signal ? { signal: options.signal } : {}),
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    if (res.status === 401 && !options?.bearerToken && requestToken && requestToken === getToken() && requestSessionVersion === sessionMutationVersion && !options?.signal?.aborted && (!options?.isCurrent || options.isCurrent()) && !path.startsWith("/auth/login") && typeof window !== "undefined") {
+    const err = await res.json().catch(() => null);
+    const failure = new ApiError(err?.error || res.statusText, res.status, err?.code || "", Number(err?.retryAfter || res.headers.get("Retry-After")) || 0);
+    if (isInvalidSession(failure) && (err?.error || err?.code === AuthErrorCode.SESSION_INVALID)
+      && !options?.bearerToken && path !== "/auth/login" && requestToken && requestToken === getToken()
+      && requestSessionVersion === sessionMutationVersion && !options?.signal?.aborted && options?.isCurrent?.() !== false
+      && typeof window !== "undefined") {
       window.dispatchEvent(new Event(SESSION_INVALID_EVENT));
     }
-    throw new ApiError(err.error || res.statusText, res.status, err.code || "", Number(err.retryAfter || res.headers.get("Retry-After")) || 0);
+    throw failure;
   }
   if (res.status === 204) return null;
   if (responseType === "blob") return res.blob();
@@ -70,7 +80,19 @@ export const api = {
     return data.user;
   },
   hasToken: () => Boolean(getToken()),
-  getSession: () => request("GET", "/auth/me"),
+  async getSession(options?: Pick<AuthRequestOptions, "signal">): Promise<{ user: SessionUser }> {
+    const token = getToken();
+    const version = sessionMutationVersion;
+    const session = await request("GET", "/auth/me", undefined, "json", options);
+    if (token !== getToken() || version !== sessionMutationVersion || options?.signal?.aborted) {
+      throw new DOMException("Operação encerrada.", "AbortError");
+    }
+    const user = session?.user;
+    if (typeof user?.id !== "string" || !user.id || typeof user.role !== "string" || !user.role || typeof user.mustChangePassword !== "boolean") {
+      throw new ApiError("Resposta de autenticação indisponível.", 502);
+    }
+    return { user };
+  },
   async changePassword(body: { currentPassword: string; password: string }, options?: AuthRequestOptions) {
     const version = ++sessionMutationVersion;
     const data = await request("POST", "/auth/change-password", body, "json", options);

@@ -269,6 +269,11 @@ const menu = [
   { id: "config", label: "Configurações", icon: Settings },
 ];
 const mobileWorkspaceQuery = "(max-width: 1120px)";
+const settingsNavButtonClassName = [
+  "tw:w-full tw:min-w-0 tw:shrink-0 tw:justify-start tw:gap-2 tw:rounded-none tw:border-y-0 tw:border-r-0 tw:border-l-[3px] tw:border-transparent",
+  "tw:bg-transparent tw:py-2 tw:pr-2 tw:pl-2 tw:text-left tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:aria-[current=page]:border-l-ui-accent",
+].join(" ");
+const settingsNavLabelClassName = "tw:min-w-0 tw:flex-1 tw:leading-snug tw:whitespace-normal tw:[overflow-wrap:anywhere]";
 
 const environmentConfigTabs: ConfigTabItem[] = [
   { id: "agenda", label: "Agenda" },
@@ -402,7 +407,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [breeds, setBreeds] = useState([]);
   const [neighborhoods, setNeighborhoods] = useState([]);
   const [municipalities, setMunicipalities] = useState(initialMunicipalities);
-  const [aiSettings, setAiSettings] = useState(initialAiSettings);
+  const [aiConfig, setAiConfig] = useState<{ scope: string; settings: AnyRecord | null } | null>(null);
+  const [aiConfigAttempt, setAiConfigAttempt] = useState(0);
   const [scheduleDays, setScheduleDays] = useState([]);
   const [scheduleRules, setScheduleRules] = useState([]);
   const [permissionGroups, setPermissionGroups] = useState([]);
@@ -455,7 +461,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
     api.getMunicipalities().then((list) => {
       const active = Array.isArray(list) ? list : [];
-      setMunicipalities(active);
+      if (!isGlobalRole(currentUser?.role)) setMunicipalities(active);
       if (geoTriedRef.current || !active.length) return;
       geoTriedRef.current = true;
       const linked = accessLink?.slug ? active.find((m) => m.slug === accessLink.slug) : null;
@@ -534,28 +540,27 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   }, [municipalities, selectedMunicipalityId]);
 
   useEffect(() => {
-    if (!globalMunicipalityFilterId) return;
-    if (municipalities.some((municipality) => municipality.id === globalMunicipalityFilterId)) return;
-    setGlobalMunicipalityFilterId("");
-    localStorage.removeItem(GLOBAL_MUNICIPALITY_FILTER_KEY);
-  }, [municipalities, globalMunicipalityFilterId]);
-
-  useEffect(() => {
     if (!currentUser) return;
     setTenantConfigReady(false);
     setLoadedConfigKeys({});
     if (isGlobalRole(currentUser.role)) {
+      let cancelled = false;
       const loadGlobalMunicipalityConfigs = async () => {
         try {
           const municipalityList = await api.getMunicipalitiesAdmin();
-          const activeMunicipalities = Array.isArray(municipalityList) ? municipalityList : [];
-          setMunicipalities(activeMunicipalities);
-          const configEntries = await Promise.all(activeMunicipalities.map(async (municipality) => {
+          if (cancelled || !Array.isArray(municipalityList)) return;
+          setMunicipalities(municipalityList);
+          const savedMunicipalityId = localStorage.getItem(GLOBAL_MUNICIPALITY_FILTER_KEY);
+          if (savedMunicipalityId && !municipalityList.some(({ id }) => id === savedMunicipalityId)) {
+            handleGlobalMunicipalityFilter("");
+          }
+          const configEntries = await Promise.all(municipalityList.map(async (municipality) => {
             const values = await Promise.all(CONFIG_KEYS_LIST.map((key) =>
               api.getConfig(key, municipality.id).then((value) => [key, value]).catch(() => [key, null]),
             ));
             return { municipality, values: Object.fromEntries(values) };
           }));
+          if (cancelled) return;
           setRequestTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.requestTypes], municipality)));
           setDocumentTypes(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.documentTypes], municipality)));
           setSpeciesOptions(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.species], municipality)));
@@ -583,11 +588,11 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           )));
           setPermissionGroups(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.permissionGroups], municipality)));
         } finally {
-          setTenantConfigReady(true);
+          if (!cancelled) setTenantConfigReady(true);
         }
       };
       loadGlobalMunicipalityConfigs().catch(console.error);
-      return;
+      return () => { cancelled = true; };
     }
     const configLoaders: Array<[string, (value: any) => void]> = [
       [CONFIG_KEYS.requestTypes, setRequestTypes],
@@ -626,25 +631,39 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const aiConfigMunicipalityId = currentUser
     ? (isGlobalRole(currentUser.role) ? globalMunicipalityFilterId : currentUser.municipalityId || "")
     : selectedMunicipalityId;
+  const aiConfigScope = `${currentUser?.id || ""}:${currentUser?.role || ""}:${aiConfigMunicipalityId}`;
+  const scopedAiConfig = aiConfig?.scope === aiConfigScope ? aiConfig : null;
+  const aiSettings = scopedAiConfig?.settings || initialAiSettings;
+  const aiConfigStatus = !aiConfigMunicipalityId ? "unselected" : !scopedAiConfig ? "loading" : scopedAiConfig.settings ? "ready" : "error";
+
+  function retryAiConfig() {
+    setAiConfig(null);
+    setAiConfigAttempt((attempt) => attempt + 1);
+  }
+
+  function setAiSettings(update: React.SetStateAction<AnyRecord>) {
+    setAiConfig((current) => {
+      if (current?.scope !== aiConfigScope || !current.settings) return current;
+      return { ...current, settings: typeof update === "function" ? update(current.settings) : update };
+    });
+  }
 
   useEffect(() => {
-    if (!currentUser && !selectedMunicipalityId) {
-      setAiSettings(initialAiSettings);
-      return;
-    }
+    if (!aiConfigMunicipalityId) return;
     let cancelled = false;
     api.getConfig("ai", aiConfigMunicipalityId).then((saved) => {
       if (cancelled) return;
+      if (saved !== null && typeof saved?.hasApiKey !== "boolean") throw new Error("Incomplete AI settings");
       const safeSaved = saved && typeof saved === "object" ? saved : {};
       const merged = { ...initialAiSettings, ...safeSaved, active: Boolean(safeSaved.active) };
       const validModels = aiProviderOptions[merged.provider]?.models || [];
       if (validModels.length && !validModels.includes(merged.model)) merged.model = validModels[0];
-      setAiSettings(merged);
+      setAiConfig({ scope: aiConfigScope, settings: merged });
     }).catch(() => {
-      if (!cancelled) setAiSettings(initialAiSettings);
+      if (!cancelled) setAiConfig({ scope: aiConfigScope, settings: null });
     });
     return () => { cancelled = true; };
-  }, [aiConfigMunicipalityId, currentUser?.id, currentUser?.role, selectedMunicipalityId]);
+  }, [aiConfigMunicipalityId, aiConfigScope, aiConfigAttempt]);
 
   // The tutor data saved in an attendance also changes the requests in progress, so the list is read again.
   const refreshRequests = useCallback(() => {
@@ -653,21 +672,17 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
 
   useEffect(() => {
     if (!currentUser) return;
-    function handleInitialLoadError(error) {
-      console.error(error);
-      const message = String(error?.message || "").toLowerCase();
-      if (message.includes("token")) setCurrentUser(null);
-    }
-    api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(handleInitialLoadError);
-    api.getAccessRequests().then((list) => setAccessRequests(list.map(normalizeAccessRequest))).catch(handleInitialLoadError);
-    api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(handleInitialLoadError);
+    api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(console.error);
+    api.getAccessRequests().then((list) => setAccessRequests(list.map(normalizeAccessRequest))).catch(console.error);
+    api.getAdoptions().then((list) => setAdoptionAnimals(list.map(normalizeAdoptionAnimal))).catch(console.error);
     const municipalityId = isGlobalRole(currentUser.role) ? "" : currentUser.municipalityId || "";
     api.getSchedule(municipalityId).then((days) => {
       if (!days.length) return;
       setScheduleDays(days.map(normalizeScheduleDay).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date)));
     }).catch(console.error);
-    const loadMunicipalities = isGlobalRole(currentUser.role) ? api.getMunicipalitiesAdmin : api.getMunicipalities;
-    loadMunicipalities().then((list) => setMunicipalities(Array.isArray(list) ? list : [])).catch(() => {});
+    if (!isGlobalRole(currentUser.role)) {
+      api.getMunicipalities().then((list) => setMunicipalities(Array.isArray(list) ? list : [])).catch(() => {});
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -974,7 +989,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                 <Button
                   variant="custom"
                   className="tw:w-full tw:justify-start tw:gap-2 tw:border-transparent tw:bg-transparent tw:text-left tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:data-[selected=true]:border-ui-accent tw:data-[selected=true]:bg-ui-accent-soft tw:data-[selected=true]:font-semibold tw:data-[selected=true]:text-ui-accent-strong"
-                  data-selected={active === item.id}
+                  data-selected={!settingsExpanded && active === item.id}
                   title={sidebarIsCollapsed ? item.label : undefined}
                   aria-label={sidebarIsCollapsed ? item.label : undefined}
                   aria-current={!settingsExpanded && active === item.id ? "page" : undefined}
@@ -1009,8 +1024,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                         <React.Fragment key={subitem.id}>
                           <Button
                             variant="custom"
-                            className="tw:w-full tw:justify-start tw:gap-2 tw:border-transparent tw:bg-transparent tw:text-left tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:data-[selected=true]:border-ui-accent tw:data-[selected=true]:bg-ui-accent-soft tw:data-[selected=true]:text-ui-accent-strong"
-                            data-selected={showing}
+                            className={settingsNavButtonClassName}
                             aria-current={!hasTabs && showing ? "page" : undefined}
                             aria-expanded={hasTabs ? expanded : undefined}
                             aria-controls={hasTabs && expanded ? `settings-tabs-${subitem.id}` : undefined}
@@ -1024,7 +1038,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                               setMobileOpen(false);
                             }}
                           >
-                            <span className="tw:min-w-0 tw:flex-1 tw:truncate">{subitem.label}</span>
+                            <span className={settingsNavLabelClassName}>{subitem.label}</span>
                             {hasTabs && (
                               <ChevronRight size={13} aria-hidden="true" className={`tw:shrink-0 tw:motion-safe:transition-transform${expanded ? " tw:rotate-90" : ""}`} />
                             )}
@@ -1035,11 +1049,11 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                                 <Button
                                   key={tab.id}
                                   variant="custom"
-                                  className="tw:w-full tw:justify-start tw:border-transparent tw:bg-transparent tw:text-left tw:text-ui-text tw:hover:bg-card-page tw:aria-[current=page]:border-ui-accent tw:aria-[current=page]:bg-ui-accent-soft tw:aria-[current=page]:font-semibold tw:aria-[current=page]:text-ui-accent-strong"
+                                  className={settingsNavButtonClassName}
                                   aria-current={showing && configTab === tab.id ? "page" : undefined}
                                   onClick={() => { setActive("config"); setConfigArea(subitem.id); setConfigTab(tab.id); setMobileOpen(false); }}
                                 >
-                                  <span className="tw:min-w-0 tw:truncate">{tab.label}</span>
+                                  <span className={settingsNavLabelClassName}>{tab.label}</span>
                                 </Button>
                               ))}
                             </div>
@@ -1160,6 +1174,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             setMunicipalities={setMunicipalities}
             aiSettings={aiSettings}
             setAiSettings={setAiSettings}
+            aiConfigStatus={aiConfigStatus}
+            retryAiConfig={retryAiConfig}
             setScheduleDays={setScheduleDays}
             scheduleRules={scopedScheduleRules}
             setScheduleRules={setScheduleRules}
@@ -4837,6 +4853,8 @@ function ConfigView({
   selectedMunicipalityId = "",
   aiSettings = initialAiSettings,
   setAiSettings,
+  aiConfigStatus,
+  retryAiConfig,
 }) {
   const emptyRequestType = { name: "", charged: false, fee: "Gratuito", billingDescription: "", billingAmount: "", billingDueDate: "", active: true, overrideDailyLimit: false, breedIds: [] };
   const emptyAgendaForm = {
@@ -4978,19 +4996,8 @@ function ConfigView({
   const selectedAiModels = selectedAiProviderConfig.models || [];
   const selectedAiModel = selectedAiModels.includes(aiSettings.model) ? aiSettings.model : selectedAiModels[0] || "";
 
-  useEffect(() => {
-    if (!setAiSettings || !selectedAiModel) return;
-    if (aiSettings.provider === selectedAiProvider && aiSettings.model === selectedAiModel) return;
-    setAiSettings((current: AnyRecord) => ({
-      ...current,
-      provider: selectedAiProvider,
-      model: selectedAiModel,
-    }));
-  }, [aiSettings.model, aiSettings.provider, selectedAiModel, selectedAiProvider, setAiSettings]);
-
   async function saveAiCredentials() {
     const nextSettings = {
-      ...aiSettings,
       active: Boolean(aiSettings.active),
       provider: selectedAiProvider,
       model: selectedAiModel,
@@ -5015,10 +5022,8 @@ function ConfigView({
   async function clearAiCredentials() {
     setAiSaveStatus("Removendo chave...");
     try {
-      await api.setConfig("ai", { provider: selectedAiProvider, model: selectedAiModel, apiKey: "", clearApiKey: true }, configMunicipalityScopeId);
-      const reloaded = await api.getConfig("ai", configMunicipalityScopeId);
-      const safeReloaded = reloaded && typeof reloaded === "object" ? reloaded : {};
-      setAiSettings?.({ ...initialAiSettings, ...safeReloaded, active: Boolean(safeReloaded.active) });
+      const saved = await api.setConfig("ai", { clearApiKey: true }, configMunicipalityScopeId);
+      setAiSettings?.({ ...initialAiSettings, ...saved.value });
       setAiSaveStatus("Chave removida.");
     } catch (err: any) {
       setAiSaveStatus(`Não foi possível remover a chave: ${err.message}`);
@@ -6253,7 +6258,20 @@ function ConfigView({
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
         <div className="config-panel wide">
           <PanelHeader title="IA externa para documentos" />
-          <div className="tw:grid tw:items-start tw:gap-3 tw:lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+          {aiConfigStatus !== "ready" ? (
+            <Card className="tw:grid tw:justify-items-start tw:gap-3 tw:p-4">
+              {aiConfigStatus === "error" ? (
+                <>
+                  <p role="alert" className="tw:m-0">Não foi possível carregar a configuração de IA.</p>
+                  <Button variant="outline" onClick={retryAiConfig}>Tentar novamente</Button>
+                </>
+              ) : (
+                <p role="status" className="tw:m-0">
+                  {aiConfigStatus === "unselected" ? "Selecione um município para configurar a IA." : "Carregando a configuração de IA…"}
+                </p>
+              )}
+            </Card>
+          ) : <div className="tw:grid tw:items-start tw:gap-3 tw:lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
             <Card as="article" className="tw:grid tw:min-w-0 tw:content-start tw:gap-3 tw:p-4">
               <ConfigActiveToggle
                 checked={Boolean(aiSettings.active)}
@@ -6345,7 +6363,7 @@ function ConfigView({
               </div>
               {aiSaveStatus && <p className={aiSaveStatus.includes("sucesso") || aiSaveStatus === "Chave removida." ? "sms-status confirmed" : "sms-status"}>{aiSaveStatus}</p>}
             </Card>
-          </div>
+          </div>}
         </div>
       )}
 

@@ -2,7 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
-import { AuthAudience, AuthPurpose, validateNewPassword } from "../../shared/auth-contract.js";
+import { AuthAudience, AuthErrorCode, AuthPurpose, validateNewPassword } from "../../shared/auth-contract.js";
+import { runMigrations } from "../src/db/migrations.js";
 import { issueSession, verifySession } from "../src/services/auth/auth-session.js";
 import { resolveRequestTutor } from "../src/services/auth/request-tutor.js";
 import { createChallenge, consumeChallenge } from "../src/repositories/auth-challenges.js";
@@ -45,8 +46,61 @@ test("session requires current password revision, role, municipality and active 
     { password: "another-hash" }, { session_version: 1 }, { role: "master" },
     { municipality_id: OTHER_MUNICIPALITY }, { active: false }, { municipality_active: false }, { cpf: null },
   ]) {
-    await assert.rejects(verifySession(token, { loadUser: async () => ({ ...user, ...changed }) }), { status: 401 });
+    await assert.rejects(verifySession(token, { loadUser: async () => ({ ...user, ...changed }) }), {
+      status: 401, code: AuthErrorCode.SESSION_INVALID,
+    });
   }
+});
+
+test("session stays verifiable after a temporary signing-key outage", async (t) => {
+  useSecret(t);
+  const user = userRow();
+  const { token } = issueSession(user);
+  const loadUser = async () => user;
+  const secret = process.env.JWT_SECRET;
+
+  delete process.env.JWT_SECRET;
+  await assert.rejects(verifySession(token, { loadUser }), { status: 503 });
+  process.env.JWT_SECRET = "different-key-for-unit-test";
+  await assert.rejects(verifySession(token, { loadUser }), { status: 401, code: AuthErrorCode.SESSION_INVALID });
+  process.env.JWT_SECRET = secret;
+  assert.equal((await verifySession(token, { loadUser })).id, user.id);
+});
+
+test("bootstrapping an administrator again preserves the stored password and active session", async (t) => {
+  useSecret(t);
+  const previousEmail = process.env.ADMIN_EMAIL;
+  const previousPassword = process.env.ADMIN_PASSWORD;
+  process.env.ADMIN_EMAIL = " admin@example.test ";
+  process.env.ADMIN_PASSWORD = "admin bootstrap unit test password";
+  t.after(() => {
+    if (previousEmail === undefined) delete process.env.ADMIN_EMAIL;
+    else process.env.ADMIN_EMAIL = previousEmail;
+    if (previousPassword === undefined) delete process.env.ADMIN_PASSWORD;
+    else process.env.ADMIN_PASSWORD = previousPassword;
+  });
+
+  let administrator;
+  const database = {
+    async query(sql, values) {
+      if (!sql.startsWith("INSERT INTO users")) return;
+      const [name, email, password] = values;
+      assert.match(sql, /lower\(email\) = \$2/);
+      assert.match(sql, /ON CONFLICT DO NOTHING/);
+      if (administrator?.email.toLowerCase() === email) return;
+      administrator = userRow({ name, email, password, role: "master", municipality_id: null });
+    },
+  };
+
+  await runMigrations(database);
+  assert.equal(administrator.email, "admin@example.test");
+  assert.ok(await bcrypt.compare(process.env.ADMIN_PASSWORD, administrator.password));
+  administrator = { ...administrator, email: "Admin@example.test", password: HASH };
+  const { token } = issueSession(administrator);
+
+  await runMigrations(database);
+  assert.equal(administrator.password, HASH);
+  assert.equal((await verifySession(token, { loadUser: async () => administrator })).id, administrator.id);
 });
 
 test("first password ticket is restricted server-side and cannot survive completing the change", async (t) => {

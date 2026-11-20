@@ -4,6 +4,7 @@ import express from "express";
 import configRoutes from "../src/routes/config.js";
 import whatsappRoutes from "../src/routes/whatsapp.js";
 import { pool } from "../src/db/index.js";
+import { decryptSecretStrict, encryptSecretStrict } from "../src/services/config-secret-cipher.js";
 import { SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 
@@ -166,6 +167,70 @@ test("global administrators must select a municipality for restricted configurat
   });
   assert.equal(response.status, 200);
   assert.equal(response.body.municipality_id, OTHER_MUNICIPALITY_ID);
+});
+
+test("AI saves preserve the encrypted key when secure storage is temporarily unavailable", async (t) => {
+  const { request, store } = await fixture(t);
+  const originalKey = process.env.CONFIG_ENCRYPTION_KEY;
+  t.after(() => {
+    if (originalKey === undefined) delete process.env.CONFIG_ENCRYPTION_KEY;
+    else process.env.CONFIG_ENCRYPTION_KEY = originalKey;
+  });
+  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 1).toString("base64");
+  const encryptedKey = encryptSecretStrict("saved-test-key");
+  delete process.env.CONFIG_ENCRYPTION_KEY;
+
+  const row = `ai:${MUNICIPALITY_ID}`;
+  store.set(row, { active: true, provider: "OpenAI", model: "previous", apiKey: encryptedKey, keyValid: true });
+  const save = (body) => request("/config/ai", { user: ADMIN, method: "PUT", body });
+
+  const unchanged = await save({ active: true, apiKey: "" });
+  assert.equal(unchanged.status, 200);
+  assert.equal(unchanged.body.value.hasApiKey, true);
+  assert.equal(unchanged.body.value.apiKey, "");
+  assert.equal(store.get(row).apiKey, encryptedKey);
+
+  const changeModel = await save({ model: "next" });
+  assert.equal(changeModel.status, 503);
+  assert.equal(store.get(row).model, "previous");
+  assert.equal(store.get(row).apiKey, encryptedKey);
+
+  assert.equal((await save({ active: false })).status, 200);
+  assert.equal(store.get(row).apiKey, encryptedKey);
+  assert.equal((await save({ apiKey: "replacement-test-key" })).status, 503);
+  assert.equal(store.get(row).apiKey, encryptedKey);
+
+  const removed = await save({ clearApiKey: true });
+  assert.equal(removed.status, 200);
+  assert.equal(removed.body.value.hasApiKey, false);
+  assert.equal(store.get(row).apiKey, "");
+});
+
+test("AI saves encrypt legacy keys and preserve provider validation when the key stays the same", async (t) => {
+  const { request, store } = await fixture(t);
+  const originalKey = process.env.CONFIG_ENCRYPTION_KEY;
+  t.after(() => {
+    if (originalKey === undefined) delete process.env.CONFIG_ENCRYPTION_KEY;
+    else process.env.CONFIG_ENCRYPTION_KEY = originalKey;
+  });
+  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 1).toString("base64");
+  globalThis.fetch = async () => { throw new Error("Unexpected provider validation"); };
+
+  const row = `ai:${MUNICIPALITY_ID}`;
+  const lastValidatedAt = "2026-01-01T00:00:00Z";
+  const apiKey = "legacy-test-key";
+  store.set(row, { active: true, provider: "OpenAI", model: "previous", apiKey, keyValid: true, lastValidatedAt });
+  const save = (body) => request("/config/ai", { user: ADMIN, method: "PUT", body });
+
+  const saved = await save({ active: true });
+  assert.equal(saved.status, 200);
+  const encryptedKey = store.get(row).apiKey;
+  assert.equal(decryptSecretStrict(encryptedKey), apiKey);
+
+  const sameKey = await save({ apiKey });
+  assert.equal(sameKey.status, 200);
+  assert.equal(sameKey.body.value.lastValidatedAt, lastValidatedAt);
+  assert.equal(store.get(row).apiKey, encryptedKey);
 });
 
 test("the WhatsApp quota is no longer served or reset through the configuration or WhatsApp routes", async (t) => {

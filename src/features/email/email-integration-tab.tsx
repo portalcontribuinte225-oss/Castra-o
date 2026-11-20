@@ -33,7 +33,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
   return (
     <div className="config-panel wide">
       <PanelHeader title="E-mail" />
-      {municipalityId && settings && <MessageContractStatus active={settings.configured && serviceOn} live={contract.live} />}
+      {municipalityId && settings && <MessageContractStatus active={contract.ready ? settings.configured && serviceOn : null} live={contract.live} />}
       <div className="tw:grid tw:gap-3">
         {master && settings && <EmailCredentials account={settings.account} state={account} />}
         <IntegrationCard title="Templates">

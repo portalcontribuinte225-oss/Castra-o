@@ -5,9 +5,14 @@ export function authError(status, message, code) {
   return Object.assign(new Error(message), { status, ...(code ? { code } : {}) });
 }
 
+export function requireJwtSecret() {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw authError(503, "Autenticação indisponível.");
+  return secret;
+}
+
 export function authenticatedDigest(purpose, ...values) {
-  if (!process.env.JWT_SECRET) throw authError(503, "Autenticação indisponível.");
-  return createHmac("sha256", process.env.JWT_SECRET).update(JSON.stringify([purpose, ...values])).digest("hex");
+  return createHmac("sha256", requireJwtSecret()).update(JSON.stringify([purpose, ...values])).digest("hex");
 }
 
 export function safeDigestEqual(left, right) {

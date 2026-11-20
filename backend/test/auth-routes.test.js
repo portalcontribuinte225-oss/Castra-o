@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
-import { AuthAudience, AuthPurpose } from "../../shared/auth-contract.js";
+import { AuthAudience, AuthErrorCode, AuthPurpose } from "../../shared/auth-contract.js";
 import { recoveryDestination } from "../src/services/auth/recovery-token.js";
 import { authHttpFixture, authUser, AUTH_TEST_MUNICIPALITY as MUNICIPALITY, AUTH_TEST_OTHER_MUNICIPALITY as OTHER,
   AUTH_TEST_PASSWORD as PASSWORD } from "./fixtures/auth-http.js";
@@ -15,6 +15,7 @@ test("tutor CPF login is municipal and profile email never promotes an instituti
   assert.equal(JSON.stringify(result.body).includes(tutor.password), false);
   const wrongMunicipality = await request("/auth/login", { method: "POST", body: { audience: AuthAudience.TUTOR, municipalityId: OTHER, identifier: tutor.cpf, password: PASSWORD } });
   assert.equal(wrongMunicipality.status, 401);
+  assert.notEqual(wrongMunicipality.body.code, AuthErrorCode.SESSION_INVALID);
   const staffLogin = await request("/auth/login", { method: "POST", body: { audience: AuthAudience.STAFF, identifier: staff.email, password: PASSWORD } });
   assert.equal(staffLogin.status, 200); assert.equal(staffLogin.body.user.role, "analista");
 });
@@ -37,7 +38,9 @@ test("first-change ticket can bootstrap and change password but cannot enter pro
   assert.equal((await request("/protected", { token: oldToken })).status, 403);
   const changed = await request("/auth/change-password", { method: "POST", token: oldToken, body: { currentPassword: PASSWORD, password: "new long password for tutor" } });
   assert.equal(changed.status, 200); assert.equal(changed.body.user.mustChangePassword, false);
-  assert.equal((await request("/protected", { token: oldToken })).status, 401);
+  const revoked = await request("/protected", { token: oldToken });
+  assert.equal(revoked.status, 401);
+  assert.equal(revoked.body.code, AuthErrorCode.SESSION_INVALID);
   assert.equal((await request("/protected", { token: changed.body.token })).status, 200);
 });
 

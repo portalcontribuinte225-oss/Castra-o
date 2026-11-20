@@ -7,12 +7,6 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
     navigator.serviceWorker.register("/sw.js").then((registration) => {
       registration.update().catch(() => {});
     }).catch(() => {});
-
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (sessionStorage.getItem("castragestao:sw-refreshing") === "true") return;
-      sessionStorage.setItem("castragestao:sw-refreshing", "true");
-      window.location.reload();
-    });
   });
 }
 

@@ -1,7 +1,7 @@
-import { pool } from "./index.js";
+import { pool as migrationPool } from "./index.js";
 import bcrypt from "bcryptjs";
 
-export async function runMigrations() {
+export async function runMigrations(pool = migrationPool) {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS municipalities (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -457,20 +457,16 @@ export async function runMigrations() {
     ALTER TABLE municipalities ADD COLUMN IF NOT EXISTS department_logo TEXT;
   `);
 
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL;
+  const adminEmail = (process.env.ADMIN_EMAIL || process.env.VITE_ADMIN_EMAIL || "").trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD || process.env.VITE_ADMIN_PASSWORD;
   if (adminEmail && adminPassword) {
     const adminHash = await bcrypt.hash(adminPassword, 10);
     await pool.query(
       `INSERT INTO users (name, email, password, role)
-       VALUES ($1, $2, $3, 'master')
-       ON CONFLICT (email)
-       DO UPDATE SET
-         name = EXCLUDED.name,
-         password = EXCLUDED.password,
-         role = 'master',
-         municipality_id = NULL`,
-      ["Administrador", adminEmail.trim().toLowerCase(), adminHash],
+       SELECT $1, $2, $3, 'master'
+       WHERE NOT EXISTS (SELECT 1 FROM users WHERE lower(email) = $2)
+       ON CONFLICT DO NOTHING`,
+      ["Administrador", adminEmail, adminHash],
     );
   }
 

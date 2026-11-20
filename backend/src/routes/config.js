@@ -3,7 +3,7 @@ import { pool } from "../db/index.js";
 import { auth, optionalAuth } from "../middleware/auth.js";
 import { isGlobalUser, isMasterUser, isMunicipalAdmin, isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
-import { encryptSecret, decryptSecret } from "../services/config-secret-cipher.js";
+import { decryptSecret, encryptSecret, encryptSecretStrict, isEncryptedSecret } from "../services/config-secret-cipher.js";
 import { prepareWhatsappCredentials, publicWhatsappConfig } from "../services/whatsapp-credentials.js";
 import { testProviderKey } from "./ai.js";
 import { BREEDS_CONFIG_KEY } from "../services/breed-defaults.js";
@@ -235,9 +235,10 @@ router.put("/:key", auth, async (req, res) => {
     if (validationError) return res.status(400).json({ error: validationError });
   }
 
-  const client = await pool.connect();
+  let client;
   let writeTransaction = false;
   try {
+    client = await pool.connect();
     if (RESERVATION_CONFIG_KEYS.has(key)) {
       await client.query("BEGIN");
       writeTransaction = true;
@@ -250,11 +251,14 @@ router.put("/:key", auth, async (req, res) => {
     // para não gerar uma chamada paga ao provedor a cada salvamento de config não relacionada.
     if (key === "ai" && value.active) {
       const previous = value.__previous || {};
-      const previousApiKey = decryptSecret(previous.apiKey || "");
-      const nextApiKey = decryptSecret(value.apiKey || "");
-      const needsTest = !previous.active || previousApiKey !== nextApiKey || previous.provider !== value.provider || previous.model !== value.model;
+      const keyChanged = previous.apiKey !== value.apiKey && decryptSecret(previous.apiKey) !== decryptSecret(value.apiKey);
+      const needsTest = !previous.active || keyChanged || previous.provider !== value.provider || previous.model !== value.model;
 
       if (needsTest) {
+        const nextApiKey = decryptSecret(value.apiKey);
+        if (value.apiKey && !nextApiKey) {
+          return res.status(503).json({ error: "O armazenamento seguro da chave de IA está indisponível." });
+        }
         const testResult = await testProviderKey(value.provider, { apiKey: nextApiKey, model: value.model });
         if (!testResult.valid) {
           return res.status(400).json({ error: testResult.error || "Chave de IA invalida para o provedor selecionado." });
@@ -297,7 +301,7 @@ router.put("/:key", auth, async (req, res) => {
     if (writeTransaction) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível salvar a configuração." });
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
@@ -322,10 +326,18 @@ async function prepareConfigValue(key, value = {}, municipalityId = null, client
   const current = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
   if (key === "whatsapp") return prepareWhatsappCredentials(current, value);
   const nextApiKey = String(value.apiKey || "").trim();
-  const resolvedApiKey = value.clearApiKey ? "" : nextApiKey || decryptSecret(current.apiKey || "");
   const { clearApiKey, ...rest } = value;
-  const merged = { ...current, ...rest, apiKey: encryptSecret(resolvedApiKey) };
-  if (value.clearApiKey) {
+  let apiKey = current.apiKey || "";
+  if (clearApiKey === true) apiKey = "";
+  else if (nextApiKey && nextApiKey !== decryptSecret(apiKey)) {
+    try {
+      apiKey = encryptSecretStrict(nextApiKey);
+    } catch {
+      throw Object.assign(new Error("O armazenamento seguro da chave de IA está indisponível."), { status: 503 });
+    }
+  } else if (apiKey && !isEncryptedSecret(apiKey)) apiKey = encryptSecret(apiKey);
+  const merged = { ...current, ...rest, apiKey };
+  if (clearApiKey === true) {
     merged.active = false;
     merged.keyValid = null;
     merged.lastValidatedAt = "";

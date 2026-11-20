@@ -24,6 +24,7 @@ const channelOn: SmsConfig = { ...stored, active: true };
 const municipal: SmsConfig = { ...buildDefaultSmsConfig(), active: true, municipalityName: "Test Town" };
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: vi.fn(), saveStatus: "",
+  ready: true, loadFailed: false, retry: vi.fn(), saving: false,
   live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
   confirmingEnd: false, setConfirmingEnd: vi.fn(), save: vi.fn(), endContractToday: vi.fn(), resetUsed: vi.fn(), setEnabled: vi.fn(),
 };

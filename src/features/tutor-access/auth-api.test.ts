@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api, ApiError } from "../../api";
-import { AuthAudience } from "../../../shared/auth-contract.js";
+import { api, ApiError, SESSION_INVALID_EVENT } from "../../api";
+import { AuthAudience, AuthErrorCode } from "../../../shared/auth-contract.js";
 
 describe("auth API boundaries", () => {
   const values = new Map<string, string>();
@@ -78,6 +78,43 @@ describe("auth API boundaries", () => {
     await expect(api.getSession()).rejects.toMatchObject({ status: 401 });
     expect(dispatchEvent).not.toHaveBeenCalled();
     expect(values.get("castragestao:token")).toBe("new-token");
+  });
+
+  it("keeps the session when an integration or the proxy responds without confirming expiration", async () => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent });
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "Token do provedor inválido." }), { status: 401 }))
+      .mockResolvedValueOnce(new Response("<html>Service starting</html>", { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 503 })));
+    values.set("castragestao:token", "staff-session");
+
+    await expect(api.getSmsSettings()).rejects.toMatchObject({ status: 401 });
+    await expect(api.getSession()).rejects.toMatchObject({ status: 401 });
+    await expect(api.getSession()).rejects.toMatchObject({ status: 503 });
+    expect(dispatchEvent).not.toHaveBeenCalled();
+    expect(values.get("castragestao:token")).toBe("staff-session");
+  });
+
+  it.each([
+    { error: "Sessão inválida", code: AuthErrorCode.SESSION_INVALID },
+    { error: "Sessão inválida ou expirada." },
+  ])("ends the session when the API confirms invalidation with $error", async (failure) => {
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify(failure), { status: 401 })));
+    values.set("castragestao:token", "staff-session");
+
+    await expect(api.getSession()).rejects.toMatchObject({ status: 401 });
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: SESSION_INVALID_EVENT }));
+  });
+
+  it("treats an incomplete bootstrap response as temporary downtime", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ user: { id: "staff-a", role: "staff" } }))));
+    values.set("castragestao:token", "staff-session");
+
+    await expect(api.getSession()).rejects.toMatchObject({ status: 502 });
+    expect(values.get("castragestao:token")).toBe("staff-session");
   });
 
   it("discovers without sending and sends only the selected opaque recovery option", async () => {

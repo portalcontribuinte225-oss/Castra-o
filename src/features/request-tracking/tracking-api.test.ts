@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { api } from "../../api";
+import { AuthErrorCode } from "../../../shared/auth-contract.js";
+import { api, SESSION_INVALID_EVENT } from "../../api";
 
 describe("request tracking API boundaries", () => {
   beforeEach(() => { vi.stubGlobal("localStorage", { getItem: () => "session-token" }); });
@@ -33,10 +34,14 @@ describe("request tracking API boundaries", () => {
   it("an expired tracking session never signs the logged-in user out, while a rejected session still does", async () => {
     const dispatchEvent = vi.fn();
     vi.stubGlobal("window", { dispatchEvent });
-    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "Acompanhamento expirado." }), { status: 401 })));
-    await expect(api.getTrackedRequest("expired-token")).rejects.toMatchObject({ status: 401, message: "Acompanhamento expirado." });
+    const trackingError = "Acompanhamento expirado. Solicite um novo código.";
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: trackingError }), { status: 401 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "Sessão inválida ou expirada.", code: AuthErrorCode.SESSION_INVALID }), { status: 401 })));
+    await expect(api.getTrackedRequest("expired-token")).rejects.toMatchObject({ status: 401, message: trackingError });
     expect(dispatchEvent).not.toHaveBeenCalled();
-    await expect(api.getRequests()).rejects.toMatchObject({ status: 401 });
+    await expect(api.getRequests()).rejects.toMatchObject({ status: 401, code: AuthErrorCode.SESSION_INVALID });
+    expect(dispatchEvent).toHaveBeenCalledWith(expect.objectContaining({ type: SESSION_INVALID_EVENT }));
     expect(dispatchEvent).toHaveBeenCalledTimes(1);
   });
 

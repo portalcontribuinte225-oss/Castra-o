@@ -10,6 +10,7 @@ const noop = vi.fn();
 const live: MessageQuotaStatus = { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true };
 const contractState = (extra: Partial<MessageContract> = {}): MessageContract => ({
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "", live,
+  ready: true, loadFailed: false, retry: noop, saving: false,
   confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop, ...extra,
 });
 
@@ -35,6 +36,14 @@ describe("contract status", () => {
     expect(status(true, null)).not.toContain("mensagens este mês");
     const open = status(true, { ...live, contractEnd: null });
     expect(open).toContain("Contrato vigente"); expect(open).not.toContain(" até ");
+  });
+
+  it("keeps unavailable settings distinct from a turned-off channel or a municipality without a quota", () => {
+    const html = renderToStaticMarkup(<MessageContractStatus active={null} live={undefined} />);
+    expect(html).toContain("Status da integração indisponível");
+    expect(html).toContain("Cota indisponível");
+    expect(html).not.toContain("Inativo");
+    expect(html).not.toContain("Cota não configurada");
   });
 });
 
@@ -70,6 +79,18 @@ describe("contract form", () => {
     for (const label of ["Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(disabled(ready, label), label).toBe(false);
     const empty = form({ settings: { plan: "", contractStart: "", contractEnd: "" }, live: null });
     expect(disabled(empty, "Salvar cota")).toBe(false); expect(disabled(empty, "Encerrar contrato")).toBe(true); expect(disabled(empty, "Zerar cota do mês")).toBe(true);
+  });
+
+  it("keeps the form unavailable until the quota loads and offers a retry on failure", () => {
+    const loading = form({ ready: false, live: undefined });
+    const failed = form({ ready: false, loadFailed: true, live: undefined });
+    expect(loading).toContain("Carregando contrato e cota...");
+    expect(failed).toContain("Carregar novamente");
+    for (const html of [loading, failed]) {
+      expect(html).not.toContain("Salvar cota");
+      expect(html).not.toContain("Encerrar contrato");
+      expect(html).not.toContain("Zerar cota do mês");
+    }
   });
 
   it("offers the switch of the service for SMS and e-mail only, once the municipality has a contract", () => {
