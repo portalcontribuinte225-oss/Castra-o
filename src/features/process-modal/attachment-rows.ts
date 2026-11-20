@@ -31,7 +31,7 @@ function isAnimalPhoto(document: AnyRecord) {
 }
 
 function stateOf(document: AnyRecord): AttachmentState {
-  if (document.internalEvidence || document.documentId?.startsWith("evidencia-")) return AttachmentState.INFO;
+  if (document.internalEvidence || document.documentId?.startsWith?.("evidencia-") || document.documentName === "Evidência da apuração") return AttachmentState.INFO;
   if (document.status === DocumentReviewStatus.APPROVED) return AttachmentState.APPROVED;
   if (document.status === DocumentReviewStatus.REJECTED) return AttachmentState.REJECTED;
   return AttachmentState.PENDING;
@@ -73,9 +73,12 @@ export function isBlockingAttachment(row: AttachmentRow): boolean {
   return row.required && row.state !== AttachmentState.APPROVED;
 }
 
-// The staff decides on a required file that was sent and is waiting, or that was sent back for correction and may be accepted after all.
+export function isPendingAttachment(row: AttachmentRow): boolean {
+  return row.state === AttachmentState.PENDING || isBlockingAttachment(row);
+}
+
 export function canReviewAttachment(row: AttachmentRow): boolean {
-  return row.required && row.available && Boolean(row.document?.attachmentId) && [AttachmentState.PENDING, AttachmentState.REJECTED].includes(row.state);
+  return row.available && Boolean(row.document?.attachmentId) && [AttachmentState.PENDING, AttachmentState.REJECTED].includes(row.state);
 }
 
 export const attachmentStateLabels: Record<AttachmentState, string> = {
@@ -83,7 +86,7 @@ export const attachmentStateLabels: Record<AttachmentState, string> = {
   [AttachmentState.INFO]: "Anexado",
   [AttachmentState.PENDING]: "Aguardando",
   [AttachmentState.APPROVED]: "Deferido",
-  [AttachmentState.REJECTED]: "Ajuste solicitado",
+  [AttachmentState.REJECTED]: "Indeferido",
   [AttachmentState.MISSING]: "Não enviado",
 };
 
@@ -101,7 +104,7 @@ export function attachmentDescription(row: AttachmentRow): string {
   if (row.state === AttachmentState.SYSTEM) return "Gerado automaticamente pelo sistema";
   if (row.state === AttachmentState.INFO) return row.kind === "photo" ? "Foto de identificação do animal" : "Evidência anexada pela equipe";
   if (row.state === AttachmentState.MISSING) return row.required ? "Documento obrigatório não enviado" : "Documento não enviado";
-  if (row.state === AttachmentState.REJECTED) return row.document?.review?.note ? `Ajuste solicitado: ${row.document.review.note}` : "Ajuste solicitado ao tutor";
+  if (row.state === AttachmentState.REJECTED) return row.document?.review?.note || "Indeferido na conferência";
   if (row.state === AttachmentState.APPROVED) return row.document?.review ? "Deferido na conferência" : row.document?.provider ? "Aprovado pela análise automática" : "Documento disponível";
   return row.required ? "Conferência obrigatória para o agendamento" : "Documento complementar";
 }

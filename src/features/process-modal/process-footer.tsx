@@ -12,6 +12,7 @@ interface ProcessFooterProps {
   hasAssignment: boolean;
   assignmentBlock: string;
   documentsBlock: string;
+  hasPendingAttachments: boolean;
   procedure: AnyRecord | null;
   procedureTabLabel: string;
   specialConfirmLabel: string;
@@ -57,7 +58,7 @@ function procedureActions({ procedure, busy, currentChanged, assignmentBlock, do
 
 // The fixed bottom of the process: the actions of the tab on screen, and of the chosen procedure.
 export function ProcessFooter(props: ProcessFooterProps) {
-  const { tab, readOnly, isSpecial, processOpen, hasAssignment, assignmentBlock, documentsBlock, procedureTabLabel, specialConfirmLabel, busy, canAssume, tutorSlot, on } = props;
+  const { tab, readOnly, isSpecial, processOpen, hasAssignment, assignmentBlock, hasPendingAttachments, procedureTabLabel, specialConfirmLabel, busy, canAssume, tutorSlot, on } = props;
   let content;
   if (tab === ProcessTab.TUTOR) {
     content = readOnly ? <Note>Visualização somente leitura.</Note> : <div className="prm-footer-end" ref={tutorSlot} />;
@@ -71,7 +72,7 @@ export function ProcessFooter(props: ProcessFooterProps) {
           </div>
         )}
         <div className="prm-footer-end">
-          <span className="prm-muted-note">{documentsBlock ? "Aguardando conferência dos anexos" : "Documentos conferidos"}</span>
+          <span className="prm-muted-note">{hasPendingAttachments ? "Aguardando conferência dos anexos" : "Documentos conferidos"}</span>
           <button className="prm-action-btn prm-action-btn--secondary" type="button" disabled={busy} onClick={on.showProcedures}>Ver {isSpecial ? procedureTabLabel.toLowerCase() : "procedimentos"} <ArrowRight size={15} /></button>
         </div>
       </>

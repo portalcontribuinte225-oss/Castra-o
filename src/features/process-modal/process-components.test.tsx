@@ -1,6 +1,8 @@
 import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
+import { RequestOrigin } from "../../../shared/request-contract.js";
 import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
 import { ProcessFooter } from "./process-footer";
 import { ProcessTab } from "./process-labels";
@@ -30,6 +32,23 @@ describe("ProcessModal", () => {
     expect(html).toContain("Pendência documental");
     expect(html).toContain('class="prm-tab-count">1</span>');
   });
+
+  it("renders document decisions and pending review for a supplemental public upload", () => {
+    const request = {
+      id: "request-b", status: "NOVA", origin: RequestOrigin.PUBLIC, request_type: "Castração",
+      workflow_data: { assignedSectorId: "clinic", assignedUserId: "staff" },
+      documents: [{ documentId: "address", attachmentId: "address-upload", documentName: "Comprovante de Residência", status: DocumentReviewStatus.ATTACHED }],
+    };
+    const html = renderToStaticMarkup(<ProcessModal request={request} readOnly={false} onClose={noop} />);
+    expect(html).toMatch(/<button\b(?![^>]*\bdisabled\b)[^>]*aria-label="Deferir Comprovante de Residência"/);
+    expect(html).toMatch(/<button\b(?![^>]*\bdisabled\b)[^>]*aria-label="Indeferir Comprovante de Residência"/);
+    expect(html).toContain('class="prm-tab-count">1</span>');
+    expect(html).toContain("Aguardando conferência dos anexos");
+    expect(html).not.toContain("Pendência documental");
+
+    const viewOnly = renderToStaticMarkup(<ProcessModal request={request} readOnly onClose={noop} />);
+    expect(viewOnly).not.toMatch(/aria-label="(?:Deferir|Indeferir) /);
+  });
 });
 
 const footerProps: ComponentProps<typeof ProcessFooter> = {
@@ -40,6 +59,7 @@ const footerProps: ComponentProps<typeof ProcessFooter> = {
   hasAssignment: true,
   assignmentBlock: "",
   documentsBlock: "",
+  hasPendingAttachments: false,
   procedure,
   procedureTabLabel: "Procedimento e saúde",
   specialConfirmLabel: "Confirmar solicitação",
@@ -55,7 +75,7 @@ const footer = (overrides: Partial<ComponentProps<typeof ProcessFooter>> = {}) =
 
 describe("ProcessFooter", () => {
   it("shows assignment and navigation on attachments", () => {
-    const html = footer({ tab: ProcessTab.ATTACHMENTS, hasAssignment: false, documentsBlock: "Identidade pendente" });
+    const html = footer({ tab: ProcessTab.ATTACHMENTS, hasAssignment: false, hasPendingAttachments: true });
     expect(html).toContain("Atribuir");
     expect(html).toContain("Assumir");
     expect(html).toContain("Aguardando conferência dos anexos");

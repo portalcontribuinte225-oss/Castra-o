@@ -9,7 +9,7 @@ import { neighborhoodNames } from "../neighborhoods/neighborhoods";
 import { getSpecialRequestSection, specialRequestConfirmLabel } from "../request-analysis-sections";
 import { TutorDataTab } from "../tutor-data/tutor-data-tab";
 import { AttachmentsTab } from "./attachments-tab";
-import { buildAttachmentRows, isBlockingAttachment } from "./attachment-rows";
+import { buildAttachmentRows, isBlockingAttachment, isPendingAttachment } from "./attachment-rows";
 import type { AttachmentRow } from "./attachment-rows";
 import { AssignDialog, NoteDialog, RejectDialog, UnsavedChangesDialog } from "./process-dialogs";
 import { requestDocumentTypes } from "./process-documents";
@@ -23,7 +23,7 @@ import { RescheduleDialog } from "./reschedule-dialog";
 import { useAttachmentActions } from "./use-attachment-actions";
 import { useProcessProcedures } from "./use-process-procedures";
 
-enum Dialog { ASSIGN, REJECT, REJECT_PROCESS, RESCHEDULE, PRESCRIPTION, ADJUST, COMPLAINT, UNSAVED }
+enum Dialog { ASSIGN, REJECT, REJECT_PROCESS, RESCHEDULE, PRESCRIPTION, REJECT_DOCUMENT, COMPLAINT, UNSAVED }
 
 const REQUEST_DOCUMENT_KINDS: Record<string, string> = {
   [RequestType.TUTOR_TRANSFER]: "tutor-transfer-request",
@@ -46,7 +46,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const [tab, setTab] = useState(ProcessTab.ATTACHMENTS);
   const panelId = useId();
   const [dialog, setDialog] = useState<Dialog | null>(null);
-  const [adjusting, setAdjusting] = useState<AttachmentRow | null>(null);
+  const [rejectingDocument, setRejectingDocument] = useState<AttachmentRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
@@ -62,6 +62,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
     requestDocument,
   });
   const blocking = rows.filter(isBlockingAttachment);
+  const pendingAttachmentCount = rows.filter(isPendingAttachment).length;
   const documentsBlock = blocking.length ? `Resolva os documentos obrigatórios: ${blocking.map((row) => row.title).join(", ")}` : "";
   const hasAssignment = Boolean(normalized.assignedSectorId && normalized.assignedUserId);
   const assignmentBlock = !hasAssignment && normalized.origin !== RequestOrigin.INTERNAL ? "Atribua um setor e um usuário ao processo antes de continuar" : "";
@@ -132,7 +133,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
           subtitle={[`Tutor: ${displayText(normalized.tutor)}`, !isSpecial && plural(procedures.animals.length, "animal", "animais")].filter(Boolean).join(" · ")}
           status={normalized.status}
           reportLoading={reportLoading}
-          tabs={[{ id: ProcessTab.ATTACHMENTS, label: "Anexos", count: blocking.length }, { id: ProcessTab.PROCEDURES, label: procedureTabLabel }, { id: ProcessTab.TUTOR, label: "Dados do tutor" }]}
+          tabs={[{ id: ProcessTab.ATTACHMENTS, label: "Anexos", count: pendingAttachmentCount }, { id: ProcessTab.PROCEDURES, label: procedureTabLabel }, { id: ProcessTab.TUTOR, label: "Dados do tutor" }]}
           activeTab={tab}
           panelId={panelId}
           busy={pending}
@@ -143,9 +144,9 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
         <div className="prm-body" role="tabpanel" id={panelId} aria-labelledby={`${panelId}-${tab}`}>
           {reportError && <p className="form-error" role="alert">{reportError}</p>}
           {tab === ProcessTab.ATTACHMENTS && (
-            <AttachmentsTab rows={rows} canReview={!readOnly && processOpen} canAttach={!readOnly} reviewBlockedReason={assignmentBlock} busyId={attachments.busyId}
+            <AttachmentsTab rows={rows} pendingCount={pendingAttachmentCount} canReview={!readOnly && processOpen} canAttach={!readOnly} reviewBlockedReason={assignmentBlock} busyId={attachments.busyId}
               uploadingEvidence={attachments.uploadingEvidence} error={attachments.error} onPreview={attachments.open} onDownload={attachments.save}
-              onApprove={attachments.approve} onRequestAdjustment={(row) => { setAdjusting(row); setDialog(Dialog.ADJUST); }} onEvidence={attachments.attachEvidence} />
+              onApprove={attachments.approve} onReject={(row) => { setRejectingDocument(row); setDialog(Dialog.REJECT_DOCUMENT); }} onEvidence={attachments.attachEvidence} />
           )}
           {tab === ProcessTab.PROCEDURES && isSpecial && specialSection?.({ request: normalized })}
           {tab === ProcessTab.PROCEDURES && !isSpecial && (
@@ -157,7 +158,8 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
           )}
         </div>
         <ProcessFooter
-          tab={tab} readOnly={readOnly} isSpecial={isSpecial} processOpen={processOpen} hasAssignment={hasAssignment} assignmentBlock={assignmentBlock} documentsBlock={documentsBlock}
+          tab={tab} readOnly={readOnly} isSpecial={isSpecial} processOpen={processOpen} hasAssignment={hasAssignment} assignmentBlock={assignmentBlock}
+          documentsBlock={documentsBlock} hasPendingAttachments={pendingAttachmentCount > 0}
           procedure={procedure} procedureTabLabel={procedureTabLabel} specialConfirmLabel={specialRequestConfirmLabel(normalized)} busy={pending} currentChanged={procedures.currentChanged}
           canAssume={Boolean(onAssume) && localSectors.length > 0} tutorSlot={setTutorSlot}
           on={{
@@ -192,10 +194,10 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
         <NoteDialog title="Deferir denúncia" label="Conclusão da apuração" placeholder="Descreva o que foi apurado..." confirmLabel="Confirmar deferimento" busy={false} maxLength={2000}
           onClose={() => setDialog(null)} onConfirm={(note) => { onConfirmSpecial?.(request, { note }); setDialog(null); }} />
       )}
-      {dialog === Dialog.ADJUST && adjusting && (
-        <NoteDialog title={`Solicitar ajuste: ${adjusting.title}`} label="O que precisa ser corrigido" placeholder="Ex.: o comprovante está ilegível; envie uma foto nítida e recente." confirmLabel="Solicitar ajuste"
-          busy={attachments.busyId === adjusting.id} maxLength={500} onClose={closeDialog} onConfirm={async (note) => {
-            if (await attachments.requestAdjustment(adjusting, note)) setDialog(null);
+      {dialog === Dialog.REJECT_DOCUMENT && rejectingDocument && (
+        <NoteDialog title={`Indeferir ${rejectingDocument.title}`} label="Justificativa do indeferimento" placeholder="Explique o motivo do indeferimento." confirmLabel="Indeferir documento"
+          busy={attachments.busyId === rejectingDocument.id} maxLength={500} onClose={closeDialog} onConfirm={async (note) => {
+            if (await attachments.reject(rejectingDocument, note)) setDialog(null);
           }} />
       )}
       {dialog === Dialog.RESCHEDULE && procedure && (

@@ -1,4 +1,4 @@
-import { CheckCircle2, Download, Eye, FileText, Plus } from "lucide-react";
+import { CheckCircle2, Download, Eye, FileText, Plus, X } from "lucide-react";
 import { AiAnalysisDetails } from "../../App";
 import type { AttachmentRow } from "./attachment-rows";
 import { attachmentDescription, attachmentStateClasses, attachmentStateLabels, canReviewAttachment, isBlockingAttachment, AttachmentState } from "./attachment-rows";
@@ -6,6 +6,7 @@ import { plural } from "./process-labels";
 
 interface AttachmentsTabProps {
   rows: AttachmentRow[];
+  pendingCount: number;
   // Decisions and evidence are taken while the process is open and the user may edit it.
   canReview: boolean;
   canAttach: boolean;
@@ -16,11 +17,11 @@ interface AttachmentsTabProps {
   onPreview: (row: AttachmentRow) => void;
   onDownload: (row: AttachmentRow) => void;
   onApprove: (row: AttachmentRow) => void;
-  onRequestAdjustment: (row: AttachmentRow) => void;
+  onReject: (row: AttachmentRow) => void;
   onEvidence: (file: File) => void;
 }
 
-export function AttachmentsTab({ rows, canReview, canAttach, reviewBlockedReason, busyId, uploadingEvidence, error, onPreview, onDownload, onApprove, onRequestAdjustment, onEvidence }: AttachmentsTabProps) {
+export function AttachmentsTab({ rows, pendingCount, canReview, canAttach, reviewBlockedReason, busyId, uploadingEvidence, error, onPreview, onDownload, onApprove, onReject, onEvidence }: AttachmentsTabProps) {
   const blocking = rows.filter(isBlockingAttachment);
   const busy = Boolean(busyId) || uploadingEvidence;
   return (
@@ -30,7 +31,7 @@ export function AttachmentsTab({ rows, canReview, canAttach, reviewBlockedReason
         <div>
           <p className="prm-section-label">Conferência de documentos</p>
         </div>
-        {blocking.length > 0 && <span className="attachment-status attachment-status--pending">{plural(blocking.length, "pendente", "pendentes")}</span>}
+        {pendingCount > 0 && <span className="attachment-status attachment-status--pending">{plural(pendingCount, "pendente", "pendentes")}</span>}
       </div>
       <div className="process-attachments-list">
         {rows.map((row) => {
@@ -62,16 +63,16 @@ export function AttachmentsTab({ rows, canReview, canAttach, reviewBlockedReason
                   </div>
                 )}
                 {reviewable && (
-                  <>
-                    <button className="prm-action-btn prm-action-btn--primary" type="button" title={reviewBlockedReason || "Deferir documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onApprove(row)}>
-                      <CheckCircle2 size={15} /> Deferir
+                  <div className="process-attachment-review-actions">
+                    <button className="prm-action-btn prm-action-btn--approve-document" type="button" aria-label={`Deferir ${row.title}`} title={reviewBlockedReason || "Deferir documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onApprove(row)}>
+                      <CheckCircle2 size={15} aria-hidden="true" /> Deferir
                     </button>
                     {row.state !== AttachmentState.REJECTED && (
-                      <button className="prm-action-btn prm-action-btn--secondary" type="button" title={reviewBlockedReason || "Pedir ao tutor que corrija o documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onRequestAdjustment(row)}>
-                        Solicitar ajuste
+                      <button className="prm-action-btn prm-action-btn--reject-document" type="button" aria-label={`Indeferir ${row.title}`} title={reviewBlockedReason || "Indeferir documento"} disabled={Boolean(reviewBlockedReason) || busy} onClick={() => onReject(row)}>
+                        <X size={15} aria-hidden="true" /> Indeferir
                       </button>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             </article>

@@ -50,8 +50,8 @@ export function useAttachmentActions(request: AnyRecord, municipality: AnyRecord
   const approve = (row: AttachmentRow) => run(row, () => updateDocuments(request,
     { documentReviews: [buildDocumentReviewDecision(row.document?.attachmentId, DocumentReviewStatus.APPROVED)] }, `Documento deferido: ${row.title}`));
 
-  const requestAdjustment = (row: AttachmentRow, note: string) => run(row, () => updateDocuments(request,
-    { documentReviews: [buildDocumentReviewDecision(row.document?.attachmentId, DocumentReviewStatus.REJECTED, note)] }, `Ajuste solicitado em ${row.title}: ${note}`));
+  const reject = (row: AttachmentRow, note: string) => run(row, () => updateDocuments(request,
+    { documentReviews: [buildDocumentReviewDecision(row.document?.attachmentId, DocumentReviewStatus.REJECTED, note)] }, `Documento indeferido (${row.title}). ${note}`));
 
   async function attachEvidence(file: File) {
     if (busyId || uploadingEvidence) return;
@@ -68,5 +68,5 @@ export function useAttachmentActions(request: AnyRecord, municipality: AnyRecord
     }
   }
 
-  return { preview, closePreview: () => setPreview(null), busyId, uploadingEvidence, error, open, save, approve, requestAdjustment, attachEvidence };
+  return { preview, closePreview: () => setPreview(null), busyId, uploadingEvidence, error, open, save, approve, reject, attachEvidence };
 }

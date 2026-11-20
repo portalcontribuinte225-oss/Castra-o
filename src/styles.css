@@ -17063,6 +17063,13 @@ main {
   background: #ffffff;
 }
 
+.prm-modal .process-attachment-review-actions {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 5px;
+}
+
 .prm-modal .icon-action {
   display: inline-flex;
   align-items: center;
@@ -17218,6 +17225,30 @@ main {
   min-height: 34px;
   padding-inline: 9px;
   font-size: 0.76rem;
+}
+
+.prm-action-btn--approve-document {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.prm-action-btn--approve-document:hover:not(:disabled) {
+  border-color: #86efac;
+  background: #dcfce7;
+  color: #166534;
+}
+
+.prm-action-btn--reject-document {
+  border-color: #fecdd3;
+  background: #fff1f2;
+  color: #be123c;
+}
+
+.prm-action-btn--reject-document:hover:not(:disabled) {
+  border-color: #fda4af;
+  background: #ffe4e6;
+  color: #9f1239;
 }
 
 .prm-action-btn:disabled {
