@@ -6,12 +6,13 @@ import { NeighborhoodField } from "../neighborhoods/neighborhood-field";
 
 const SEX_OPTIONS = ["Macho", "Fêmea"];
 // The words the tutor reads; the values stored stay the ones the rest of the system knows.
-const BREED_TYPE_OPTIONS = [{ value: "Indefinida", label: "Sem raça definida" }, { value: "Definida", label: "Com raça definida" }];
+const BREED_TYPE_OPTIONS = [{ value: "Definida", label: "Sim" }, { value: "Indefinida", label: "Não" }];
 const YES_NO_OPTIONS = ["Sim", "Não"];
 // "Come só ração?" is answered yes or no, and stored as the kind of food.
 const FOOD_OPTIONS = [{ value: "Ração", label: "Sim" }, { value: "Diversos", label: "Não" }];
 
 interface AnimalFieldsProps {
+  procedures?: React.ReactNode;
   animal: AnyRecord;
   speciesNames: string[];
   sizeChoices: OptionCardChoice[];
@@ -26,74 +27,80 @@ interface AnimalFieldsProps {
 }
 
 // The data of one animal of the request, and its health: what is the same whoever asks and whatever is asked for it.
-export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, neighborhoodNames = [], submitAttempted, internal = false, onChange, onSelectSpecies }: AnimalFieldsProps) {
+export function AnimalFields({ procedures, animal, speciesNames, sizeChoices, breedOptions, neighborhoodNames = [], submitAttempted, internal = false, onChange, onSelectSpecies }: AnimalFieldsProps) {
   return (
-    <>
-      <div className="form-sub-card">
+    <div className="animal-form-sections">
+      {procedures && <div className="form-sub-card animal-procedures-card">{procedures}</div>}
+      <div className="form-sub-card animal-profile-card">
         <span className="form-sub-card-title">Como ele é?</span>
         <div className="option-card-grid">
-          <OptionCardGroup label="Espécie" value={animal.species} options={speciesNames} onChange={onSelectSpecies} invalid={submitAttempted && !animal.species} required />
-          <OptionCardGroup label="Sexo" value={animal.sex} options={SEX_OPTIONS} onChange={(value) => onChange("sex", value)} invalid={submitAttempted && !animal.sex} required />
-          <OptionCardGroup label="Tem raça definida?" value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required />
+          <OptionCardGroup label="Espécie" value={animal.species} options={speciesNames} onChange={onSelectSpecies} invalid={submitAttempted && !animal.species} required stacked />
+          <OptionCardGroup label="Sexo" value={animal.sex} options={SEX_OPTIONS} onChange={(value) => onChange("sex", value)} invalid={submitAttempted && !animal.sex} required stacked />
+          <OptionCardGroup label="Tem raça definida?" value={animal.breedType} options={BREED_TYPE_OPTIONS} onChange={(value) => onChange("breedType", value)} invalid={submitAttempted && !animal.breedType} required stacked />
           <OptionCardGroup label="Qual o porte?" value={animal.size} options={sizeChoices} onChange={(value) => onChange("size", value)} invalid={submitAttempted && !animal.size} required />
         </div>
-        {animal.breedType === "Definida" && (breedOptions.length > 0 ? (
-          <div className="access-field" data-label="Raça">
-            <select aria-label="Raça" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)}>
-              <option value="">Selecione a raça</option>
-              {breedOptions.map((breed) => (
-                <option key={breed.id} value={breed.name}>{breed.name}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="access-field" data-label="Raça">
-            <input type="text" placeholder="Descreva a raça (Ex: Poodle, Siamês)" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)} />
-          </div>
-        ))}
         <div className="text-field-row">
+          {animal.breedType === "Definida" && (
+            <div className="access-field animal-breed-field" data-label="Raça">
+              {breedOptions.length > 0 ? (
+                <select aria-label="Raça" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)}>
+                  <option value="">Selecione</option>
+                  {breedOptions.map((breed) => (
+                    <option key={breed.id} value={breed.name}>{breed.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <input type="text" aria-label="Raça" placeholder="Ex.: Poodle" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)} />
+              )}
+            </div>
+          )}
           <div className="access-field" data-label="Como ele se chama?">
-            <input type="text" placeholder="Ex.: Bidu" value={animal.name} onChange={(event) => onChange("name", event.target.value)} />
+            <input type="text" aria-label="Como ele se chama?" placeholder="Ex.: Bidu" value={animal.name} onChange={(event) => onChange("name", event.target.value)} />
           </div>
           <div className="access-field" data-label="Cor da pelagem">
-            <input type="text" placeholder="Ex.: caramelo, preto e branco" value={animal.coat} onChange={(event) => onChange("coat", event.target.value)} />
+            <input type="text" aria-label="Cor da pelagem" placeholder="Ex.: caramelo" value={animal.coat} onChange={(event) => onChange("coat", event.target.value)} />
           </div>
           <div className="access-field" data-label="Idade aproximada">
-            <input type="text" placeholder="Ex.: 2 anos" value={animal.age || ""} onChange={(event) => onChange("age", event.target.value)} />
+            <input type="text" aria-label="Idade aproximada" placeholder="Ex.: 2 anos" value={animal.age || ""} onChange={(event) => onChange("age", event.target.value)} />
           </div>
         </div>
-        <NeighborhoodField label="Em que bairro ele vive?" placeholder="Ex.: Centro" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
-        <small className="form-hint">Usamos o bairro para organizar os atendimentos da região.</small>
-        {internal && (
-          <div className="internal-microchip-row">
-            <div className="access-field" data-label="Microchip">
-              <input
-                type="text"
-                placeholder={animal.hasChip === "Sim" ? "Código do microchip" : "Microchip não informado"}
-                value={animal.microchip}
-                onChange={(event) => onChange("microchip", event.target.value)}
-                readOnly={animal.hasChip !== "Sim"}
-              />
-            </div>
-            <label className="doc-accept-check internal-chip-check">
-              <input
-                type="checkbox"
-                checked={animal.hasChip === "Sim"}
-                onChange={(event) => {
-                  onChange("hasChip", event.target.checked ? "Sim" : "Nao");
-                  if (!event.target.checked) onChange("microchip", "");
-                }}
-              />
-              <span className="doc-check-box" />
-              <span>Microchipado</span>
-            </label>
+        <div className="animal-location-row">
+          <div className="animal-neighborhood">
+            <NeighborhoodField label="Em que bairro ele vive?" placeholder="Ex.: Centro" value={animal.neighborhood || ""} names={neighborhoodNames} required invalid={submitAttempted && !animal.neighborhood} onChange={(value) => onChange("neighborhood", value)} />
+            <small className="form-hint">Ajuda a organizar os atendimentos.</small>
           </div>
-        )}
+          {internal && (
+            <div className="internal-microchip-row">
+              <div className="access-field" data-label="Microchip">
+                <input
+                  type="text"
+                  aria-label="Microchip"
+                  placeholder={animal.hasChip === "Sim" ? "Código" : "Não informado"}
+                  value={animal.microchip}
+                  onChange={(event) => onChange("microchip", event.target.value)}
+                  readOnly={animal.hasChip !== "Sim"}
+                />
+              </div>
+              <label className="doc-accept-check internal-chip-check">
+                <input
+                  type="checkbox"
+                  checked={animal.hasChip === "Sim"}
+                  onChange={(event) => {
+                    onChange("hasChip", event.target.checked ? "Sim" : "Nao");
+                    if (!event.target.checked) onChange("microchip", "");
+                  }}
+                />
+                <span className="doc-check-box" />
+                <span>Microchipado</span>
+              </label>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="form-sub-card">
+      <div className="form-sub-card animal-health-card">
         <div className="form-sub-card-heading">
           <span className="form-sub-card-title">Saúde e cuidados</span>
-          <small className="form-hint">Responda como souber, tudo bem não ter certeza.</small>
+          <small className="form-hint">Responda só o que souber.</small>
         </div>
         <div className="option-card-grid">
           <OptionCardGroup label="Já tomou vermífugo?" value={animal.dewormed} options={YES_NO_OPTIONS} onChange={(value) => onChange("dewormed", value)} />
@@ -102,6 +109,6 @@ export function AnimalFields({ animal, speciesNames, sizeChoices, breedOptions, 
           <OptionCardGroup label="Come só ração?" value={animal.food} options={FOOD_OPTIONS} onChange={(value) => onChange("food", value)} />
         </div>
       </div>
-    </>
+    </div>
   );
 }

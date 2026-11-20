@@ -43,7 +43,6 @@ import {
   Mail,
   Phone,
   X,
-  Home,
   Paperclip,
   Trash2,
   AlertCircle,
@@ -185,6 +184,7 @@ import { emptyMunicipalityForm, formFromMunicipality, municipalityContactIssue }
 import type { MunicipalityForm } from "./features/municipality-form/municipality-address";
 import { findNeighborhoodName, neighborhoodNames } from "./features/neighborhoods/neighborhoods";
 import { RequestStep, requestSteps } from "./features/request-steps/request-steps";
+import { RequestFormLayout } from "./features/request-steps/request-form-layout";
 import { availableFollowUpContacts, buildFollowUpPayload, emptyFollowUp, getFollowUpIssues } from "./features/request-follow-up/follow-up";
 import type { FollowUpValue } from "./features/request-follow-up/follow-up";
 import { useFollowUpPolicy } from "./features/request-follow-up/use-follow-up-policy";
@@ -373,7 +373,7 @@ export default function App() {
   useEffect(() => { if (session.ready && !session.user) setProcedureIntent((current) => current?.ownerId ? null : current); }, [session.ready, session.user]);
   return <SessionBoundary session={{ ...session, accept, logout }}
     renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} createRequirement={createRequestPdfDataUrl} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact setActive={() => {}} />}
-      renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} publicFlow selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} municipality={input.options[MUNICIPALITY_OPTION]} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
+      renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} municipality={input.options[MUNICIPALITY_OPTION]} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
         requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
     />}
     renderWorkspace={(user) => <ApplicationWorkspace key={user?.id || "public"} currentUser={user} setCurrentUser={accept} onProcedureIntent={setProcedureIntent} />} />;
@@ -1355,58 +1355,62 @@ export function PublicSchedulePicker({
 
   return (
     <section className="panel public-schedule-picker">
-      {title && <span className="form-sub-card-title">{title}</span>}
-      {hint && <p className="form-hint">{hint}</p>}
-      <div className="sched-month-selector">
-        <button
-          type="button"
-          className="sched-month-trigger"
-          onClick={() => setMonthDropdownOpen((open) => !open)}
-        >
-          <CalendarDays size={14} />
-          <span>{formatMonthYear(activeScheduleMonth)}</span>
-          {scheduleMonths.length > 1 && <ChevronDown size={14} className={monthDropdownOpen ? "sched-chevron-open" : ""} />}
-        </button>
-        {scheduleMonths.length > 1 && monthDropdownOpen && (
-          <div className="sched-month-dropdown">
-            {scheduleMonths.map((month, i) => (
-              <button
-                key={month}
-                type="button"
-                className={`sched-month-tab${i === scheduleMonthIndex ? " is-active" : ""}`}
-                onClick={() => { setScheduleMonthIndex(i); setMonthDropdownOpen(false); }}
-              >
-                {formatMonthYear(month)}
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="schedule-picker-controls">
+        {title && <span className="form-sub-card-title">{title}</span>}
+        {hint && <p className="form-hint">{hint}</p>}
+        <div className="sched-month-selector">
+          <button
+            type="button"
+            className="sched-month-trigger"
+            onClick={() => setMonthDropdownOpen((open) => !open)}
+          >
+            <CalendarDays size={14} />
+            <span>{formatMonthYear(activeScheduleMonth)}</span>
+            {scheduleMonths.length > 1 && <ChevronDown size={14} className={monthDropdownOpen ? "sched-chevron-open" : ""} />}
+          </button>
+          {scheduleMonths.length > 1 && monthDropdownOpen && (
+            <div className="sched-month-dropdown">
+              {scheduleMonths.map((month, i) => (
+                <button
+                  key={month}
+                  type="button"
+                  className={`sched-month-tab${i === scheduleMonthIndex ? " is-active" : ""}`}
+                  onClick={() => { setScheduleMonthIndex(i); setMonthDropdownOpen(false); }}
+                >
+                  {formatMonthYear(month)}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-      <div className="calendar-weekdays" aria-hidden="true">
-        {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((weekday) => <span key={weekday}>{weekday}</span>)}
-      </div>
-      <div className="calendar-availability">
-        {visibleScheduleDays.length === 0 && (
-          <div className="calendar-empty-month">Nenhuma data configurada para {formatMonthYear(activeScheduleMonth)}.</div>
-        )}
-        {visibleScheduleDays.map((day, index) =>
-          day.offset
-            ? <div key={`offset-${index}`} className="calendar-day-button calendar-day-offset" aria-hidden="true" />
-            : (
-              <ScheduleDayButton
-                key={day.date}
-                selected={selectedDate === day.date}
-                mutirao={day.kind === "Mutirao"}
-                hasVacancy={day.available && !day.isPast && day.hasEnoughVacancies}
-                disabled={!day.available || !day.hasEnoughVacancies || day.isPast}
-                onClick={() => onSelect(day.date, day.occurrenceKey || "")}
-              >
-                <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
-                <small>{!day.available ? "Sem atendimento" : day.isPast ? "Já passou" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} · ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
-                {day.kind === "Mutirao" && <em>Mutirão</em>}
-              </ScheduleDayButton>
-            )
-        )}
+      <div className="schedule-picker-calendar">
+        <div className="calendar-weekdays" aria-hidden="true">
+          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((weekday) => <span key={weekday}>{weekday}</span>)}
+        </div>
+        <div className="calendar-availability">
+          {visibleScheduleDays.length === 0 && (
+            <div className="calendar-empty-month">Nenhuma data configurada para {formatMonthYear(activeScheduleMonth)}.</div>
+          )}
+          {visibleScheduleDays.map((day, index) =>
+            day.offset
+              ? <div key={`offset-${index}`} className="calendar-day-button calendar-day-offset" aria-hidden="true" />
+              : (
+                <ScheduleDayButton
+                  key={day.date}
+                  selected={selectedDate === day.date}
+                  mutirao={day.kind === "Mutirao"}
+                  hasVacancy={day.available && !day.isPast && day.hasEnoughVacancies}
+                  disabled={!day.available || !day.hasEnoughVacancies || day.isPast}
+                  onClick={() => onSelect(day.date, day.occurrenceKey || "")}
+                >
+                  <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
+                  <small>{!day.available ? "Sem atendimento" : day.isPast ? "Já passou" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} · ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
+                  {day.kind === "Mutirao" && <em>Mutirão</em>}
+                </ScheduleDayButton>
+              )
+          )}
+        </div>
       </div>
       {chosenDay && <p className="schedule-chosen" role="status">Você escolheu {new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date(parseScheduleDate(chosenDay.date)))}{chosenTime ? `, às ${chosenTime}` : ""}.</p>}
       {selectedDate && scheduleWithUsage.filter((day) => day.date === selectedDate).length > 1 && <div className="schedule-occurrence-options" role="group" aria-label="Local e horário"><p>Escolha o local desta data:</p>{scheduleWithUsage.filter((day) => day.date === selectedDate).map((day) => <button type="button" key={day.occurrenceKey || day.id} className={selectedOccurrenceKey === day.occurrenceKey ? "primary-action" : "ghost-button"} disabled={!day.hasEnoughVacancies || day.isPast} onClick={() => onSelect(day.date, day.occurrenceKey || "")}>{day.locationName || "Local de atendimento"} · {day.offeredSlot?.time || day.startTime} · {Math.max(day.vacancies - (day.used - (selectedOccurrenceKey === day.occurrenceKey ? requiredVacancies : 0)), 0)} vagas</button>)}</div>}
@@ -1811,8 +1815,10 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
     { label: "Endereço", value: activeMunicipality?.address, icon: MapPin },
     { label: "CEP", value: activeMunicipality?.cep, icon: Navigation },
   ].filter((item) => String(item.value || "").trim());
+  const procedureService = activePublicService === "procedure_form";
+  const requestFormOpen = procedureService && selectedMunicipalityId && !publicServiceDone;
   return (
-    <main className="login-page">
+    <main className={`login-page${requestFormOpen ? " login-page--request" : ""}`}>
       <div className="public-topbar">
         <div className="public-topbar-brand">
           {activeMunicipality?.brasao ? (
@@ -1874,7 +1880,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
           </aside>
 
           <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
-            {(activePublicService !== "procedure_form" || !selectedMunicipalityId) && (
+            {(!procedureService || !selectedMunicipalityId) && (
               <div className="public-service-panel-header">
                 <h2>{activePublicService === REQUEST_ACCESS_SERVICE ? "Acessar minha solicitação" : activePublicServiceDetails?.label || "Serviço"}</h2>
                 <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
@@ -1891,14 +1897,13 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 onCreatePassword={publicServiceDone.cpf && isProcedureRequest(publicServiceDone.request_type)
                   ? () => openRequestAccess({ protocol: publicServiceDone.protocol, cpf: onlyDigits(String(publicServiceDone.cpf)) }) : undefined}
               />
-            ) : activePublicService === "procedure_form" && !selectedMunicipalityId ? (
+            ) : procedureService && !selectedMunicipalityId ? (
               <p role="status">Selecione o município na página para continuar.</p>
-            ) : activePublicService === "procedure_form" ? (
+            ) : procedureService ? (
               <NewRequest
                 key={`public-procedure-${selectedMunicipalityId}`}
                 createRequest={createRequest}
                 currentUser={GUEST_USER}
-                publicFlow
                 selectedMunicipalityId={selectedMunicipalityId}
                 municipality={activeMunicipality}
                 onBack={closePublicService}
@@ -2626,9 +2631,7 @@ function NewRequest({
   // The public form only: "Animal já cadastrado" goes through the tutor's sign-in.
   onRegisteredAnimal,
   currentUser,
-  compact = false,
   internalSimple = false,
-  publicFlow = false,
   selectedMunicipalityId = "",
   onBack,
   backLabel = "Voltar ao início",
@@ -3221,59 +3224,32 @@ function NewRequest({
     }
   }
 
-  const stepperNode = (
-    <div className="nr-stepper" aria-label="Etapas da solicitação">
-      {requestSteps.map((item, index) => {
-        const isDone = index < currentStepIndex;
-        const isCurrent = index === currentStepIndex;
-        const hasIssue = submitAttempted && isCurrent && getStepIssues(item.step).length > 0;
-        return (
-          <React.Fragment key={item.step}>
-            <button
-              type="button"
-              className={`nr-step${isCurrent ? " nr-step--current" : ""}${isDone ? " nr-step--done" : ""}${hasIssue ? " nr-step--invalid" : ""}`}
-              disabled
-              aria-current={isCurrent ? "step" : undefined}
-            >
-              <span className="nr-step-circle">
-                {isDone ? <CheckCircle2 size={13} strokeWidth={2.5} /> : <span>{index + 1}</span>}
-              </span>
-              <span className="nr-step-label">{item.label}</span>
-            </button>
-            {index < requestSteps.length - 1 && <span className="nr-step-connector" aria-hidden="true" />}
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-  const internalCompact = compact && !publicFlow;
-  const requestShellClassName = [
-    "nr-shell",
-    internalCompact ? "nr-shell--internal" : "",
-    publicFlow ? "nr-shell--public" : "",
-  ].filter(Boolean).join(" ");
-  const externalLikeRegistration = publicFlow || internalSimple;
-
   return (
-      <div className={requestShellClassName}>
-        <div className={internalCompact ? "nr-topbar nr-topbar--internal" : "nr-topbar"}>
-          {!internalCompact && !publicFlow && (
-            <button className="nr-home-btn" type="button" onClick={onBack} aria-label="Início">
-              <Home size={20} />
+    <>
+      <RequestFormLayout
+        stepIndex={currentStepIndex}
+        stepInvalid={submitAttempted && getStepIssues(formStep).length > 0}
+        internal={internalSimple}
+        exit={onBack ? { label: backLabel, onClick: onBack } : undefined}
+        onNavigate={navigateToStep}
+        onSubmit={submit}
+        submitting={submitting}
+        submitDisabled={animalPhotoLoading || contextLoading || registeredContext?.eligibility?.canSubmit === false
+          || (followUp.enabled === true && (!followUpPolicy.ready || noticesIssues.length > 0))}
+        error={submissionError}
+        actions={formStep === RequestStep.ANIMAL && !registered && (
+          <>
+            <button className="anm-add-btn" type="button" onClick={addAnimal}>
+              <PlusCircle size={18} aria-hidden="true" />
+              Adicionar outro animal
             </button>
-          )}
-          <div className="nr-topbar-stepper">{stepperNode}</div>
-          {publicFlow && onBack && (
-            <button className="nr-topbar-continue nr-topbar-home primary-action" type="button" onClick={onBack}>
-              {backLabel}
+            <button className="anm-add-btn" type="button" onClick={duplicatePreviousAnimal}>
+              <RefreshCw size={18} aria-hidden="true" />
+              Repetir os dados do anterior
             </button>
-          )}
-        </div>
-
-        <div className="nr-body">
-
-          {submissionError && <p className="form-error">{submissionError}</p>}
-          <div className="single-request-form clean-form">
+          </>
+        )}
+      >
           {formStep === RequestStep.TUTOR && <FormSection title="Você">
             <RequesterStep
               entry={onRegisteredAnimal ? { first: firstRequest, onFirst: () => setFirstRequest(true), onRegistered: onRegisteredAnimal } : undefined}
@@ -3318,17 +3294,15 @@ function NewRequest({
                   collapsible={animals.length > 1}
                   onToggle={() => setExpandedAnimal(expandedAnimal === index ? -1 : index)}
                 >
-                  {hasConfiguredTypes && (
-                    <div className="form-sub-card">
+                  <AnimalFields
+                    procedures={hasConfiguredTypes && (
                       <RequestProcedureList
                         types={configuredRequestTypes}
                         selectedIds={animalRequestTypeIds(animal)}
                         onChange={(ids) => changeProcedures(index, ids)}
                         invalid={submitAttempted && needsProcedure(animal, hasConfiguredTypes)}
                       />
-                    </div>
-                  )}
-                  <AnimalFields
+                    )}
                     animal={animal}
                     speciesNames={activeSpecies}
                     sizeChoices={sizeChoiceOptions}
@@ -3451,56 +3425,10 @@ function NewRequest({
               </div>
             </div>
           </FormSection>}
-          </div>
-          {submissionError && <p className="form-error nr-bottom-error">{submissionError}</p>}
-          <div className={`nr-nav-row${currentStepIndex === requestSteps.length - 1 ? " nr-nav-row--final" : ""}`}>
-            {currentStepIndex > 0 && (
-              <button
-                className="nr-back-btn primary-action"
-                type="button"
-                onClick={() => navigateToStep(requestSteps[currentStepIndex - 1].step)}
-              >
-                Voltar
-              </button>
-            )}
-            {formStep === RequestStep.ANIMAL && !registered && (
-              <>
-                <button className="anm-add-btn" type="button" onClick={addAnimal}>
-                  <PlusCircle size={18} aria-hidden="true" />
-                  Adicionar outro animal
-                </button>
-                <button className="anm-add-btn" type="button" onClick={duplicatePreviousAnimal}>
-                  <RefreshCw size={18} aria-hidden="true" />
-                  Repetir os dados do anterior
-                </button>
-              </>
-            )}
-            {currentStepIndex < requestSteps.length - 1 ? (
-              <button
-                className="nr-topbar-continue primary-action"
-                type="button"
-                onClick={() => navigateToStep(requestSteps[currentStepIndex + 1].step)}
-              >
-                Próximo
-                {publicFlow && <ChevronRight size={15} />}
-              </button>
-            ) : (
-              <button
-                className="nr-topbar-continue primary-action"
-                type="button"
-                disabled={submitting || animalPhotoLoading || contextLoading || (registered && (registeredContext.eligibility?.canSubmit === false)) || (followUp.enabled === true && (!followUpPolicy.ready || noticesIssues.length > 0))}
-                onClick={submit}
-              >
-                {submitting ? "Enviando..." : internalSimple ? "Encerrar" : "Enviar"}
-                {publicFlow && <ChevronRight size={15} />}
-              </button>
-            )}
-          </div>
-        </div>
-
-        {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
-        {reusedPreview && registeredContext && <ReusableDocumentPreview key={`${reusedPreview.attachmentId}:${reusedPreview.reuseRef.hash}`} animalId={registeredContext.animal.id} candidate={reusedPreview} onClose={() => setReusedPreview(null)} />}
-      </div>
+      </RequestFormLayout>
+      {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
+      {reusedPreview && registeredContext && <ReusableDocumentPreview key={`${reusedPreview.attachmentId}:${reusedPreview.reuseRef.hash}`} animalId={registeredContext.animal.id} candidate={reusedPreview} onClose={() => setReusedPreview(null)} />}
+    </>
   );
 }
 
@@ -3882,23 +3810,25 @@ function AdminDashboard({
 
       {createRequestOpen && (
         <div className="modal-backdrop">
-          <div className="config-modal internal-request-modal" role="dialog" aria-modal="true">
+          <div className="internal-request-modal" role="dialog" aria-modal="true" aria-labelledby="internal-request-title">
             <div className="irm-header">
               <div className="irm-header-text">
-                <strong>Nova solicitação</strong>
+                <strong id="internal-request-title">Nova solicitação</strong>
               </div>
               <button className="irm-close-btn" type="button" aria-label="Fechar" onClick={closeCreateRequest}>
                 <X size={18} />
               </button>
             </div>
             {createdRequest ? (
-              <RequestDoneCard
-                protocol={createdRequest.protocol}
-                followUp={(createdRequest.workflow_data || createdRequest.workflowData)?.followUp}
-                createRequirement={() => createRequestPdfDataUrl(createdRequest, municipalities.find((item) => item.id === createdRequest.municipalityId))}
-                closeLabel="Fechar"
-                onClose={closeCreateRequest}
-              />
+              <div className="nr-body">
+                <RequestDoneCard
+                  protocol={createdRequest.protocol}
+                  followUp={(createdRequest.workflow_data || createdRequest.workflowData)?.followUp}
+                  createRequirement={() => createRequestPdfDataUrl(createdRequest, municipalities.find((item) => item.id === createdRequest.municipalityId))}
+                  closeLabel="Fechar"
+                  onClose={closeCreateRequest}
+                />
+              </div>
             ) : (
               <NewRequest
                 key={`internal-procedure-${selectedMunicipalityId || currentUser.municipalityId || ""}`}
@@ -3906,9 +3836,7 @@ function AdminDashboard({
                 currentUser={currentUser}
                 selectedMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
                 initialMunicipalityId={selectedMunicipalityId || currentUser.municipalityId || ""}
-                compact
                 internalSimple
-                onBack={closeCreateRequest}
                 onDone={setCreatedRequest}
                 requestTypes={requestTypes}
                 aiSettings={aiSettings}

@@ -42,7 +42,7 @@ export function TutorArea({ user, intent, onIntentConsumed, onSession, onLogout,
   useEffect(() => { if (intentKey) setTab(TutorAreaTab.ANIMALS); }, [intentKey]);
   function openForm(id?: string) { setAnimalId(id); setTab(TutorAreaTab.FORM); }
   function openService(animal: AnimalSummary, service: AnimalService) { setServiceSelection({ animal, service }); setTab(TutorAreaTab.SERVICE); }
-  return <main className="tutor-access-shell">
+  return <main className={`tutor-access-shell${tab === TutorAreaTab.FORM ? " tutor-access-shell--form" : ""}`}>
     <header className="tutor-access-header"><div><h1>Olá, {user.name}</h1><p>{user.municipalityName || "Área do tutor"}</p></div><button type="button" className="ghost-button" onClick={onLogout}>Sair</button></header>
     <nav className="tutor-access-nav" aria-label="Área do tutor"><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.ANIMALS ? "page" : undefined} onClick={() => setTab(TutorAreaTab.ANIMALS)}>Meus animais</button><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.REQUESTS ? "page" : undefined} onClick={() => setTab(TutorAreaTab.REQUESTS)}>Minhas solicitações</button><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.PROFILE ? "page" : undefined} onClick={() => setTab(TutorAreaTab.PROFILE)}>Meu perfil</button><button type="button" className="ghost-button" aria-current={tab === TutorAreaTab.PASSWORD ? "page" : undefined} onClick={() => { setTab(TutorAreaTab.PASSWORD); setPasswordChanged(false); }}>Alterar senha</button></nav>
     {tab === TutorAreaTab.ANIMALS && <RegisteredAnimalsView key={listVersion} onSelect={openForm} onNew={() => openForm()} onService={openService} />}

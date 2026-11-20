@@ -155,16 +155,21 @@ describe("AnimalFields", () => {
 
   it("asks for the species, sex, breed, size, name, coat, age and the health of the animal", () => {
     const html = renderToStaticMarkup(<AnimalFields {...props} />);
-    for (const label of ["Como ele é?", "Espécie", "Sexo", "Tem raça definida?", "Sem raça definida", "Com raça definida", "Qual o porte?", "Como ele se chama?", "Cor da pelagem", "Idade aproximada", "Em que bairro ele vive?", "Saúde e cuidados", "Já tomou vermífugo?", "As vacinas estão em dia?", "Já teve alguma doença?", "Come só ração?"]) {
+    for (const label of ["Como ele é?", "Espécie", "Sexo", "Tem raça definida?", "Qual o porte?", "Como ele se chama?", "Cor da pelagem", "Idade aproximada", "Em que bairro ele vive?", "Saúde e cuidados", "Já tomou vermífugo?", "As vacinas estão em dia?", "Já teve alguma doença?", "Come só ração?"]) {
       expect(html).toContain(label);
     }
     expect(html).not.toContain("Microchipado");
     expect(html).not.toContain("toggle-switch");
   });
 
-  it("puts each question in a card of radios, with nothing marked until it is answered", () => {
+  it("shows eight groups of choice buttons with no answer selected initially in both forms", () => {
     const blank = renderToStaticMarkup(<AnimalFields {...props} animal={blankAnimal()} />);
     expect(blank.match(/class="option-card"/g)).toHaveLength(8);
+    for (const internal of [false, true]) {
+      const html = renderToStaticMarkup(<AnimalFields {...props} animal={blankAnimal()} internal={internal} />);
+      expect(html.match(/class="option-card-tiles\b/g)).toHaveLength(8);
+      expect(html.match(/class="option-card-tiles option-card-tiles--stacked"/g)).toHaveLength(3);
+    }
     expect(blank.match(/type="radio"/g)).toHaveLength(2 + 2 + 2 + 1 + 2 * 4);
     expect(blank).not.toContain("checked");
     expect(blank).toContain("0–5 kg");
@@ -174,12 +179,15 @@ describe("AnimalFields", () => {
     expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={blankAnimal()} />).match(/option-card is-invalid/g)).toHaveLength(4);
   });
 
-  it("offers a select when the procedures link breeds and a text field when they do not", () => {
-    expect(renderToStaticMarkup(<AnimalFields {...props} />)).toContain("Descreva a raça");
+  it("labels the breed answers Sim and Não while keeping the saved values and the breed detail field", () => {
+    const defined = renderToStaticMarkup(<AnimalFields {...props} />);
+    expect(defined).toContain('checked="" value="Definida"/><span>Sim</span>');
+    expect(defined).toContain('value="Indefinida"/><span>Não</span>');
+    expect(defined).toContain('type="text" aria-label="Raça"');
     const withOptions = renderToStaticMarkup(<AnimalFields {...props} breedOptions={[{ id: "poodle", name: "Poodle" }]} />);
-    expect(withOptions).toContain("Selecione a raça");
-    expect(withOptions).toContain("<option");
-    expect(renderToStaticMarkup(<AnimalFields {...props} animal={{ ...props.animal, breedType: "Indefinida" }} />)).not.toContain("Descreva a raça");
+    expect(withOptions).toContain('aria-label="Raça"');
+    expect(withOptions).toContain('<option value="Poodle">Poodle</option>');
+    expect(renderToStaticMarkup(<AnimalFields {...props} animal={{ ...props.animal, breedType: "Indefinida" }} />)).not.toContain('aria-label="Raça"');
   });
 
   it("asks for the neighborhood of the animal: a select of the registered ones, or text while there are none", () => {
@@ -195,7 +203,7 @@ describe("AnimalFields", () => {
   it("adds the microchip only for staff", () => {
     const html = renderToStaticMarkup(<AnimalFields {...props} internal />);
     expect(html).toContain("Microchipado");
-    expect(html).toContain("Microchip não informado");
+    expect(html).toContain('aria-label="Microchip" placeholder="Não informado"');
   });
 
 });

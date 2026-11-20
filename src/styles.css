@@ -2157,92 +2157,6 @@ button:disabled {
 }
 
 
-/* legacy — kept for other usages */
-
-.public-form-page {
-  height: 100dvh;
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-
-.public-form-page--consultation {
-  background: #f8fafc;
-}
-
-
-.public-form-header {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 24px;
-  border-bottom: 1px solid var(--line);
-  background: var(--panel);
-}
-
-.public-form-header div {
-  display: flex;
-  flex-direction: column;
-}
-
-.public-form-header strong {
-  font-size: 0.95rem;
-  color: var(--ink);
-}
-
-.public-form-header span {
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
-.public-municipality-prompt {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  color: var(--muted);
-  font-size: 1rem;
-}
-
-
-.public-form-success {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 48px 24px;
-  text-align: center;
-  color: var(--ink);
-}
-
-.public-form-success svg {
-  color: #1f8a5f;
-}
-
-.success-brasao {
-  width: 120px;
-  height: 120px;
-  object-fit: contain;
-  margin-bottom: 8px;
-}
-
-.public-form-success h2 {
-  font-size: 1.5rem;
-  margin: 0;
-}
-
-.public-form-success p {
-  margin: 0;
-  color: var(--muted);
-}
-
-
 .interests-list {
   display: flex;
   flex-direction: column;
@@ -3237,9 +3151,10 @@ button:disabled {
   flex: 1;
   display: flex;
   flex-direction: column;
+  width: 100%;
   overflow: hidden;
   min-height: 0;
-  background: var(--panel);
+  background: var(--ui-page, #f6f8fb);
 }
 
 
@@ -3253,44 +3168,6 @@ button:disabled {
   height: 64px;
   background: #fff;
   border-bottom: 1px solid var(--border);
-}
-
-
-.nr-topbar-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-
-.nr-topbar-brasao {
-  width: 44px;
-  height: 44px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.nr-home-btn {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border: none;
-  border-radius: 14px;
-  background: #0a0a0a;
-  color: #ffffff;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.18);
-  transition: opacity 140ms, transform 140ms;
-}
-
-.nr-home-btn:hover {
-  opacity: 0.85;
-  transform: translateY(-1px);
 }
 
 
@@ -3351,12 +3228,12 @@ button:disabled {
 
 
 .nr-nav-row {
-  max-width: 580px;
-  margin: 20px auto 0;
   display: flex;
+  flex: none;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  padding-bottom: 24px;
+  gap: 10px;
+  background: #ffffff;
 }
 
 
@@ -3366,34 +3243,17 @@ button:disabled {
 
 
 .nr-bottom-error {
+  flex: none;
+  margin: 0;
   text-align: center;
   color: var(--red);
   font-size: 0.82rem;
-  margin: 12px 0 0;
-  max-width: 580px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-
-.nr-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 32px 20px 24px;
-  background: #f1f4f8;
 }
 
 
 .nr-body .single-request-form {
-  max-width: 580px;
-  margin: 0 auto;
-}
-
-
-.internal-request-modal .nr-shell--internal {
-  height: calc(100% - 72px);
-  min-height: 0;
-  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  width: 100%;
+  margin: 0;
 }
 
 
@@ -3407,28 +3267,6 @@ button:disabled {
 
 .internal-request-modal .nr-topbar--internal .nr-topbar-stepper {
   width: 100%;
-}
-
-
-.internal-request-modal .nr-body {
-  padding: 18px 20px 16px;
-}
-
-
-.internal-request-modal .nr-body .single-request-form,
-.internal-request-modal .nr-nav-row,
-.internal-request-modal .nr-bottom-error {
-  max-width: 860px;
-}
-
-
-.internal-request-modal .nr-nav-row {
-  position: sticky;
-  bottom: -16px;
-  z-index: 5;
-  margin-top: 16px;
-  padding: 12px 0 14px;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0), #ffffff 28%);
 }
 
 
@@ -4017,6 +3855,11 @@ button:disabled {
   gap: 12px;
 }
 
+.schedule-picker-controls,
+.schedule-picker-calendar {
+  display: contents;
+}
+
 
 .helper-text {
   margin: 0;
@@ -4600,16 +4443,6 @@ main {
   margin: 0;
   color: #0a0a0a;
   font-size: 1rem;
-}
-
-
-.internal-request-modal {
-  width: min(820px, calc(100vw - 24px));
-  max-height: min(92vh, 900px);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
 }
 
 
@@ -8939,7 +8772,7 @@ form textarea:focus {
   }
 
 
-  main {
+  main:where(:not(.login-page--request, .tutor-access-shell--form)) {
     padding-bottom: 64px !important;
   }
 
@@ -11016,18 +10849,6 @@ body * {
    SOLICITACAO INTERNA - modal moderno
    ============================================================ */
 
-.internal-request-modal {
-  width: min(1040px, calc(100vw - 36px));
-  height: min(88vh, 860px);
-  max-height: min(88vh, 860px);
-  border: 1px solid rgba(190, 215, 224, 0.92);
-  border-radius: 20px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96));
-  box-shadow: 0 32px 90px rgba(15, 23, 42, 0.26);
-}
-
-
 .internal-request-modal .irm-header {
   min-height: 72px;
   padding: 18px 22px;
@@ -11328,12 +11149,6 @@ body * {
 
 @media (max-width: 760px) {
 
-  .internal-request-modal {
-    width: min(100%, calc(100vw - 16px));
-    height: min(92vh, 900px);
-  }
-
-
   .internal-request-modal .nr-step-label,
   .internal-request-modal .nr-step-connector {
     display: none;
@@ -11622,12 +11437,6 @@ body * {
 }
 
 
-/* Cadastro interno: composição mais compacta e ações agrupadas */
-.internal-request-modal .nr-body .single-request-form {
-  max-width: 860px;
-}
-
-
 .internal-request-modal .single-request-form .animal-form-header {
   margin: 0;
 }
@@ -11641,15 +11450,6 @@ body * {
 
 .internal-request-modal .internal-microchip-row .access-field {
   padding: 0;
-}
-
-
-.internal-request-modal .nr-nav-row {
-  max-width: 860px;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 14px;
-  padding: 12px 0 14px;
 }
 
 
@@ -11681,16 +11481,6 @@ body * {
     grid-template-columns: 1fr;
   }
 
-
-  .internal-request-modal .nr-nav-row {
-    align-items: stretch;
-  }
-
-
-  .internal-request-modal .nr-back-btn,
-  .internal-request-modal .nr-topbar-continue {
-    width: 100%;
-  }
 
 }
 
@@ -11765,8 +11555,7 @@ body * {
 }
 
 
-.login-page,
-.public-form-page {
+.login-page {
   min-width: 0;
 }
 
@@ -11777,7 +11566,6 @@ body * {
 .public-hero,
 .hero-content,
 .hero-art,
-.public-form-page,
 .nr-shell,
 .nr-body,
 .single-request-form,
@@ -11793,7 +11581,6 @@ body * {
 .secondary-action,
 .ghost-button,
 .public-back-button,
-.nr-home-btn,
 .nr-back-btn,
 .nr-topbar-continue,
 .adoption-filter-group button,
@@ -11849,18 +11636,6 @@ body * {
 
 @media (max-width: 900px) {
 
-  .public-form-header {
-    flex-wrap: wrap;
-    gap: 10px;
-    padding: 12px 16px;
-  }
-
-
-  .public-form-header > div:last-child {
-    width: 100%;
-    order: 3;
-  }
-
 
   .nr-topbar {
     height: auto;
@@ -11879,12 +11654,6 @@ body * {
 
   .nr-body {
     padding: 20px 16px 18px;
-  }
-
-
-  .nr-nav-row {
-    margin-top: 16px;
-    padding-bottom: 8px;
   }
 
 
@@ -11937,20 +11706,6 @@ body * {
   }
 
 
-  .nr-footer-inner,
-  .nr-nav-row {
-    flex-direction: column-reverse;
-  }
-
-
-  .nr-back-footer-btn,
-  .nr-continue-btn,
-  .nr-nav-row .nr-topbar-continue {
-    width: 100%;
-    flex-basis: auto;
-  }
-
-
   .pwa-install-banner {
     right: 12px;
     left: 12px;
@@ -11969,13 +11724,8 @@ body * {
 
 @media (max-width: 520px) {
 
-  .public-form-header {
-    align-items: stretch;
-  }
 
-
-  .public-back-button,
-  .public-form-header .municipality-chip-btn {
+  .public-back-button {
     width: 100%;
     justify-content: center;
   }
@@ -12289,29 +12039,6 @@ body * {
   align-items: center;
   gap: 14px;
   margin-bottom: 6px;
-}
-
-.consultation-home-btn {
-  position: fixed;
-  top: 16px;
-  left: 16px;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border: none;
-  border-radius: 14px;
-  background: #0f172a;
-  color: #ffffff;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(43,36,32,0.18);
-  transition: opacity 140ms, transform 140ms;
-}
-
-.consultation-home-btn:hover {
-  opacity: 0.85;
-  transform: translateY(-1px);
 }
 
 .consultation-mun-id {
@@ -13255,10 +12982,6 @@ body * {
 
 @media (max-width: 480px) {
 
-  .public-form-page--consultation {
-    min-height: 100dvh;
-  }
-
 
   .consultation-stack {
     width: 100%;
@@ -13286,13 +13009,6 @@ body * {
 
   .consultation-card-location {
     gap: 8px;
-  }
-
-
-  .consultation-card-location .nr-home-btn {
-    width: 38px;
-    height: 38px;
-    min-width: 38px;
   }
 
 
@@ -13361,329 +13077,6 @@ body * {
 
 
 /* Solicitação pública: leitura e ergonomia em smartphones */
-@media (max-width: 720px) {
-
-  .public-form-page:not(.public-form-page--consultation) {
-    background:
-      radial-gradient(circle at 12% 0%, rgba(15, 159, 154, 0.12), transparent 30%),
-      linear-gradient(180deg, #f7fdff 0%, #ffffff 46%, #f8fbfd 100%);
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-shell {
-    background: transparent;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-topbar {
-    position: sticky;
-    top: 0;
-    z-index: 18;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding: 10px 12px 8px;
-    background: transparent;
-    border-bottom: 0;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-home-btn {
-    top: 12px;
-    left: 12px;
-    width: 44px;
-    height: 44px;
-    border-radius: 12px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-topbar-stepper {
-    order: initial;
-    grid-column: auto;
-    min-width: 0;
-    overflow-x: auto;
-    padding: 2px 0 4px;
-    scrollbar-width: none;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-topbar-stepper::-webkit-scrollbar {
-    display: none;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-stepper {
-    width: max-content;
-    min-width: 100%;
-    gap: 8px;
-    align-items: stretch;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step {
-    flex: 0 0 86px;
-    min-height: 0;
-    padding: 4px 6px 8px;
-    border-radius: 0;
-    background: transparent;
-    border-bottom: 3px solid #dbe5f1;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step--current {
-    padding: 4px 6px 8px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step--current,
-  .public-form-page:not(.public-form-page--consultation) .nr-step--done {
-    background: transparent;
-    box-shadow: none;
-    border-bottom-color: #2563eb;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step-circle {
-    display: none;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step-label {
-    display: block;
-    max-width: 76px;
-    color: inherit;
-    font-size: 0.62rem;
-    line-height: 1.12;
-    letter-spacing: 0.02em;
-    text-align: center;
-    white-space: normal;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step-connector {
-    display: none;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-body {
-    padding: 14px 12px 12px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .single-request-form {
-    gap: 12px;
-    max-width: none;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .form-section {
-    gap: 12px;
-    border-color: rgba(207, 229, 240, 0.9);
-    border-radius: 20px;
-    background:
-      radial-gradient(circle at 0% 0%, rgba(15, 159, 154, 0.05), transparent 30%),
-      #ffffff;
-    padding: 12px;
-    padding-top: 0;
-    box-shadow: 0 14px 34px rgba(15, 52, 71, 0.08);
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .access-field input,
-  .public-form-page:not(.public-form-page--consultation) .access-field textarea,
-  .public-form-page:not(.public-form-page--consultation) .field input,
-  .public-form-page:not(.public-form-page--consultation) .field select {
-    min-height: 48px;
-    border-radius: 14px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .access-field input {
-    padding-left: 38px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .access-field-icon {
-    left: 13px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .two-column-fields,
-  .public-form-page:not(.public-form-page--consultation) .address-lookup-grid,
-  .public-form-page:not(.public-form-page--consultation) .address-city-grid,
-  .public-form-page:not(.public-form-page--consultation) .phone-validation-row {
-    grid-template-columns: 1fr;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .doc-accept-check {
-    min-height: 44px;
-    align-items: center;
-    white-space: normal;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .anm-type-picker,
-  .public-form-page:not(.public-form-page--consultation) .doc-declaration {
-    border-radius: 16px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .anm-type-cards {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .anm-type-card {
-    width: 100%;
-    min-height: 48px;
-    padding: 10px 14px;
-    white-space: normal;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .single-request-form .animal-form {
-    border-radius: 18px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .animal-form-header {
-    min-height: 52px;
-    padding: 12px 14px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .birth-weight-or {
-    display: block;
-    margin: -4px 0;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .calendar-availability {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .calendar-weekdays {
-    display: none;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .calendar-day-button {
-    min-height: 74px;
-    border-radius: 14px;
-    padding: 10px 8px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .calendar-day-button strong {
-    font-size: 1rem;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .calendar-day-button small {
-    font-size: 0.68rem;
-    line-height: 1.15;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .doc-photo-zone {
-    min-height: 154px;
-    border-radius: 18px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .doc-row {
-    display: grid;
-    grid-template-columns: 26px minmax(0, 1fr);
-    align-items: start;
-    gap: 10px;
-    padding: 12px;
-    border-radius: 16px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .doc-row-info small {
-    white-space: normal;
-    overflow: visible;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .doc-row-actions {
-    grid-column: 1 / -1;
-    justify-content: stretch;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .doc-attach-btn,
-  .public-form-page:not(.public-form-page--consultation) .doc-remove-btn {
-    width: 100%;
-    height: 42px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .doc-declaration p {
-    padding: 12px;
-    font-size: 0.84rem;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-bottom-error {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border: 1px solid #fecaca;
-    border-radius: 14px;
-    background: #fff1f2;
-    text-align: left;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-nav-row {
-    position: sticky;
-    bottom: 0;
-    z-index: 16;
-    max-width: none;
-    margin: 14px -12px -12px;
-    padding: 12px 12px max(12px, env(safe-area-inset-bottom));
-    border-top: 1px solid rgba(207, 229, 240, 0.9);
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(12px);
-    flex-direction: column-reverse;
-    gap: 8px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-back-btn,
-  .public-form-page:not(.public-form-page--consultation) .nr-topbar-continue {
-    width: 100%;
-    min-height: 48px;
-    justify-content: center;
-    border-radius: 14px;
-  }
-
-}
-
-
-@media (max-width: 380px) {
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step {
-    flex-basis: 78px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-step-label {
-    max-width: 68px;
-    font-size: 0.58rem;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .calendar-availability {
-    grid-template-columns: 1fr;
-  }
-
-}
 
 
 /* Fiscal-style operational UI pass: cards, lists and actions */
@@ -14261,31 +13654,6 @@ form textarea:focus,
 }
 
 
-/* Unified request registration flow */
-.nr-shell {
-  width: 100%;
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--ui-page, #f6f8fb);
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-shell--public {
-  min-height: 100dvh;
-  background: var(--ui-page, #f6f8fb);
-}
-
-
-.internal-request-modal {
-  width: min(1040px, calc(100vw - 48px));
-  height: min(88vh, 820px);
-  max-height: calc(100vh - 56px);
-  overflow: hidden;
-  background: #ffffff;
-}
-
-
 .internal-request-modal .irm-header {
   min-height: 72px;
   padding: 18px 24px;
@@ -14320,12 +13688,6 @@ form textarea:focus,
 }
 
 
-.internal-request-modal .nr-shell--internal {
-  height: calc(100% - 72px);
-  background: var(--ui-page, #f6f8fb);
-}
-
-
 .nr-topbar {
   flex: 0 0 auto;
   display: flex;
@@ -14346,23 +13708,6 @@ form textarea:focus,
 .nr-topbar-stepper {
   min-width: 0;
   flex: 1 1 auto;
-}
-
-
-.nr-home-btn {
-  width: 52px;
-  height: 52px;
-  display: inline-grid;
-  place-items: center;
-  border: none;
-  border-radius: 14px;
-  background: #0a0a0a;
-  color: #ffffff;
-}
-
-
-.nr-home-btn:hover {
-  opacity: 0.85;
 }
 
 
@@ -14389,36 +13734,9 @@ form textarea:focus,
 }
 
 
-.nr-body .single-request-form,
-.nr-bottom-error,
-.nr-nav-row {
-  width: min(920px, 100%);
-  margin-inline: auto;
-}
-
-
-.internal-request-modal .nr-body .single-request-form,
-.internal-request-modal .nr-bottom-error,
-.internal-request-modal .nr-nav-row {
-  width: min(900px, 100%);
-  max-width: 900px;
-}
-
-
 .nr-shell .single-request-form {
   display: grid;
   gap: 12px;
-}
-
-
-.nr-shell .form-section {
-  display: grid;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--ui-border);
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: var(--ui-shadow-line);
 }
 
 
@@ -14559,8 +13877,7 @@ form textarea:focus,
 }
 
 
-.nr-shell .access-field-icon,
-.public-form-page:not(.public-form-page--consultation) .access-field-icon {
+.nr-shell .access-field-icon {
   display: none;
 }
 
@@ -14621,19 +13938,6 @@ form textarea:focus,
 }
 
 
-.nr-nav-row {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 14px;
-  padding: 12px 0 0;
-  background: linear-gradient(180deg, rgba(246, 248, 251, 0), var(--ui-page, #f6f8fb) 30%);
-}
-
-
 .nr-shell .nr-back-btn {
   min-height: 42px;
   padding: 0 14px;
@@ -14650,20 +13954,7 @@ form textarea:focus,
 }
 
 
-.nr-bottom-error {
-  margin-top: 12px;
-}
-
-
 @media (max-width: 760px) {
-
-  .internal-request-modal {
-    width: 100vw;
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
-  }
-
 
   .internal-request-modal .irm-header {
     padding-inline: 16px;
@@ -14686,11 +13977,6 @@ form textarea:focus,
   }
 
 
-  .nr-nav-row {
-    align-items: stretch;
-  }
-
-
   .nr-shell .nr-back-btn,
   .nr-shell .nr-topbar-continue {
     flex: 1 1 0;
@@ -14700,19 +13986,30 @@ form textarea:focus,
 }
 
 
-/* Request registration: fiscal modal composition */
-.internal-request-modal {
-  width: min(604px, calc(100vw - 40px));
-  height: auto;
+/* The request dialog's dimensions follow the viewport across every step. */
+.modal-backdrop:has(> .internal-request-modal) {
+  padding-block: min(24px, 5dvh);
+}
+
+.modal-backdrop > .internal-request-modal {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(70vw, 100%);
+  height: 90dvh;
+  padding: 14px 20px;
+  overflow: hidden;
+  border: 1px solid #dfe7f1;
   border-radius: 14px;
-  max-height: calc(100vh - 40px);
-  overflow: auto;
+  background: #ffffff;
+  box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
 }
 
 
 .internal-request-modal .irm-header {
   min-height: 0;
-  padding: 18px 20px 10px;
+  padding: 10px 20px 6px;
   align-items: flex-start;
   border-bottom: 0;
 }
@@ -14739,13 +14036,11 @@ form textarea:focus,
 
 
 .internal-request-modal .nr-shell--internal {
-  height: auto;
-  background: #ffffff;
+  min-height: 0;
 }
 
 
-.internal-request-modal .nr-topbar--internal,
-.nr-shell--public .nr-topbar {
+.internal-request-modal .nr-topbar--internal {
   min-height: 46px;
   padding: 0 20px;
   background: #ffffff;
@@ -14755,30 +14050,45 @@ form textarea:focus,
 
 
 .internal-request-modal .nr-body {
+  flex: 1 1 0;
   min-height: 0;
-  display: block;
   padding: 0;
-  overflow: visible;
+  overflow: auto;
+  overscroll-behavior: contain;
   background: #ffffff;
 }
 
 
-.internal-request-modal .nr-body .single-request-form,
-.internal-request-modal .nr-bottom-error,
-.internal-request-modal .nr-nav-row {
-  width: 100%;
-  max-width: none;
+.internal-request-modal .nr-body .single-request-form {
+  padding: 14px 20px 12px;
 }
 
+.internal-request-modal .nr-nav-row {
+  padding: 8px 0 10px;
+}
 
-.internal-request-modal .nr-body .single-request-form {
+.internal-request-modal .public-service-success-card {
   min-height: 0;
-  overflow: visible;
-  padding: 14px 20px 12px;
+}
+
+@media (min-width: 1240px) and (max-height: 720px) {
+  .modal-backdrop > .internal-request-modal {
+    padding-block: 10px;
+  }
+
+  .internal-request-modal .irm-header {
+    padding-block: 8px 4px;
+  }
+
+  .internal-request-modal .nr-nav-row {
+    padding-block: 6px 8px;
+  }
 }
 
 
 .nr-shell .form-section {
+  display: grid;
+  gap: 12px;
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -14969,16 +14279,6 @@ form textarea:focus,
 }
 
 
-.nr-nav-row {
-  min-height: 0;
-  align-items: center;
-  margin: 0;
-  padding: 10px 20px 18px;
-  border-top: 0;
-  background: #ffffff;
-}
-
-
 .nr-shell .nr-topbar-continue {
   min-width: 90px;
   min-height: 40px;
@@ -14997,11 +14297,31 @@ form textarea:focus,
 
 @media (max-width: 760px) {
 
-  .internal-request-modal {
-    width: min(604px, calc(100vw - 18px));
-    height: auto;
-    max-height: calc(100dvh - 18px);
-    border-radius: 14px;
+  .modal-backdrop > .internal-request-modal {
+    width: 100%;
+  }
+
+  .internal-request-modal .nr-nav-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .internal-request-modal .nr-nav-row > button {
+    width: 100%;
+    min-width: 0;
+    padding-inline: 8px;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .internal-request-modal .nr-nav-row > button > svg {
+    flex-shrink: 0;
+  }
+
+  .internal-request-modal .nr-nav-row > .nr-topbar-continue:only-child {
+    grid-column: 2;
   }
 
 
@@ -15425,187 +14745,6 @@ form textarea:focus,
 }
 
 
-/* Public registration steps: página normal, sem altura travada — o documento
-   inteiro rola (igual ao mockup), não um "shell" de app com scroll preso no meio. */
-.public-form-page:not(.public-form-page--consultation) {
-  display: block;
-  height: auto;
-  min-height: 100dvh;
-  overflow: visible;
-  background: #f6f8fb;
-  font-family: "Poppins", sans-serif;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-shell--public {
-  display: block;
-  width: 100%;
-  min-height: 0;
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  overflow: visible;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-topbar {
-  position: relative;
-  top: auto;
-  z-index: 18;
-  display: flex;
-  flex-shrink: 0;
-  justify-content: center;
-  min-height: 56px;
-  padding: 10px 20px 8px;
-  border: 0;
-  background: transparent;
-}
-
-
-/* Mockup: ícone dentro da própria linha do topbar (ao lado do stepper), não flutuando
-   fixo sobre a página — e no tamanho/cor exatos do ícone quadrado do mockup. */
-.public-form-page:not(.public-form-page--consultation) .nr-home-btn {
-  position: static;
-  flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: #0f172a;
-  box-shadow: none;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-topbar-stepper {
-  grid-column: auto;
-  width: 100%;
-  max-width: 480px;
-  overflow: visible;
-  padding: 0;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-stepper {
-  width: 100%;
-  min-width: 0;
-  gap: 6px;
-  align-items: center;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-step {
-  flex: 1 1 0;
-  min-height: 0;
-  height: auto;
-  padding: 0 0 8px;
-  border-radius: 0;
-  border-bottom: 3px solid #dbe5f1;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-step--current {
-  padding: 0 0 8px;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-step--current,
-.public-form-page:not(.public-form-page--consultation) .nr-step--done {
-  border-bottom-color: #2563eb;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-step-label {
-  display: inline;
-  max-width: none;
-  color: inherit;
-  font-size: 0.7rem;
-  line-height: 1;
-  text-align: left;
-  white-space: nowrap;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-step-circle {
-  display: none;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .nr-step-connector {
-  display: none;
-}
-
-
-/* overflow-y sozinho não bastava: com overflow-x ainda "auto" (herdado do .nr-body base),
-   a spec de CSS força overflow-y "visible" de volta para "auto" quando o outro eixo não é
-   visible — por isso o scroll ainda ficava preso aqui mesmo com overflow-y:visible. Usar o
-   shorthand para os dois eixos resolve. */
-.public-form-page:not(.public-form-page--consultation) .nr-body {
-  overflow: visible;
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 0;
-  background: transparent;
-}
-
-
-/* padding-bottom era 64px (o espaço final da página no mockup), mas aqui .nr-nav-row
-   é um IRMÃO depois deste elemento, não um filho — então esse espaço criava um vão
-   grande ENTRE o último card e o "Continuar", em vez de depois dele. Reduzido para
-   ficar igual ao espaçamento entre seções (18px); o respiro final agora fica no
-   próprio .nr-nav-row (padding-bottom). */
-.public-form-page:not(.public-form-page--consultation) .nr-body .single-request-form {
-  width: 100%;
-  max-width: none;
-  padding: 32px 40px 18px;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .single-request-form .form-section {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-
-/* Padding lateral igual ao do .single-request-form (40px) para o botão "Continuar"
-   alinhar com a borda direita dos cards/botões acima (a regra antiga usava 20px,
-   metade do padding do conteúdo). padding-bottom carrega o respiro final da página
-   que antes estava (no lugar errado) no .single-request-form. */
-.public-form-page:not(.public-form-page--consultation) .nr-nav-row {
-  position: relative;
-  bottom: auto;
-  max-width: none;
-  margin: 0;
-  padding: 10px 40px 40px;
-  border: 0;
-  background: transparent;
-  backdrop-filter: none;
-  flex-direction: row;
-}
-
-
-/* Mockup usa os dois botões com largura igual (flex:1 cada), não um menor e
-   um maior — e "Continuar"/"Enviar" ganham um ícone de seta ao lado do texto. */
-.public-form-page:not(.public-form-page--consultation) .nr-back-btn,
-.public-form-page:not(.public-form-page--consultation) .nr-topbar-continue {
-  width: auto;
-  flex: 1 1 0;
-  min-height: 44px;
-  border-radius: 12px;
-  margin-left: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-
 @media (max-width: 720px) {
 
   .modal-backdrop > .access-modal {
@@ -15652,18 +14791,6 @@ form textarea:focus,
 
   .modal-backdrop > .access-modal {
     border-radius: 20px;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-shell--public {
-    width: min(604px, calc(100vw - 18px));
-    margin: 12px auto;
-  }
-
-
-  .public-form-page:not(.public-form-page--consultation) .nr-topbar {
-    padding-inline: 20px;
-    padding-left: 80px;
   }
 
 }
@@ -16174,32 +15301,6 @@ form textarea:focus,
   padding: 0 14px;
   border-radius: 10px;
   box-shadow: none;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .anm-add-btn,
-.public-form-page:not(.public-form-page--consultation) .animal-remove-inline {
-  width: 100%;
-  min-height: 44px;
-  border-radius: 10px;
-  font-size: 0.88rem;
-  font-weight: 600;
-  box-shadow: none;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .animal-remove-inline {
-  background: #fee2e2;
-  border: 1px solid #fca5a5;
-  color: #dc2626;
-  justify-content: center;
-}
-
-
-.public-form-page:not(.public-form-page--consultation) .animal-remove-inline:hover {
-  background: #fecaca;
-  border-color: #f87171;
-  color: #b91c1c;
 }
 
 
@@ -18484,12 +17585,7 @@ form textarea:focus,
   }
 }
 
-/* Fluxo público de solicitação (Solicitações v2): paleta verde/neutra.
-   Escopado a .nr-shell--public (presente só quando publicFlow=true) para não
-   afetar .nr-shell--internal, usado dentro de .internal-request-modal
-   (fora de escopo). Colocado ao final do arquivo para vencer, de forma
-   previsível, as demais regras .nr-shell/.anm-type-card
-   de mesma especificidade espalhadas pelo arquivo. */
+/* Shared field and card styles for the public request form. */
 .nr-shell--public .anm-type-label,
 .nr-shell--public .access-field[data-label]::before {
   color: var(--type-color-secondary);
@@ -18613,12 +17709,67 @@ form textarea:focus,
    (nr-shell--internal) — aqui, no fluxo público, precisa do card cheio de volta,
    por isso o `border-color` sozinho acima não bastava (border-width já vinha 0). */
 .nr-shell--public .public-schedule-picker {
-  padding: 24px 26px;
-  gap: 16px;
+  padding: clamp(12px, 1.4vw, 20px);
+  gap: 10px;
+  align-items: start;
   border: 1px solid #dbe5f1;
   border-radius: 18px;
   background: #ffffff;
   box-shadow: 0 1px 2px rgba(43, 36, 32, 0.04);
+}
+
+.nr-shell--public .schedule-picker-controls,
+.nr-shell--public .schedule-picker-calendar {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.nr-shell--public .sched-month-selector,
+.nr-shell--public .calendar-weekdays {
+  margin-bottom: 0;
+}
+
+.nr-shell--public .calendar-weekdays,
+.nr-shell--public .calendar-availability {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.nr-shell--public .calendar-day-button {
+  min-width: 0;
+  min-height: 44px;
+  padding: 4px 2px;
+  overflow-wrap: anywhere;
+}
+
+.nr-shell--public .schedule-chosen,
+.nr-shell--public .schedule-occurrence-options {
+  grid-column: 1 / -1;
+}
+
+@container request-form (min-width: 720px) {
+  .nr-shell--public .public-schedule-picker {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+    gap: 16px;
+  }
+}
+
+@container request-form (max-width: 980px) {
+  .nr-shell--public .calendar-day-button:disabled small {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+}
+
+@container request-form (max-width: 440px) {
+  .nr-shell--public .calendar-weekdays,
+  .nr-shell--public .calendar-availability {
+    gap: 4px;
+  }
 }
 
 
@@ -18788,11 +17939,6 @@ form textarea:focus,
 }
 
 
-.public-form-page:not(.public-form-page--consultation) {
-  background: #f8fafc;
-}
-
-
 /* -- LOGIN MODAL (staff/veterinários): padrão v4 verde/neutro, por analogia com os módulos públicos -- */
 .modal-backdrop > .compact-auth-modal {
   border: 1px solid #dbe5f1;
@@ -18940,6 +18086,107 @@ form textarea:focus,
   overflow: visible;
 }
 
+.login-page--request {
+  height: 100dvh;
+  min-height: 360px;
+  padding: 0;
+}
+
+.login-page--request > .public-topbar,
+.login-page--request > .public-home-footer {
+  flex: none;
+  height: auto;
+}
+
+.login-page--request > .public-topbar {
+  position: sticky;
+  min-height: var(--public-header-height);
+  z-index: 3;
+}
+
+.login-page--request > .public-home-footer {
+  position: relative;
+  z-index: 1;
+}
+
+.login-page--request > .public-service-workspace {
+  flex: 1 1 0;
+  width: auto;
+  min-height: 0;
+  margin: 8px clamp(8px, 1.2vw, 24px) 10px;
+  align-items: stretch;
+  gap: clamp(10px, 1.2vw, 20px);
+}
+
+.login-page--request .public-service-rail {
+  position: static;
+  align-self: stretch;
+  height: auto;
+  max-height: none;
+}
+
+.login-page--request .public-service-panel {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  min-height: 0;
+  padding: 0;
+  z-index: auto;
+}
+
+.login-page--request .public-hero--compact .hero-art {
+  height: clamp(0px, calc(100% - 315px), 58%);
+}
+
+@media (max-width: 1100px), (max-height: 480px) {
+  .login-page--request > .public-service-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .login-page--request .public-service-rail {
+    display: none;
+  }
+}
+
+@media (max-width: 820px), (max-height: 480px) {
+  .login-page--request > .public-topbar,
+  .login-page--request > .public-home-footer {
+    min-height: 0;
+  }
+
+  .login-page--request > .public-topbar {
+    gap: 6px;
+    padding-block: 6px;
+  }
+
+  .login-page--request .public-topbar-nav {
+    max-width: 100%;
+    flex-shrink: 1;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-block: 2px;
+    scrollbar-width: thin;
+  }
+
+  .login-page--request .public-topbar-nav > button {
+    flex: 0 0 auto;
+    width: auto;
+  }
+}
+
+@media (min-width: 560px) and (max-height: 480px) {
+  .login-page--request > .public-topbar {
+    flex-flow: row nowrap;
+    align-items: center;
+  }
+
+  .login-page--request .public-topbar-brand {
+    flex: 0 0 auto;
+    max-width: 42%;
+  }
+}
+
 .public-service-rail {
   position: sticky;
   top: calc(var(--public-header-height) + 8px);
@@ -19040,39 +18287,26 @@ form textarea:focus,
   white-space: nowrap;
 }
 
-.public-service-panel .modal-backdrop {
-  position: static;
-  inset: auto;
-  min-height: auto;
-  background: transparent;
-  backdrop-filter: none;
-  pointer-events: auto;
+.nr-shell--public {
+  container: request-form / inline-size;
+  min-width: 0;
+  border: 1px solid #dbe5f1;
+  border-radius: 14px;
+  background: var(--surface);
 }
 
-/* !important sobrepõe o lock de tema .nr-shell (~L24617, "Neutral background lock"), compartilhado com .request-workspace/.clean-requests-workspace/etc., fora de escopo */
-.public-service-panel .nr-shell {
-  width: 100%;
-  min-height: auto;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  overflow: visible;
+.nr-shell--public .nr-topbar {
+  height: auto;
+  min-height: 46px;
+  flex-wrap: nowrap;
+  padding: 4px 10px;
+  border-bottom: 1px solid #dbe5f1;
 }
 
-.public-service-panel .nr-topbar {
-  padding: 4px 0 6px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.public-service-panel .nr-body {
-  padding: 4px 0 0;
-  background: transparent;
-  overflow: visible;
-  overscroll-behavior: auto;
+.nr-shell--public .nr-body {
+  flex: 1 1 0;
+  padding: 4px 10px;
+  overscroll-behavior: contain;
 }
 
 .public-service-panel .single-request-form {
@@ -19086,18 +18320,16 @@ form textarea:focus,
   gap: 14px;
 }
 
-.public-service-panel .form-section {
-  width: 100%;
-  max-width: none;
-  padding: 12px 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
+.nr-shell--public .nr-bottom-error {
+  padding: 4px 10px;
+}
+
+.nr-shell--public .nr-body:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
 }
 
 .public-service-panel .form-sub-card,
-.public-service-panel .public-schedule-picker,
 .public-inline-card {
   width: 100%;
   max-width: none;
@@ -19115,10 +18347,6 @@ form textarea:focus,
   border-radius: 12px;
   background: #ffffff;
   box-shadow: none;
-}
-.public-service-panel .nr-home-btn,
-.public-service-panel .consultation-home-btn {
-  display: none !important;
 }
 
 .public-service-panel textarea,
@@ -19265,25 +18493,25 @@ form textarea:focus,
   background: transparent;
 }
 
-.public-service-panel .nr-topbar-stepper {
-  width: 100%;
+.nr-shell--public .nr-topbar-stepper {
   min-width: 0;
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  order: 0;
 }
 
-.public-service-panel .nr-stepper {
-  width: min(960px, 100%);
-  min-height: 42px;
-  margin: 0 auto;
-  padding: 0 2px;
+.nr-shell--public .nr-stepper {
   display: flex;
   align-items: center;
+  min-height: 40px;
+  padding: 0 2px;
   justify-content: center;
   gap: 8px;
 }
 
-.public-service-panel .nr-step {
-  min-width: auto;
+.nr-shell--public .nr-step {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
   height: 34px;
   padding: 0 10px 0 5px;
   border: 1px solid transparent;
@@ -19292,67 +18520,42 @@ form textarea:focus,
   color: #64748b;
   opacity: 1;
   cursor: default;
-  display: inline-flex;
   flex: 0 0 auto;
-  flex-direction: row;
-  align-items: center;
-  justify-content: flex-start;
   gap: 7px;
-  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
 }
 
-.public-service-panel .nr-step:hover:not(:disabled) {
-  border-color: rgba(37, 99, 235, 0.18);
-  background: rgba(37, 99, 235, 0.07);
+.nr-shell--public .nr-step--current {
   color: #1d4ed8;
 }
 
-.public-service-panel .nr-step:focus-visible {
-  outline: 3px solid rgba(37, 99, 235, 0.22);
-  outline-offset: 3px;
-}
-
-.public-service-panel .nr-step--current {
-  color: #1d4ed8;
-}
-
-.public-service-panel .nr-step--done {
+.nr-shell--public .nr-step--done {
   color: #2563eb;
 }
 
-.public-service-panel .nr-step--invalid {
+.nr-shell--public .nr-step--invalid {
   border-color: rgba(185, 28, 28, 0.2);
   background: #fff1f2;
   color: #b91c1c;
 }
 
-.public-service-panel .nr-step-circle {
+.nr-shell--public .nr-step-circle {
   width: 22px;
   height: 22px;
   font-size: var(--type-size-detail);
   flex: 0 0 auto;
 }
 
-.public-service-panel .nr-step-label {
+.nr-shell--public .nr-step-label {
   display: inline;
   font-size: var(--type-size-label);
   font-weight: var(--type-weight-label);
   letter-spacing: 0;
 }
-.public-service-panel .nr-step:disabled {
-  opacity: 1;
-  cursor: default;
-}
 
-
-.public-service-panel .nr-step::after {
-  display: none;
-}
-
-.public-service-panel .nr-step-connector {
+.nr-shell--public .nr-step-connector {
   display: block;
   height: 1px;
-  min-width: 34px;
+  min-width: 8px;
   max-width: 150px;
   flex: 1 1 96px;
   border: 0;
@@ -19362,11 +18565,11 @@ form textarea:focus,
   pointer-events: none;
 }
 
-.public-service-panel .nr-step--done + .nr-step-connector {
+.nr-shell--public .nr-step--done + .nr-step-connector {
   background: rgba(37, 99, 235, 0.18);
 }
 
-.public-service-panel .nr-step--invalid .nr-step-circle {
+.nr-shell--public .nr-step--invalid .nr-step-circle {
   background: #fee2e2;
   color: #b91c1c;
   box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.12);
@@ -19462,41 +18665,84 @@ form textarea:focus,
   white-space: nowrap;
 }
 
-.public-service-panel .nr-nav-row {
-  position: static;
-  width: 100%;
-  max-width: none;
-  margin: 6px 0 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  backdrop-filter: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+.nr-shell--public .nr-nav-row {
+  padding: 6px 10px;
+  border-top: 1px solid #dbe5f1;
+  gap: 8px;
 }
 
-.public-service-panel .nr-nav-row--final {
-  justify-content: flex-end;
+.nr-shell--public .nr-nav-row .anm-add-btn {
+  min-width: 0;
+  flex: 1 1 0;
+  text-align: center;
+  white-space: normal;
 }
 
-.public-service-panel .nr-nav-row .anm-add-btn {
-  width: auto;
-  flex: 1 1 auto;
+.nr-shell--public .nr-nav-row .nr-back-btn {
+  flex: none;
 }
 
-.public-service-panel .nr-topbar-continue {
-  width: auto;
+.nr-shell--public .nr-nav-row .nr-topbar-continue {
   min-width: 104px;
   flex: 0 0 auto;
-  margin-left: auto;
 }
 
-.public-service-panel .nr-topbar-home {
-  flex-shrink: 0;
-  white-space: nowrap;
+@container request-form (max-width: 620px) {
+  .nr-shell--public .nr-stepper {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(min-content, 1fr));
+    gap: 4px;
+  }
+
+  .nr-shell--public .nr-step {
+    height: auto;
+    flex-direction: column;
+    gap: 3px;
+    padding: 2px;
+  }
+
+  .nr-shell--public .nr-step-label {
+    font-size: var(--type-size-detail);
+    white-space: nowrap;
+  }
+
+  .nr-shell--public .nr-step-connector {
+    display: none;
+  }
+
+  .nr-shell--public .nr-nav-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+
+  .nr-shell--public .nr-nav-row > button {
+    min-width: 0;
+    padding-inline: 8px;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+  }
+
+  .nr-shell--public .nr-nav-row > .nr-topbar-continue {
+    width: 100%;
+  }
+
+  .nr-shell--public .nr-nav-row > .nr-topbar-continue:only-child {
+    grid-column: 2;
+  }
+}
+
+@container request-form (max-width: 440px) {
+  .nr-shell--public .nr-topbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .nr-shell--public .nr-topbar-home {
+    justify-self: end;
+  }
 }
 
 .animal-form-header--card {
@@ -19666,29 +18912,6 @@ form textarea:focus,
 
   .public-service-panel-header .ghost-button {
     width: 100%;
-  }
-
-  .public-service-panel .nr-stepper {
-    width: 100%;
-    overflow-x: auto;
-    justify-content: flex-start;
-    gap: 7px;
-    padding-bottom: 4px;
-    scrollbar-width: none;
-  }
-
-  .public-service-panel .nr-stepper::-webkit-scrollbar {
-    display: none;
-  }
-
-  .public-service-panel .nr-step {
-    height: 32px;
-  }
-
-  .public-service-panel .nr-step-connector {
-    min-width: 18px;
-    max-width: 18px;
-    flex: 0 0 18px;
   }
 
   .public-hero--compact {
@@ -21160,8 +20383,6 @@ textarea::placeholder,
 body,
 main,
 .app-shell,
-.public-form-page,
-.public-form-page:not(.public-form-page--consultation),
 .nr-body,
 .request-workspace,
 .clean-requests-workspace,
@@ -21178,7 +20399,6 @@ main,
 }
 /* Neutral public/background lock: remove remaining cream page surfaces */
 .public-hero,
-.public-form-page:not(.public-form-page--consultation),
 .nr-shell--public .sched-month-tab,
 .nr-shell--public .doc-photo-zone,
 .nr-shell .doc-photo-zone--compact,
@@ -22044,7 +21264,7 @@ main,
 
 /* The answer chosen, in the line that replaces a question once answered; and the step the person is in. */
 .choice-answer strong,
-.public-service-panel .nr-step--current .nr-step-label {
+.nr-shell--public .nr-step--current .nr-step-label {
   font-weight: var(--type-weight-strong);
 }
 
@@ -22528,10 +21748,6 @@ small,
 
 
 /* Internal request registration mirrors the public layout with neutral system colors. */
-.internal-request-modal {
-  width: min(1100px, calc(100vw - 40px)) !important;
-}
-
 .internal-request-modal .nr-shell--internal {
   background: #ffffff !important;
 }
@@ -22543,17 +21759,17 @@ small,
 
 .internal-request-modal .nr-shell--internal .single-request-form {
   gap: 18px !important;
-  padding: 16px 24px 14px !important;
+  padding: var(--request-form-padding, 16px 24px 14px) !important;
 }
 
 .internal-request-modal .nr-shell--internal .form-sub-card,
 .internal-request-modal .nr-shell--internal .public-schedule-picker {
-  padding: 24px 26px !important;
+  padding: var(--animal-card-padding, 24px 26px) !important;
   border: 1px solid #dbe5f1 !important;
   border-radius: 18px !important;
   background: #ffffff !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
-  gap: 18px !important;
+  gap: var(--animal-card-gap, 18px) !important;
 }
 
 .internal-request-modal .nr-shell--internal .form-sub-card-title {
@@ -22622,11 +21838,13 @@ small,
 }
 
 .internal-request-modal .nr-shell--internal .internal-microchip-row {
-  grid-template-columns: minmax(0, 1fr) 132px !important;
+  grid-template-columns: minmax(0, 1fr) var(--microchip-toggle-width, 132px) !important;
   align-items: end !important;
 }
 
 .internal-request-modal .nr-shell--internal .internal-chip-check {
+  gap: 6px;
+  padding-inline: 6px;
   border-color: #dbe5f1 !important;
   border-radius: 12px !important;
   background: #f8fafc !important;
@@ -22736,10 +21954,6 @@ small,
 }
 
 @media (max-width: 760px) {
-  .internal-request-modal {
-    width: min(100vw - 18px, 860px) !important;
-  }
-
   .internal-request-modal .nr-shell--internal .single-request-form {
     padding: 14px !important;
   }
@@ -23012,6 +22226,22 @@ small,
   margin: 32px auto;
   display: grid;
   gap: 22px;
+}
+
+.tutor-access-shell--form {
+  --tutor-form-inset: clamp(8px, 1.2vw, 24px);
+  display: flex;
+  flex-direction: column;
+  width: calc(100% - 2 * var(--tutor-form-inset));
+  height: 100dvh;
+  min-height: 360px;
+  margin: 0 auto;
+  padding: var(--tutor-form-inset) 0;
+  gap: 12px;
+}
+
+.tutor-access-shell--form > :is(.tutor-access-header, .tutor-access-nav) {
+  flex: none;
 }
 
 .tutor-access-header,
@@ -23431,35 +22661,98 @@ small,
   font-weight: var(--type-weight-strong);
 }
 
+.option-card-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 88px), 1fr));
+  gap: 8px;
+}
+
+.option-card-tiles:has(> .option-card-choice > small),
+.option-card-tiles--stacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.option-card-tiles--stacked {
+  flex: 1;
+  grid-auto-rows: minmax(56px, 1fr);
+}
+
 .option-card-choice {
+  position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 4px 10px;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 1px solid #dbe5f1;
+  border-radius: 8px;
+  background: #f8fafc;
   color: var(--type-color-primary);
   font-size: var(--type-size-body);
-  font-weight: var(--type-weight-body);
+  font-weight: var(--type-weight-strong);
+  text-align: center;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
-.option-card-choice input {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
+.option-card-choice > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   margin: 0;
-  accent-color: #2563eb;
-  cursor: pointer;
+  clip-path: inset(50%);
 }
 
-.option-card-choice small {
-  color: #2563eb;
+.option-card-choice > small {
+  color: var(--type-color-muted);
   font-size: var(--type-size-detail);
+  font-weight: var(--type-weight-body);
+}
+
+@media (hover: hover) {
+  .option-card-choice:hover {
+    border-color: #2563eb;
+  }
+}
+
+.option-card-choice:has(input:checked) {
+  border-color: #2563eb;
+  background: #eff6ff;
+  color: #1e40af;
+}
+
+.option-card-choice:has(input:focus-visible) {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }
 
 .text-field-row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
+}
+
+.animal-form:has(> .animal-form-sections) {
+  container: animal-form / inline-size;
+}
+
+.animal-form-sections,
+.animal-location-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+}
+
+.animal-breed-field {
+  grid-column: 1 / -1;
+}
+
+.animal-neighborhood {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
 }
 
 @container (max-width: 760px) {
@@ -23472,6 +22765,114 @@ small,
   .option-card-grid,
   .text-field-row {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (min-width: 1240px) {
+  .internal-request-modal .nr-body:has(.animal-form) {
+    --request-form-padding: 8px 24px;
+  }
+}
+
+@container animal-form (min-width: 760px) {
+  .animal-form-sections {
+    --animal-card-padding: 8px 12px;
+    --animal-card-gap: 6px;
+    --microchip-toggle-width: auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.9fr);
+    grid-template-areas: "health profile";
+    align-items: start;
+    gap: 8px;
+  }
+
+  .animal-form-sections:has(> .animal-procedures-card) {
+    grid-template-areas: "procedures profile" "health profile";
+    grid-template-rows: auto 1fr;
+  }
+
+  .nr-shell--public .animal-form-sections .form-sub-card {
+    padding: var(--animal-card-padding);
+    gap: var(--animal-card-gap);
+  }
+
+  .animal-procedures-card {
+    grid-area: procedures;
+  }
+
+  .animal-profile-card {
+    grid-area: profile;
+  }
+
+  .animal-health-card {
+    grid-area: health;
+  }
+
+  .animal-form-sections .form-sub-card-heading {
+    gap: 2px;
+  }
+
+  .animal-profile-card .option-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(152px, 1fr) minmax(124px, 1fr);
+  }
+
+  .animal-form-sections .option-card-grid,
+  .animal-form-sections .option-card-tiles {
+    gap: 6px;
+  }
+
+  .animal-form-sections .option-card {
+    gap: 4px;
+    padding: 6px 8px;
+  }
+
+  .animal-profile-card .option-card > legend,
+  .animal-profile-card .option-card-choice {
+    line-height: 1.3;
+  }
+
+  .animal-profile-card .option-card-choice {
+    padding: 2px 4px;
+  }
+
+  .animal-health-card .option-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .animal-health-card .option-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 100px;
+    align-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .animal-health-card .option-card + .option-card {
+    padding-top: 2px;
+    border-top: 1px solid #dbe5f1;
+  }
+
+  .animal-health-card .option-card-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .animal-profile-card .text-field-row {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    grid-template-columns: none;
+    gap: 8px;
+  }
+
+  .animal-breed-field {
+    grid-column: auto;
+  }
+
+  .animal-location-row:has(> .internal-microchip-row) {
+    grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+    align-items: start;
+    gap: 8px;
   }
 }
 

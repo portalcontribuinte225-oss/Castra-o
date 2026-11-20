@@ -1,4 +1,7 @@
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { RequestFormLayout } from "./request-form-layout";
 import { RequestStep, requestStepLabels, requestSteps } from "./request-steps";
 
 describe("requestSteps", () => {
@@ -18,5 +21,24 @@ describe("requestSteps", () => {
 
   it("cannot be changed by whoever imports them", () => {
     expect(Object.isFrozen(requestSteps)).toBe(true);
+  });
+});
+
+describe("RequestFormLayout", () => {
+  it("keeps navigation and one error message outside the content region for every step", () => {
+    const noop = () => {};
+    for (const [stepIndex, { label }] of requestSteps.entries()) {
+      const html = renderToStaticMarkup(createElement(RequestFormLayout, {
+        stepIndex, stepInvalid: false, internal: false, onNavigate: noop, onSubmit: noop,
+        submitting: false, submitDisabled: false, error: "Revise os dados", children: "Campos da etapa",
+      }));
+
+      expect(html).toContain(`role="region" aria-label="${label}"`);
+      expect(html).toMatch(/Campos da etapa<\/div><\/div><p[^>]*role="alert">Revise os dados<\/p><div class="nr-nav-row">/);
+      expect(html.match(/Revise os dados/g)).toHaveLength(1);
+      const footer = html.split('<div class="nr-nav-row">')[1];
+      expect(footer).toContain(stepIndex === requestSteps.length - 1 ? "Enviar" : "Próximo");
+      expect(footer.includes(">Voltar<")).toBe(stepIndex > 0);
+    }
   });
 });

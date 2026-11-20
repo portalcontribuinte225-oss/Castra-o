@@ -17,7 +17,7 @@ describe("OptionCardGroup", () => {
     expect(html).not.toContain("checked");
   });
 
-  it("marks the answer by its value or by its label, and shows the note beside the label", () => {
+  it("marks the answer by its value or label and displays the secondary note", () => {
     const html = renderToStaticMarkup(<OptionCardGroup label="Qual o porte?" value="Grande" options={sizes} onChange={noop} />);
     expect(html).toMatch(/checked="" value="Grande"/);
     expect(html.match(/checked=""/g)).toHaveLength(1);
