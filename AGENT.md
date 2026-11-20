@@ -17,7 +17,7 @@ Sistema de castração animal multi-prefeitura. Frontend React + Vite + TypeScri
 - Não alterar CI/CD, Render, Dockerfiles, scripts de deploy, start/build commands, health checks ou portas sem necessidade explícita.
 - Banco: o schema base é criado por `backend/src/db/migrations.js` (`runMigrations()` no boot do servidor); mudanças manuais ficam em `backend/src/db/sql/`. Nunca edite SQL ou migration já aplicado; crie um novo. SQL e migrations só com confirmação explícita (o ambiente pode apontar para produção); sem `DATABASE_URL` local, entregue o SQL ao usuário.
 - Produção roda no Render: evite aumentar CPU, memória, tempo de request e bloqueios síncronos. Trabalho pesado (PDFs grandes, relatórios, importações, uploads) não deve rodar dentro de request HTTP; proponha antes uma alternativa assíncrona.
-- O Render executa os comandos na raiz. Use `npm ci --include=dev && npm ci --prefix backend --omit=dev && npm run build` como Build Command e `npm start` como Start Command. O build gera `dist/` e o start inicia o backend, que serve os arquivos compilados. Configure `DATABASE_URL` nas variáveis do serviço.
+- O Render executa os comandos na raiz. Use `npm run build:render` como Build Command e `npm start` como Start Command. O script de build instala as dependências do frontend e do backend e gera `dist/`. O start inicia o backend, que serve os arquivos compilados. Configure `DATABASE_URL` nas variáveis do serviço.
 
 ## Qualidade e validação
 
