@@ -18309,6 +18309,11 @@ form textarea:focus,
   overscroll-behavior: contain;
 }
 
+.nr-shell--public .single-request-form {
+  min-block-size: 100%;
+  align-items: stretch;
+}
+
 .public-service-panel .single-request-form {
   width: 100%;
   max-width: none;
@@ -22873,6 +22878,107 @@ small,
     grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
     align-items: start;
     gap: 8px;
+  }
+}
+
+/* Steps fill the available height while their content sets the minimum size.
+   Taller content scrolls inside the form body. */
+@media (min-height: 600px) {
+  @container request-form (min-width: 720px) {
+    .nr-shell--public .single-request-form > .form-section {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nr-shell--public .form-section:has(> :is(.choice-question, .choice-answer)) {
+      margin-block: auto;
+    }
+
+    .nr-shell--public .choice-card {
+      padding-block: clamp(20px, 4dvh, 48px);
+    }
+
+    .nr-shell--public .form-section > :is(.animal-form.is-open, .registered-request-selection, .public-schedule-picker, .documents-step-card) {
+      flex: 1 0 auto;
+    }
+
+    .nr-shell--public .form-section > .animal-form.is-open {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nr-shell--public .registered-request-selection {
+      align-content: center;
+    }
+
+    .nr-shell--public .public-schedule-picker {
+      grid-template-rows: minmax(min-content, 1fr);
+    }
+
+    .nr-shell--public .schedule-picker-calendar {
+      align-self: stretch;
+      grid-template-rows: auto minmax(min-content, 1fr);
+    }
+
+    .nr-shell--public .documents-step-card {
+      grid-template-rows: auto minmax(min-content, 1fr);
+    }
+
+    .nr-shell--public .documents-step-grid {
+      grid-template-columns: clamp(180px, 30dvh, 300px) minmax(0, 1fr);
+      grid-template-rows: minmax(min-content, 1fr) auto;
+    }
+
+    .nr-shell--public .documents-main-column {
+      display: contents;
+    }
+
+    .nr-shell--public .doc-declaration {
+      grid-column: 1 / -1;
+    }
+
+    .nr-shell--public .documents-step-grid:has(.documents-list-card:empty) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .nr-shell--public .documents-step-grid:has(.documents-list-card:empty) .documents-photo-column {
+      width: min(100%, clamp(180px, 34dvh, 320px));
+      place-self: center;
+    }
+
+    .nr-shell--public .documents-list-card:empty {
+      display: none;
+    }
+  }
+
+  @container animal-form (min-width: 760px) {
+    .nr-shell--public .animal-form-sections {
+      flex: 1 0 auto;
+      align-items: stretch;
+    }
+
+    .nr-shell--public .animal-profile-card {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .nr-shell--public .animal-profile-card > .option-card-grid {
+      flex: 2 0 auto;
+    }
+
+    .nr-shell--public .animal-profile-card > :is(.text-field-row, .animal-location-row) {
+      flex: 1 0 auto;
+      align-content: center;
+    }
+
+    .nr-shell--public .animal-profile-card .option-card-tiles {
+      flex: 1;
+      grid-auto-rows: minmax(min-content, 1fr);
+    }
+
+    .nr-shell--public .animal-health-card {
+      grid-template-rows: auto minmax(min-content, 1fr);
+    }
   }
 }
 
