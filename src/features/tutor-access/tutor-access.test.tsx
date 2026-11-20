@@ -69,6 +69,8 @@ describe("tutor entry and validation", () => {
     const html = renderToStaticMarkup(<AuthEntry audience={AuthAudience.TUTOR} municipalityId="municipality-a" onLogin={() => {}} onClose={() => {}} />);
     expect(html).toContain("CPF ou e-mail"); expect(html).toContain("Entrar como tutor");
     expect(html).toContain('type="text"'); expect(html).toContain("use seu CPF");
+    expect(html.match(/data-ui-input/g)).toHaveLength(2);
+    expect(html).toMatch(/<button type="button" aria-label="Fechar acesso"[^>]*><svg\b/);
     expect(html).not.toContain("<select"); expect(html).not.toContain('type="radio"');
   });
 

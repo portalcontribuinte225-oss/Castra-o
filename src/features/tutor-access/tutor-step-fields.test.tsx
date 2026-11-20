@@ -37,10 +37,10 @@ describe("the Tutor step", () => {
 
   it("asks for the mobile as required and the e-mail as optional, and no longer calls the whole contact optional", () => {
     const markup = html();
-    expect(markup).toContain('data-label="Celular *"'); expect(markup).toContain('data-label="E-mail (opcional)"');
+    expect(markup).toContain(">Celular *</span>"); expect(markup).toContain(">E-mail (opcional)</span>");
     expect(markup).toContain("Contato de cadastro"); expect(markup).not.toContain("Contato de cadastro (opcional)");
-    expect(markup).toMatch(/aria-label="Celular de cadastro"[^>]*required/);
-    expect(markup).not.toMatch(/aria-label="E-mail de cadastro"[^>]*required/);
+    expect(markup).toMatch(/<input[^>]*required=""[^>]*aria-label="Celular de cadastro"/);
+    expect(markup).not.toMatch(/<input[^>]*required=""[^>]*aria-label="E-mail de cadastro"/);
   });
 
   it("shows the contact errors only after an attempt, and the name and CPF errors when they are invalid", () => {
@@ -64,7 +64,9 @@ describe("the Tutor step", () => {
   });
 
   it("is one copy: the staff's form has no other markup for the same step", () => {
-    const markup = html();
+    const markup = html({ internal: true });
+    expect(markup).toContain('data-label="Celular *"');
+    expect(markup).not.toContain("data-ui-input");
     expect(markup).not.toContain("cadunico-row"); expect(markup).not.toContain("Se aplica"); expect(markup).not.toContain("Identificação");
     expect(markup).not.toContain("CadÚnico"); expect(markup).not.toContain("cadunico-square-toggle");
   });

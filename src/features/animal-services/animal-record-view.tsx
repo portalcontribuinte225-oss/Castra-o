@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { Cat, Clock, Dog, Download, MapPin, Phone, ScanLine, User } from "lucide-react";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
 import { InfoTile } from "../../components/ui";
 import { statusLabels } from "../../domain";
 import { formatDateTime, maskCpf } from "../../utils";
@@ -33,13 +35,13 @@ export function AnimalRecordView({ animalId, onBack, downloadRecordPdf }: { anim
 
   if (state.loading) return <p role="status">Carregando prontuário...</p>;
   if (state.error || !state.record) {
-    return <section className="panel">
+    return <Card as="section" className="tw:grid tw:gap-3 tw:p-5">
       <p className="form-error" role="alert">{state.error || "Prontuário indisponível."}</p>
       <div className="svc-modal-footer">
-        <button type="button" className="ghost-button" onClick={onBack}>Voltar aos meus animais</button>
-        <button type="button" className="primary-action" onClick={state.retry}>Tentar novamente</button>
+        <Button variant="outline" onClick={onBack}>Voltar aos meus animais</Button>
+        <Button onClick={state.retry}>Tentar novamente</Button>
       </div>
-    </section>;
+    </Card>;
   }
 
   const { animal, tutor } = state.record;
@@ -52,9 +54,14 @@ export function AnimalRecordView({ animalId, onBack, downloadRecordPdf }: { anim
   const AnimalIcon = String(animal.species || "").toLowerCase().includes("gat") ? Cat : Dog;
   const contact = [maskFollowUpPhone(tutor?.phone || ""), maskFollowUpEmail(tutor?.tutor_email || "")].filter(Boolean).join(" · ") || "Não informado";
   const address = [tutor?.address, tutor?.neighborhood, tutor?.city, tutor?.state].filter(Boolean).join(", ") || "Endereço não informado";
+  const summaryCards = [
+    { icon: User, label: "Tutor atual", value: tutor?.tutor_name || tutor?.name || "Não informado", detail: maskCpf(tutor?.cpf || "") },
+    { icon: Phone, label: "Contato", value: contact, detail: address },
+    { icon: Clock, label: "Situação", value: latest ? animalHistoryTitle(latest) : "Sem eventos", detail: latest?.occurred_at ? formatDateTime(latest.occurred_at) : "Sem data registrada" },
+  ];
 
-  return <section className="animal-record-panel">
-    <div className="animal-record-header">
+  return <section className="tw:grid tw:min-w-0 tw:gap-3.5">
+    <Card tone="page" className="tw:flex tw:flex-col tw:items-start tw:justify-between tw:gap-3 tw:p-4 tw:min-[761px]:flex-row">
       <div className="animal-record-identity">
         <div className="animal-record-avatar" aria-hidden="true"><AnimalIcon size={28} /></div>
         <div>
@@ -68,29 +75,23 @@ export function AnimalRecordView({ animalId, onBack, downloadRecordPdf }: { anim
       </div>
       <div className="animal-record-header-tools">
         <span className="animal-status-chip">{animal.status || "ativo"}</span>
-        <button className="icon-btn-flat" type="button" title="Baixar prontuário PDF" aria-label="Baixar prontuário PDF" disabled={downloading} onClick={() => download(state.record)}>
-          <Download size={15} />
-        </button>
+        <Button variant="outline" title="Baixar prontuário PDF" aria-label="Baixar prontuário PDF" disabled={downloading} onClick={() => download(state.record)}>
+          <Download size={15} aria-hidden="true" />
+        </Button>
       </div>
-    </div>
+    </Card>
     {downloadError && <p className="form-error" role="alert">{downloadError}</p>}
 
     <div className="animal-record-summary">
-      <div className="animal-record-summary-card">
-        <span><User size={14} /> Tutor atual</span>
-        <strong>{tutor?.tutor_name || tutor?.name || "Não informado"}</strong>
-        <small>{maskCpf(tutor?.cpf || "")}</small>
-      </div>
-      <div className="animal-record-summary-card">
-        <span><Phone size={14} /> Contato</span>
-        <strong>{contact}</strong>
-        <small>{address}</small>
-      </div>
-      <div className="animal-record-summary-card">
-        <span><Clock size={14} /> Situação</span>
-        <strong>{latest ? animalHistoryTitle(latest) : "Sem eventos"}</strong>
-        <small>{latest?.occurred_at ? formatDateTime(latest.occurred_at) : "Sem data registrada"}</small>
-      </div>
+      {summaryCards.map(({ icon: Icon, label, value, detail }) => (
+        <Card key={label} className="tw:grid tw:min-w-0 tw:content-start tw:gap-1 tw:p-3.5 tw:[overflow-wrap:anywhere]">
+          <span className="tw:inline-flex tw:items-center tw:gap-1.5 tw:text-sm tw:font-semibold tw:text-ui-muted">
+            <Icon size={14} aria-hidden="true" /> {label}
+          </span>
+          <strong className="tw:text-ui-ink">{value}</strong>
+          <small className="tw:text-ui-muted">{detail}</small>
+        </Card>
+      ))}
     </div>
 
     <div className="animal-record-grid">
@@ -128,7 +129,7 @@ export function AnimalRecordView({ animalId, onBack, downloadRecordPdf }: { anim
     </div>
 
     <div className="svc-modal-footer">
-      <button type="button" className="ghost-button" onClick={onBack}>Voltar aos meus animais</button>
+      <Button variant="outline" onClick={onBack}>Voltar aos meus animais</Button>
     </div>
   </section>;
 }

@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
 import { RequestDoneCard } from "../request-requester/request-done-card";
 import { MUNICIPALITY_OPTION, useRequestOptions } from "./use-request-options";
 import { useRegisteredContext } from "./use-registered-context";
@@ -33,6 +35,18 @@ export function RegisteredRequestWorkspace({ animalId, municipalityId, intent, o
   const context = useRegisteredContext(animalId || "", requestTypeId);
   if (created) return <RequestDoneCard protocol={created.protocol || ""} followUp={(created.workflow_data || created.workflowData)?.followUp} createRequirement={() => createRequirement(created, options.options[MUNICIPALITY_OPTION])} closeLabel="Voltar aos meus animais" onClose={() => { onComplete(); onBack(); }} />;
   if (options.loading || (animalId && !context.context && !context.error)) return <p role="status">Preparando a solicitação...</p>;
-  if (options.error || (animalId && context.error && !context.context)) return <section className="panel"><p className="form-error" role="alert">{options.error || context.error}</p><button type="button" className="ghost-button" onClick={() => { options.retry(); context.retry(); }}>Tentar novamente</button><button type="button" className="ghost-button" onClick={onBack}>Voltar aos meus animais</button></section>;
-  return <>{context.error && <div role="alert"><p className="form-error">{context.error}</p><button type="button" className="ghost-button" onClick={context.retry}>Tentar novamente</button></div>}{renderForm({ options: options.options, context: animalId ? context.context || undefined : undefined, contextLoading: Boolean(animalId) && !context.ready, requestTypeId, onRequestTypeChange: animalId ? setRequestTypeId : undefined, intent, onBack, onDone: setCreated })}</>;
+  if (options.error || (animalId && context.error && !context.context)) return <Card as="section" className="tw:grid tw:gap-3 tw:p-5">
+    <p className="form-error" role="alert">{options.error || context.error}</p>
+    <div className="tw:flex tw:flex-wrap tw:gap-2">
+      <Button variant="outline" onClick={() => { options.retry(); context.retry(); }}>Tentar novamente</Button>
+      <Button variant="outline" onClick={onBack}>Voltar aos meus animais</Button>
+    </div>
+  </Card>;
+  return <>
+    {context.error && <div>
+      <p className="form-error" role="alert">{context.error}</p>
+      <Button variant="outline" onClick={context.retry}>Tentar novamente</Button>
+    </div>}
+    {renderForm({ options: options.options, context: animalId ? context.context || undefined : undefined, contextLoading: Boolean(animalId) && !context.ready, requestTypeId, onRequestTypeChange: animalId ? setRequestTypeId : undefined, intent, onBack, onDone: setCreated })}
+  </>;
 }

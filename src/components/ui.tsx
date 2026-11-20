@@ -177,18 +177,6 @@ export function CompactChoiceField({ label, value, options, onChange, invalid = 
   );
 }
 
-export function FormSection({ title, action, children }: AnyRecord) {
-  return (
-    <div className="form-section">
-      <div className="form-section-header">
-        <h3>{title}</h3>
-        {action}
-      </div>
-      {children}
-    </div>
-  );
-}
-
 function SegmentedButtons({ label, value, options, onChange }: AnyRecord) {
   return (
     <div className="compact-choice-field">

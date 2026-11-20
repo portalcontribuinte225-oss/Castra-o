@@ -36,15 +36,16 @@ describe("request tracking screens", () => {
     const empty = render();
     expect(empty).toContain("Acompanhar solicitação"); expect(empty).toContain("Protocolo"); expect(empty).toContain("E-mail ou telefone do acompanhamento");
     expect(empty).toContain("escolheu receber avisos"); expect(empty).toContain("Enviar código");
-    expect(empty).toMatch(/<button type="submit" class="primary-action" disabled="">/);
+    expect(empty).not.toContain("<h2");
+    expect(empty).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>/);
     mockTracking({ protocol: "000123/2026", contact: "citizen@example.com" });
-    expect(render()).not.toMatch(/<button type="submit" class="primary-action" disabled="">/);
+    expect(render()).toMatch(/<button(?=[^>]*type="submit")(?![^>]*disabled="")[^>]*>Enviar código/);
   });
 
   it("shows the waiting time after a send and after a rate limit", () => {
     mockTracking({ protocol: "000123/2026", contact: "citizen@example.com" }, { retryIn: 30, expiresIn: 0 });
     const html = render();
-    expect(html).toContain("Aguarde 30s"); expect(html).toMatch(/<button type="submit" class="primary-action" disabled="">/);
+    expect(html).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>Aguarde 30s/);
   });
 
   it("answers the same way whether or not the request exists and only echoes the masked contact", () => {
@@ -61,9 +62,9 @@ describe("request tracking screens", () => {
     const html = render();
     expect(html).toContain("(48) *****-1234"); expect(html).not.toContain("48999991234");
     expect(html).toContain("Código expirado"); expect(html).toContain("Reenviar em 20s");
-    expect(html).toMatch(/<button type="submit" class="primary-action" disabled="">Consultar solicitação/);
+    expect(html).toMatch(/<button(?=[^>]*type="submit")(?=[^>]*disabled="")[^>]*>Consultar solicitação/);
     mockTracking({ step: TrackingStep.CODE, challenge, contact: "citizen@example.com", code: "123456" }, { retryIn: 0, expiresIn: 300 });
-    expect(render()).not.toMatch(/<button type="submit" class="primary-action" disabled="">Consultar solicitação/);
+    expect(render()).toMatch(/<button(?=[^>]*type="submit")(?![^>]*disabled="")[^>]*>Consultar solicitação/);
   });
 
   it("shows a failure as an alert on every step", () => {

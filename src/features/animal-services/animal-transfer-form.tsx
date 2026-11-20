@@ -1,5 +1,9 @@
 import React, { useState } from "react";
 import { api } from "../../api";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
+import { Input } from "../../components/input";
+import { animalServiceFieldStyle, animalServiceTextareaStyle } from "./animal-service-form-styles";
 import { formatCep, formatCpf, formatPhone } from "../../utils";
 import { lookupCep } from "./cep-lookup";
 import { buildTransferPayload, describeAnimal, emptyTransferForm, validateTransferForm } from "./animal-service-forms";
@@ -37,37 +41,37 @@ export function AnimalTransferForm({ animal, onBack }: { animal: AnimalSummary; 
     void request.send(buildTransferPayload(form));
   }
 
-  return <form className="panel animal-service-form" onSubmit={submit}>
-    <h2>Trocar tutor</h2>
+  return <Card as="form" className="tw:grid tw:gap-4 tw:p-5" onSubmit={submit}>
+    <h2 className="tw:m-0">Trocar tutor</h2>
     <p className="svc-step-context">{describeAnimal(animal)}</p>
-    <div className="form-sub-card">
-      <span className="form-sub-card-title">Novo tutor</span>
+    <Card tone="page" className="tw:grid tw:gap-3 tw:p-4">
+      <h3 className="tw:m-0 tw:text-base tw:font-semibold">Novo tutor</h3>
       <div className="svc-grid-2">
-        <label className="field svc-field"><span>Nome</span><input value={form.target_tutor_name} maxLength={120} onChange={field("target_tutor_name")} /></label>
-        <label className="field svc-field"><span>CPF</span><input value={form.target_tutor_cpf} inputMode="numeric" onChange={field("target_tutor_cpf", formatCpf)} placeholder="000.000.000-00" /></label>
+        <label className={animalServiceFieldStyle}><span>Nome</span><Input value={form.target_tutor_name} maxLength={120} onChange={field("target_tutor_name")} /></label>
+        <label className={animalServiceFieldStyle}><span>CPF</span><Input value={form.target_tutor_cpf} inputMode="numeric" onChange={field("target_tutor_cpf", formatCpf)} placeholder="000.000.000-00" /></label>
       </div>
       <div className="svc-grid-2">
-        <label className="field svc-field"><span>E-mail</span><input type="email" value={form.target_tutor_email} maxLength={254} onChange={field("target_tutor_email")} /></label>
-        <label className="field svc-field"><span>Telefone</span><input type="tel" value={form.target_tutor_phone} onChange={field("target_tutor_phone", formatPhone)} placeholder="(00) 00000-0000" /></label>
+        <label className={animalServiceFieldStyle}><span>E-mail</span><Input type="email" value={form.target_tutor_email} maxLength={254} onChange={field("target_tutor_email")} /></label>
+        <label className={animalServiceFieldStyle}><span>Telefone</span><Input type="tel" value={form.target_tutor_phone} onChange={field("target_tutor_phone", formatPhone)} placeholder="(00) 00000-0000" /></label>
       </div>
-    </div>
-    <div className="form-sub-card">
-      <span className="form-sub-card-title">Endereço</span>
+    </Card>
+    <Card tone="page" className="tw:grid tw:gap-3 tw:p-4">
+      <h3 className="tw:m-0 tw:text-base tw:font-semibold">Endereço</h3>
       <div className="svc-grid-3">
-        <label className="field svc-field"><span>CEP</span><input value={form.target_tutor_cep} inputMode="numeric" onChange={changeCep} placeholder="00000-000" /></label>
-        <label className="field svc-field"><span>Bairro</span><input value={form.target_tutor_neighborhood} maxLength={120} onChange={field("target_tutor_neighborhood")} /></label>
-        <label className="field svc-field"><span>UF</span><input value={form.target_tutor_state} maxLength={2} onChange={field("target_tutor_state", (value) => value.toUpperCase())} placeholder="UF" /></label>
+        <label className={animalServiceFieldStyle}><span>CEP</span><Input value={form.target_tutor_cep} inputMode="numeric" onChange={changeCep} placeholder="00000-000" /></label>
+        <label className={animalServiceFieldStyle}><span>Bairro</span><Input value={form.target_tutor_neighborhood} maxLength={120} onChange={field("target_tutor_neighborhood")} /></label>
+        <label className={animalServiceFieldStyle}><span>UF</span><Input value={form.target_tutor_state} maxLength={2} onChange={field("target_tutor_state", (value) => value.toUpperCase())} placeholder="UF" /></label>
       </div>
       <div className="svc-grid-2">
-        <label className="field svc-field"><span>Endereço</span><input value={form.target_tutor_address} maxLength={200} onChange={field("target_tutor_address")} placeholder="Rua, número, complemento" /></label>
-        <label className="field svc-field"><span>Cidade</span><input value={form.target_tutor_city} maxLength={120} onChange={field("target_tutor_city")} /></label>
+        <label className={animalServiceFieldStyle}><span>Endereço</span><Input value={form.target_tutor_address} maxLength={200} onChange={field("target_tutor_address")} placeholder="Rua, número, complemento" /></label>
+        <label className={animalServiceFieldStyle}><span>Cidade</span><Input value={form.target_tutor_city} maxLength={120} onChange={field("target_tutor_city")} /></label>
       </div>
-    </div>
-    <label className="field svc-field"><span>Motivo</span><textarea rows={3} maxLength={1000} value={form.notes} onChange={field("notes")} placeholder="Descreva o motivo da transferência..." /></label>
+    </Card>
+    <label className={animalServiceFieldStyle}><span>Motivo</span><textarea data-ui-input="" className={animalServiceTextareaStyle} rows={3} maxLength={1000} value={form.notes} onChange={field("notes")} placeholder="Descreva o motivo da transferência..." /></label>
     {request.error && <p className="form-error" role="alert">{request.error}</p>}
     <div className="svc-modal-footer">
-      <button type="button" className="ghost-button" onClick={onBack}>Cancelar</button>
-      <button type="submit" className="primary-action" disabled={request.saving}>{request.saving ? "Enviando..." : "Solicitar troca"}</button>
+      <Button variant="outline" onClick={onBack}>Cancelar</Button>
+      <Button type="submit" disabled={request.saving}>{request.saving ? "Enviando..." : "Solicitar troca"}</Button>
     </div>
-  </form>;
+  </Card>;
 }

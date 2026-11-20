@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "./api";
 import {
   Activity,
@@ -25,7 +25,6 @@ import {
   LogOut,
   MapPin,
   Menu,
-  MessageCircle,
   Navigation,
   PawPrint,
   Plus,
@@ -116,14 +115,15 @@ import {
   ConfigStatusFilter,
   EmptyState,
   Field,
-  FormSection,
   InfoTile,
-  Metric,
   ModalHeader,
   PanelHeader,
   StatusBadge,
 } from "./components/ui";
 import { Button } from "./components/button";
+import { Card } from "./components/card";
+import { CloseButton } from "./components/close-button";
+import { Input } from "./components/input";
 import {
   dataUrlToUint8Array,
   escapeHtml,
@@ -374,7 +374,7 @@ export default function App() {
   const logout = useCallback(() => { setProcedureIntent(null); session.logout(); }, [session.logout]);
   useEffect(() => { if (session.ready && !session.user) setProcedureIntent((current) => current?.ownerId ? null : current); }, [session.ready, session.user]);
   return <SessionBoundary session={{ ...session, accept, logout }}
-    renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} createRequirement={createRequestPdfDataUrl} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} compact setActive={() => {}} />}
+    renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} createRequirement={createRequestPdfDataUrl} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} />}
       renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} municipality={input.options[MUNICIPALITY_OPTION]} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
         requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
     />}
@@ -1306,6 +1306,7 @@ export function PublicSchedulePicker({
   pendingReservation = null,
   title = "",
   hint = "",
+  external = false,
 }) {
   const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
   const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
@@ -1414,7 +1415,21 @@ export function PublicSchedulePicker({
         </div>
       </div>
       {chosenDay && <p className="schedule-chosen" role="status">Você escolheu {new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date(parseScheduleDate(chosenDay.date)))}{chosenTime ? `, às ${chosenTime}` : ""}.</p>}
-      {selectedDate && scheduleWithUsage.filter((day) => day.date === selectedDate).length > 1 && <div className="schedule-occurrence-options" role="group" aria-label="Local e horário"><p>Escolha o local desta data:</p>{scheduleWithUsage.filter((day) => day.date === selectedDate).map((day) => <button type="button" key={day.occurrenceKey || day.id} className={selectedOccurrenceKey === day.occurrenceKey ? "primary-action" : "ghost-button"} disabled={!day.hasEnoughVacancies || day.isPast} onClick={() => onSelect(day.date, day.occurrenceKey || "")}>{day.locationName || "Local de atendimento"} · {day.offeredSlot?.time || day.startTime} · {Math.max(day.vacancies - (day.used - (selectedOccurrenceKey === day.occurrenceKey ? requiredVacancies : 0)), 0)} vagas</button>)}</div>}
+      {selectedDate && scheduleWithUsage.filter((day) => day.date === selectedDate).length > 1 && (
+        <div className="schedule-occurrence-options" role="group" aria-label="Local e horário">
+          <p>Escolha o local desta data:</p>
+          {scheduleWithUsage.filter((day) => day.date === selectedDate).map((day) => {
+            const selected = selectedOccurrenceKey === day.occurrenceKey;
+            const remaining = Math.max(day.vacancies - (day.used - (selected ? requiredVacancies : 0)), 0);
+            const label = `${day.locationName || "Local de atendimento"} · ${day.offeredSlot?.time || day.startTime} · ${remaining} vagas`;
+            const disabled = !day.hasEnoughVacancies || day.isPast;
+            const onClick = () => onSelect(day.date, day.occurrenceKey || "");
+            return external
+              ? <Button key={day.occurrenceKey || day.id} variant={selected ? "primary" : "outline"} aria-pressed={selected} className="tw:whitespace-normal tw:text-center" disabled={disabled} onClick={onClick}>{label}</Button>
+              : <button type="button" key={day.occurrenceKey || day.id} className={selected ? "primary-action" : "ghost-button"} disabled={disabled} onClick={onClick}>{label}</button>;
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -1426,6 +1441,13 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   const [showInterestForm, setShowInterestForm] = useState(false);
   const [interestSent, setInterestSent] = useState(false);
   const [interestForm, setInterestForm] = useState({ name: "", phone: "", visit_date: "" });
+  const [interestError, setInterestError] = useState("");
+  const [interestSaving, setInterestSaving] = useState(false);
+  const interestRequest = useRef<symbol | null>(null);
+  const adoptionTitleId = useId();
+  const adoptionCloseRef = useRef<HTMLButtonElement>(null);
+  const interestNameRef = useRef<HTMLInputElement>(null);
+  const adoptionOpen = Boolean(selectedAnimal);
   const speciesQuickFilters = [
     { value: "", label: "Todos" },
     { value: "canino", label: "Cães" },
@@ -1439,29 +1461,59 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   useEffect(() => {
     if (sharedAnimalId) openAnimalModal(normalizeAdoptionAnimal(sharedAdoption.animal));
   }, [sharedAnimalId]);
+  useEffect(() => {
+    if (!adoptionOpen) return;
+    const previous = document.activeElement;
+    adoptionCloseRef.current?.focus();
+    return () => {
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus();
+    };
+  }, [adoptionOpen]);
+  useEffect(() => {
+    if (interestSent) adoptionCloseRef.current?.focus();
+  }, [interestSent]);
+  useEffect(() => {
+    if (showInterestForm) interestNameRef.current?.focus();
+  }, [showInterestForm]);
 
   function openAnimalModal(animal, openInterestForm = false) {
+    interestRequest.current = null;
     setSelectedAnimal(animal);
     setShowInterestForm(openInterestForm);
     setInterestSent(false);
+    setInterestSaving(false);
+    setInterestError("");
     setInterestForm({ name: "", phone: "", visit_date: "" });
   }
 
   function closeAnimalModal() {
+    interestRequest.current = null;
     setSelectedAnimal(null);
     setShowInterestForm(false);
     setInterestSent(false);
+    setInterestSaving(false);
+    setInterestError("");
     setInterestForm({ name: "", phone: "", visit_date: "" });
   }
 
   async function submitInterest(e) {
     e.preventDefault();
+    if (!selectedAnimal || interestRequest.current) return;
+    const request = Symbol();
+    interestRequest.current = request;
+    setInterestError("");
+    setInterestSaving(true);
     try {
       const updated = await api.registerInterest(selectedAnimal.id, interestForm, selectedAnimal.municipality_id);
-      setInterestSent(true);
+      if (interestRequest.current === request) setInterestSent(true);
       onInterestSent?.(updated);
-    } catch (err) {
-      console.error("Erro ao registrar interesse:", err);
+    } catch {
+      if (interestRequest.current === request) setInterestError("Não foi possível registrar o interesse. Tente novamente.");
+    } finally {
+      if (interestRequest.current === request) {
+        interestRequest.current = null;
+        setInterestSaving(false);
+      }
     }
   }
 
@@ -1475,14 +1527,15 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
         </div>
         <div className="showcase-filter-pills">
           {speciesQuickFilters.map((filter) => (
-            <button
+            <Button
               key={filter.value || "all"}
-              type="button"
-              className={`showcase-pill-text${speciesFilter === filter.value ? " active" : ""}`}
+              variant="custom"
+              aria-pressed={speciesFilter === filter.value}
+              className="tw:border-card-border tw:bg-card-surface tw:font-semibold tw:text-[#7a6f60] tw:hover:bg-[#f0e9da] tw:aria-pressed:border-ui-ink tw:aria-pressed:bg-ui-ink tw:aria-pressed:text-white"
               onClick={() => setSpeciesFilter(filter.value)}
             >
               {filter.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -1491,7 +1544,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
 
       <div className="public-animal-grid">
         {filteredAnimals.length === 0 && (
-          <div className="adoption-filter-empty">
+          <div className="adoption-filter-empty" role="status">
             {availableAnimals.length === 0 ? "Nenhum animal disponível para adoção no momento." : "Nenhum animal encontrado com estes filtros."}
           </div>
         )}
@@ -1500,11 +1553,12 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
           const interestCount = getAdoptionInterestCount(animal);
           const highlighted = isAdoptionHighlighted(animal);
           return (
-            <article
-              className={`public-animal-card${highlighted ? " is-highlighted" : ""}`}
+            <Card
+              as="article"
+              className={`public-animal-card tw:grid tw:grid-rows-[1fr_auto] tw:overflow-hidden tw:shadow-sm tw:motion-safe:transition-shadow tw:hover:shadow-md${highlighted ? " is-highlighted" : ""}`}
               key={animal.id || animal.name}
             >
-              <button className="public-animal-open-area" type="button" onClick={() => openAnimalModal(animal)}>
+              <button className="tw:grid tw:h-full tw:w-full tw:border-0 tw:bg-transparent tw:p-0 tw:text-inherit tw:focus-visible:outline-2 tw:focus-visible:-outline-offset-2 tw:focus-visible:outline-ui-accent" type="button" aria-label={`Ver detalhes de ${displayName}`} onClick={() => openAnimalModal(animal)}>
                 <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
                   {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={24} />}
                 </div>
@@ -1514,19 +1568,15 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
                   <Users size={13} />
                   {interestCount} interessado{interestCount === 1 ? "" : "s"}
                 </span>
-                <button
-                  className="public-interest-cta"
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openAnimalModal(animal, true);
-                  }}
+                <Button
+                  className="tw:w-full"
+                  onClick={() => openAnimalModal(animal, true)}
                 >
                   <HeartHandshake size={14} />
                   Quero adotar
-                </button>
+                </Button>
               </div>
-            </article>
+            </Card>
           );
         })}
       </div>
@@ -1535,8 +1585,26 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
 
     {selectedAnimal && (
       <div className="modal-backdrop">
-        <div className="animal-detail-modal adoption-profile-modal">
-          <ModalHeader onClose={closeAnimalModal} />
+        <Card as="section" className="animal-detail-modal adoption-profile-modal" role="dialog" aria-modal="true" aria-labelledby={adoptionTitleId}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              closeAnimalModal();
+            }
+            if (event.key !== "Tab") return;
+            const controls = event.currentTarget.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), a[href]");
+            const first = controls[0];
+            const last = controls[controls.length - 1];
+            if (!first || !last) return;
+            if (event.shiftKey ? document.activeElement === first : document.activeElement === last) {
+              event.preventDefault();
+              (event.shiftKey ? last : first).focus();
+            }
+          }}
+        >
+          <div className="tw:absolute tw:end-3 tw:top-3 tw:z-20">
+            <CloseButton aria-label="Fechar detalhes do animal" ref={adoptionCloseRef} onClick={closeAnimalModal} />
+          </div>
           <div className="adoption-profile-media">
             <div className={`adoption-main-photo ${getAnimalGradient(selectedAnimal)}`}>
               {getAnimalMainPhoto(selectedAnimal) ? <img src={getAnimalMainPhoto(selectedAnimal)} alt={selectedAnimal.name} /> : <PawPrint size={54} />}
@@ -1551,7 +1619,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
           </div>
           <div className="adoption-profile-info">
             <div className="adoption-profile-identity">
-              <h2>{selectedAnimal.name || selectedAnimal.animal_name}</h2>
+              <h2 id={adoptionTitleId}>{selectedAnimal.name || selectedAnimal.animal_name || "Animal"}</h2>
               <div className="adoption-profile-tags">
                 {selectedAnimal.species && <Chip>{selectedAnimal.species}</Chip>}
                 {selectedAnimal.sex && <Chip>{selectedAnimal.sex}</Chip>}
@@ -1563,10 +1631,10 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
             </div>
 
             {!showInterestForm && !interestSent && (
-              <button className="primary-action adoption-main-cta" type="button" onClick={() => setShowInterestForm(true)}>
+              <Button className="tw:w-full" onClick={() => setShowInterestForm(true)}>
                 <HeartHandshake size={18} />
                 Quero adotar
-              </button>
+              </Button>
             )}
 
             <ShareAdoptionButton animal={selectedAnimal} />
@@ -1577,36 +1645,34 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
                   <HeartHandshake size={15} />
                   <span>Registrar interesse</span>
                 </div>
-                <div className="access-field">
-                  <User size={14} className="access-field-icon" />
-                  <input value={interestForm.name} onChange={(e) => setInterestForm((f) => ({ ...f, name: e.target.value }))} placeholder="Nome completo" required />
-                </div>
-                <div className="access-field">
-                  <MessageCircle size={14} className="access-field-icon" />
-                  <input type="tel" value={interestForm.phone} onChange={(e) => setInterestForm((f) => ({ ...f, phone: formatPhone(e.target.value) }))} placeholder="WhatsApp (00) 00000-0000" required />
-                </div>
-                <div className="access-field">
-                  <CalendarDays size={14} className="access-field-icon" />
-                  <input type="date" value={interestForm.visit_date} onChange={(e) => setInterestForm((f) => ({ ...f, visit_date: e.target.value }))} />
-                </div>
+                <label className="tw:grid tw:gap-1.5 tw:text-sm tw:font-medium">Nome completo
+                  <Input ref={interestNameRef} value={interestForm.name} onChange={(e) => setInterestForm((f) => ({ ...f, name: e.target.value }))} autoComplete="name" required />
+                </label>
+                <label className="tw:grid tw:gap-1.5 tw:text-sm tw:font-medium">WhatsApp
+                  <Input type="tel" value={interestForm.phone} onChange={(e) => setInterestForm((f) => ({ ...f, phone: formatPhone(e.target.value) }))} placeholder="(00) 00000-0000" autoComplete="tel" required />
+                </label>
+                <label className="tw:grid tw:gap-1.5 tw:text-sm tw:font-medium">Data da visita
+                  <Input type="date" value={interestForm.visit_date} onChange={(e) => setInterestForm((f) => ({ ...f, visit_date: e.target.value }))} />
+                </label>
+                {interestError && <p className="form-error" role="alert">{interestError}</p>}
                 <div className="form-actions">
-                  <button className="primary-action" type="submit">
+                  <Button type="submit" disabled={interestSaving}>
                     <HeartHandshake size={15} />
-                    Enviar interesse
-                  </button>
+                    {interestSaving ? "Enviando..." : "Enviar interesse"}
+                  </Button>
                 </div>
               </form>
             )}
 
             {interestSent && (
-              <div className="adoption-interest-success">
+              <div className="adoption-interest-success" role="status">
                 <CheckCircle2 size={40} />
                 <strong>Interesse registrado!</strong>
                 <p>Em breve entraremos em contato pelo WhatsApp informado.</p>
               </div>
             )}
           </div>
-        </div>
+        </Card>
       </div>
     )}
     </>
@@ -1857,7 +1923,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 key={service.id}
                 variant="menu"
                 aria-current={active || undefined}
-                className={`tw:gap-1.5 tw:text-[0.85rem] tw:text-[color:var(--ink-700)] ${serviceButtonLayout}`}
+                className={`tw:text-[color:var(--ink-700)] ${serviceButtonLayout}`}
                 onClick={() => openPublicService(service.id)}
               >
                 <Icon size={14} aria-hidden="true" className={service.danger ? "tw:shrink-0 tw:text-[#b5482f]" : "tw:shrink-0 tw:text-[color:var(--ui-action)]"} />
@@ -1867,7 +1933,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
           })}
           <Button
             variant="menu"
-            className={`tw:gap-2 tw:text-[0.83rem] tw:text-[color:var(--selected-ink)] ${enterButtonLayout}`}
+            className={`tw:text-[color:var(--selected-ink)] ${enterButtonLayout}`}
             onClick={() => openAuthEntry(AuthEntryOrigin.STAFF)}
           >
             <User size={15} aria-hidden="true" />
@@ -1892,7 +1958,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
             {(!procedureService || !selectedMunicipalityId) && (
               <div className="public-service-panel-header">
                 <h2>{activePublicService === REQUEST_ACCESS_SERVICE ? "Acessar minha solicitação" : activePublicServiceDetails?.label || "Serviço"}</h2>
-                <button type="button" className="ghost-button" onClick={closePublicService}>Voltar ao início</button>
+                {!publicServiceDone && <Button variant="outline" className="tw:shrink-0" onClick={closePublicService}>Voltar ao início</Button>}
               </div>
             )}
 
@@ -2015,9 +2081,12 @@ function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
     city: "",
     state: "",
   });
-  const [status, setStatus] = useState("");
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const [sent, setSent] = useState(false);
+  const submitting = useRef(false);
   const selectedType = accessRequesterTypes.find((type) => type.id === form.requesterType) || accessRequesterTypes[0];
+  const fieldLabel = "tw:grid tw:gap-1.5 tw:text-sm tw:font-medium tw:text-ui-ink";
 
   function patch(field, value) {
     setForm((current) => ({ ...current, [field]: value }));
@@ -2025,11 +2094,14 @@ function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
 
   async function submit(event) {
     event.preventDefault();
+    if (submitting.current) return;
     if (!form.responsibleName.trim() || !form.email.trim()) {
-      setStatus("Informe o responsável e o email para contato.");
+      setError("Informe o responsável e o email para contato.");
       return;
     }
-    setStatus("Enviando solicitação...");
+    submitting.current = true;
+    setSaving(true);
+    setError("");
     try {
       await onSubmit?.({
         requester_type: form.requesterType,
@@ -2044,102 +2116,95 @@ function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
         municipality_id: municipalityId,
       });
       setSent(true);
-      setStatus("");
     } catch (err) {
-      setStatus(err.message || "Não foi possível enviar a solicitação.");
+      setError(err instanceof Error && err.message ? err.message : "Não foi possível enviar a solicitação.");
+    } finally {
+      submitting.current = false;
+      setSaving(false);
     }
   }
 
   return (
-    <div className="public-inline-card public-access-inline">
-      <form className="single-request-form clean-form" onSubmit={submit}>
+    <Card className="tw:p-4 tw:sm:p-6">
+      <form className="tw:grid tw:gap-4" aria-label="Solicitar credenciamento" aria-busy={saving} onSubmit={submit}>
         {sent ? (
-          <div className="access-modal-success">
-            <CheckCircle2 size={38} strokeWidth={1.5} />
-            <h2>Solicitação enviada!</h2>
-            <p>Um usuário interno vai analisar o pedido e liberar o acesso se estiver tudo certo.</p>
-
+          <div className="tw:grid tw:min-h-48 tw:content-center tw:justify-items-center tw:gap-2 tw:text-center" role="status">
+            <CheckCircle2 size={38} strokeWidth={1.5} className="tw:text-ui-accent" aria-hidden="true" />
+            <h3 className="tw:m-0 tw:text-lg tw:font-semibold">Solicitação enviada!</h3>
+            <p className="tw:m-0 tw:text-ui-text">Um usuário interno vai analisar o pedido e liberar o acesso se estiver tudo certo.</p>
           </div>
         ) : (
           <>
-            <div className="public-inline-heading"><span className="public-inline-icon"><Shield size={18} /></span><div><strong>Solicitar credenciamento</strong><span>Acesso ao sistema para ONGs e protetores independentes.</span></div></div>
+            <div className="tw:flex tw:items-center tw:gap-3">
+              <span className="tw:inline-flex tw:size-10 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-[10px] tw:bg-ui-accent-soft tw:text-ui-accent"><Shield size={18} aria-hidden="true" /></span>
+              <div>
+                <h3 className="tw:m-0 tw:text-base tw:font-semibold">Solicitar credenciamento</h3>
+                <p className="tw:m-0 tw:text-sm tw:text-ui-text">Acesso ao sistema para ONGs e protetores independentes.</p>
+              </div>
+            </div>
 
-            <div className="access-type-picker">
+            <div className="tw:grid tw:gap-2 tw:sm:grid-cols-2" role="group" aria-label="Tipo de solicitante">
               {accessRequesterTypes.map((type) => (
-                <button
+                <Card
+                  as="button"
                   key={type.id}
-                  type="button"
-                  className={`access-type-card${form.requesterType === type.id ? " is-selected" : ""}`}
+                  aria-pressed={form.requesterType === type.id}
+                  className="tw:flex tw:enabled:cursor-pointer tw:flex-col tw:items-start tw:gap-1 tw:px-3.5 tw:py-3 tw:text-left tw:enabled:hover:border-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent"
+                  disabled={saving}
                   onClick={() => patch("requesterType", type.id)}
                 >
-                  <span className="access-type-icon">
-                    {type.id === "ONG" ? <Building2 size={17} /> : <HeartHandshake size={17} />}
+                  <span className="tw:inline-flex tw:size-8 tw:items-center tw:justify-center tw:rounded-lg tw:bg-ui-accent-soft tw:text-ui-accent">
+                    {type.id === "ONG" ? <Building2 size={17} aria-hidden="true" /> : <HeartHandshake size={17} aria-hidden="true" />}
                   </span>
-                  <span className="access-type-label">{type.label}</span>
-                  <span className="access-type-sector">{type.sector}</span>
-                </button>
+                  <span className="tw:text-sm tw:font-semibold tw:text-ui-ink">{type.label}</span>
+                  <span className="tw:text-xs tw:text-ui-text">{type.sector}</span>
+                </Card>
               ))}
             </div>
 
-            <div className="single-request-form clean-form">
-              <label className="access-form-label">
-                <span>Organização</span>
-                <div className="access-field">
-                  <input type="text" placeholder="Nome da ONG ou grupo (opcional para protetor)" value={form.organizationName} onChange={(e) => patch("organizationName", e.target.value)} />
-                </div>
+            <label className={fieldLabel}>
+              <span>Organização</span>
+              <Input type="text" placeholder="Nome da ONG ou grupo (opcional para protetor)" value={form.organizationName} onChange={(e) => patch("organizationName", e.target.value)} autoComplete="organization" disabled={saving} />
+            </label>
+            <label className={fieldLabel}>
+              <span>Responsável</span>
+              <Input type="text" placeholder="Nome completo do responsável *" value={form.responsibleName} onChange={(e) => patch("responsibleName", e.target.value)} autoComplete="name" required disabled={saving} />
+            </label>
+            <label className={fieldLabel}>
+              <span>Email</span>
+              <Input type="email" placeholder="Email para contato *" value={form.email} onChange={(e) => patch("email", e.target.value)} autoComplete="email" required disabled={saving} />
+            </label>
+            <div className="tw:grid tw:gap-4 tw:sm:grid-cols-2">
+              <label className={fieldLabel}>
+                <span>Telefone</span>
+                <Input type="tel" placeholder="(00) 00000-0000" value={form.phone} onChange={(e) => patch("phone", formatPhone(e.target.value))} autoComplete="tel" disabled={saving} />
               </label>
-              <label className="access-form-label">
-                <span>Responsável</span>
-                <div className="access-field">
-                  <input type="text" placeholder="Nome completo do responsável *" value={form.responsibleName} onChange={(e) => patch("responsibleName", e.target.value)} required />
-                </div>
+              <label className={fieldLabel}>
+                <span>CPF / CNPJ</span>
+                <Input type="text" placeholder="CPF, CNPJ ou matrícula" value={form.document} onChange={(e) => patch("document", /^[0-9.\-/\s]*$/.test(e.target.value) ? formatCpfOrCnpj(e.target.value) : e.target.value)} disabled={saving} />
               </label>
-              <label className="access-form-label">
-                <span>Email</span>
-                <div className="access-field">
-                  <input type="email" placeholder="Email para contato *" value={form.email} onChange={(e) => patch("email", e.target.value)} required />
-                </div>
+            </div>
+            <div className="tw:grid tw:gap-4 tw:sm:grid-cols-2">
+              <label className={fieldLabel}>
+                <span>Cidade</span>
+                <Input type="text" placeholder="Cidade" value={form.city} onChange={(e) => patch("city", e.target.value)} autoComplete="address-level2" disabled={saving} />
               </label>
-              <div className="two-column-fields">
-                <label className="access-form-label">
-                  <span>Telefone</span>
-                  <div className="access-field">
-                    <input type="tel" placeholder="(00) 00000-0000" value={form.phone} onChange={(e) => patch("phone", formatPhone(e.target.value))} />
-                  </div>
-                </label>
-                <label className="access-form-label">
-                  <span>CPF / CNPJ</span>
-                  <div className="access-field">
-                    <input type="text" placeholder="CPF, CNPJ ou matrícula" value={form.document} onChange={(e) => patch("document", /^[0-9.\-/\s]*$/.test(e.target.value) ? formatCpfOrCnpj(e.target.value) : e.target.value)} />
-                  </div>
-                </label>
-              </div>
-              <div className="two-column-fields">
-                <label className="access-form-label">
-                  <span>Cidade</span>
-                  <div className="access-field">
-                    <input type="text" placeholder="Cidade" value={form.city} onChange={(e) => patch("city", e.target.value)} />
-                  </div>
-                </label>
-                <label className="access-form-label">
-                  <span>UF</span>
-                  <div className="access-field">
-                    <input type="text" placeholder="UF" value={form.state} maxLength={2} onChange={(e) => patch("state", e.target.value.toUpperCase().slice(0, 2))} />
-                  </div>
-                </label>
-              </div>
+              <label className={fieldLabel}>
+                <span>UF</span>
+                <Input type="text" placeholder="UF" value={form.state} maxLength={2} onChange={(e) => patch("state", e.target.value.toUpperCase().slice(0, 2))} autoComplete="address-level1" disabled={saving} />
+              </label>
             </div>
 
-            {status && <p className={`access-status${status.includes("Enviando") ? " is-sending" : " is-error"}`}>{status}</p>}
+            {error && <p className="form-error" role="alert">{error}</p>}
 
-            <button className="primary-action" type="submit">
-              <Shield size={14} />
-              Enviar solicitação
-            </button>
+            <Button className="tw:justify-self-start" type="submit" disabled={saving}>
+              <Shield size={14} aria-hidden="true" />
+              {saving ? "Enviando solicitação..." : "Enviar solicitação"}
+            </Button>
           </>
         )}
       </form>
-    </div>
+    </Card>
   );
 }
 
@@ -2164,9 +2229,9 @@ function MutiraoBanner({ scheduleDay, onJoin }: AnyRecord) {
           )}
         </div>
       </div>
-      <button type="button" className="mutirao-banner-cta" onClick={onJoin}>
+      <Button variant="custom" className="tw:shrink-0 tw:border-[#c2410c] tw:bg-transparent tw:font-semibold tw:text-[#c2410c] tw:hover:bg-[#c2410c] tw:hover:text-[#fff7ed] tw:max-[640px]:w-full" onClick={onJoin}>
         Quero participar
-      </button>
+      </Button>
     </section>
   );
 }
@@ -2174,7 +2239,12 @@ function MutiraoBanner({ scheduleDay, onJoin }: AnyRecord) {
 function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSelect, compact = false }: AnyRecord) {
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const searchRef = useRef(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverId = useId();
+  useEffect(() => {
+    if (popoverOpen) searchRef.current?.focus();
+  }, [popoverOpen]);
 
   const selected = municipalities.find((m) => m.id === selectedMunicipalityId);
   const multiState = new Set(municipalities.map((m) => m.state).filter(Boolean)).size > 1;
@@ -2188,21 +2258,34 @@ function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSe
   function open() {
     setSearch("");
     setPopoverOpen(true);
-    setTimeout(() => searchRef.current?.focus(), 50);
+  }
+
+  function close() {
+    setPopoverOpen(false);
+    triggerRef.current?.focus();
   }
 
   function pick(id) {
     onSelect(id);
-    setPopoverOpen(false);
+    close();
     setSearch("");
   }
 
   return (
-    <div style={{ position: "relative", display: "inline-block" }}>
+    <div className="tw:relative tw:inline-block" onKeyDown={(event) => {
+      if (event.key === "Escape" && popoverOpen) {
+        event.preventDefault();
+        close();
+      }
+    }}>
       <button
+        ref={triggerRef}
         type="button"
         className={`municipality-chip-btn${selected ? " selected" : ""}${compact ? " compact" : ""}`}
-        onClick={() => (popoverOpen ? setPopoverOpen(false) : open())}
+        aria-label={compact && selected ? "Trocar município" : undefined}
+        aria-expanded={popoverOpen}
+        aria-controls={popoverOpen ? popoverId : undefined}
+        onClick={popoverOpen ? close : open}
       >
         {compact && selected ? (
           <><ChevronDown size={13} />trocar</>
@@ -2212,13 +2295,14 @@ function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSe
       </button>
       {popoverOpen && (
         <>
-          <div className="municipality-popover-backdrop" onClick={() => setPopoverOpen(false)} />
-          <div className="municipality-popover">
+          <div className="municipality-popover-backdrop" onClick={close} />
+          <div className="municipality-popover" id={popoverId}>
             <div className="mun-search-box">
               <Search size={14} />
               <input
                 ref={searchRef}
                 type="text"
+                aria-label="Buscar município"
                 placeholder="Buscar município..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -2226,12 +2310,13 @@ function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSe
             </div>
             <div className="mun-list">
               {filtered.length === 0 && (
-                <p className="mun-empty">Nenhum resultado</p>
+                <p className="mun-empty" role="status">Nenhum resultado</p>
               )}
               {filtered.map((m) => (
                 <button
                   key={m.id}
                   type="button"
+                  aria-pressed={m.id === selectedMunicipalityId}
                   className={`mun-list-item${m.id === selectedMunicipalityId ? " active" : ""}`}
                   onClick={() => pick(m.id)}
                 >
@@ -2258,66 +2343,35 @@ async function downloadAnimalRecordPdf(record: AnimalRecord) {
   anchor.click();
 }
 
-function TutorDashboard({ requests, setActive, currentUser, compact = false }: AnyRecord) {
+function TutorDashboard({ requests, currentUser }: AnyRecord) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
-  const next = safeRequests.find((request) => request.status === "AGENDADA" && (request.appointment || request.preferredSchedule));
   const [detailsRequest, setDetailsRequest] = useState(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const detailsAnimal = detailsRequest?.animals?.[0] || {};
-  const detailsAnimalHistory = detailsRequest ? buildPublicAnimalHistory(detailsRequest, detailsAnimal) : [];
 
   return (
-    <section className={compact ? "simple-stack consultation-results" : "content-grid"}>
-      {!compact && <div className="hero-panel">
-        <div>
-          <h2>Olá, {currentUser.name}</h2>
-        </div>
-        <button className="primary-action" onClick={() => setActive("solicitacao")}>
-          <Plus size={18} />
-          Nova solicitação
-        </button>
-      </div>}
-
-      {!compact && <div className="summary-row">
-        <Metric title={compact ? "Ativas" : "Solicitações ativas"} value={safeRequests.filter((r) => r.status === "NOVA" || r.status === "AGENDADA").length} icon={ClipboardCheck} />
-        <Metric title="Próximo agendamento" value={next ? next.appointment || next.preferredSchedule : "Nenhum"} icon={CalendarDays} />
-        <Metric title={compact ? "Avisos" : "Notificações"} value="4" icon={Bell} />
-      </div>}
-
-      <div className="panel wide">
-        <div className="panel-header">
-          <h3>{compact ? "Solicitações" : "Minhas solicitações"}</h3>
-        </div>
-        <div className="request-list">
-          {safeRequests.length === 0 && (
-            <EmptyState
-              title="Nenhuma solicitação cadastrada"
-              text="Crie a primeira solicitação para iniciar os testes do fluxo completo."
-              action="Nova solicitação"
-              onAction={() => setActive("solicitacao")}
-            />
-          )}
-          {safeRequests.slice(0, compact ? safeRequests.length : 4).map((request) => (
-            <article className="request-card" key={request.id}>
-              <div className="request-card-main">
+    <>
+      <Card as="section" className="tw:grid tw:gap-4 tw:p-5">
+        <h2 className="tw:m-0 tw:text-xl">Minhas solicitações</h2>
+        <div className="tw:grid tw:gap-3">
+          {safeRequests.map((request) => (
+            <Card as="article" key={request.id} className="tw:grid tw:items-center tw:gap-3 tw:p-4 tw:min-[721px]:grid-cols-[minmax(0,1fr)_auto_auto]">
+              <div className="tw:grid tw:min-w-0 tw:gap-1 tw:[overflow-wrap:anywhere]">
                 <strong>#{request.protocol}</strong>
                 <span>{request.animals.map((animal) => animal.name).join(", ") || "Animal não informado"}</span>
                 <small>{requestTypeLabel(request)}</small>
               </div>
-              <div className="request-card-status">
+              <div className="tw:grid tw:justify-items-start tw:gap-1">
                 <StatusBadge status={request.status} className="card-status-plain" />
-                <span className="request-card-date">{request.appointment || request.preferredSchedule || request.createdAt}</span>
+                <span className="tw:text-sm tw:text-ui-muted">{request.appointment || request.preferredSchedule || request.createdAt}</span>
               </div>
-              <div className="request-card-actions">
-                <button className="ghost-button" type="button" onClick={() => setDetailsRequest(request)}>
-                  Detalhes
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </article>
+              <Button variant="outline" className="tw:justify-self-start" onClick={() => setDetailsRequest(request)}>
+                Detalhes
+                <ChevronRight size={16} aria-hidden="true" />
+              </Button>
+            </Card>
           ))}
         </div>
-      </div>
+      </Card>
       {detailsRequest && (() => {
         const req = detailsRequest;
         const animal = req.animals?.[0] || {};
@@ -2329,7 +2383,7 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }: A
         const cancelReason = wf.cancelReason || req.rejectionReason || "";
         return (
           <div className="modal-backdrop">
-            <div className="public-request-details-modal prontuario-modal" role="dialog" aria-modal="true">
+            <div className="public-request-details-modal prontuario-modal" role="dialog" aria-modal="true" aria-label={`Prontuário · #${req.protocol}`}>
               <div className="prontuario-modal-header">
                 <div className="prontuario-modal-title">
                   <span className="prontuario-modal-eyebrow">Prontuário · #{req.protocol}</span>
@@ -2337,10 +2391,10 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }: A
                   <StatusBadge status={req.status} />
                 </div>
                 <div className="prontuario-modal-actions">
-                  <button
-                    className="icon-btn-flat"
-                    type="button"
+                  <Button
+                    variant="outline"
                     title="Baixar prontuário do animal"
+                    aria-label="Baixar prontuário do animal"
                     disabled={downloadingId === req.id}
                     onClick={async () => {
                       setDownloadingId(req.id);
@@ -2360,11 +2414,9 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }: A
                       } finally { setDownloadingId(null); }
                     }}
                   >
-                    <Download size={16} />
-                  </button>
-                  <button className="icon-btn-flat" type="button" onClick={() => setDetailsRequest(null)} aria-label="Fechar">
-                    <X size={16} />
-                  </button>
+                    <Download size={16} aria-hidden="true" />
+                  </Button>
+                  <CloseButton onClick={() => setDetailsRequest(null)} aria-label="Fechar prontuário" />
                 </div>
               </div>
 
@@ -2424,29 +2476,8 @@ function TutorDashboard({ requests, setActive, currentUser, compact = false }: A
           </div>
         );
       })()}
-    </section>
+    </>
   );
-}
-
-function buildPublicAnimalHistory(request: AnyRecord = {}, animal: AnyRecord = {}) {
-  const performed = request.performedProcedures || request.workflow_data?.performedProcedures || request.workflowData?.performedProcedures || "";
-  const procedureStatus = request.status === "REALIZADA"
-    ? performed || animal.procedure || animalProcedureLabels(animal, request).join(", ") || requestTypeLabel(request)
-    : animal.procedure || animalProcedureLabels(animal, request).join(", ") || requestTypeLabel(request);
-  return [
-    { label: "Espécie", value: displayText(animal.species || "Não informado") },
-    { label: "Sexo", value: displayText(animal.sex || "Não informado") },
-    { label: "Porte", value: displayText(animal.size || "Não informado") },
-    { label: "Raça", value: displayText(animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "Não informado")) },
-    { label: "Nascimento / idade", value: animal.birthDate || animal.age || "Não informado" },
-    { label: "Peso", value: animal.weight ? `${animal.weight} kg` : "Não informado" },
-    { label: "Microchip", value: animal.microchip || request.animalMicrochip || "Não informado" },
-    { label: request.status === "REALIZADA" ? "Procedimento realizado" : "Procedimento solicitado", value: displayText(procedureStatus || "Não informado") },
-    { label: "Vermifugado", value: displayText(animal.dewormed || "Não informado") },
-    { label: "Vacinas em dia", value: displayText(animal.vaccinated || "Não informado") },
-    { label: "Histórico de doenças", value: displayText(animal.illnessHistory || "Não informado") },
-    { label: "Alimentação", value: displayText(animal.food || "Não informado") },
-  ].filter((item) => item.value);
 }
 
 function NewRequest({
@@ -2522,6 +2553,7 @@ function NewRequest({
   const [documentUploads, setDocumentUploads] = useState<AnyRecord>({});
   const documentUploadGeneration = useRef(0);
   const animalPhotoGeneration = useRef(0);
+  const animalPhotoInput = useRef<HTMLInputElement>(null);
   const [animalPhotoLoading, setAnimalPhotoLoading] = useState(false);
   useEffect(() => () => { documentUploadGeneration.current += 1; }, []);
   const [reusedDocuments, setReusedDocuments] = useState<Record<string, ReusableDocumentCandidate>>({});
@@ -2529,7 +2561,7 @@ function NewRequest({
   const [formStep, setFormStep] = useState<RequestStep>(RequestStep.TUTOR);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [previewDocument, setPreviewDocument] = useState(null);
+  const [previewDocument, setPreviewDocument] = useState<AnyRecord | null>(null);
   const [submissionError, setSubmissionError] = useState("");
   const [followUp, setFollowUp] = useState<FollowUpValue>(emptyFollowUp);
   // The public form asks first how the person wants to request: the rest of the step opens for a first request.
@@ -3047,6 +3079,10 @@ function NewRequest({
     }
   }
 
+  const RequestButton = internalSimple ? "button" : Button;
+  const animalActionStyle = internalSimple ? "anm-add-btn" : "tw:min-w-0 tw:flex-1 tw:whitespace-normal tw:text-center tw:text-[color:var(--ui-action)]";
+  const uploadedPhoto = documentUploads.animal_photo;
+
   return (
     <>
       <RequestFormLayout
@@ -3062,18 +3098,18 @@ function NewRequest({
         error={submissionError}
         actions={formStep === RequestStep.ANIMAL && !registered && (
           <>
-            <button className="anm-add-btn" type="button" onClick={addAnimal}>
+            <RequestButton className={animalActionStyle} variant={internalSimple ? undefined : "outline"} type="button" onClick={addAnimal}>
               <PlusCircle size={18} aria-hidden="true" />
               Adicionar outro animal
-            </button>
-            <button className="anm-add-btn" type="button" onClick={duplicatePreviousAnimal}>
+            </RequestButton>
+            <RequestButton className={animalActionStyle} variant={internalSimple ? undefined : "outline"} type="button" onClick={duplicatePreviousAnimal}>
               <RefreshCw size={18} aria-hidden="true" />
               Repetir os dados do anterior
-            </button>
+            </RequestButton>
           </>
         )}
       >
-          {formStep === RequestStep.TUTOR && <FormSection title="Você">
+          {formStep === RequestStep.TUTOR && <div className="form-section">
             <RequesterStep
               entry={onRegisteredAnimal ? { first: firstRequest, onFirst: () => setFirstRequest(true), onRegistered: onRegisteredAnimal } : undefined}
               tutorship={tutorship}
@@ -3087,6 +3123,7 @@ function NewRequest({
               }}
               tutorFields={{
                 data: requestData,
+                internal: internalSimple,
                 nameInvalid: showInvalid("tutor"),
                 nameIssue: validateTutorName(requestData.tutor),
                 cpfInvalid: showInvalid("cpf"),
@@ -3101,9 +3138,9 @@ function NewRequest({
               onFollowUpChange={setFollowUp}
               policy={{ loading: followUpPolicy.loading, error: followUpPolicy.error, phoneEnabled: followUpPolicy.phoneEnabled, retry: followUpPolicy.retry }}
             />
-          </FormSection>}
+          </div>}
 
-          {formStep === RequestStep.ANIMAL && <FormSection title="Agora, conte sobre o animal">
+          {formStep === RequestStep.ANIMAL && <div className="form-section">
             {registeredContext ? <><RegisteredRequestSelection context={registeredContext} selectedType={selectedRequestTypes[0]?.name || ""} onSelectType={selectRegisteredProcedure} />{contextLoading && <p role="status">Atualizando os requisitos do procedimento...</p>}</> : <>
             {animals.map((animal, index) => {
               const header = animalHeader(animal, index);
@@ -3115,6 +3152,7 @@ function NewRequest({
                   detail={header.detail}
                   open={animals.length === 1 || expandedAnimal === index}
                   collapsible={animals.length > 1}
+                  internal={internalSimple}
                   onToggle={() => setExpandedAnimal(expandedAnimal === index ? -1 : index)}
                 >
                   <AnimalFields
@@ -3137,27 +3175,28 @@ function NewRequest({
                     onSelectSpecies={(value) => selectSpecies(index, value)}
                   />
                   {animals.length > 1 && (
-                    <button className="animal-remove-inline" type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
+                    <RequestButton className={internalSimple ? "animal-remove-inline" : "tw:self-start"} variant={internalSimple ? undefined : "danger"} type="button" onClick={() => { removeAnimal(index); setExpandedAnimal(Math.max(0, index - 1)); }}>
                       Remover animal {index + 1}
-                    </button>
+                    </RequestButton>
                   )}
                 </AnimalAccordionCard>
               );
             })}
             {animals.length > 1 && hasConfiguredTypes && (
               <div className="anm-actions-row">
-                <button className="ghost-button" type="button" onClick={applyFirstProceduresToAll} disabled={animalRequestTypeIds(animals[0]).length === 0}>
+                <RequestButton className={internalSimple ? "ghost-button" : "tw:whitespace-normal"} variant={internalSimple ? undefined : "outline"} type="button" onClick={applyFirstProceduresToAll} disabled={animalRequestTypeIds(animals[0]).length === 0}>
                   Aplicar os procedimentos do Animal 1 a todos
-                </button>
+                </RequestButton>
               </div>
             )}
             </>}
-          </FormSection>}
+          </div>}
 
-          {formStep === RequestStep.SCHEDULE && <FormSection title="Agenda">
+          {formStep === RequestStep.SCHEDULE && <div className="form-section">
             {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
-            {availability.error && <p className="form-error" role="alert">{availability.error} <button type="button" className="ghost-button" onClick={availability.refresh}>Tentar novamente</button></p>}
+            {availability.error && <p className="form-error" role="alert">{availability.error} <RequestButton type="button" className={internalSimple ? "ghost-button" : undefined} variant={internalSimple ? undefined : "outline"} onClick={availability.refresh}>Tentar novamente</RequestButton></p>}
             <PublicSchedulePicker
+              external={!internalSimple}
               scheduleDays={scheduleDays}
               selectedDate={requestData.schedule}
               selectedOccurrenceKey={requestData.scheduleOccurrenceKey}
@@ -3176,9 +3215,9 @@ function NewRequest({
                 />
               </label>
             )}
-          </FormSection>}
+          </div>}
 
-          {formStep === RequestStep.DOCUMENTS && <FormSection title={internalSimple ? "Documentos" : "Quase lá! Faltam só os documentos"}>
+          {formStep === RequestStep.DOCUMENTS && <div className="form-section">
             <div className="form-sub-card documents-step-card">
               <div className="documents-step-header">
                 <span className="form-sub-card-title">{internalSimple ? "Documentos" : "Quase lá! Faltam só os documentos"}</span>
@@ -3187,7 +3226,7 @@ function NewRequest({
 
               <div className="documents-step-grid">
                 <aside className="documents-photo-column">
-                  <label className="doc-photo-zone doc-photo-zone--compact">
+                  {internalSimple ? <label className="doc-photo-zone doc-photo-zone--compact">
                     {documentUploads.animal_photo?.dataUrl ? (
                       <img className="doc-photo-preview" src={documentUploads.animal_photo.dataUrl} alt="Foto do animal" onClick={(e) => { e.preventDefault(); setPreviewDocument(documentUploads.animal_photo); }} />
                     ) : (
@@ -3203,7 +3242,23 @@ function NewRequest({
                         <Trash2 size={13} />
                       </button>
                     )}
-                  </label>
+                  </label> : (
+                    <Card className="tw:grid tw:justify-items-center tw:gap-3 tw:p-3 tw:text-center">
+                      {uploadedPhoto?.dataUrl ? (
+                        <img className="tw:max-h-40 tw:w-full tw:rounded-[var(--ui-radius-md)] tw:object-contain" src={uploadedPhoto.dataUrl} alt="Foto do animal" />
+                      ) : <ImagePlus size={22} aria-hidden="true" className="tw:text-ui-accent" />}
+                      <span className="tw:text-sm tw:font-medium" role={animalPhotoLoading ? "status" : undefined}>
+                        {animalPhotoLoading ? "Carregando foto..." : reusedDocuments.animal_photo?.fileName || "Foto do animal"}
+                      </span>
+                      <small className="tw:text-ui-muted">{reusedDocuments.animal_photo ? "Foto reaproveitada" : "Opcional"}</small>
+                      <input ref={animalPhotoInput} type="file" accept="image/*" hidden onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
+                      <div className="tw:flex tw:flex-wrap tw:justify-center tw:gap-2">
+                        <Button variant="outline" disabled={animalPhotoLoading} onClick={() => animalPhotoInput.current?.click()}>{uploadedPhoto ? "Substituir foto" : "Anexar foto"}</Button>
+                        {uploadedPhoto?.dataUrl && <Button variant="outline" onClick={() => setPreviewDocument(uploadedPhoto)}>Ver foto</Button>}
+                        {uploadedPhoto && <Button variant="danger" onClick={() => removeDocumentFile("animal_photo")}>Remover foto</Button>}
+                      </div>
+                    </Card>
+                  )}
                   {registeredContext && !contextLoading && <ReusableDocumentChoices candidates={registeredContext.documents.filter((candidate) => candidate.documentId === "animal_photo")} selected={reusedDocuments.animal_photo} onSelect={(candidate) => { animalPhotoGeneration.current += 1; setAnimalPhotoLoading(false); removeDocumentFile("animal_photo"); setReusedDocuments((current) => ({ ...current, animal_photo: candidate })); }} onPreview={setReusedPreview} onRemove={() => setReusedDocuments((current) => removeReusedDocument(current, "animal_photo"))} />}
                 </aside>
 
@@ -3227,6 +3282,7 @@ function NewRequest({
                           aiActive={aiSettings.active && document.analysisRules?.useAi !== false}
                           onUpload={(file) => handleDocumentFile(document, file)}
                           onRemove={() => removeDocumentFile(document.id)}
+                          onPreview={internalSimple ? undefined : setPreviewDocument}
                         />}
                         </div>
                       );
@@ -3236,20 +3292,19 @@ function NewRequest({
                   {!internalSimple && <div className="doc-declaration">
                     <p>
                       <span>Declaração de responsabilidade</span>{" · "}
-                      <button className="inline-link-button" type="button" onClick={openDeclarationPdf}>Ler</button>
+                      <Button variant="outline" onClick={openDeclarationPdf}>Ler</Button>
                     </p>
-                    <label className={`doc-accept-check${showInvalid("accepted") ? " is-invalid" : ""}`}>
-                      <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
-                      <span className="doc-check-box" />
+                    <label className={`tw:flex tw:min-h-10 tw:cursor-pointer tw:items-center tw:gap-2 tw:text-sm ${showInvalid("accepted") ? "tw:text-ui-danger" : "tw:text-ui-text"}`}>
+                      <input type="checkbox" className="tw:size-5 tw:shrink-0 tw:accent-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent" aria-invalid={showInvalid("accepted") || undefined} checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
                       <span>Li e concordo<span className="required-asterisk">*</span></span>
                     </label>
                   </div>}
                 </div>
               </div>
             </div>
-          </FormSection>}
+          </div>}
       </RequestFormLayout>
-      {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} />}
+      {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} external={!internalSimple} />}
       {reusedPreview && registeredContext && <ReusableDocumentPreview key={`${reusedPreview.attachmentId}:${reusedPreview.reuseRef.hash}`} animalId={registeredContext.animal.id} candidate={reusedPreview} onClose={() => setReusedPreview(null)} />}
     </>
   );
@@ -3351,17 +3406,41 @@ function buildDeclarationPdfHtml(requestData, animals = [], declaration) {
   </body>
 </html>`;
 }
-export function DocumentPreviewModal({ document, onClose }: AnyRecord) {
+export function DocumentPreviewModal({ document, onClose, external = false }: AnyRecord) {
+  const dialogRef = useRef<HTMLDivElement>(null);
   const dataUrl = getDocumentPreviewSource(document);
   const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
   const isImage = mimeType?.startsWith("image/");
   const isPdf = mimeType === "application/pdf";
   const canPreview = Boolean(dataUrl) && (isImage || isPdf);
+  const title = document.documentName || document.fileName;
+
+  useEffect(() => {
+    if (!external) return;
+    const trigger = window.document.activeElement;
+    dialogRef.current?.querySelector("button")?.focus();
+    return () => { if (trigger instanceof HTMLElement) trigger.focus(); };
+  }, [external]);
 
   return (
     <div className="modal-backdrop">
-      <div className="document-preview-modal" role="dialog" aria-modal="true">
-        <ModalHeader title={document.documentName || document.fileName} subtitle={document.fileName !== (document.documentName || document.fileName) ? document.fileName : undefined} onClose={onClose} />
+      <div
+        ref={dialogRef}
+        className="document-preview-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={external ? title : undefined}
+        onKeyDown={external ? (event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } } : undefined}
+      >
+        {external ? (
+          <header className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:p-2">
+            <div className="tw:min-w-0 tw:break-words">
+              <h2 className="tw:m-0 tw:text-lg tw:font-semibold tw:text-ui-ink">{title}</h2>
+              {document.fileName !== title && <p className="tw:m-0 tw:text-sm tw:text-ui-muted">{document.fileName}</p>}
+            </div>
+            <CloseButton onClick={onClose} />
+          </header>
+        ) : <ModalHeader title={title} subtitle={document.fileName !== title ? document.fileName : undefined} onClose={onClose} />}
         <div className="document-preview-frame">
           {isImage && <img src={dataUrl} alt={document.documentName || document.fileName} />}
           {isPdf && (
@@ -3645,6 +3724,7 @@ function AdminDashboard({
             {createdRequest ? (
               <div className="nr-body">
                 <RequestDoneCard
+                  internal
                   protocol={createdRequest.protocol}
                   followUp={(createdRequest.workflow_data || createdRequest.workflowData)?.followUp}
                   createRequirement={() => createRequestPdfDataUrl(createdRequest, municipalities.find((item) => item.id === createdRequest.municipalityId))}
@@ -7332,7 +7412,8 @@ function DocumentButtonPicker({ documents, selectedDocuments, onToggle }: AnyRec
   );
 }
 
-function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove }: AnyRecord) {
+function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove, onPreview }: AnyRecord) {
+  const fileInput = useRef<HTMLInputElement>(null);
   const documentUsesAi = document.analysisRules?.useAi !== false;
   const needsReplacement = upload?.status === "attached" && upload?.aiVerdict === "rejected";
   const statusLabel = needsReplacement ? "Não confirmado" : ({
@@ -7360,7 +7441,7 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
 
   return (
     <>
-      <article className={`doc-row ${upload?.status || "empty"}${needsReplacement ? " needs-replacement" : ""}`}>
+      <article className={`doc-row ${upload?.status || "empty"}${needsReplacement ? " needs-replacement" : ""}${onPreview ? " tw:flex-wrap" : ""}`}>
         <div className="doc-row-icon">{statusIcon}</div>
         <div className="doc-row-info">
           <strong>{document.name}{document.required && <span className="doc-required">*</span>}</strong>
@@ -7370,21 +7451,30 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove 
           }
           {publicMessage && <small className="doc-row-msg">{publicMessage}</small>}
         </div>
-        <div className="doc-row-actions">
-          <label className="doc-attach-btn" title={upload ? "Substituir arquivo" : "Anexar arquivo"}>
-            <Paperclip size={15} />
-            <input
-              type="file"
-              accept={(document.accept || []).join(",")}
-              onClick={(event) => { event.currentTarget.value = ""; }}
-              onChange={(event) => onUpload(event.target.files?.[0])}
-            />
-          </label>
-          {upload && (
-            <button className="doc-remove-btn" type="button" onClick={onRemove} title="Remover">
-              <Trash2 size={14} />
-            </button>
-          )}
+        <div className={onPreview ? "tw:flex tw:w-full tw:flex-wrap tw:gap-2" : "doc-row-actions"}>
+          {onPreview ? <>
+            <input ref={fileInput} type="file" hidden accept={(document.accept || []).join(",")} onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => onUpload(event.target.files?.[0])} />
+            <Button variant="outline" onClick={() => fileInput.current?.click()} aria-label={`${upload ? "Substituir" : "Anexar"} ${document.name}`}>
+              <Paperclip size={15} aria-hidden="true" />{upload ? "Substituir" : "Anexar"}
+            </Button>
+            {upload?.dataUrl && <Button variant="outline" onClick={() => onPreview(upload)} aria-label={`Ver ${document.name}`}>Ver arquivo</Button>}
+            {upload && <Button variant="danger" onClick={onRemove} aria-label={`Remover ${document.name}`}><Trash2 size={14} aria-hidden="true" />Remover</Button>}
+          </> : <>
+            <label className="doc-attach-btn" title={upload ? "Substituir arquivo" : "Anexar arquivo"}>
+              <Paperclip size={15} />
+              <input
+                type="file"
+                accept={(document.accept || []).join(",")}
+                onClick={(event) => { event.currentTarget.value = ""; }}
+                onChange={(event) => onUpload(event.target.files?.[0])}
+              />
+            </label>
+            {upload && (
+              <button className="doc-remove-btn" type="button" onClick={onRemove} title="Remover">
+                <Trash2 size={14} />
+              </button>
+            )}
+          </>}
         </div>
       </article>
       {upload?.status === "checking" && upload?.dataUrl && (
@@ -7906,7 +7996,7 @@ function drawProntuarioSectionTitle(page, title, y, ctx, colorOverride: unknown 
   return y - 22;
 }
 
-// Espelha .animal-record-header da tela "Consultar prontuário": card neutro
+// Mirrors the neutral header card of the animal record.
 // (#f8fafc / borda #dbe5f1) com avatar circular escuro, nome, resumo,
 // microchip/município e o chip de status verde no canto direito.
 function drawAnimalRecordHeader(page, animalName, animalSummary, microchipLine, statusLabel, ctx) {
@@ -7991,7 +8081,7 @@ function drawProntuarioFields(page, rows, y, ctx, contentWidthOverride = 0, colo
 }
 
 function drawProntuarioSummaryCards(page, cards, y, ctx) {
-  // cards: { label, primary, secondary }[] — espelha .animal-record-summary-card da tela
+  // cards: { label, primary, secondary }[] mirrors the summaries shown in the animal record.
   const { font, bold, margin, rgb } = ctx;
   const cardBorder = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.cardBorder));
   const cardInk = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink));

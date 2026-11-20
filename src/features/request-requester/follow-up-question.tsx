@@ -1,4 +1,5 @@
 import { ChoiceQuestion } from "../../components/choice-question";
+import { Button } from "../../components/button";
 import type { FollowUpValue, TutorContacts } from "../request-follow-up/follow-up";
 
 const FollowUpAnswer = Object.freeze({ YES: "yes", NO: "no" });
@@ -16,11 +17,12 @@ interface FollowUpQuestionProps {
   error: string;
   onRetry: () => void;
   invalid?: boolean;
+  internal?: boolean;
 }
 
 // Whether the person wants the notices of the request, asked with no answer marked. With the contacts already known, the notices can
 // only be accepted when one of them can be reached, and the yes names the channels they will use.
-export function FollowUpQuestion({ value, onChange, reachable, phoneEnabled, loading, error, onRetry, invalid = false }: FollowUpQuestionProps) {
+export function FollowUpQuestion({ value, onChange, reachable, phoneEnabled, loading, error, onRetry, invalid = false, internal }: FollowUpQuestionProps) {
   const channels = reachable ? [reachable.email && "e-mail", reachable.phone && "celular"].filter(Boolean).join(" e ") : "";
   const unreachable = reachable !== null && !channels;
   const options = [
@@ -33,7 +35,13 @@ export function FollowUpQuestion({ value, onChange, reachable, phoneEnabled, loa
     <ChoiceQuestion question="Quer acompanhar esta solicitação?" options={options} value={answer} invalid={invalid}
       onChange={(next) => onChange({ enabled: next === FollowUpAnswer.YES })}>
       {loading && <p role="status">Carregando os canais de aviso...</p>}
-      {error && <div role="alert"><p className="form-error">{error}</p><button type="button" className="ghost-button" onClick={onRetry}>Tentar novamente</button></div>}
+      {error && (
+        <div role="alert">
+          <p className="form-error">{error}</p>
+          {internal ? <button type="button" className="ghost-button" onClick={onRetry}>Tentar novamente</button>
+            : <Button variant="outline" onClick={onRetry}>Tentar novamente</Button>}
+        </div>
+      )}
       {!loading && !error && unreachable && <p className="follow-up-notice" role="status">{phoneEnabled ? NO_CONTACT_TEXT : NO_CHANNEL_TEXT}</p>}
     </ChoiceQuestion>
   );

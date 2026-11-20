@@ -16,11 +16,14 @@ interface OptionCardGroupProps {
   required?: boolean;
   invalid?: boolean;
   stacked?: boolean;
+  external?: boolean;
 }
+
+const externalChoiceStyle = "tw:[--option-card-accent:var(--ui-action)] tw:[--option-card-active-surface:var(--accent-green-soft)] tw:[--option-card-active-text:var(--ui-action-hover)] tw:[--option-card-radius:var(--radius-lg)]";
 
 // A question in its own card: the question on top and one radio per answer. An option without a value
 // stores its label, and a stored label still marks its option.
-export function OptionCardGroup({ label, value, options, onChange, required = false, invalid = false, stacked = false }: OptionCardGroupProps) {
+export function OptionCardGroup({ label, value, options, onChange, required = false, invalid = false, stacked = false, external = false }: OptionCardGroupProps) {
   const name = useId();
   return (
     <fieldset className={`option-card${invalid ? " is-invalid" : ""}`}>
@@ -29,7 +32,7 @@ export function OptionCardGroup({ label, value, options, onChange, required = fa
         {options.map((option) => {
           const item = typeof option === "string" ? { value: option, label: option } : { ...option, value: option.value || option.label };
           return (
-            <label className="option-card-choice" key={item.value}>
+            <label className={external ? `option-card-choice ${externalChoiceStyle}` : "option-card-choice"} key={item.value}>
               <input type="radio" name={name} value={item.value} checked={Boolean(value) && (value === item.value || value === item.label)} onChange={() => onChange(item.value)} />
               <span>{item.label}</span>
               {item.subtitle && <small>{item.subtitle}</small>}

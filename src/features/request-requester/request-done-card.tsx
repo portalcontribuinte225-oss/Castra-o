@@ -1,4 +1,6 @@
 import { CheckCircle2 } from "lucide-react";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
 import { FollowUpSummary } from "../request-follow-up/follow-up-summary";
 import { useRequirementDownload } from "./use-requirement-download";
 
@@ -11,27 +13,30 @@ interface RequestDoneCardProps {
   onClose: () => void;
   // Only where the tutor has no password yet (the public form with a tutor): opens "Acessar minha solicitação".
   onCreatePassword?: () => void;
+  internal?: boolean;
 }
 
 // The last screen of a request, for the public page and for the staff's modal: the protocol, the notices and the request document.
-export function RequestDoneCard({ protocol, followUp, createRequirement, closeLabel, onClose, onCreatePassword }: RequestDoneCardProps) {
+export function RequestDoneCard({ protocol, followUp, createRequirement, closeLabel, onClose, onCreatePassword, internal = false }: RequestDoneCardProps) {
   const requirement = useRequirementDownload(createRequirement, protocol);
+  const Container = internal ? "div" : Card;
+  const Action = internal ? "button" : Button;
 
   return (
-    <div className="public-inline-success public-service-success-card">
-      <CheckCircle2 size={52} />
+    <Container className={internal ? "public-inline-success public-service-success-card" : "tw:mx-auto tw:grid tw:w-full tw:max-w-[680px] tw:justify-items-center tw:gap-3 tw:p-5 tw:text-center tw:text-ui-text tw:[&>h3]:m-0 tw:[&>h3]:text-xl tw:[&>h3]:font-semibold tw:[&>h3]:text-ui-ink tw:[&>p]:m-0"}>
+      <CheckCircle2 size={52} aria-hidden="true" className={internal ? undefined : "tw:text-ui-accent"} />
       <h3>Recebemos sua solicitação!</h3>
       <p>Ela está em análise.</p>
       <p>Protocolo oficial: <strong>{protocol}</strong></p>
       <FollowUpSummary value={followUp} />
-      <div className="public-service-success-actions">
-        <button className="primary-action" type="button" onClick={onClose}>{closeLabel}</button>
-        <button className="ghost-button" type="button" onClick={requirement.download} disabled={requirement.downloading}>
+      <div className={internal ? "public-service-success-actions" : "tw:flex tw:flex-wrap tw:justify-center tw:gap-2"}>
+        <Action className={internal ? "primary-action" : undefined} type="button" onClick={onClose}>{closeLabel}</Action>
+        <Action className={internal ? "ghost-button" : undefined} variant={internal ? undefined : "outline"} type="button" onClick={requirement.download} disabled={requirement.downloading}>
           {requirement.downloading ? "Gerando..." : "Baixar requerimento"}
-        </button>
-        {onCreatePassword && <button className="ghost-button" type="button" onClick={onCreatePassword}>Criar minha senha</button>}
+        </Action>
+        {onCreatePassword && <Action className={internal ? "ghost-button" : undefined} variant={internal ? undefined : "outline"} type="button" onClick={onCreatePassword}>Criar minha senha</Action>}
       </div>
-      {requirement.error && <p className="form-error">{requirement.error}</p>}
-    </div>
+      {requirement.error && <p className="form-error" role="alert">{requirement.error}</p>}
+    </Container>
   );
 }

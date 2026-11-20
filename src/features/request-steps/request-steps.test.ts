@@ -39,11 +39,22 @@ describe("RequestFormLayout", () => {
       expect(steps?.match(/aria-current="step"/g)).toHaveLength(1);
       expect(steps?.match(/<li[^>]*aria-current="step"[^>]*>(.*?)<\/li>/)?.[1]).toContain(label);
       expect(steps).not.toContain("<button");
-      expect(html).toMatch(/Campos da etapa<\/div><\/div><p[^>]*role="alert">Revise os dados<\/p><div class="nr-nav-row">/);
+      expect(html).toMatch(/Campos da etapa<\/div><\/div><p[^>]*role="alert">Revise os dados<\/p><div aria-label="Navegação da solicitação" role="group"/);
       expect(html.match(/Revise os dados/g)).toHaveLength(1);
-      const footer = html.split('<div class="nr-nav-row">')[1];
+      const footer = html.split('aria-label="Navegação da solicitação"')[1];
       expect(footer).toContain(stepIndex === requestSteps.length - 1 ? "Enviar" : "Próximo");
       expect(footer.includes(">Voltar<")).toBe(stepIndex > 0);
     }
+  });
+
+  it("keeps the team navigation and labels for an internal request", () => {
+    const noop = () => {};
+    const html = renderToStaticMarkup(createElement(RequestFormLayout, {
+      stepIndex: RequestStep.DOCUMENTS, stepInvalid: false, internal: true, onNavigate: noop, onSubmit: noop,
+      submitting: false, submitDisabled: true, error: "", children: "Documentos da equipe",
+    }));
+    expect(html).toContain('class="nr-nav-row"');
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Encerrar<\/button>/);
+    expect(html).not.toContain("data-ui-button");
   });
 });

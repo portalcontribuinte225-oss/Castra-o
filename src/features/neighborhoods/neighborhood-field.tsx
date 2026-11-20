@@ -1,4 +1,5 @@
 import { neighborhoodChoices } from "./neighborhoods";
+import { RequestTextField } from "../request-steps/request-text-field";
 
 interface NeighborhoodFieldProps {
   label?: string;
@@ -9,19 +10,20 @@ interface NeighborhoodFieldProps {
   invalid?: boolean;
   required?: boolean;
   placeholder?: string;
+  internal?: boolean;
 }
 
-export function NeighborhoodField({ label = "Bairro", value, names, onChange, invalid = false, required = false, placeholder = "Bairro" }: NeighborhoodFieldProps) {
+export function NeighborhoodField({ label = "Bairro", value, names, onChange, invalid = false, required = false, placeholder = "Bairro", internal }: NeighborhoodFieldProps) {
+  const fieldLabel = required ? `${label} *` : label;
+  if (!names.length) {
+    return <RequestTextField internal={internal} label={fieldLabel} type="text" aria-label={label} aria-invalid={invalid} placeholder={placeholder} maxLength={120} value={value || ""} onChange={(event) => onChange(event.target.value)} />;
+  }
   return (
-    <div className={`access-field${invalid ? " is-invalid" : ""}`} data-label={required ? `${label} *` : label}>
-      {names.length > 0 ? (
-        <select aria-label={label} aria-invalid={invalid} value={value || ""} onChange={(event) => onChange(event.target.value)}>
-          <option value="">Selecione o bairro</option>
-          {neighborhoodChoices(names, value).map((name) => <option key={name} value={name}>{name}</option>)}
-        </select>
-      ) : (
-        <input type="text" aria-label={label} aria-invalid={invalid} placeholder={placeholder} maxLength={120} value={value || ""} onChange={(event) => onChange(event.target.value)} />
-      )}
+    <div className={`access-field${invalid ? " is-invalid" : ""}`} data-label={fieldLabel}>
+      <select aria-label={label} aria-invalid={invalid} value={value || ""} onChange={(event) => onChange(event.target.value)}>
+        <option value="">Selecione o bairro</option>
+        {neighborhoodChoices(names, value).map((name) => <option key={name} value={name}>{name}</option>)}
+      </select>
     </div>
   );
 }

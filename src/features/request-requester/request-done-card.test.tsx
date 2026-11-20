@@ -17,7 +17,7 @@ describe("the last screen of a request", () => {
 
   it("closes with the label of the place it is in", () => {
     expect(markup({ closeLabel: "Voltar ao início" })).toContain("Voltar ao início");
-    expect(markup({ closeLabel: "Fechar" })).toMatch(/class="primary-action"[^>]*>Fechar</);
+    expect(markup({ closeLabel: "Fechar", internal: true })).toMatch(/class="primary-action"[^>]*>Fechar</);
   });
 
   it("tells what was chosen about the notices, with the contacts masked, and says nothing when nothing was chosen", () => {
@@ -30,7 +30,7 @@ describe("the last screen of a request", () => {
 
   it("offers to create the password only where it is given, after the request document, and never shows a password", () => {
     const html = markup({ onCreatePassword: noop });
-    expect(html).toMatch(/class="ghost-button"[^>]*>Criar minha senha</);
+    expect(html).toMatch(/data-ui-button=""[^>]*>Criar minha senha</);
     expect(html.indexOf("Baixar requerimento")).toBeLessThan(html.indexOf("Criar minha senha"));
     expect(markup()).not.toContain("Criar minha senha");
     expect(html).not.toMatch(/Senha inicial|senha temporária/i);

@@ -1,4 +1,5 @@
 import { Card } from "../../components/card";
+import { Button } from "../../components/button";
 import petHeroImage from "../../assets/caogato.avif";
 
 interface HeroCardProps {
@@ -6,8 +7,6 @@ interface HeroCardProps {
   onGoToAdoption: () => void;
   onPublicRequest: () => void;
 }
-
-const actionStyle = "tw:inline-flex tw:items-center tw:justify-center tw:rounded-full tw:border tw:border-solid tw:px-6 tw:py-3 tw:text-sm tw:whitespace-nowrap tw:motion-safe:transition-colors tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent";
 
 const homeLayout = [
   "tw:mx-auto tw:mt-[clamp(16px,2vw,28px)] tw:w-[min(1760px,100%_-_24px)] tw:gap-5 tw:p-5",
@@ -44,12 +43,12 @@ export function HeroCard({ variant = "home", onGoToAdoption, onPublicRequest }: 
           Castração gratuita, adoção responsável e bem-estar animal - digital e acessível.
         </p>
         <div className={`tw:mt-1.5 tw:flex tw:flex-wrap tw:gap-3 ${home ? "tw:max-[520px]:flex-col" : "tw:max-w-[260px] tw:flex-col"}`}>
-          <button type="button" className={`${actionStyle} tw:border-ui-accent tw:bg-ui-accent tw:text-white tw:hover:border-ui-accent-strong tw:hover:bg-ui-accent-strong`} onClick={onGoToAdoption}>
+          <Button variant="custom" className="tw:border-ui-accent tw:bg-ui-accent tw:text-white tw:hover:border-ui-accent-strong tw:hover:bg-ui-accent-strong" onClick={onGoToAdoption}>
             Quero adotar
-          </button>
-          <button type="button" className={`${actionStyle} tw:border-ui-ink tw:bg-transparent tw:text-ui-ink tw:hover:bg-ui-accent-soft`} onClick={onPublicRequest}>
+          </Button>
+          <Button variant="custom" className="tw:border-ui-ink tw:bg-transparent tw:text-ui-ink tw:hover:bg-ui-accent-soft" onClick={onPublicRequest}>
             Agendar castração
-          </button>
+          </Button>
         </div>
       </div>
       <img src={petHeroImage} alt="" className={`tw:pointer-events-none tw:block tw:min-w-0 tw:object-cover ${home ? homeArt : `${sidebarArt} ${artHeight}`}`} />

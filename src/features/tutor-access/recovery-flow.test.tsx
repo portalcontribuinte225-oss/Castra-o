@@ -58,8 +58,9 @@ describe("three-step password recovery", () => {
     const html = render(sent());
     for (const text of ["Redefinir senha", "Código recebido", "Nova senha", "Confirmar nova senha", "Salvar nova senha", "Reenviar código", "Voltar ao login"]) expect(html).toContain(text);
     for (const removed of ["CPF ou e-mail", "52998224725", "Escolha o contato", "15 caracteres", "expira em", "segundos", "60s", "Se houver uma conta"]) expect(html).not.toContain(removed);
-    expect(html).toContain('disabled="">Reenviar código');
-    expect(render(sent(), { expiresIn: 540, retryIn: 0 })).not.toContain('disabled="">Reenviar código');
+    const disabledResend = /<button\b[^>]*\bdisabled=""[^>]*>Reenviar código<\/button>/;
+    expect(html).toMatch(disabledResend);
+    expect(render(sent(), { expiresIn: 540, retryIn: 0 })).not.toMatch(disabledResend);
     expect(render(sent(), { expiresIn: 0, retryIn: 0 })).toContain("Código expirado. Reenvie.");
   });
 

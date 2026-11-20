@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { MouseEvent } from "react";
 import { Check, Share2 } from "lucide-react";
 import type { AnyRecord } from "../../types";
+import { Button } from "../../components/button";
 import { ShareOutcome, adoptionShareDetails, shareAdoptionLink } from "./share-adoption";
 
 export enum ShareButtonLook {
@@ -36,9 +37,9 @@ export function ShareAdoptionButton({ animal, look = ShareButtonLook.FULL }: { a
     return <button className="ghost-button" type="button" onClick={share} title={label} aria-label={label}>{icon}</button>;
   }
   return (
-    <button className="ghost-button adoption-share-button" type="button" onClick={share} aria-live="polite">
+    <Button variant="outline" className="tw:w-full" onClick={share} aria-live="polite">
       {icon}
       {label}
-    </button>
+    </Button>
   );
 }

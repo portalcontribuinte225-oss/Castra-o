@@ -748,32 +748,10 @@ button:disabled {
   text-decoration: underline;
 }
 
-.mutirao-banner-cta {
-  flex-shrink: 0;
-  border: 1px solid #c2410c;
-  background: transparent;
-  color: #c2410c;
-  border-radius: 999px;
-  padding: 9px 18px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.mutirao-banner-cta:hover {
-  background: #c2410c;
-  color: #fff7ed;
-}
-
 @media (max-width: 640px) {
   .mutirao-banner {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .mutirao-banner-cta {
-    width: 100%;
-    text-align: center;
   }
 }
 
@@ -918,33 +896,6 @@ button:disabled {
   font-weight: 400;
   margin-top: 1px;
   line-height: 1;
-}
-
-
-.password-field > div {
-  position: relative;
-}
-
-
-.password-field input {
-  width: 100%;
-  padding-right: 44px;
-}
-
-
-.password-field button {
-  position: absolute;
-  right: 6px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 34px;
-  height: 34px;
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--muted);
-  display: grid;
-  place-items: center;
 }
 
 
@@ -1615,118 +1566,6 @@ button:disabled {
   border-top: 1px solid rgba(203, 213, 225, 0.75);
   background: #ffffff;
 }
-.access-modal {
-  position: relative;
-  width: min(520px, calc(100vw - 24px));
-  max-height: min(88vh, 760px);
-  overflow-y: auto;
-  border-radius: 22px;
-  background: #ffffff;
-  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.18);
-  display: grid;
-  gap: 20px;
-  padding: 32px;
-}
-
-
-.access-modal .modal-header {
-  position: static;
-  margin: 0;
-  padding: 0;
-  border-bottom: none;
-  border-radius: 0;
-  background: none;
-}
-
-
-.access-modal .modal-header-text h2 {
-  color: #0f172a;
-}
-
-
-.access-modal .modal-header-sub {
-  color: #64748b;
-}
-
-
-.access-modal .modal-header-close {
-  width: 34px;
-  height: 34px;
-  border-color: #fecdd3;
-  border-radius: 50%;
-  background: #fff1f2;
-  color: #be123c;
-  box-shadow: none;
-  margin-left: 0;
-}
-
-
-.access-modal .modal-header-close:hover {
-  border-color: #fda4af;
-  background: #ffe4e6;
-  color: #9f1239;
-}
-
-
-.access-type-picker {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-
-.access-type-card {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 3px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  border: 1.5px solid #dbe5f1;
-  background: #ffffff;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
-  text-align: left;
-}
-
-
-.access-type-card:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
-}
-
-
-.access-type-card.is-selected {
-  border-color: #1f8a5f;
-  background: #eaf3ee;
-}
-
-
-.access-type-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  background: #eaf3ee;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #1f8a5f;
-  margin-bottom: 4px;
-  transition: background 0.15s, color 0.15s;
-}
-
-
-.access-type-label {
-  font-size: 0.86rem;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-
-.access-type-sector {
-  font-size: 0.72rem;
-  color: #64748b;
-}
 
 
 .access-field {
@@ -1802,56 +1641,6 @@ button:disabled {
 
 .access-field textarea {
   resize: none;
-  line-height: 1.5;
-}
-
-
-.access-status {
-  margin: 0 20px;
-  font-size: 0.82rem;
-  padding: 8px 12px;
-  border-radius: 8px;
-}
-
-
-.access-status.is-sending {
-  background: #f0f9ff;
-  color: #0369a1;
-}
-
-
-.access-status.is-error {
-  background: #fef2f2;
-  color: #dc2626;
-}
-
-
-.access-modal-success {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 10px;
-  padding: 40px 32px 24px;
-}
-
-
-.access-modal-success svg {
-  color: #1f8a5f;
-}
-
-
-.access-modal-success h2 {
-  font-size: 1.15rem;
-  color: var(--ink);
-  margin: 0;
-}
-
-
-.access-modal-success p {
-  font-size: 0.88rem;
-  color: var(--muted);
-  margin: 0 0 8px;
   line-height: 1.5;
 }
 
@@ -2423,31 +2212,6 @@ button:disabled {
 }
 
 
-.showcase-pill-text {
-  padding: 9px 18px;
-  border-radius: 999px;
-  border: none;
-  background: #ffffff;
-  color: #7a6f60;
-  font-family: inherit;
-  font-size: 0.82rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.14s, color 0.14s;
-}
-
-
-.showcase-pill-text:hover:not(.active) {
-  background: #f0e9da;
-}
-
-
-.showcase-pill-text.active {
-  background: #0f172a;
-  color: #ffffff;
-}
-
-
 .public-animal-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -2469,54 +2233,6 @@ button:disabled {
 }
 
 
-.public-animal-card {
-  border: none;
-  border-radius: 18px;
-  background: #ffffff;
-  color: var(--ink);
-  padding: 0;
-  overflow: hidden;
-  display: grid;
-  grid-template-rows: 1fr auto;
-  text-align: left;
-  cursor: pointer;
-  box-shadow: 0 4px 16px rgba(60, 40, 20, 0.05);
-  transition: transform 0.18s, box-shadow 0.18s;
-}
-
-
-.public-animal-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 22px rgba(60, 40, 20, 0.09);
-}
-
-
-.public-animal-card:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: 2px;
-}
-
-
-.public-animal-open-area {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: inherit;
-  padding: 0;
-  text-align: left;
-  display: grid;
-  cursor: pointer;
-}
-
-
-.public-animal-open-area:focus-visible {
-  outline: 2px solid #2563eb;
-  outline-offset: -2px;
-}
-
-
 .public-animal-photo {
   position: relative;
   aspect-ratio: 4 / 3;
@@ -2533,26 +2249,6 @@ button:disabled {
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-
-.public-animal-card strong,
-.public-animal-card span {
-  display: block;
-}
-
-
-.public-animal-card strong {
-  font-size: 1.02rem;
-  line-height: 1.2;
-  overflow-wrap: anywhere;
-}
-
-
-.public-animal-card span {
-  color: var(--muted);
-  font-size: 0.84rem;
-  line-height: 1.25;
 }
 
 
@@ -2578,36 +2274,6 @@ button:disabled {
 .public-interest-count.has-interest {
   color: #1f8a5f;
   font-weight: 600;
-}
-
-
-.public-interest-cta {
-  width: 100%;
-  min-height: 42px;
-  border: none;
-  border-radius: 999px;
-  background: #1f8a5f;
-  color: #ffffff;
-  font-weight: 600;
-  font-size: 0.84rem;
-  padding: 0 12px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background-color 150ms ease, transform 150ms ease;
-}
-
-
-.public-interest-cta:hover {
-  background: #196f4c;
-}
-
-
-.public-interest-cta:active {
-  transform: translateY(1px);
 }
 
 
@@ -2722,26 +2388,7 @@ button:disabled {
   font-size: 0.95rem;
 }
 
-
-.adoption-main-cta {
-  width: 100%;
-  justify-content: center;
-  gap: 8px;
-  font-size: 1rem;
-  padding: 14px 20px;
-  border-radius: 12px;
-}
-
 /* The share button under the main call of an animal's window, and the notice of a shared animal that is no longer waiting. */
-.adoption-share-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: 100%;
-  min-height: 44px;
-  border-radius: 12px;
-}
 
 .adoption-share-notice {
   display: flex;
@@ -3485,46 +3132,6 @@ button:disabled {
   background: #ffe4e6;
   color: #9f1239;
   box-shadow: 0 4px 12px rgba(190, 18, 60, 0.14);
-}
-
-
-.adoption-profile-modal > .modal-header {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 20;
-  min-height: unset;
-  padding: 0;
-  margin: 0;
-  border: none;
-  background: transparent;
-  border-radius: 0;
-  width: auto;
-  justify-content: flex-end;
-}
-
-
-.adoption-profile-modal > .modal-header > div:first-child {
-  display: none;
-}
-
-
-.adoption-profile-modal > .modal-header .icon-button {
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(8px);
-  border: none;
-  font-size: 1.1rem;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
-  color: #334155;
-}
-
-
-.adoption-profile-modal > .modal-header .icon-button:hover {
-  background: #fff;
-  color: #0f172a;
 }
 
 
@@ -5566,70 +5173,6 @@ main {
 
 
 /* --- Animal step modernizado (public form) --- */
-.anm-type-picker {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 16px;
-  background: #ffffff;
-  border: 1px solid #d0d7e3;
-  border-radius: 12px;
-}
-
-
-.anm-type-picker.is-invalid {
-  border-color: #fca5a5;
-  background: #fff1f2;
-}
-
-
-.anm-type-picker.is-invalid .anm-type-label {
-  color: #ef4444;
-}
-
-
-.anm-type-label {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #475569;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-
-.anm-type-cards {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-
-.anm-type-card {
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  background: #fff;
-  color: var(--ink);
-  padding: 12px 22px;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s;
-  white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-}
-
-
-.anm-type-card:hover {
-  border-color: #93c5fd;
-  background: #eff6ff;
-  box-shadow: 0 2px 8px rgba(59,130,246,0.1);
-}
-
-
-.anm-type-card.is-selected {
-  border-color: #2563eb;
-  background: #dbeafe;
-  color: #1d4ed8;
-  box-shadow: 0 0 0 3px rgba(37,99,235,0.12);
-}
 
 
 .anm-add-btn {
@@ -5653,24 +5196,6 @@ main {
 .anm-add-btn:hover {
   background: #eff6ff;
   border-color: #3b82f6;
-}
-
-
-.inline-link-button {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: #0b7fc3;
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  padding: 0;
-  text-decoration: underline;
-}
-
-
-.inline-link-button:hover {
-  color: #075f93;
 }
 
 
@@ -8351,7 +7876,7 @@ main {
 .field textarea,
 form input:where(:not([data-ui-input])):is([type="text"], [type="email"], [type="password"], [type="tel"], [type="number"], [type="date"]),
 form select,
-form textarea {
+form textarea:where(:not([data-ui-input])) {
   border: 1.5px solid #d1d5db;
   box-shadow: none;
   background: #ffffff;
@@ -8365,7 +7890,7 @@ form textarea {
 .field textarea:focus,
 form input:where(:not([data-ui-input])):focus,
 form select:focus,
-form textarea:focus {
+form textarea:where(:not([data-ui-input])):focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
   outline: none;
@@ -11178,7 +10703,6 @@ body * {
 .single-request-form,
 .consultation-stack,
 .validation-key-card,
-.animal-record-panel,
 .public-schedule-picker {
   min-width: 0;
 }
@@ -11196,7 +10720,6 @@ body * {
 }
 
 
-.access-modal-submit,
 .primary-action,
 .secondary-action,
 .ghost-button,
@@ -11231,8 +10754,6 @@ body * {
 .document-upload-title,
 .document-upload-title strong,
 .document-upload-title small,
-.animal-record-header,
-.animal-record-header h3,
 .selected-schedule-note,
 .selected-schedule-note span,
 .request-context-bar,
@@ -11277,11 +10798,6 @@ body * {
   .fee-note {
     align-items: stretch;
     flex-direction: column;
-  }
-
-
-  .access-type-picker {
-    grid-template-columns: 1fr;
   }
 
 
@@ -11510,30 +11026,6 @@ body * {
 }
 
 /* field override inside service modal */
-.svc-field > input,
-.svc-field > select,
-.svc-field > textarea {
-  border-radius: 8px;
-  border: 1px solid #dbe5f1;
-  padding: 9px 12px;
-  font-size: 0.84rem;
-  transition: border-color 0.12s, box-shadow 0.12s;
-}
-.svc-field > input:focus,
-.svc-field > select:focus,
-.svc-field > textarea:focus {
-  border-color: #1f8a5f;
-  box-shadow: 0 0 0 3px rgba(31,138,95,0.1);
-  outline: none;
-}
-.svc-field > span {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  margin-bottom: 4px;
-}
 
 /* grid layouts */
 .svc-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -11798,117 +11290,6 @@ body * {
   box-shadow: none;
 }
 
-
-.consultation-results .panel.wide {
-  border: 1px solid #dbe5f1;
-  border-radius: 18px;
-  background: #ffffff;
-  padding: 0;
-  box-shadow: none;
-  width: 100%;
-}
-
-
-.consultation-results .panel-header {
-  padding: 24px 28px 10px;
-}
-
-
-.consultation-results .panel-header h3,
-.consultation-results .panel-header h2 {
-  color: #0f172a;
-  font-size: 1.22rem;
-}
-
-
-.consultation-results .request-list {
-  display: grid;
-  gap: 12px;
-  padding: 14px 28px 28px;
-}
-
-
-.consultation-results .request-card {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  transition: border-color 160ms ease, background 160ms ease;
-}
-
-
-.consultation-results .empty-state {
-  border: 1px solid #dbe5f1;
-  border-radius: 14px;
-  background: #f8fafc;
-  min-height: 140px;
-  box-shadow: none;
-}
-
-
-.consultation-results .request-card:hover {
-  border-color: #bfe0cf;
-  background: #f7fbf9;
-}
-
-
-.consultation-results .request-card-main {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-
-.consultation-results .request-card-main strong {
-  color: #64748b;
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-
-.consultation-results .request-card-main span {
-  color: #0f172a;
-  font-weight: 600;
-  font-size: 0.92rem;
-}
-
-
-.consultation-results .request-card-main small {
-  color: #64748b;
-  font-size: 0.76rem;
-}
-
-
-.consultation-results .request-card-status {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 3px;
-}
-
-.consultation-results .status-badge.card-status-plain {
-  background: none;
-  border: none;
-  padding: 0;
-  min-height: auto;
-  border-radius: 0;
-  font-size: 0.8rem;
-  font-weight: 650;
-  gap: 0;
-}
-
-.consultation-results .status-badge.card-status-plain.status-NOVA { color: #2563eb; }
-.consultation-results .status-badge.card-status-plain.status-AGENDADA { color: #d97706; }
-.consultation-results .status-badge.card-status-plain.status-REALIZADA { color: #16a34a; }
-.consultation-results .status-badge.card-status-plain.status-CANCELADA { color: #dc2626; }
-
-.consultation-results .request-card-date {
-  color: #64748b;
-  font-size: 0.78rem;
-  white-space: nowrap;
-}
-
 .request-card-actions {
   display: flex;
   align-items: center;
@@ -11940,11 +11321,6 @@ body * {
 .icon-btn-flat:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.consultation-results .request-card .ghost-button {
-  border-radius: 8px;
-  font-weight: 500;
 }
 
 
@@ -12113,25 +11489,6 @@ body * {
 }
 
 
-.animal-record-panel {
-  display: grid;
-  gap: 14px;
-}
-
-
-.animal-record-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: flex-start;
-  border: 1px solid #dbe5f1;
-  border-radius: 14px;
-  background: #f8fafc;
-  color: #0f172a;
-  padding: 16px;
-}
-
-
 .animal-record-identity {
   display: flex;
   align-items: flex-start;
@@ -12148,26 +11505,6 @@ body * {
   border-radius: 10px;
   background: #0f172a;
   color: #ffffff;
-}
-
-
-.animal-record-header .eyebrow {
-  color: #64748b;
-  font-size: 0.72rem;
-}
-
-
-.animal-record-header h3 {
-  margin: 3px 0;
-  color: #0f172a;
-  font-size: clamp(1.1rem, 1.6vw, 1.45rem);
-  line-height: 1.1;
-}
-
-
-.animal-record-header p {
-  color: #64748b;
-  font-size: 0.84rem;
 }
 
 
@@ -12211,13 +11548,6 @@ body * {
 }
 
 
-.animal-record-header-tools .ghost-button {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-}
-
-
 .animal-record-summary {
   display: grid;
   grid-template-columns: 1.05fr 1.35fr 1fr;
@@ -12225,46 +11555,11 @@ body * {
 }
 
 
-.animal-record-summary-card,
 .animal-record-grid .info-tile {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   background: #ffffff;
   box-shadow: 0 8px 22px rgba(15, 47, 68, 0.05);
-}
-
-
-.animal-record-summary-card {
-  min-width: 0;
-  padding: 14px;
-}
-
-
-.animal-record-summary-card span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #64748b;
-  font-size: 0.76rem;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-
-.animal-record-summary-card strong {
-  display: block;
-  margin-top: 8px;
-  color: #0f172a;
-  font-size: 1rem;
-  overflow-wrap: anywhere;
-}
-
-
-.animal-record-summary-card small {
-  display: block;
-  margin-top: 4px;
-  color: #64748b;
-  overflow-wrap: anywhere;
 }
 
 
@@ -12343,14 +11638,12 @@ body * {
 
 @media (max-width: 1080px) {
 
-  .consultation-search-row,
-  .consultation-results .request-card {
+  .consultation-search-row {
     grid-template-columns: 1fr 1fr;
   }
 
 
-  .consultation-submit,
-  .consultation-results .request-card .ghost-button {
+  .consultation-submit {
     width: 100%;
   }
 
@@ -12460,8 +11753,7 @@ body * {
   }
 
 
-  .consultation-search-row,
-  .consultation-results .request-card {
+  .consultation-search-row {
     grid-template-columns: 1fr;
   }
 
@@ -12485,54 +11777,6 @@ body * {
   }
 
 
-  .consultation-results .panel.wide {
-    border-radius: 22px;
-  }
-
-
-  .consultation-results .panel-header {
-    padding: 18px 16px 8px;
-  }
-
-
-  .consultation-results .request-list {
-    gap: 10px;
-    padding: 10px 12px 18px;
-  }
-
-
-  .consultation-results .request-card {
-    align-items: stretch;
-    gap: 12px;
-    border-radius: 18px;
-    padding: 14px;
-  }
-
-
-  .consultation-results .request-card-main {
-    gap: 4px;
-  }
-
-
-  .consultation-results .request-card-status {
-    justify-content: space-between;
-    width: 100%;
-    gap: 10px;
-  }
-
-
-  .consultation-results .request-card-date {
-    font-size: 0.95rem;
-  }
-
-
-  .consultation-results .request-card .ghost-button {
-    min-height: 46px;
-    justify-content: center;
-    width: 100%;
-  }
-
-
   .public-request-details-modal {
     width: min(100%, calc(100vw - 20px));
     max-height: calc(100dvh - 20px);
@@ -12552,7 +11796,6 @@ body * {
   }
 
 
-  .animal-record-header,
   .animal-record-actions {
     padding: 14px;
   }
@@ -12620,30 +11863,6 @@ body * {
 
   .consultation-search-row {
     padding: 10px;
-  }
-
-
-  .consultation-results .panel.wide {
-    border-radius: 20px;
-    margin-top: 0;
-  }
-
-
-  .consultation-results .empty-state {
-    min-height: 138px;
-    padding: 18px 12px;
-    text-align: center;
-  }
-
-
-  .consultation-results .request-card-status {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-
-  .consultation-results .request-card-date {
-    white-space: normal;
   }
 
 
@@ -12751,7 +11970,6 @@ main {
 .detail-card,
 .workflow-modal,
 .empty-state,
-.animal-record-summary-card,
 .animal-record-grid .info-tile,
 .process-history-card,
 .schedule-confirm-card {
@@ -12972,7 +12190,7 @@ main {
 form input:where(:not([data-ui-input])),
 form input:where(:not([data-ui-input])):is([type="text"], [type="search"], [type="password"], [type="number"], [type="date"]),
 form select,
-form textarea,
+form textarea:where(:not([data-ui-input])),
 .field input,
 .field select,
 .field textarea,
@@ -12987,7 +12205,7 @@ form textarea,
 
 form input:where(:not([data-ui-input])):focus,
 form select:focus,
-form textarea:focus,
+form textarea:where(:not([data-ui-input])):focus,
 .field input:focus,
 .field select:focus,
 .field textarea:focus,
@@ -13084,14 +12302,6 @@ form textarea:focus,
   box-shadow: var(--ui-shadow-line);
 }
 
-.consultation-results .request-card {
-  border: 1px solid #dbe5f1;
-  border-radius: 16px;
-  background: #ffffff;
-  box-shadow: none;
-  overflow: hidden;
-}
-
 
 .request-card {
   overflow: hidden;
@@ -13102,17 +12312,12 @@ form textarea:focus,
   padding-left: 4px;
 }
 
-.consultation-results .request-card-main {
-  padding-left: 4px;
-}
-
 
 .metric-card,
 .summary-card,
 .report-card,
 .stat-card,
-.dashboard-hero-card,
-.animal-record-summary-card {
+.dashboard-hero-card {
   position: relative;
   min-height: 112px;
   align-items: center;
@@ -13322,7 +12527,6 @@ form textarea:focus,
 
 
 .nr-shell .access-field,
-.access-modal .access-field,
 .nr-shell .field input,
 .nr-shell .field select,
 .nr-shell .field textarea,
@@ -13334,8 +12538,7 @@ form textarea:focus,
 }
 
 
-.nr-shell .access-field,
-.access-modal .access-field {
+.nr-shell .access-field {
   position: relative;
   display: grid;
   align-items: end;
@@ -13344,29 +12547,14 @@ form textarea:focus,
 }
 
 
-.nr-shell .access-field[data-label]::before,
-.access-modal .access-field[data-label]::before {
+.nr-shell .access-field[data-label]::before {
   content: attr(data-label);
   line-height: 1;
 }
 
 
-/* cor/tamanho/peso/uppercase do rótulo do staff (.access-modal, fora da etapa Animal)
-   — a versão do .nr-shell (~L17043) redefine tudo isso de novo, mais tarde no arquivo,
-   então é ela quem vale para .nr-shell; esta cobre só o .access-modal. */
-.access-modal .access-field[data-label]::before {
-  color: #66758a;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-
 .nr-shell .access-field input,
-.nr-shell .access-field textarea,
-.access-modal .access-field input,
-.access-modal .access-field textarea {
+.nr-shell .access-field textarea {
   width: 100%;
   min-height: 22px;
   padding: 0;
@@ -13381,16 +12569,13 @@ form textarea:focus,
 
 
 .nr-shell .access-field input::placeholder,
-.nr-shell .access-field textarea::placeholder,
-.access-modal .access-field input::placeholder,
-.access-modal .access-field textarea::placeholder {
+.nr-shell .access-field textarea::placeholder {
   color: #94a3b8;
   opacity: 1;
 }
 
 
 .nr-shell .access-field:focus-within,
-.access-modal .access-field:focus-within,
 .nr-shell .field input:focus,
 .nr-shell .field select:focus,
 .nr-shell .field textarea:focus,
@@ -13401,37 +12586,24 @@ form textarea:focus,
 }
 
 
-.nr-shell .access-field.is-invalid,
-.access-modal .access-field.is-invalid {
+.nr-shell .access-field.is-invalid {
   border-color: #fb7185;
   background: #fff7f8;
 }
 
 
-.nr-shell .access-field.is-invalid::before,
-.access-modal .access-field.is-invalid::before {
+.nr-shell .access-field.is-invalid::before {
   color: #e11d48;
 }
 
 
-.nr-shell .access-field input:read-only,
-.access-modal .access-field input:read-only {
+.nr-shell .access-field input:read-only {
   color: #64748b;
 }
 
 
-.nr-shell .access-field:has(input:read-only),
-.access-modal .access-field:has(input:read-only) {
+.nr-shell .access-field:has(input:read-only) {
   background: #f1f5f9;
-}
-
-
-.nr-shell .anm-type-label {
-  color: #64748b;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
 }
 
 
@@ -13671,11 +12843,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .single-request-form .form-section-header {
-  display: none;
-}
-
-
 .nr-shell .access-field,
 .nr-shell .access-field:focus-within,
 .nr-shell .access-field.is-invalid,
@@ -13833,19 +13000,6 @@ form textarea:focus,
 }
 
 
-.modal-backdrop > :is(
-  .workflow-modal,
-  .config-modal,
-  .auth-modal,
-  .access-modal,
-  .public-request-details-modal,
-  .document-preview-modal,
-  .adoption-form-modal,
-  .adoption-confirm-modal,
-  .animal-detail-modal,
-  .sector-picker-modal,
-  .request-preview-modal
-):not(.config-permission-modal):not(.config-sector-modal):not(.config-user-modal),
 .assign-modal {
   height: auto;
   max-height: calc(100dvh - 48px);
@@ -14069,137 +13223,6 @@ form textarea:focus,
 }
 
 
-.access-modal {
-  width: min(604px, calc(100vw - 40px));
-  padding: 20px;
-}
-
-.modal-backdrop > .access-modal {
-  width: min(520px, calc(100vw - 40px));
-  padding: 32px;
-  gap: 20px;
-  border: none;
-  border-radius: 22px;
-  background: #ffffff;
-  box-shadow: 0 30px 70px rgba(15, 23, 42, 0.18);
-}
-
-.access-modal > .modal-header {
-  position: relative;
-  top: auto;
-  min-height: 0;
-  margin: 0 0 2px;
-  padding: 0 46px 0 0;
-  border: 0;
-  background: transparent;
-}
-
-.access-modal > .modal-header .modal-header-icon {
-  display: none;
-}
-
-.access-modal .access-type-picker {
-  gap: 8px;
-}
-
-.access-modal .access-type-card {
-  min-height: 88px;
-  padding: 12px;
-  border: 1.5px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: none;
-}
-
-.access-modal .access-type-card:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
-  box-shadow: none;
-}
-
-.access-modal .access-type-card.is-selected {
-  border-color: #1f8a5f;
-  background: #eaf3ee;
-  box-shadow: none;
-}
-
-.access-modal .access-type-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: #eaf3ee;
-  color: #1f8a5f;
-}
-
-.access-modal .single-request-form.clean-form {
-  gap: 10px;
-  padding: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.access-form-label {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.access-form-label > span {
-  color: #64748b;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
-.access-modal .access-field {
-  min-height: 38px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.access-modal .access-field input,
-.access-modal .access-field textarea {
-  width: 100%;
-  min-height: 42px;
-  padding: 10px 12px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #0f172a;
-  font-size: 0.88rem;
-  font-weight: 500;
-  outline: 0;
-}
-
-.access-modal .access-field input:focus,
-.access-modal .access-field textarea:focus {
-  border-color: #2563eb;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-}
-
-.access-modal .access-field:focus-within {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-.access-modal > .primary-action {
-  min-height: 44px;
-  border-radius: 10px;
-  background: #2563eb;
-  box-shadow: none;
-}
-
-.access-modal > .primary-action:hover:not(:disabled) {
-  background: #1d4ed8;
-  box-shadow: none;
-}
-
-
 .document-preview-modal {
   width: min(920px, calc(100vw - 40px));
   padding: 18px 20px;
@@ -14231,50 +13254,15 @@ form textarea:focus,
 
 @media (max-width: 720px) {
 
-  .modal-backdrop > .access-modal {
-    width: min(100%, calc(100vw - 24px));
-    padding: 16px;
-  }
-
-  .access-modal > .modal-header {
-    padding-right: 42px;
-  }
-
-  .access-modal .access-type-picker,
-  .access-modal .two-column-fields {
-    grid-template-columns: 1fr;
-  }
-
-  .access-modal .access-type-card {
-    min-height: 82px;
-  }
-
   .modal-backdrop,
   .assign-modal-overlay {
     padding: 12px;
   }
 
 
-  .modal-backdrop > :is(
-    .workflow-modal,
-    .config-modal,
-    .auth-modal,
-    .access-modal,
-    .public-request-details-modal,
-    .document-preview-modal,
-    .adoption-form-modal,
-    .adoption-confirm-modal,
-    .animal-detail-modal,
-    .sector-picker-modal,
-    .request-preview-modal
-  ),
   .assign-modal {
     max-height: calc(100dvh - 24px);
     border-radius: 14px;
-  }
-
-  .modal-backdrop > .access-modal {
-    border-radius: 20px;
   }
 
 }
@@ -14683,45 +13671,6 @@ form textarea:focus,
   }
 }
 /* Animal step follows the approved clean registration model */
-.nr-shell .anm-type-picker {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-
-.nr-shell .anm-type-label {
-  color: #66758a;
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-
-.nr-shell .anm-type-cards {
-  gap: 8px;
-}
-
-
-.nr-shell .anm-type-card {
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid #d7e2ef;
-  border-radius: 10px;
-  background: #f8fbff;
-  color: #0f2744;
-  box-shadow: none;
-}
-
-
-.nr-shell .anm-type-card.is-selected {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1d4ed8;
-  box-shadow: none;
-}
 
 
 .nr-shell .animal-form,
@@ -16466,7 +15415,6 @@ main {
 .workflow-modal,
 .config-modal,
 .empty-state,
-.animal-record-summary-card,
 .animal-record-grid .info-tile,
 .process-history-card,
 .schedule-confirm-card,
@@ -16489,8 +15437,7 @@ main {
 
 .primary-action,
 .config-create-action,
-.panel-header > .primary-action,
-.access-modal > .primary-action {
+.panel-header > .primary-action {
   min-height: 42px;
   border: 1px solid var(--ui-action);
   border-radius: 16px;
@@ -16502,8 +15449,7 @@ main {
 }
 
 .primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled),
-.access-modal > .primary-action:hover:not(:disabled) {
+.config-create-action:hover:not(:disabled) {
   border-color: var(--ui-action-hover);
   background: var(--ui-action-hover);
   box-shadow: none;
@@ -16530,7 +15476,7 @@ main {
 form input:where(:not([data-ui-input])),
 form input:where(:not([data-ui-input])):is([type="text"], [type="search"], [type="password"], [type="number"], [type="date"]),
 form select,
-form textarea,
+form textarea:where(:not([data-ui-input])),
 .field input,
 .field select,
 .field textarea,
@@ -16548,7 +15494,7 @@ form textarea,
 
 form input:where(:not([data-ui-input])):focus,
 form select:focus,
-form textarea:focus,
+form textarea:where(:not([data-ui-input])):focus,
 .field input:focus,
 .field select:focus,
 .field textarea:focus,
@@ -16760,7 +15706,6 @@ form textarea:focus,
 .primary-action,
 .config-create-action,
 .panel-header > .primary-action,
-.access-modal > .primary-action,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
 .config-status-filter button.active,
@@ -16775,26 +15720,13 @@ form textarea:focus,
 }
 
 .primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled),
-.access-modal > .primary-action:hover:not(:disabled) {
+.config-create-action:hover:not(:disabled) {
   border-color: #111827 !important;
   background: #111827 !important;
   box-shadow: none !important;
 }
 
 /* Modal de credenciamento (público): sobrepõe a correção neutra acima para usar o verde já adotado nas telas públicas */
-.access-modal > .primary-action {
-  border-color: #1f8a5f !important;
-  background: #1f8a5f !important;
-  color: #ffffff !important;
-  box-shadow: none !important;
-}
-
-.access-modal > .primary-action:hover:not(:disabled) {
-  border-color: #156b48 !important;
-  background: #156b48 !important;
-  box-shadow: none !important;
-}
 
 .sidebar nav > button.active,
 .sidebar nav > button[class*="active"] {
@@ -17050,24 +15982,16 @@ form textarea:focus,
 }
 
 /* Shared field and card styles for the public request form. */
-.nr-shell--public .anm-type-label,
 .nr-shell--public .access-field[data-label]::before {
   color: var(--type-color-secondary);
 }
 
 /* .access-field[data-label]::before (base) usa font-weight:800/0.66rem, mais pesado que o mockup (700). */
-.nr-shell--public .access-field[data-label]::before,
-.nr-shell--public .anm-type-label {
+.nr-shell--public .access-field[data-label]::before {
   font-size: var(--type-size-label);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-}
-
-
-.nr-shell--public .anm-type-label {
-  display: block;
-  margin-bottom: 8px;
 }
 
 
@@ -17085,51 +16009,6 @@ form textarea:focus,
 
 
 /* Cada opção vira um card independente (borda própria, sem trilho de fundo compartilhado). */
-.nr-shell--public .anm-type-cards {
-  gap: 8px;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-}
-
-
-.nr-shell--public .anm-type-card {
-  border: 1px solid var(--field-invalid-border, #dbe5f1);
-  border-radius: 10px;
-  background: #ffffff;
-  color: #64748b;
-}
-
-
-.nr-shell--public .anm-type-card {
-  flex: 1 1 0;
-}
-
-
-.nr-shell--public .anm-type-card.is-selected {
-  border-color: #2563eb !important;
-  background: #eff6ff !important;
-  color: #1d4ed8 !important;
-  box-shadow: none !important;
-}
-
-
-/* "Adicionar outro animal" e "Repetir os dados do anterior": .nr-shell .anm-add-btn os deixa azul sólido preenchido —
-   aqui ficam tracejados, fundo branco, com o ícone antes do texto. */
-.nr-shell--public .anm-add-btn {
-  border: 1.5px dashed #2563eb;
-  background: #ffffff;
-  color: #2563eb;
-  box-shadow: none;
-}
-
-
-.nr-shell--public .anm-add-btn:hover {
-  border-color: #1d4ed8;
-  background: #eff6ff;
-  box-shadow: none;
-}
 
 
 /* "Adicionar animal" e "Remover animal" lado a lado, dividindo a mesma linha,
@@ -17137,26 +16016,6 @@ form textarea:focus,
 .nr-shell--public .anm-actions-row {
   display: flex;
   gap: 10px;
-}
-
-.nr-shell--public .anm-actions-row .anm-add-btn,
-.nr-shell--public .anm-actions-row .animal-remove-inline {
-  width: auto;
-  flex: 1 1 0;
-}
-
-
-.nr-shell--public .access-field input {
-  border-color: #dbe5f1;
-  background: #ffffff;
-  color: #0f172a;
-}
-
-
-.nr-shell--public .access-field input:focus {
-  border-color: #2563eb;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
 
@@ -17251,16 +16110,6 @@ form textarea:focus,
   color: #475569;
 }
 
-.nr-shell--public .doc-accept-check {
-  padding: 0;
-  background: transparent;
-  color: #0f172a;
-}
-
-.nr-shell--public .doc-check-box {
-  border-color: #dbe5f1;
-}
-
 
 /* Card do mockup: padding/raio/espaçamento interno mais generosos que o card genérico do resto do app. */
 .nr-shell--public .form-sub-card {
@@ -17272,23 +16121,6 @@ form textarea:focus,
 
 .nr-shell--public .single-request-form {
   gap: 18px;
-}
-
-
-.nr-shell--public .doc-accept-check input:checked ~ .doc-check-box {
-  background: #2563eb;
-  border-color: #2563eb;
-}
-
-
-.nr-shell--public .inline-link-button {
-  color: #2563eb;
-  font-size: var(--type-size-body);
-}
-
-
-.nr-shell--public .inline-link-button:hover {
-  color: #156b48;
 }
 
 
@@ -17342,19 +16174,6 @@ form textarea:focus,
 }
 
 
-.nr-shell--public .doc-photo-zone {
-  border-color: #dbe5f1;
-  background: #f8fafc;
-}
-
-
-.nr-shell--public .doc-attach-btn {
-  border-color: #dbe5f1;
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-
 /* Linha de documento no estado padrão/vazio (aguardando arquivo) — .empty é a classe
    real quando não há upload (ver DocumentScannerUpload). Os estados de validação por
    IA (.approved/.rejected/.checking/.attached) continuam com as cores semânticas de
@@ -17376,62 +16195,8 @@ form textarea:focus,
   color: #64748b;
 }
 
-.nr-shell--public .doc-photo-zone:hover {
-  border-color: #2563eb;
-}
-
-.nr-shell--public .doc-photo-placeholder {
-  color: #64748b;
-}
-
-.nr-shell--public .doc-photo-placeholder svg {
-  color: #94a3b8;
-}
-
-.nr-shell--public .doc-photo-placeholder span {
-  color: var(--type-color-primary);
-}
-
-.nr-shell--public .doc-photo-placeholder small {
-  color: #64748b;
-  background: #eef3f9;
-}
-
-.nr-shell--public .doc-attach-btn:hover {
-  background: #dff0e6;
-  border-color: #2563eb;
-}
-
 
 /* Legacy form controls in tutor sign-in and password recovery */
-.compact-auth-modal .field > span {
-  color: #64748b;
-}
-
-.compact-auth-modal .field input {
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #0f172a;
-}
-
-.compact-auth-modal .password-field button:hover {
-  background: #eaf3ee;
-  color: #156b48;
-}
-
-.compact-auth-modal .primary-action {
-  border-color: #1f8a5f !important;
-  background: #1f8a5f !important;
-  color: #ffffff !important;
-  box-shadow: none !important;
-}
-
-.compact-auth-modal .primary-action:hover:not(:disabled) {
-  border-color: #156b48 !important;
-  background: #156b48 !important;
-  box-shadow: none !important;
-}
 
 
 .nr-shell--public .sms-status {
@@ -17453,7 +16218,6 @@ form textarea:focus,
    { border: var(--ui-border) ... }"), então sobrepomos aqui em vez de editar
    aquele grupo compartilhado. .animal-record-panel foi removido desse grupo
    (não deve ter fundo/borda de card — o conteúdo fica solto na tela). */
-.animal-record-summary-card,
 .animal-record-grid .info-tile {
   border-color: #dbe5f1;
   box-shadow: none;
@@ -17461,12 +16225,6 @@ form textarea:focus,
 
 /* .icon-btn-flat é compartilhado com o admin — só o hover, escopado às duas áreas
    exclusivas desta tela, migra do azul genérico para o verde v4. */
-.consultation-results .icon-btn-flat:hover,
-.animal-record-panel .icon-btn-flat:hover {
-  color: #1f8a5f;
-  border-color: #bfe0cf;
-  background: #eaf3ee;
-}
 @media (max-width: 760px) {
   .config-modal.document-analysis-modal {
     width: min(100% - 16px, 100%);
@@ -17645,16 +16403,6 @@ form textarea:focus,
   line-height: 1.08;
 }
 
-.public-service-panel-header .ghost-button {
-  flex: 0 0 auto;
-  min-height: 38px;
-  padding: 0 14px;
-  border-radius: 14px;
-  background: #ffffff;
-  font-size: 0.86rem;
-  white-space: nowrap;
-}
-
 .nr-shell--public {
   container: request-form / inline-size;
   min-width: 0;
@@ -17692,17 +16440,12 @@ form textarea:focus,
   gap: 14px;
 }
 
-.nr-shell--public .nr-bottom-error {
-  padding: 4px 10px;
-}
-
 .nr-shell--public .nr-body:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: -2px;
 }
 
-.public-service-panel .form-sub-card,
-.public-inline-card {
+.public-service-panel .form-sub-card {
   width: 100%;
   max-width: none;
   padding: clamp(16px, 1.8vw, 24px);
@@ -17729,54 +16472,6 @@ form textarea:focus,
 .public-service-panel .access-field,
 .public-service-panel .compact-choice-field {
   pointer-events: auto;
-}
-
-.public-inline-card {
-  display: grid;
-  align-content: start;
-  gap: 18px;
-}
-
-.public-inline-heading {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.public-inline-heading strong {
-  display: block;
-  color: #151922;
-  font-size: 1rem;
-}
-
-.public-inline-heading > div > span {
-  display: block;
-  margin-top: 3px;
-  color: #64748b;
-  font-size: 0.86rem;
-  line-height: 1.45;
-}
-
-.public-inline-icon {
-  width: 38px;
-  height: 38px;
-  border-radius: 10px;
-  background: #ecfdf5;
-  color: #0f8f68;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-}
-
-.public-inline-actions {
-  display: flex;
-  justify-content: flex-start;
-}
-
-.public-inline-actions .primary-action {
-  width: auto;
-  min-width: 190px;
 }
 
 .public-inline-success {
@@ -17810,10 +16505,6 @@ form textarea:focus,
   background: #ffffff;
 }
 
-.public-service-panel--success .public-service-success-card {
-  align-self: center;
-}
-
 @media (min-width: 981px) {
   .public-service-panel--success {
     grid-template-rows: auto 1fr;
@@ -17832,65 +16523,6 @@ form textarea:focus,
 
 .public-service-success-card > svg {
   color: #1f8a5f;
-}
-
-.public-inline-success--soft,
-.public-inline-note {
-  border: 1px dashed #f1c9b7;
-  border-radius: 14px;
-  background: #fff8f4;
-}
-
-.public-inline-success--soft {
-  min-height: 220px;
-  padding: 22px;
-}
-
-.public-inline-note {
-  margin: 0;
-  padding: 10px 12px;
-  color: #0f172a;
-  font-size: 0.84rem;
-  line-height: 1.45;
-}
-
-.public-access-inline .access-type-picker {
-  max-width: none;
-}
-
-.public-report-inline .form-sub-card-title {
-  margin: 0;
-}
-
-.public-report-inline .field :is(input, textarea) {
-  min-width: 0;
-  border-radius: var(--ui-radius-md);
-}
-
-.public-report-inline .field input {
-  min-height: 44px;
-}
-
-.public-report-inline .checkbox-row {
-  width: fit-content;
-  min-height: 44px;
-  cursor: pointer;
-}
-
-.public-report-inline .checkbox-row input {
-  min-height: 0;
-  accent-color: var(--blue);
-}
-
-.public-report-inline :is(input, textarea, button):focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 2px;
-}
-
-.complaint-photo-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
 }
 
 .complaint-photo-list {
@@ -17913,12 +16545,6 @@ form textarea:focus,
   border: 1px solid var(--ui-border);
   border-radius: var(--ui-radius-md);
   object-fit: cover;
-}
-
-.complaint-photo-remove {
-  position: absolute;
-  top: 6px;
-  right: 6px;
 }
 .nr-shell .documents-step-card {
   gap: 14px;
@@ -18011,62 +16637,11 @@ form textarea:focus,
   white-space: nowrap;
 }
 
-.nr-shell--public .nr-nav-row {
-  padding: 6px 10px;
-  background: transparent;
-  gap: 8px;
-}
-
-.nr-shell--public .nr-nav-row .anm-add-btn {
-  min-width: 0;
-  flex: 1 1 0;
-  text-align: center;
-  white-space: normal;
-}
-
-.nr-shell--public .nr-nav-row .nr-back-btn {
-  flex: none;
-}
-
-.nr-shell--public .nr-nav-row .nr-topbar-continue {
-  min-width: 104px;
-  flex: 0 0 auto;
-}
-
-@container request-form (max-width: 620px) {
-
-  .nr-shell--public .nr-nav-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: stretch;
-  }
-
-  .nr-shell--public .nr-nav-row > button {
-    min-width: 0;
-    padding-inline: 8px;
-    justify-content: center;
-    text-align: center;
-    white-space: normal;
-  }
-
-  .nr-shell--public .nr-nav-row > .nr-topbar-continue {
-    width: 100%;
-  }
-
-  .nr-shell--public .nr-nav-row > .nr-topbar-continue:only-child {
-    grid-column: 2;
-  }
-}
-
 @container request-form (max-width: 440px) {
   .nr-shell--public .nr-topbar {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: 4px;
-  }
-
-  .nr-shell--public .nr-topbar-home {
-    justify-self: end;
   }
 }
 
@@ -18166,12 +16741,6 @@ form textarea:focus,
     justify-content: flex-start;
   }
 
-  .public-inline-actions,
-  .public-inline-actions .primary-action {
-    width: 100%;
-    justify-content: center;
-  }
-
 
 .public-home-footer {
     align-items: flex-start;
@@ -18210,13 +16779,8 @@ form textarea:focus,
     font-size: 1.35rem;
   }
 
-  .public-service-panel-header .ghost-button {
-    width: 100%;
-  }
-
   .public-service-panel .svc-grid-2,
   .public-service-panel .svc-grid-3,
-  .public-inline-card .two-column-fields,
   .public-report-inline :is(.two-column-fields, .address-lookup-grid, .address-city-grid),
   .nr-shell .documents-step-grid {
     grid-template-columns: 1fr;
@@ -18803,11 +17367,6 @@ form textarea:focus,
 
 .adoption-drawer-actions .primary-action {
   background: #1c1917;
-}
-
-.public-animal-card.is-highlighted {
-  box-shadow: 0 10px 26px rgba(21, 122, 78, 0.14);
-  outline: 1px solid #b7dcc8;
 }
 
 .public-adoption-highlight-badge {
@@ -19501,7 +18060,7 @@ h6,
 form input:where(:not([data-ui-input])),
 form input:where(:not([data-ui-input])):is([type="text"], [type="search"], [type="password"], [type="number"], [type="date"]),
 form select,
-form textarea,
+form textarea:where(:not([data-ui-input])),
 .field input,
 .field select,
 .field textarea,
@@ -19518,7 +18077,7 @@ form textarea,
 
 form input:where(:not([data-ui-input])):focus,
 form select:focus,
-form textarea:focus,
+form textarea:where(:not([data-ui-input])):focus,
 .field input:focus,
 .field select:focus,
 .field textarea:focus,
@@ -19629,9 +18188,7 @@ textarea::placeholder,
   color: var(--ink-500) !important;
 }
 
-.access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action {
   border-color: var(--ui-action) !important;
@@ -19640,9 +18197,7 @@ textarea::placeholder,
   box-shadow: none !important;
 }
 
-.access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
-.public-inline-actions .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
 .clean-requests-workspace .workspace-heading .primary-action:hover:not(:disabled) {
   border-color: var(--ui-action-hover) !important;
@@ -19686,11 +18241,7 @@ main,
 }
 /* Neutral public/background lock: remove remaining cream page surfaces */
 .nr-shell--public .sched-month-tab,
-.nr-shell--public .doc-photo-zone,
-.nr-shell .doc-photo-zone--compact,
-.access-type-card:hover,
-.access-modal .access-type-card:hover,
-.compact-auth-modal .ghost-button:hover {
+.nr-shell .doc-photo-zone--compact {
   background: var(--ui-page) !important;
   background-color: var(--ui-page) !important;
 }
@@ -19698,11 +18249,6 @@ main,
 .public-home-footer {
   border-top-color: var(--ui-border) !important;
   background: rgba(255, 255, 255, 0.97) !important;
-  color: var(--ink-500) !important;
-}
-
-.nr-shell--public .doc-photo-placeholder small {
-  background: var(--ink-50) !important;
   color: var(--ink-500) !important;
 }
 /* Balanced color return: subtle accents without dark selected underlines */
@@ -20192,9 +18738,7 @@ main,
 .primary-action,
 .config-create-action,
 .panel-header > .primary-action,
-.access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action,
 .page-actions > .primary-action,
@@ -20220,9 +18764,7 @@ main,
 .primary-action:hover:not(:disabled),
 .config-create-action:hover:not(:disabled),
 .panel-header > .primary-action:hover:not(:disabled),
-.access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
-.public-inline-actions .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
 .clean-requests-workspace .workspace-heading .primary-action:hover:not(:disabled),
 .page-actions > .primary-action:hover:not(:disabled),
@@ -20387,9 +18929,9 @@ main,
 }
 
 .public-animal-card.is-highlighted {
-  outline-color: #93c5fd !important;
-  background: #f8fbff !important;
-  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.10) !important;
+  outline: 1px solid #93c5fd;
+  background: #f8fbff;
+  box-shadow: 0 10px 24px rgba(37, 99, 235, 0.10);
 }
 
 .public-adoption-highlight-badge {
@@ -20622,9 +19164,7 @@ textarea::placeholder,
 .primary-action,
 .config-create-action,
 .panel-header > .primary-action,
-.access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action,
 .page-actions > .primary-action,
@@ -20653,7 +19193,6 @@ textarea::placeholder,
 .danger-action,
 .icon-button,
 .public-back-button,
-.inline-link-button,
 .adoption-clear-btn,
 .modal-backdrop .adoption-form-modal .ghost-button {
   font-weight: var(--type-weight-control) !important;
@@ -20687,7 +19226,6 @@ textarea::placeholder,
 .adoption-view-toggle button,
 .adoption-nav-modern .adoption-filter-group button,
 .compact-choice-field button,
-.anm-type-card,
 .weekday-picker button,
 .agenda-kind-selector button,
 .calendar-day-button,
@@ -20710,7 +19248,6 @@ textarea::placeholder,
 .adoption-view-toggle button.selected,
 .adoption-nav-modern .adoption-filter-group button.selected,
 .compact-choice-field button.selected,
-.anm-type-card.is-selected,
 .weekday-picker button.selected,
 .agenda-kind-selector button.selected,
 .calendar-day-button.selected {
@@ -20794,9 +19331,7 @@ small,
 .primary-action,
 .config-create-action,
 .panel-header > .primary-action,
-.access-modal > .primary-action,
 .adoption-form-modal .primary-action,
-.public-inline-actions .primary-action,
 .adoption-drawer-actions .primary-action,
 .clean-requests-workspace .workspace-heading .primary-action,
 .page-actions > .primary-action,
@@ -20822,9 +19357,7 @@ small,
 .primary-action svg,
 .config-create-action svg,
 .panel-header > .primary-action svg,
-.access-modal > .primary-action svg,
 .adoption-form-modal .primary-action svg,
-.public-inline-actions .primary-action svg,
 .adoption-drawer-actions .primary-action svg,
 .clean-requests-workspace .workspace-heading .primary-action svg,
 .page-actions > .primary-action svg,
@@ -20838,9 +19371,7 @@ small,
 .primary-action:hover:not(:disabled),
 .config-create-action:hover:not(:disabled),
 .panel-header > .primary-action:hover:not(:disabled),
-.access-modal > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
-.public-inline-actions .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
 .clean-requests-workspace .workspace-heading .primary-action:hover:not(:disabled),
 .page-actions > .primary-action:hover:not(:disabled),
@@ -20856,9 +19387,7 @@ small,
 .primary-action:focus-visible,
 .config-create-action:focus-visible,
 .panel-header > .primary-action:focus-visible,
-.access-modal > .primary-action:focus-visible,
 .adoption-form-modal .primary-action:focus-visible,
-.public-inline-actions .primary-action:focus-visible,
 .adoption-drawer-actions .primary-action:focus-visible,
 .clean-requests-workspace .workspace-heading .primary-action:focus-visible,
 .page-actions > .primary-action:focus-visible,
@@ -21044,45 +19573,12 @@ small,
   text-transform: none !important;
 }
 
-.internal-request-modal .nr-shell--internal .anm-type-label,
 .internal-request-modal .nr-shell--internal .access-field[data-label]::before {
   color: #64748b !important;
   font-size: 0.72rem !important;
   font-weight: 600 !important;
   letter-spacing: 0 !important;
   text-transform: none !important;
-}
-
-.internal-request-modal .nr-shell--internal .anm-type-label {
-  display: block !important;
-  margin-bottom: 8px !important;
-}
-
-.internal-request-modal .nr-shell--internal .anm-type-cards {
-  gap: 4px !important;
-  padding: 3px !important;
-  border: 1px solid var(--field-invalid-border, transparent) !important;
-  border-radius: 10px !important;
-  background: #eef3f9 !important;
-}
-
-.internal-request-modal .nr-shell--internal .anm-type-card {
-  min-height: 38px !important;
-  border: 0 !important;
-  border-radius: 8px !important;
-  background: transparent !important;
-  color: #475569 !important;
-  box-shadow: none !important;
-}
-
-.internal-request-modal .nr-shell--internal .anm-type-card {
-  flex: 1 1 0 !important;
-}
-
-.internal-request-modal .nr-shell--internal .anm-type-card.is-selected {
-  background: #ffffff !important;
-  color: #0f172a !important;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.14) !important;
 }
 
 .internal-request-modal .nr-shell--internal .access-field input,
@@ -21331,11 +19827,6 @@ small,
   justify-content: flex-start;
 }
 
-.tutor-access-nav [aria-current="page"] {
-  background: #e9f5ef;
-  color: #186a46;
-}
-
 .tutor-auth-form {
   width: 100%;
   display: grid;
@@ -21347,46 +19838,11 @@ small,
 .tutor-auth-heading h2 {
   margin: 0;
 }
-
-
-.registered-animal-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: 16px;
-  margin-top: 20px;
-}
-
-.registered-animal-card,
-.registered-readonly-summary {
-  display: grid;
-  gap: 12px;
-  padding: 22px;
-  border: 1px solid var(--border, #dce4e0);
-  border-radius: 14px;
-  background: #fff;
-  color: inherit;
-  text-align: left;
-}
-
-.registered-animal-card h3,
-.registered-animal-card p { margin: 0; }
-.registered-animal-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.animal-service-form { display: grid; gap: 16px; }
-.registered-readonly-summary dl { display: grid; grid-template-columns: max-content 1fr; gap: 8px 18px; margin: 0; }
-.registered-readonly-summary dt { color: #60716a; }
-.registered-readonly-summary dd { margin: 0; overflow-wrap: anywhere; }
 .registered-request-selection,
-.reusable-document-options,
 .schedule-occurrence-options { display: grid; gap: 14px; }
-.reusable-document-option { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 14px; border: 1px solid #dce4e0; border-radius: 10px; }
-.reusable-document-option > div { display: grid; gap: 5px; flex: 1 1 180px; overflow-wrap: anywhere; }
 .reused-document-badge { color: #186a46; font-weight: 600; }
 .reused-document-frame { width: 100%; height: 65dvh; border: 0; }
 .reused-document-image { display: block; max-width: 100%; max-height: 65dvh; object-fit: contain; margin: auto; }
-@media (max-width: 540px) {
-  .registered-readonly-summary dl { grid-template-columns: 1fr; gap: 5px; }
-  .registered-readonly-summary dd { margin-bottom: 8px; }
-}
 
 /* WhatsApp templates: table, switch and variables list */
 .whatsapp-grid-wrap {
@@ -21759,7 +20215,7 @@ small,
   min-height: 44px;
   padding: 6px 8px;
   border: 1px solid #dbe5f1;
-  border-radius: 8px;
+  border-radius: var(--option-card-radius, 8px);
   background: #f8fafc;
   color: var(--type-color-primary);
   font-size: var(--type-size-body);
@@ -21785,18 +20241,18 @@ small,
 
 @media (hover: hover) {
   .option-card-choice:hover {
-    border-color: #2563eb;
+    border-color: var(--option-card-accent, #2563eb);
   }
 }
 
 .option-card-choice:has(input:checked) {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #1e40af;
+  border-color: var(--option-card-accent, #2563eb);
+  background: var(--option-card-active-surface, #eff6ff);
+  color: var(--option-card-active-text, #1e40af);
 }
 
 .option-card-choice:has(input:focus-visible) {
-  outline: 2px solid #2563eb;
+  outline: 2px solid var(--option-card-accent, #2563eb);
   outline-offset: 2px;
 }
 

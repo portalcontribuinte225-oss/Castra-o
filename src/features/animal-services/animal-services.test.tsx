@@ -100,7 +100,9 @@ describe("animal service screens", () => {
     const html = renderToStaticMarkup(<AnimalDeathForm animal={animal} onBack={() => {}} />);
     expect(html).toContain("Registrar óbito"); expect(html).toContain("Bidu · CHIP123");
     expect(html).toContain("Data do óbito"); expect(html).toContain("Causa mortis");
-    expect(html).toContain("Confirmar óbito"); expect(html).toContain("danger-action");
+    const confirmButton = html.match(/<button[^>]+>Confirmar óbito<\/button>/)?.[0];
+    expect(confirmButton).toContain('type="submit"');
+    expect(confirmButton).toContain("tw:border-ui-danger");
   });
 
   it("renders the transfer form with tutor and address sections and no credential field", () => {

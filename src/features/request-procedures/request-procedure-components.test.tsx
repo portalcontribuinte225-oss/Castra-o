@@ -132,7 +132,7 @@ describe("AnimalAccordionCard", () => {
     expect(html).toContain("Mel · Felino");
     expect(html).toContain('aria-expanded="true"');
     expect(html).toContain("conteúdo");
-    expect(html).toContain('<div class="animal-title-badge">2</div>');
+    expect(html).toContain('<div class="animal-title-badge" aria-hidden="true">2</div>');
   });
 
   it("hides the content when folded, and has no header when there is a single animal", () => {
@@ -183,7 +183,7 @@ describe("AnimalFields", () => {
     const defined = renderToStaticMarkup(<AnimalFields {...props} />);
     expect(defined).toContain('checked="" value="Definida"/><span>Sim</span>');
     expect(defined).toContain('value="Indefinida"/><span>Não</span>');
-    expect(defined).toContain('type="text" aria-label="Raça"');
+    expect(defined).toMatch(/<input[^>]*type="text"[^>]*aria-label="Raça"/);
     const withOptions = renderToStaticMarkup(<AnimalFields {...props} breedOptions={[{ id: "poodle", name: "Poodle" }]} />);
     expect(withOptions).toContain('aria-label="Raça"');
     expect(withOptions).toContain('<option value="Poodle">Poodle</option>');
@@ -196,8 +196,8 @@ describe("AnimalFields", () => {
     expect(withNames).toContain("Selecione o bairro");
     expect(withNames).toContain("Pinheirinho");
     expect(withNames).not.toContain("Ex.: Centro");
-    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted />)).toContain("access-field is-invalid");
-    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={{ ...props.animal, neighborhood: "Centro" }} />)).not.toContain("access-field is-invalid");
+    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted />)).toMatch(/aria-label="Em que bairro ele vive\?" aria-invalid="true"/);
+    expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={{ ...props.animal, neighborhood: "Centro" }} />)).toMatch(/aria-label="Em que bairro ele vive\?" aria-invalid="false"/);
   });
 
   it("adds the microchip only for staff", () => {

@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
 type CloseButtonProps = Pick<ComponentPropsWithoutRef<"button">, "aria-label" | "disabled" | "onClick">;
@@ -10,10 +11,13 @@ const closeButtonStyle = [
   "tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-[#be123c]",
 ].join(" ");
 
-export function CloseButton({ "aria-label": label = "Fechar", disabled, onClick }: CloseButtonProps) {
+export const CloseButton = forwardRef<HTMLButtonElement, CloseButtonProps>(function CloseButton(
+  { "aria-label": label = "Fechar", disabled, onClick },
+  ref,
+) {
   return (
-    <button type="button" aria-label={label} disabled={disabled} onClick={onClick} className={closeButtonStyle}>
+    <button ref={ref} type="button" aria-label={label} disabled={disabled} onClick={onClick} className={closeButtonStyle}>
       <X size={17} aria-hidden="true" />
     </button>
   );
-}
+});
