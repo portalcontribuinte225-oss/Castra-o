@@ -111,8 +111,11 @@ import {
 import {
   CompactChoiceField,
   ConfigActiveToggle,
+  ConfigField,
+  ConfigRow,
   ConfigSectionHeader,
   ConfigStatusFilter,
+  configTextareaStyle,
   EmptyState,
   Field,
   InfoTile,
@@ -123,6 +126,7 @@ import {
 import { Button } from "./components/button";
 import { Card } from "./components/card";
 import { CloseButton } from "./components/close-button";
+import { ConfigDialogBackdrop } from "./components/config-dialog";
 import { Input } from "./components/input";
 import {
   dataUrlToUint8Array,
@@ -912,6 +916,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                 <button
                   className={`${active === item.id ? "active" : ""} ${item.id === "config" ? "sidebar-parent" : ""}`}
                   title={sidebarCollapsed ? item.label : undefined}
+                  aria-expanded={item.id === "config" ? configMenuOpen : undefined}
+                  aria-controls={item.id === "config" && configMenuOpen ? "settings-navigation" : undefined}
                   onClick={() => {
                     if (item.id === "config") {
                       setConfigMenuOpen((open) => !open);
@@ -930,7 +936,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                   )}
                 </button>
                 {item.id === "config" && configMenuOpen && (
-                  <div className="sidebar-subnav" aria-label="Subabas de configurações">
+                  <div className="sidebar-subnav" id="settings-navigation" role="group" aria-label="Subabas de configurações">
                     {visibleConfigSidebarItems.map((subitem) => {
                       const subitemTabs = subitem.id === "environment"
                         ? visibleEnvironmentTabs
@@ -942,9 +948,13 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                       const expanded = expandedConfigItem === subitem.id;
                       return (
                         <React.Fragment key={subitem.id}>
-                          <button
-                            className={`config-nav-item${showing ? " active" : ""}`}
-                            type="button"
+                          <Button
+                            variant="custom"
+                            className="tw:w-full tw:justify-start tw:gap-2 tw:border-transparent tw:bg-transparent tw:text-left tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:data-[selected=true]:border-ui-accent tw:data-[selected=true]:bg-ui-accent-soft tw:data-[selected=true]:text-ui-accent-strong"
+                            data-selected={showing}
+                            aria-current={!hasTabs && showing ? "page" : undefined}
+                            aria-expanded={hasTabs ? expanded : undefined}
+                            aria-controls={hasTabs && expanded ? `settings-tabs-${subitem.id}` : undefined}
                             onClick={() => {
                               if (hasTabs) {
                                 setExpandedConfigItem(expanded ? "" : subitem.id);
@@ -955,25 +965,23 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                               setMobileOpen(false);
                             }}
                           >
-                            <span className="config-nav-dot" />
-                            <span className="config-nav-text">
-                              <span className="config-nav-label">{subitem.label}</span>
-                            </span>
+                            <span className="tw:min-w-0 tw:flex-1 tw:truncate">{subitem.label}</span>
                             {hasTabs && (
-                              <ChevronRight size={13} className={`config-nav-chevron${expanded ? " open" : ""}`} />
+                              <ChevronRight size={13} aria-hidden="true" className={`tw:shrink-0 tw:motion-safe:transition-transform${expanded ? " tw:rotate-90" : ""}`} />
                             )}
-                          </button>
+                          </Button>
                           {hasTabs && expanded && (
-                            <div className="config-nav-children">
+                            <div className="config-nav-children" id={`settings-tabs-${subitem.id}`}>
                               {subitemTabs.map((tab) => (
-                                <button
+                                <Button
                                   key={tab.id}
-                                  className={`config-nav-child${showing && configTab === tab.id ? " active" : ""}`}
-                                  type="button"
+                                  variant="custom"
+                                  className="tw:w-full tw:justify-start tw:border-transparent tw:bg-transparent tw:text-left tw:text-ui-text tw:hover:bg-card-page tw:aria-[current=page]:border-ui-accent tw:aria-[current=page]:bg-ui-accent-soft tw:aria-[current=page]:font-semibold tw:aria-[current=page]:text-ui-accent-strong"
+                                  aria-current={showing && configTab === tab.id ? "page" : undefined}
                                   onClick={() => { setActive("config"); setConfigArea(subitem.id); setConfigTab(tab.id); setMobileOpen(false); }}
                                 >
-                                  {tab.label}
-                                </button>
+                                  <span className="tw:min-w-0 tw:truncate">{tab.label}</span>
+                                </Button>
                               ))}
                             </div>
                           )}
@@ -4650,11 +4658,17 @@ async function geocodeAddress(addressString, apiKey) {
 
 function AgendaKindSelector({ value, onChange }: AnyRecord) {
   return (
-    <div className="agenda-kind-selector">
+    <div className="tw:grid tw:grid-cols-2 tw:gap-1.5" role="group" aria-label="Tipo de agenda">
       {["Agenda", "Mutirao"].map((option) => (
-        <button key={option} className={value === option ? "selected" : ""} type="button" onClick={() => onChange(option)}>
+        <Button
+          key={option}
+          variant="custom"
+          aria-pressed={value === option}
+          className="tw:min-w-0 tw:px-2 tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong"
+          onClick={() => onChange(option)}
+        >
           {option === "Agenda" ? "Agenda normal" : "Mutirão"}
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -4669,18 +4683,20 @@ function DocumentCriteriaColumn({ variant, value, onChange, placeholder }: AnyRe
   const { label, accent } = documentCriteriaVariants[variant as keyof typeof documentCriteriaVariants];
   const count = textToCriteriaList(value).length;
   return (
-    <section className={`document-criteria-column document-criteria-column--${accent}`}>
+    <Card as="section" className={`document-criteria-column document-criteria-column--${accent}`}>
       <header className="document-criteria-column-header">
         <span>{label}</span>
         <span className="document-criteria-count">{count}</span>
       </header>
       <textarea
-        className="document-criteria-textarea"
+        data-ui-input=""
+        className={`${configTextareaStyle} tw:min-h-0 tw:flex-1 tw:resize-none`}
+        aria-label={label}
         value={value}
         placeholder={placeholder || "Um crit\u00e9rio por linha\u2026"}
         onChange={(event) => onChange(event.target.value)}
       />
-    </section>
+    </Card>
   );
 }
 
@@ -5212,10 +5228,6 @@ function ConfigView({
       setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true });
     }
     setConfigModal("size");
-  }
-
-  function patchListItem(setter, itemId, patch) {
-    setter?.((current) => current.map((item) => (matchesScopedConfigItem(item, itemId) ? { ...item, ...patch } : item)));
   }
 
   function deleteListItem(setter, itemId) {
@@ -6114,6 +6126,8 @@ function ConfigView({
     user.active !== false
     && (!sectorModalMunicipalityId || getItemMunicipalityId(user) === sectorModalMunicipalityId)
   );
+  const managementSubmitStyle = "tw:border-ui-ink tw:bg-[#e8f0fb] tw:font-semibold tw:text-ui-ink tw:enabled:hover:bg-card-page";
+  const municipalitySaveFailed = ["Não", "Selecione", "Informe"].some((message) => municipalitySaveStatus.includes(message));
   const configAreaTitle = {
     environment: "Configurar Ambiente",
     municipalities: "Dados Gerais",
@@ -6147,16 +6161,16 @@ function ConfigView({
             <div className="config-editor-grid">
               {municipalityRows.length === 0 && <EmptyState title="Nenhum município cadastrado" text="Cadastre um município para liberar um ambiente próprio." />}
               {municipalityRows.map((municipality, index) => (
-                <article className="config-list-row" key={municipality.id} onClick={() => openMunicipalityModal(municipality)} role="button" tabIndex={0}>
+                <ConfigRow key={municipality.id} onClick={() => openMunicipalityModal(municipality)}>
                   <span className="config-list-index">{index + 1}</span>
-                  <div className="config-list-main">
+                  <span className="config-list-main">
                     <strong>{municipality.name}</strong>
                     <span>{municipality.state || "UF não informada"}</span>
-                  </div>
+                  </span>
                   <small className={municipality.active === false ? "schedule-status inactive" : "schedule-status active"}>
                     {municipality.active === false ? "Inativo" : "Ativo"}
                   </small>
-                </article>
+                </ConfigRow>
               ))}
             </div>
           </div>
@@ -6170,16 +6184,14 @@ function ConfigView({
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
         <div className="config-panel wide">
           <PanelHeader title="IA externa para documentos" />
-          <div className="ai-settings-layout">
-            <article className="ai-settings-card">
-              <div className="config-modal-options">
-                <ConfigActiveToggle
-                  checked={Boolean(aiSettings.active)}
-                  onChange={(checked) => setAiSettings?.((current: AnyRecord) => ({ ...current, active: checked }))}
-                  onText="Ativa"
-                  offText="Inativa"
-                />
-              </div>
+          <div className="tw:grid tw:items-start tw:gap-3 tw:lg:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]">
+            <Card as="article" className="tw:grid tw:min-w-0 tw:content-start tw:gap-3 tw:p-4">
+              <ConfigActiveToggle
+                checked={Boolean(aiSettings.active)}
+                onChange={(checked) => setAiSettings?.((current: AnyRecord) => ({ ...current, active: checked }))}
+                onText="Ativa"
+                offText="Inativa"
+              />
               <p className={aiSettings.hasApiKey && aiSettings.keyValid ? "sms-status confirmed" : "sms-status"}>
                 {!aiSettings.hasApiKey
                   ? "Token não configurado."
@@ -6218,53 +6230,58 @@ function ConfigView({
                   ))}
                 </select>
               </label>
-            </article>
-            <article className="ai-rules-card">
-              <strong>Como a IA será usada</strong>
-              <p>
-                Ao anexar um documento, a IA usa os critérios cadastrados no tipo de documento (obrigatórios e de recusa)
-                para decidir se o arquivo condiz com o solicitado.
-              </p>
-              <p>
-                Com a IA inativa, o arquivo fica apenas anexado e segue para conferência manual, sem análise automática.
-              </p>
-              <label className="field">
-                <span>Token / chave API</span>
-                <input
-                  value={aiSettings.apiKey}
-                  type="password"
-                  name="ai-provider-api-key"
-                  autoComplete="new-password"
-                  data-lpignore="true"
-                  data-1p-ignore="true"
-                  data-bwignore="true"
-                  placeholder={`Cole a chave da ${selectedAiProvider}`}
-                  onChange={(event) => setAiSettings?.((current: AnyRecord) => ({ ...current, apiKey: event.target.value }))}
-                />
-              </label>
+            </Card>
+            <Card as="article" className="tw:grid tw:min-w-0 tw:gap-3 tw:p-4">
+              <h3 className="tw:m-0 tw:text-sm tw:font-semibold tw:text-ui-ink">Como a IA será usada</h3>
+              <div className="tw:grid tw:gap-2 tw:text-sm tw:text-ui-text">
+                <p className="tw:m-0">
+                  Ao anexar um documento, a IA usa os critérios cadastrados no tipo de documento (obrigatórios e de recusa)
+                  para decidir se o arquivo condiz com o solicitado.
+                </p>
+                <p className="tw:m-0">
+                  Com a IA inativa, o arquivo fica apenas anexado e segue para conferência manual, sem análise automática.
+                </p>
+              </div>
+              <ConfigField
+                label="Token / chave API"
+                value={aiSettings.apiKey}
+                type="password"
+                name="ai-provider-api-key"
+                autoComplete="new-password"
+                data-lpignore="true"
+                data-1p-ignore="true"
+                data-bwignore="true"
+                placeholder={`Cole a chave da ${selectedAiProvider}`}
+                onChange={(apiKey) => setAiSettings?.((current: AnyRecord) => ({ ...current, apiKey }))}
+              />
               {selectedAiProviderConfig.keyUrl && (
-                <a className="external-provider-link" href={selectedAiProviderConfig.keyUrl} target="_blank" rel="noreferrer">
+                <a
+                  className="tw:inline-flex tw:min-h-10 tw:items-center tw:justify-center tw:rounded-full tw:border tw:border-solid tw:border-[color:var(--ui-border-strong)] tw:bg-[var(--selected-bg)] tw:px-3.5 tw:text-center tw:text-[0.85rem] tw:font-semibold tw:text-[color:var(--selected-ink)] tw:no-underline tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent"
+                  href={selectedAiProviderConfig.keyUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   Criar ou acessar chave da {selectedAiProvider}
                 </a>
               )}
-              <div className="ai-settings-actions">
-                <button className="primary-action ai-save-key-action" type="button" onClick={saveAiCredentials}>
+              <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-2">
+                <Button onClick={saveAiCredentials}>
                   Salvar configuração
-                </button>
+                </Button>
                 {aiSettings.hasApiKey && (
-                  <button className="ghost-button" type="button" onClick={clearAiCredentials}>
+                  <Button variant="outline" onClick={clearAiCredentials}>
                     Remover chave
-                  </button>
+                  </Button>
                 )}
               </div>
               {aiSaveStatus && <p className={aiSaveStatus.includes("sucesso") || aiSaveStatus === "Chave removida." ? "sms-status confirmed" : "sms-status"}>{aiSaveStatus}</p>}
-            </article>
+            </Card>
           </div>
         </div>
       )}
 
       {configArea === "environment" && configTab === "requests" && (
-        <div className="config-panel wide">
+        <Card className="config-panel wide">
           <ConfigSectionHeader title="Tipos de solicitação" createLabel="Criar tipo" onCreate={() => setConfigModal("requestType")}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -6278,23 +6295,23 @@ function ConfigView({
               <EmptyState title="Nenhum tipo configurado" text="Crie os tipos de solicitação que o tutor poderá escolher. Cada tipo define taxa e documentos exigidos." />
             )}
             {filteredRequestTypes.map((type, index) => (
-              <article className="config-list-row" key={type.id} onClick={() => { setEditingRequestTypeId(type.id); setNewRequestType({ ...emptyRequestType, ...type }); setConfigModal("requestType"); }} role="button" tabIndex={0}>
+              <ConfigRow key={type.id} onClick={() => { setEditingRequestTypeId(type.id); setNewRequestType({ ...emptyRequestType, ...type }); setConfigModal("requestType"); }}>
                 <span className="config-list-index">{index + 1}</span>
-                <div className="config-list-main">
+                <span className="config-list-main">
                   <strong>{type.name}</strong>
                   <span>{type.charged ? `Taxa: ${type.billingAmount || type.fee || "-"}` : "Gratuito"} · {(type.documents?.length || 0)} documento(s)</span>
-                </div>
+                </span>
                 <small className={type.active === false ? "schedule-status inactive" : "schedule-status active"}>
                   {type.active === false ? "Inativo" : "Ativo"}
                 </small>
-              </article>
+              </ConfigRow>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {configArea === "environment" && configTab === "agenda" && (
-        <div className="config-panel wide">
+        <Card className="config-panel wide">
           <ConfigSectionHeader title="Agenda" createLabel="Criar agenda" onCreate={() => openAgendaModal()}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -6308,27 +6325,27 @@ function ConfigView({
               <EmptyState title="Nenhuma agenda cadastrada" text="Crie uma agenda para gerar dias disponíveis para castração." />
             )}
             {filteredScheduleRules.map((rule, index) => (
-              <article className="config-list-row" key={rule.id} onClick={() => openAgendaModal(rule)} role="button" tabIndex={0}>
+              <ConfigRow key={rule.id} onClick={() => openAgendaModal(rule)}>
                 <span className="config-list-index">{index + 1}</span>
-                <div className="config-list-main">
+                <span className="config-list-main">
                   <strong>{rule.description}</strong>
                   <span>{formatAgendaRuleSummary(rule)}</span>
-                </div>
+                </span>
                 <small className={rule.active ? "schedule-status active" : "schedule-status inactive"}>
                   {rule.active ? "Ativo" : "Inativo"}
                 </small>
-              </article>
+              </ConfigRow>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {configArea === "environment" && configTab === "sizes" && (
-        <SimpleConfigList title="Portes" items={filteredSizes} allItems={sizeOptions} filterValue={configStatusFilter} onFilterChange={setConfigStatusFilter} onCreate={() => openSizeModal()} onEdit={openSizeModal} onPatch={(id, patch) => patchListItem(setSizeOptions, id, patch)} showDescription />
+        <SimpleConfigList title="Portes" items={filteredSizes} allItems={sizeOptions} filterValue={configStatusFilter} onFilterChange={setConfigStatusFilter} onCreate={() => openSizeModal()} onEdit={openSizeModal} showDescription />
       )}
 
       {configArea === "environment" && configTab === "species" && (
-        <SimpleConfigList title="Espécies" items={filteredSpecies} allItems={speciesOptions} filterValue={configStatusFilter} onFilterChange={setConfigStatusFilter} onCreate={() => openSpeciesModal()} onEdit={openSpeciesModal} onPatch={(id, patch) => patchListItem(setSpeciesOptions, id, patch)} />
+        <SimpleConfigList title="Espécies" items={filteredSpecies} allItems={speciesOptions} filterValue={configStatusFilter} onFilterChange={setConfigStatusFilter} onCreate={() => openSpeciesModal()} onEdit={openSpeciesModal} />
       )}
 
       {configArea === "environment" && configTab === "breeds" && (
@@ -6365,16 +6382,16 @@ function ConfigView({
                   getItemMunicipalityId(u) === sectorMunicipalityId && userBelongsToSector(u, sector.id)
                 );
                 return (
-                  <article className="config-list-row" key={`${sectorMunicipalityId}:${sector.id}`} onClick={() => openSectorModal(sector)} role="button" tabIndex={0}>
+                  <ConfigRow key={`${sectorMunicipalityId}:${sector.id}`} onClick={() => openSectorModal(sector)}>
                     <span className="config-list-index">{index + 1}</span>
-                    <div className="config-list-main">
+                    <span className="config-list-main">
                       <strong>{sector.name || "Setor sem nome"}</strong>
                       <span>{sectorUsers.length} usuário(s) vinculado(s){sectorUsers.length > 0 ? ` · ${sectorUsers.map((u) => u.name).join(", ")}` : ""}</span>
-                    </div>
+                    </span>
                     <small className={sector.active === false ? "schedule-status inactive" : "schedule-status active"}>
                       {sector.active === false ? "Inativo" : "Ativo"}
                     </small>
-                  </article>
+                  </ConfigRow>
                 );
               })}
             </div>
@@ -6383,47 +6400,27 @@ function ConfigView({
       )}
 
       {sectorModal && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal config-sector-modal" onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
-            <header className="sector-modal-header">
-              <div className="sector-modal-titleblock">
-                <h2>{editingSectorId ? "Editar setor" : "Criar setor"}</h2>
-                <p>Organize vínculos internos e responsáveis por etapa.</p>
-              </div>
-              <div className="permission-modal-head-actions">
-                <label className="permission-inline-toggle">
-                  <span>Ativo</span>
-                  <input
-                    type="checkbox"
-                    checked={newSectorActive}
-                    onChange={(event) => setNewSectorActive(event.target.checked)}
-                  />
-                  <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
-                </label>
-                <button className="modal-header-close" type="button" onClick={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }} aria-label="Fechar">
-                  <X size={16} />
-                </button>
-              </div>
-            </header>
+        <ConfigDialogBackdrop>
+          <Card as="form" className="workflow-modal config-sector-modal" role="dialog" aria-modal="true" aria-label={editingSectorId ? "Editar setor" : "Criar setor"} onSubmit={(e) => { e.preventDefault(); createSector(); setSectorModal(false); }}>
+            <ModalHeader
+              appearance="config"
+              title={editingSectorId ? "Editar setor" : "Criar setor"}
+              subtitle="Organize vínculos internos e responsáveis por etapa."
+              onClose={() => { setSectorModal(false); setEditingSectorId(null); setEditingSectorMunicipalityId(""); }}
+              actions={<ConfigActiveToggle checked={newSectorActive} onChange={setNewSectorActive} />}
+            />
 
             <div className="sector-modal-body">
-              <label className="field sector-name-field">
-                <span>Nome do setor</span>
-                <input
-                  value={newSectorName}
-                  placeholder="Ex: Triagem documental"
-                  onChange={(event) => setNewSectorName(event.target.value)}
-                />
-              </label>
+              <ConfigField label="Nome do setor" value={newSectorName} placeholder="Ex: Triagem documental" onChange={setNewSectorName} />
 
-              <section className="sector-links-panel">
+              <Card as="section" className="sector-links-panel">
                 <div className="sector-links-head">
                   <strong>Vincular usuários</strong>
                   <small>{pendingSectorUserIds.length} de {sectorModalUsers.length} selecionados</small>
                 </div>
                 <div className="sector-link-list">
                   {sectorModalUsers.length === 0 && (
-                    <span className="helper-text">Nenhum usuário cadastrado ainda.</span>
+                    <span className="helper-text" role="status">Nenhum usuário cadastrado ainda.</span>
                   )}
                   {sectorModalUsers.length > 0 && (
                     <label className="sector-link-row sector-link-row--all">
@@ -6452,14 +6449,14 @@ function ConfigView({
                     </label>
                   ))}
                 </div>
-              </section>
+              </Card>
             </div>
 
             <footer className="sector-modal-footer">
-              <button className="primary-action" type="submit" disabled={!newSectorName.trim()}>{editingSectorId ? "Salvar" : "Criar setor"}</button>
+              <Button variant="custom" className={managementSubmitStyle} type="submit" disabled={!newSectorName.trim()}>{editingSectorId ? "Salvar" : "Criar setor"}</Button>
             </footer>
-          </form>
-        </div>
+          </Card>
+        </ConfigDialogBackdrop>
       )}
       {configArea === "permissions" && (
         <div className="config-panel wide">
@@ -6478,16 +6475,16 @@ function ConfigView({
             {filteredPermissionGroups.map((group, index) => {
               const linkedUsers = (teams.users || []).filter((user) => user.permissionGroupId === group.id);
               return (
-                <article className="config-list-row" key={group.id} onClick={() => openPermissionModal(group)} role="button" tabIndex={0}>
+                <ConfigRow key={group.id} onClick={() => openPermissionModal(group)}>
                   <span className="config-list-index">{index + 1}</span>
-                  <div className="config-list-main">
+                  <span className="config-list-main">
                     <strong>{group.name || "Grupo sem nome"}</strong>
                     <span>{linkedUsers.length} usuário(s) · Menus: {(group.allowedMenuItems || []).length || 0} · Config: {(group.allowedConfigItems || []).length || 0}</span>
-                  </div>
+                  </span>
                   <small className={group.active === false ? "schedule-status inactive" : "schedule-status active"}>
                     {group.active === false ? "Inativo" : "Ativo"}
                   </small>
-                </article>
+                </ConfigRow>
               );
             })}
           </div>
@@ -6510,16 +6507,16 @@ function ConfigView({
                 <EmptyState title="Nenhum usuário cadastrado" text="Crie usuários internos e vincule cada um a um setor." />
               )}
               {filteredTeamUsers.map((user, index) => (
-                <article className="config-list-row" key={`${getItemMunicipalityId(user)}:${user.id}`} onClick={() => openTeamUserModal(user)} role="button" tabIndex={0}>
+                <ConfigRow key={`${getItemMunicipalityId(user)}:${user.id}`} onClick={() => openTeamUserModal(user)}>
                   <span className="config-list-index">{index + 1}</span>
-                  <div className="config-list-main">
+                  <span className="config-list-main">
                     <strong>{user.name || "Usuário sem nome"}</strong>
                     <span>{user.email || "Sem e-mail"} · {getMunicipalityLabel(user.municipalityId, municipalities)}</span>
-                  </div>
+                  </span>
                   <small className={user.active === false ? "schedule-status inactive" : "schedule-status active"}>
                     {user.active === false ? "Inativo" : "Ativo"}
                   </small>
-                </article>
+                </ConfigRow>
               ))}
             </div>
           </div>
@@ -6527,41 +6524,25 @@ function ConfigView({
       )}
 
       {permissionModal && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal config-permission-modal" onSubmit={(event) => { event.preventDefault(); createPermissionGroup(); }}>
-            <header className="permission-modal-header">
-              <div className="permission-modal-titleblock">
-                <h2>{newPermissionGroup.name || (editingPermissionGroupId ? "Grupo de permissão" : "Novo grupo")}</h2>
-                <p>Grupo padrão com todas as permissões do catálogo habilitadas.</p>
-                <span>Criado em: {newPermissionGroup.createdAt || "sem registro"}</span>
-              </div>
-              <div className="permission-modal-head-actions">
-                <label className="permission-inline-toggle">
-                  <span>Ativo</span>
-                  <input
-                    type="checkbox"
-                    checked={newPermissionGroup.active !== false}
-                    onChange={(event) => setNewPermissionGroup((current) => ({ ...current, active: event.target.checked }))}
-                  />
-                  <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
-                </label>
-                <button className="modal-header-close" type="button" onClick={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }} aria-label="Fechar">
-                  <X size={16} />
-                </button>
-              </div>
-            </header>
+        <ConfigDialogBackdrop>
+          <Card as="form" className="workflow-modal config-permission-modal" role="dialog" aria-modal="true" aria-label={editingPermissionGroupId ? "Editar grupo de permissão" : "Criar grupo de permissão"} onSubmit={(event) => { event.preventDefault(); createPermissionGroup(); }}>
+            <ModalHeader
+              appearance="config"
+              title={newPermissionGroup.name || (editingPermissionGroupId ? "Grupo de permissão" : "Novo grupo")}
+              subtitle={<>Grupo padrão com todas as permissões do catálogo habilitadas.<br />Criado em: {newPermissionGroup.createdAt || "sem registro"}</>}
+              onClose={() => { setPermissionModal(false); setEditingPermissionGroupId(null); setNewPermissionGroup(emptyPermissionGroup); }}
+              actions={
+                <ConfigActiveToggle
+                  checked={newPermissionGroup.active !== false}
+                  onChange={(checked) => setNewPermissionGroup((current) => ({ ...current, active: checked }))}
+                />
+              }
+            />
 
             <div className="permission-modal-body">
-              <label className="field permission-name-field">
-                <span>Nome do grupo</span>
-                <input
-                  value={newPermissionGroup.name}
-                  placeholder="Ex: Triagem documental"
-                  onChange={(event) => setNewPermissionGroup((current) => ({ ...current, name: event.target.value }))}
-                />
-              </label>
+              <ConfigField label="Nome do grupo" value={newPermissionGroup.name} placeholder="Ex: Triagem documental" onChange={(value) => setNewPermissionGroup((current) => ({ ...current, name: value }))} />
 
-              <section className="permission-catalog-panel">
+              <Card as="section" className="permission-catalog-panel">
                 <div className="permission-catalog-head">
                   <strong>Permissões</strong>
                 </div>
@@ -6571,10 +6552,11 @@ function ConfigView({
                     const selectedCount = section.items.filter((item) => (newPermissionGroup[item.field] || []).includes(item.id)).length;
                     const isOpen = permissionOpenSections[section.key] === true;
                     return (
-                      <section className={`permission-group-card permission-group-card--${section.tone}`} key={section.key}>
+                      <Card as="section" className={`permission-group-card permission-group-card--${section.tone}`} key={section.key}>
                         <button
                           className="permission-group-header"
                           type="button"
+                          aria-expanded={isOpen}
                           onClick={() => setPermissionOpenSections((current) => ({ ...current, [section.key]: !isOpen }))}
                         >
                           <span>
@@ -6583,7 +6565,7 @@ function ConfigView({
                           </span>
                           <span className={`permission-group-toggle${isOpen ? " is-open" : ""}`}>
                             {isOpen ? "Ocultar" : "Expandir"}
-                            <ChevronDown size={14} />
+                            <ChevronDown size={14} aria-hidden="true" />
                           </span>
                         </button>
                         {isOpen && (
@@ -6602,42 +6584,38 @@ function ConfigView({
                             ))}
                           </div>
                         )}
-                      </section>
+                      </Card>
                     );
                   })}
                 </div>
-              </section>
+              </Card>
             </div>
 
             <footer className="permission-modal-footer">
-              <button className="primary-action" type="submit" disabled={!newPermissionGroup.name?.trim()}>
+              <Button variant="custom" className={managementSubmitStyle} type="submit" disabled={!newPermissionGroup.name?.trim()}>
                 Salvar
-              </button>
+              </Button>
             </footer>
-          </form>
-        </div>
+          </Card>
+        </ConfigDialogBackdrop>
       )}
       {userModal && (
-        <div className="modal-backdrop">
-          <form className="workflow-modal config-user-modal" onSubmit={async (e) => { e.preventDefault(); setUserSaveError(""); if (await createTeamUser()) setUserModal(false); }}>
+        <ConfigDialogBackdrop>
+          <Card as="form" className="workflow-modal config-user-modal" role="dialog" aria-modal="true" aria-label={editingTeamUserId ? "Editar usuário" : "Criar usuário"} onSubmit={async (e) => { e.preventDefault(); setUserSaveError(""); if (await createTeamUser()) setUserModal(false); }}>
             <ModalHeader
+              appearance="config"
               title={editingTeamUserId ? "Editar usuário" : "Criar usuário"}
               onClose={() => { setUserModal(false); setEditingTeamUserId(null); setSectorPickerOpen(false); setUserSaveError(""); }}
               actions={
-                <label className="permission-inline-toggle">
-                  <span>Ativo</span>
-                  <input
-                    type="checkbox"
-                    checked={newTeamUser.active !== false}
-                    onChange={(event) => setNewTeamUser((c) => ({ ...c, active: event.target.checked }))}
-                  />
-                  <span className="toggle-track" aria-hidden="true"><span className="toggle-thumb" /></span>
-                </label>
+                <ConfigActiveToggle
+                  checked={newTeamUser.active !== false}
+                  onChange={(checked) => setNewTeamUser((c) => ({ ...c, active: checked }))}
+                />
               }
             />
             <div className="config-management-body">
-              <Field label="Nome" value={newTeamUser.name} placeholder="Nome completo" onChange={(value) => setNewTeamUser((c) => ({ ...c, name: value }))} />
-              <Field label="Email" value={newTeamUser.email} placeholder="email@dominio.com" onChange={(value) => setNewTeamUser((c) => ({ ...c, email: value }))} />
+              <ConfigField label="Nome" value={newTeamUser.name} placeholder="Nome completo" onChange={(value) => setNewTeamUser((c) => ({ ...c, name: value }))} />
+              <ConfigField label="Email" value={newTeamUser.email} placeholder="email@dominio.com" onChange={(value) => setNewTeamUser((c) => ({ ...c, email: value }))} />
               {isGlobalRole(currentUser?.role) && (() => {
                 const munStates = [...new Set(activeMunicipalities.map((m) => m.state).filter(Boolean))].sort();
                 const filteredMuns = municipalityStateFilter
@@ -6688,8 +6666,8 @@ function ConfigView({
                   </div>
                 );
               })()}
-              <label className="field">
-                <span>Setores vinculados</span>
+              <div className="tw:grid tw:min-w-0 tw:gap-1.5 tw:text-sm" role="group" aria-labelledby="config-user-sectors-label">
+                <span id="config-user-sectors-label" className="tw:font-medium">Setores vinculados</span>
                 <div className="sector-input-box">
                   {selectedTeamSectors.map((sector) => (
                     <span className="sector-tag" key={`${getItemMunicipalityId(sector)}:${sector.id}`}>
@@ -6702,17 +6680,17 @@ function ConfigView({
                           sectorIds: (current.sectorIds || []).filter((id) => id !== sector.id),
                         }))}
                       >
-                        <X size={11} />
+                        <X size={11} aria-hidden="true" />
                       </button>
                     </span>
                   ))}
-                  <button type="button" className="sector-add-btn" aria-label="Adicionar setor" onClick={() => setSectorPickerOpen(true)}>
-                    <Plus size={14} />
-                  </button>
+                  <Button variant="outline" aria-label="Adicionar setor" onClick={() => setSectorPickerOpen(true)}>
+                    <Plus size={14} aria-hidden="true" />
+                  </Button>
                 </div>
-              </label>
-              <Field label="N° Matrícula" value={newTeamUser.matricula} placeholder="Ex: 00123" onChange={(value) => setNewTeamUser((c) => ({ ...c, matricula: value }))} />
-              <Field label="Cargo" value={newTeamUser.role} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, role: value }))} />
+              </div>
+              <ConfigField label="N° Matrícula" value={newTeamUser.matricula} placeholder="Ex: 00123" onChange={(value) => setNewTeamUser((c) => ({ ...c, matricula: value }))} />
+              <ConfigField label="Cargo" value={newTeamUser.role} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, role: value }))} />
               <label className="field">
                 <span>Grupo de permissão</span>
                 <select
@@ -6728,42 +6706,46 @@ function ConfigView({
                     ))}
                 </select>
               </label>
-              <label className="field">
-                <span>Senha de login</span>
-                <input type="password" value={newTeamUser.senha} placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"} onChange={(e) => setNewTeamUser((c) => ({ ...c, senha: e.target.value }))} />
-              </label>
-              {userSaveError && <p className="form-error-msg">{userSaveError}</p>}
+              <ConfigField
+                label="Senha de login"
+                type="password"
+                value={newTeamUser.senha}
+                placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"}
+                onChange={(value) => setNewTeamUser((c) => ({ ...c, senha: value }))}
+              />
+              {userSaveError && <p className="form-error-msg" role="alert">{userSaveError}</p>}
             </div>
             <footer className="config-management-footer">
-              <button className="primary-action" type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
+              <Button variant="custom" className={managementSubmitStyle} type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
                 {editingTeamUserId ? "Salvar" : "Criar usuário"}
-              </button>
+              </Button>
             </footer>
-          </form>
-        </div>
+          </Card>
+        </ConfigDialogBackdrop>
       )}
 
       {userModal && sectorPickerOpen && (
-        <div className="modal-backdrop">
-          <div className="sector-picker-modal">
-            <ModalHeader title="Adicionar setor" onClose={() => setSectorPickerOpen(false)} />
-            <div className="sector-picker-list">
-              {availableTeamSectors.length === 0 && <small>Todos os setores ativos já estão vinculados.</small>}
+        <ConfigDialogBackdrop>
+          <Card className="sector-picker-modal tw:max-h-[calc(100dvh-32px)] tw:grid-rows-[auto_minmax(0,1fr)] tw:overflow-hidden" role="dialog" aria-modal="true" aria-label="Adicionar setor">
+            <ModalHeader appearance="config" title="Adicionar setor" onClose={() => setSectorPickerOpen(false)} />
+            <div className="tw:grid tw:min-h-0 tw:gap-1.5 tw:overflow-auto tw:p-1">
+              {availableTeamSectors.length === 0 && <small className="tw:py-2 tw:text-ui-muted" role="status">Todos os setores ativos já estão vinculados.</small>}
               {availableTeamSectors.map((sector) => (
-                <button
+                <Button
                   key={`${getItemMunicipalityId(sector)}:${sector.id}`}
-                  type="button"
+                  variant="outline"
+                  className="tw:justify-start tw:whitespace-normal"
                   onClick={() => {
                     setNewTeamUser((current) => ({ ...current, sectorIds: [...(current.sectorIds || []), sector.id] }));
                     setSectorPickerOpen(false);
                   }}
                 >
                   {sector.name}
-                </button>
+                </Button>
               ))}
             </div>
-          </div>
-        </div>
+          </Card>
+        </ConfigDialogBackdrop>
       )}
 
       {configArea === "integrations" && configTab === "whatsapp" && (
@@ -6771,7 +6753,7 @@ function ConfigView({
       )}
 
       {configArea === "environment" && configTab === "documents" && (
-        <div className="config-panel wide">
+        <Card className="config-panel wide">
           <ConfigSectionHeader title="Tipos de documentos" createLabel="Criar documento" onCreate={() => openDocumentModal()}>
             <ConfigStatusFilter
               value={configStatusFilter}
@@ -6785,35 +6767,40 @@ function ConfigView({
               <EmptyState title="Nenhum documento cadastrado" text="Crie documentos para vincular aos tipos de solicitação." />
             )}
             {filteredDocumentTypes.map((document, index) => (
-              <article className="config-list-row" key={document.id} onClick={() => openDocumentModal(document)} role="button" tabIndex={0}>
+              <ConfigRow key={document.id} onClick={() => openDocumentModal(document)}>
                 <span className="config-list-index">{index + 1}</span>
-                <div className="config-list-main">
+                <span className="config-list-main">
                   <strong>{document.name || "Documento sem nome"}</strong>
                   <span>
                     {document.required === false ? "Opcional" : "Obrigatório"}
                     {document.analysisRules?.expectedDocument ? ` · ${document.analysisRules.expectedDocument}` : ""}
                     {document.analysisRules?.requiredCriteria?.length ? " · Critérios configurados" : ""}
                   </span>
-                </div>
+                </span>
                 <small className={document.active === false ? "schedule-status inactive" : "schedule-status active"}>
                   {document.active === false ? "Inativo" : "Ativo"}
                 </small>
-              </article>
+              </ConfigRow>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {configModal === "municipality" && (
-        <div className="modal-backdrop">
-          <form
+        <ConfigDialogBackdrop>
+          <Card
+            as="form"
             className="config-modal compact config-environment-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingMunicipalityId ? "Editar município" : "Cadastrar município"}
             onSubmit={async (event) => {
               event.preventDefault();
               await saveMunicipality();
             }}
           >
             <ModalHeader
+              appearance="config"
               title={editingMunicipalityId ? "Editar município" : "Cadastrar município"}
               onClose={() => {
                 setConfigModal(null);
@@ -6832,21 +6819,15 @@ function ConfigView({
             )}
             <MunicipalityAddressFields form={newMunicipality} setForm={setNewMunicipality} canEditCity={isGlobalRole(currentUser?.role)} />
 
-            <Field
+            <ConfigField
               label="Nome do órgão / secretaria"
               value={newMunicipality.departmentName}
               placeholder="Ex: Secretaria de Meio Ambiente"
               onChange={(value) => setNewMunicipality((current) => ({ ...current, departmentName: value }))}
             />
             <div className="modal-form-grid">
-              <label className="field">
-                <span>Contato</span>
-                <input type="tel" value={newMunicipality.contact} placeholder="(00) 00000-0000" onChange={(event) => setNewMunicipality((current) => ({ ...current, contact: formatPhone(event.target.value) }))} />
-              </label>
-              <label className="field">
-                <span>Email</span>
-                <input type="email" value={newMunicipality.email} placeholder="contato@municipio.gov.br" onChange={(event) => setNewMunicipality((current) => ({ ...current, email: event.target.value }))} />
-              </label>
+              <ConfigField label="Contato" type="tel" value={newMunicipality.contact} placeholder="(00) 00000-0000" onChange={(value) => setNewMunicipality((current) => ({ ...current, contact: formatPhone(value) }))} />
+              <ConfigField label="Email" type="email" value={newMunicipality.email} placeholder="contato@municipio.gov.br" onChange={(value) => setNewMunicipality((current) => ({ ...current, email: value }))} />
             </div>
             <div className="modal-form-grid">
               <MunicipalityImageField
@@ -6862,28 +6843,29 @@ function ConfigView({
             </div>
 
             {municipalitySaveStatus && (
-              <p className={municipalitySaveStatus.includes("Não") || municipalitySaveStatus.includes("Selecione") || municipalitySaveStatus.includes("Informe") ? "form-error" : "helper-text"}>
+              <p className={municipalitySaveFailed ? "form-error" : "helper-text"} role={municipalitySaveFailed ? "alert" : "status"}>
                 {municipalitySaveStatus}
               </p>
             )}
             <div className="form-actions">
-              <button className="primary-action" type="submit" disabled={municipalitySaving || !newMunicipality.name.trim() || !newMunicipality.state.trim()}>
+              <Button type="submit" disabled={municipalitySaving || !newMunicipality.name.trim() || !newMunicipality.state.trim()}>
                 {municipalitySaving ? "Salvando..." : "Salvar"}
-              </button>
+              </Button>
             </div>
-          </form>
-        </div>
+          </Card>
+        </ConfigDialogBackdrop>
       )}
 
       {configModal === "agenda" && (
-        <div className="modal-backdrop">
-          <form className="config-modal agenda-config-modal config-environment-modal" onSubmit={createScheduleFromModal} role="dialog" aria-modal="true">
+        <ConfigDialogBackdrop>
+          <form className="config-modal agenda-config-modal config-environment-modal" onSubmit={createScheduleFromModal} role="dialog" aria-modal="true" aria-label={editingScheduleRuleId ? "Editar agenda" : "Criar agenda"}>
             <ModalHeader
+              appearance="config"
               title={editingScheduleRuleId ? "Editar agenda" : "Criar agenda"}
               onClose={() => { setConfigModal(null); setEditingScheduleRuleId(null); setAgendaForm(emptyAgendaForm); setAgendaSaving(false); setAgendaSaveStatus(""); }}
             />
 
-            <div className="agenda-modal-head">
+            <Card className="agenda-modal-head">
               <div>
                 <span>{agendaFormIsMutirao ? "Mutirão" : "Agenda"}</span>
                 <strong>{agendaForm.description || "Nova agenda"}</strong>
@@ -6892,17 +6874,17 @@ function ConfigView({
                 checked={agendaForm.active}
                 onChange={(checked) => patchAgendaForm("active", checked)}
               />
-            </div>
+            </Card>
 
             <div className="agenda-modal-layout agenda-modal-layout--modern">
-              <section className="agenda-modal-block agenda-modal-block--identity">
+              <Card as="section" className="agenda-modal-block">
                 <div className="agenda-block-title">
                   <div>
                     <strong>Identificação</strong>
                     <small>Nome, município e tipo de agenda.</small>
                   </div>
                 </div>
-                <Field label="Descrição" value={agendaForm.description} placeholder="Ex: Mutirão bairro Centro" onChange={(value) => patchAgendaForm("description", value)} />
+                <ConfigField label="Descrição" value={agendaForm.description} placeholder="Ex: Mutirão bairro Centro" onChange={(value) => patchAgendaForm("description", value)} />
                 <div className="modal-form-grid">
                   <label className="field">
                     <span>Município</span>
@@ -6929,11 +6911,11 @@ function ConfigView({
                 {agendaFormIsMutirao && (
                   <p className="agenda-mode-note">Mutirão usa datas específicas. Cadastre cada data com seu local e suas faixas de horário.</p>
                 )}
-              </section>
+              </Card>
 
               {!agendaFormIsMutirao && (
                 <>
-                  <section className="agenda-modal-block">
+                  <Card as="section" className="agenda-modal-block">
                     <div className="agenda-block-title">
                       <div>
                         <strong>Local</strong>
@@ -6941,13 +6923,13 @@ function ConfigView({
                       </div>
                     </div>
                     <div className="modal-form-grid">
-                      <Field label="Local de atendimento" value={agendaForm.locationName} placeholder="Ex: Centro de zoonoses" onChange={(value) => patchAgendaForm("locationName", value)} />
-                      <Field label="Endereço do local" value={agendaForm.locationAddress} placeholder="Ex: Rua Araranguá, 333 - Centro" onChange={(value) => patchAgendaForm("locationAddress", value)} />
-                      <Field label="Link do endereço" value={agendaForm.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaForm("addressUrl", value)} />
+                      <ConfigField label="Local de atendimento" value={agendaForm.locationName} placeholder="Ex: Centro de zoonoses" onChange={(value) => patchAgendaForm("locationName", value)} />
+                      <ConfigField label="Endereço do local" value={agendaForm.locationAddress} placeholder="Ex: Rua Araranguá, 333 - Centro" onChange={(value) => patchAgendaForm("locationAddress", value)} />
+                      <ConfigField label="Link do endereço" value={agendaForm.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaForm("addressUrl", value)} />
                     </div>
-                  </section>
+                  </Card>
 
-                  <section className="agenda-modal-block">
+                  <Card as="section" className="agenda-modal-block">
                     <div className="agenda-block-title">
                       <div>
                         <strong>Período e capacidade</strong>
@@ -6955,18 +6937,12 @@ function ConfigView({
                       </div>
                     </div>
                     <div className="modal-form-grid">
-                      <label className="field">
-                        <span>Início da agenda</span>
-                        <input type="date" value={agendaForm.start} onChange={(event) => patchAgendaForm("start", event.target.value)} />
-                      </label>
+                      <ConfigField label="Início da agenda" type="date" value={agendaForm.start} onChange={(value) => patchAgendaForm("start", value)} />
                       {normalizeText(agendaForm.type) === "recorrencia" && (
-                        <label className="field">
-                          <span>Fim da agenda</span>
-                          <input type="date" value={agendaForm.end} onChange={(event) => patchAgendaForm("end", event.target.value)} />
-                        </label>
+                        <ConfigField label="Fim da agenda" type="date" value={agendaForm.end} onChange={(value) => patchAgendaForm("end", value)} />
                       )}
                       {normalizeText(agendaForm.type) === "recorrencia" && (
-                        <Field label="Repetir a cada semana(s)" value={agendaForm.repeatEvery} onChange={(value) => patchAgendaForm("repeatEvery", value)} />
+                        <ConfigField label="Repetir a cada semana(s)" value={agendaForm.repeatEvery} onChange={(value) => patchAgendaForm("repeatEvery", value)} />
                       )}
                     </div>
                     {normalizeText(agendaForm.type) === "recorrencia" && (
@@ -6975,7 +6951,7 @@ function ConfigView({
                           <span>Dias da semana</span>
                           <small>Selecione quando esta agenda abre vagas.</small>
                         </div>
-                        <div className="weekday-picker">
+                        <div className="weekday-picker" role="group" aria-label="Dias da semana">
                           {[
                             { label: "Dom", name: "Domingo" },
                             { label: "Seg", name: "Segunda-feira" },
@@ -6985,12 +6961,13 @@ function ConfigView({
                             { label: "Sex", name: "Sexta-feira" },
                             { label: "Sáb", name: "Sábado" },
                           ].map((weekday, index) => (
-                            <button
+                            <Button
                               key={weekday.name}
-                              type="button"
+                              variant={agendaForm.weekdays.includes(index) ? "primary" : "outline"}
                               aria-label={weekday.name}
+                              aria-pressed={agendaForm.weekdays.includes(index)}
                               title={weekday.name}
-                              className={agendaForm.weekdays.includes(index) ? "selected" : ""}
+                              className="tw:min-w-0"
                               onClick={() =>
                                 patchAgendaForm(
                                   "weekdays",
@@ -7001,133 +6978,131 @@ function ConfigView({
                               }
                             >
                               {weekday.label}
-                            </button>
+                            </Button>
                           ))}
                         </div>
                       </div>
                     )}
-                    <div className="agenda-slots-field">
+                    <Card className="agenda-slots-field">
                       <div className="agenda-slots-header">
                         <div>
                           <span>Faixas de horário</span>
                           <small>Total diário: {sumScheduleSlotsVacancies(agendaForm.slots)} vagas</small>
                         </div>
-                        <button className="secondary-action" type="button" onClick={addAgendaSlot}>
+                        <Button variant="outline" onClick={addAgendaSlot}>
                           <Plus size={16} />
                           Adicionar faixa
-                        </button>
+                        </Button>
                       </div>
                       <div className="agenda-slots-list">
                         {(agendaForm.slots || []).map((slot, index) => (
-                          <div className="agenda-slot-row" key={`${index}-${slot.time}`}>
-                            <label className="field">
-                              <span>Hora de início</span>
-                              <input type="time" value={slot.time} onChange={(event) => patchAgendaSlot(index, "time", event.target.value)} />
-                            </label>
-                            <Field label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaSlot(index, "vacancies", value)} />
-                            <button className="icon-button danger-action" type="button" onClick={() => removeAgendaSlot(index)} aria-label="Remover faixa" title="Remover faixa">
+                          <div className="agenda-slot-row" key={index}>
+                            <ConfigField label="Hora de início" type="time" value={slot.time} onChange={(value) => patchAgendaSlot(index, "time", value)} />
+                            <ConfigField label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaSlot(index, "vacancies", value)} />
+                            <Button className="tw:justify-self-end" variant="danger" onClick={() => removeAgendaSlot(index)} aria-label="Remover faixa" title="Remover faixa">
                               <X size={16} />
-                            </button>
+                            </Button>
                           </div>
                         ))}
                       </div>
-                    </div>
-                  </section>
+                    </Card>
+                  </Card>
                 </>
               )}
 
               {agendaFormIsMutirao && (
-                <section className="agenda-modal-block agenda-mutirao-block">
+                <Card as="section" className="agenda-modal-block agenda-mutirao-block">
                   <div className="agenda-block-title">
                     <div>
                       <strong>Datas e locais do mutirão</strong>
                       <small>Adicione uma ocorrência para cada dia de atendimento.</small>
                     </div>
-                    <button className="secondary-action" type="button" onClick={addAgendaOccurrence}>
+                    <Button variant="outline" onClick={addAgendaOccurrence}>
                       <Plus size={16} />
                       Adicionar data
-                    </button>
+                    </Button>
                   </div>
 
                   <div className="agenda-occurrence-list">
                     {getAgendaOccurrenceList(agendaForm).map((occurrence, occurrenceIndex) => (
-                      <article className="agenda-occurrence-card" key={occurrence.id || occurrenceIndex}>
+                      <Card as="article" className="agenda-occurrence-card" key={occurrence.id || occurrenceIndex}>
                         <div className="agenda-occurrence-header">
                           <div>
                             <span>Ocorrência {occurrenceIndex + 1}</span>
                             <strong>{occurrence.date ? toScheduleDate(occurrence.date) : "Nova data"}</strong>
                           </div>
-                          <button
-                            className="icon-button danger-action"
-                            type="button"
+                          <Button
+                            variant="danger"
                             onClick={() => removeAgendaOccurrence(occurrenceIndex)}
                             disabled={getAgendaOccurrenceList(agendaForm).length === 1}
                             aria-label="Remover data do mutirão"
                             title="Remover data"
                           >
                             <X size={16} />
-                          </button>
+                          </Button>
                         </div>
 
                         <div className="modal-form-grid">
-                          <label className="field">
-                            <span>Data do mutirão</span>
-                            <input type="date" value={occurrence.date} onChange={(event) => patchAgendaOccurrence(occurrenceIndex, "date", event.target.value)} />
-                          </label>
-                          <Field label="Local de atendimento" value={occurrence.locationName} placeholder="Ex: Escola municipal do bairro" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "locationName", value)} />
-                          <Field label="Endereço do local" value={occurrence.locationAddress} placeholder="Rua, número e bairro" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "locationAddress", value)} />
-                          <Field label="Link do endereço" value={occurrence.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "addressUrl", value)} />
+                          <ConfigField label="Data do mutirão" type="date" value={occurrence.date} onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "date", value)} />
+                          <ConfigField label="Local de atendimento" value={occurrence.locationName} placeholder="Ex: Escola municipal do bairro" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "locationName", value)} />
+                          <ConfigField label="Endereço do local" value={occurrence.locationAddress} placeholder="Rua, número e bairro" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "locationAddress", value)} />
+                          <ConfigField label="Link do endereço" value={occurrence.addressUrl} placeholder="Cole o link do Google Maps" onChange={(value) => patchAgendaOccurrence(occurrenceIndex, "addressUrl", value)} />
                         </div>
 
-                        <div className="agenda-slots-field agenda-slots-field--compact">
+                        <Card className="agenda-slots-field agenda-slots-field--compact">
                           <div className="agenda-slots-header">
                             <div>
                               <span>Faixas de horário</span>
                               <small>Total: {sumScheduleSlotsVacancies(occurrence.slots)} vagas</small>
                             </div>
-                            <button className="secondary-action" type="button" onClick={() => addAgendaOccurrenceSlot(occurrenceIndex)}>
+                            <Button variant="outline" onClick={() => addAgendaOccurrenceSlot(occurrenceIndex)}>
                               <Plus size={16} />
                               Adicionar faixa
-                            </button>
+                            </Button>
                           </div>
                           <div className="agenda-slots-list">
                             {(occurrence.slots || []).map((slot, slotIndex) => (
-                              <div className="agenda-slot-row" key={`${occurrence.id}-${slotIndex}-${slot.time}`}>
-                                <label className="field">
-                                  <span>Hora de início</span>
-                                  <input type="time" value={slot.time} onChange={(event) => patchAgendaOccurrenceSlot(occurrenceIndex, slotIndex, "time", event.target.value)} />
-                                </label>
-                                <Field label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaOccurrenceSlot(occurrenceIndex, slotIndex, "vacancies", value)} />
-                                <button className="icon-button danger-action" type="button" onClick={() => removeAgendaOccurrenceSlot(occurrenceIndex, slotIndex)} aria-label="Remover faixa" title="Remover faixa">
+                              <div className="agenda-slot-row" key={slotIndex}>
+                                <ConfigField label="Hora de início" type="time" value={slot.time} onChange={(value) => patchAgendaOccurrenceSlot(occurrenceIndex, slotIndex, "time", value)} />
+                                <ConfigField label="Vagas" value={slot.vacancies} onChange={(value) => patchAgendaOccurrenceSlot(occurrenceIndex, slotIndex, "vacancies", value)} />
+                                <Button className="tw:justify-self-end" variant="danger" onClick={() => removeAgendaOccurrenceSlot(occurrenceIndex, slotIndex)} aria-label="Remover faixa" title="Remover faixa">
                                   <X size={16} />
-                                </button>
+                                </Button>
                               </div>
                             ))}
                           </div>
-                        </div>
-                      </article>
+                        </Card>
+                      </Card>
                     ))}
                   </div>
-                </section>
+                </Card>
               )}
             </div>
 
             <div className="form-actions">
-              <button className="primary-action" type="submit" disabled={agendaSaving}>
+              <Button type="submit" disabled={agendaSaving}>
                 {agendaSaving ? "Salvando..." : "Salvar"}
-              </button>
+              </Button>
             </div>
-            {agendaSaveStatus && <p className="form-error">{agendaSaveStatus}</p>}
+            {agendaSaveStatus && (
+              <p className={agendaSaving ? "helper-text" : "form-error"} role={agendaSaving ? "status" : "alert"}>
+                {agendaSaveStatus}
+              </p>
+            )}
           </form>
-        </div>
+        </ConfigDialogBackdrop>
       )}
       {configModal === "requestType" && (
-        <div className="modal-backdrop">
+        <ConfigDialogBackdrop>
           <form
             className="config-modal compact request-type-modal config-environment-modal"
             onSubmit={saveRequestType}
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingRequestTypeId ? "Editar tipo de solicitação" : "Criar tipo de solicitação"}
           >
             <ModalHeader
+              appearance="config"
               title={editingRequestTypeId ? "Editar tipo de solicitação" : "Criar tipo de solicitação"}
               onClose={() => { if (!requestTypeSaving) closeRequestTypeEditor(); }}
             />
@@ -7136,34 +7111,25 @@ function ConfigView({
                 checked={newRequestType.active !== false}
                 onChange={(checked) => setNewRequestType((current) => ({ ...current, active: checked }))}
               />
-              <label className="toggle-switch config-active-toggle">
-                <input
-                  type="checkbox"
-                  checked={!!newRequestType.charged}
-                  onChange={(e) => setNewRequestType((current) => ({ ...current, charged: e.target.checked, fee: e.target.checked ? current.billingAmount || "" : "Gratuito" }))}
-                />
-                <span className="toggle-track"><span className="toggle-thumb" /></span>
-                <span>Cobrar taxa</span>
-              </label>
-              <label className="toggle-switch config-active-toggle">
-                <input
-                  type="checkbox"
-                  checked={!!newRequestType.overrideDailyLimit}
-                  onChange={(e) => setNewRequestType((current) => ({ ...current, overrideDailyLimit: e.target.checked }))}
-                />
-                <span className="toggle-track"><span className="toggle-thumb" /></span>
-                <span>Sobrepor limite</span>
-              </label>
+              <ConfigActiveToggle
+                checked={!!newRequestType.charged}
+                onChange={(charged) => setNewRequestType((current) => ({ ...current, charged, fee: charged ? current.billingAmount || "" : "Gratuito" }))}
+                onText="Cobrar taxa"
+                offText="Cobrar taxa"
+              />
+              <ConfigActiveToggle
+                checked={!!newRequestType.overrideDailyLimit}
+                onChange={(overrideDailyLimit) => setNewRequestType((current) => ({ ...current, overrideDailyLimit }))}
+                onText="Sobrepor limite"
+                offText="Sobrepor limite"
+              />
             </div>
-            <Field label="Nome" value={newRequestType.name} placeholder="Ex: Castração" onChange={(value) => setNewRequestType((current) => ({ ...current, name: value }))} />
+            <ConfigField label="Nome" value={newRequestType.name} placeholder="Ex: Castração" onChange={(value) => setNewRequestType((current) => ({ ...current, name: value }))} />
             {newRequestType.charged && (
               <div className="billing-grid">
-                <Field label="Descrição da taxa" value={newRequestType.billingDescription} placeholder="Ex: Taxa de castração" onChange={(value) => setNewRequestType((current) => ({ ...current, billingDescription: value }))} />
-                <Field label="Valor" value={newRequestType.billingAmount} placeholder="Ex: R$ 20,00" onChange={(value) => setNewRequestType((current) => ({ ...current, billingAmount: value, fee: value }))} />
-                <label className="field">
-                  <span>Vencimento do boleto</span>
-                  <input type="date" value={newRequestType.billingDueDate || ""} onChange={(e) => setNewRequestType((current) => ({ ...current, billingDueDate: e.target.value }))} />
-                </label>
+                <ConfigField label="Descrição da taxa" value={newRequestType.billingDescription} placeholder="Ex: Taxa de castração" onChange={(value) => setNewRequestType((current) => ({ ...current, billingDescription: value }))} />
+                <ConfigField label="Valor" value={newRequestType.billingAmount} placeholder="Ex: R$ 20,00" onChange={(value) => setNewRequestType((current) => ({ ...current, billingAmount: value, fee: value }))} />
+                <ConfigField label="Vencimento do boleto" type="date" value={newRequestType.billingDueDate} onChange={(value) => setNewRequestType((current) => ({ ...current, billingDueDate: value }))} />
               </div>
             )}
             <DocumentButtonPicker
@@ -7186,16 +7152,17 @@ function ConfigView({
             />
             {requestTypeSaveError && <p className="form-error" role="alert">{requestTypeSaveError}</p>}
             <div className="form-actions">
-              <button className="primary-action" type="submit" disabled={requestTypeSaving}>{requestTypeSaving ? "Salvando..." : "Salvar"}</button>
+              <Button type="submit" disabled={requestTypeSaving}>{requestTypeSaving ? "Salvando..." : "Salvar"}</Button>
             </div>
           </form>
-        </div>
+        </ConfigDialogBackdrop>
       )}
 
       {configModal === "species" && (
-        <div className="modal-backdrop">
-          <form className="config-modal compact config-environment-modal" onSubmit={(event) => { event.preventDefault(); createSpecies(newSpecies); setNewSpecies({ name: "", active: true }); setEditingSpeciesId(null); setConfigModal(null); }}>
+        <ConfigDialogBackdrop>
+          <form className="config-modal compact config-environment-modal" role="dialog" aria-modal="true" aria-label={editingSpeciesId ? "Editar espécie" : "Criar espécie"} onSubmit={(event) => { event.preventDefault(); createSpecies(newSpecies); setNewSpecies({ name: "", active: true }); setEditingSpeciesId(null); setConfigModal(null); }}>
             <ModalHeader
+              appearance="config"
               title={editingSpeciesId ? "Editar espécie" : "Criar espécie"}
               onClose={() => { setConfigModal(null); setEditingSpeciesId(null); setNewSpecies({ name: "", active: true }); }}
             />
@@ -7205,18 +7172,19 @@ function ConfigView({
                 onChange={(checked) => setNewSpecies((current) => ({ ...current, active: checked }))}
               />
             </div>
-            <Field label="Nome" value={newSpecies.name} onChange={(value) => setNewSpecies((current) => ({ ...current, name: value }))} />
+            <ConfigField label="Nome" value={newSpecies.name} onChange={(value) => setNewSpecies((current) => ({ ...current, name: value }))} />
             <div className="form-actions">
-              <button className="primary-action" type="submit">Salvar</button>
+              <Button type="submit">Salvar</Button>
             </div>
           </form>
-        </div>
+        </ConfigDialogBackdrop>
       )}
 
       {configModal === "size" && (
-        <div className="modal-backdrop">
-          <form className="config-modal compact config-environment-modal" onSubmit={(event) => { event.preventDefault(); saveSize(newSize); setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true }); setEditingSizeId(null); setConfigModal(null); }}>
+        <ConfigDialogBackdrop>
+          <form className="config-modal compact config-environment-modal" role="dialog" aria-modal="true" aria-label={editingSizeId ? "Editar porte" : "Criar porte"} onSubmit={(event) => { event.preventDefault(); saveSize(newSize); setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true }); setEditingSizeId(null); setConfigModal(null); }}>
             <ModalHeader
+              appearance="config"
               title={editingSizeId ? "Editar porte" : "Criar porte"}
               onClose={() => { setConfigModal(null); setEditingSizeId(null); setNewSize({ name: "", weightStart: "", weightEnd: "", weightUnit: "kg", active: true }); }}
             />
@@ -7226,23 +7194,26 @@ function ConfigView({
                 onChange={(checked) => setNewSize((current) => ({ ...current, active: checked }))}
               />
             </div>
-            <Field label="Nome" value={newSize.name} onChange={(value) => setNewSize((current) => ({ ...current, name: value }))} />
+            <ConfigField label="Nome" value={newSize.name} onChange={(value) => setNewSize((current) => ({ ...current, name: value }))} />
             <div className="size-range-grid">
-              <Field label="De" value={newSize.weightStart} placeholder="0" onChange={(value) => setNewSize((current) => ({ ...current, weightStart: value }))} />
-              <Field label="Até" value={newSize.weightEnd} placeholder="5" onChange={(value) => setNewSize((current) => ({ ...current, weightEnd: value }))} />
-              <Field label="Unidade" value={newSize.weightUnit} placeholder="kg" onChange={(value) => setNewSize((current) => ({ ...current, weightUnit: value }))} />
+              <ConfigField label="De" value={newSize.weightStart} placeholder="0" onChange={(value) => setNewSize((current) => ({ ...current, weightStart: value }))} />
+              <ConfigField label="Até" value={newSize.weightEnd} placeholder="5" onChange={(value) => setNewSize((current) => ({ ...current, weightEnd: value }))} />
+              <ConfigField label="Unidade" value={newSize.weightUnit} placeholder="kg" onChange={(value) => setNewSize((current) => ({ ...current, weightUnit: value }))} />
             </div>
             <div className="form-actions">
-              <button className="primary-action" type="submit">Salvar</button>
+              <Button type="submit">Salvar</Button>
             </div>
           </form>
-        </div>
+        </ConfigDialogBackdrop>
       )}
 
       {configModal === "document" && (
-        <div className="modal-backdrop">
+        <ConfigDialogBackdrop>
           <form
             className="config-modal document-analysis-modal config-environment-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingDocumentId ? "Editar documento" : "Criar documento"}
             onSubmit={(event) => {
               event.preventDefault();
               const { policy, error } = documentPolicyFromForm(newDocument.reuseScope, newDocument.reuseValidityDays);
@@ -7261,59 +7232,56 @@ function ConfigView({
             }}
           >
             <ModalHeader
+              appearance="config"
               title={editingDocumentId ? "Editar documento" : "Criar documento"}
               onClose={() => { setConfigModal(null); setEditingDocumentId(null); setNewDocument(emptyDocumentForm); setNewRequiredCriterion(""); setNewRejectionCriterion(""); }}
             />
 
-            <div className="document-settings-card">
-              <div className="document-settings-item">
-                <span>Ativo</span>
-                <ConfigActiveToggle
-                  checked={newDocument.active !== false}
-                  onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
-                  onText=""
-                  offText=""
-                />
-              </div>
-              <div className="document-settings-item">
-                <span>Obrigatório</span>
-                <ConfigActiveToggle
-                  checked={newDocument.required !== false}
-                  onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
-                  onText=""
-                  offText=""
-                />
-              </div>
-              <div className="document-settings-item">
-                <span>Usar Análise por IA</span>
-                <ConfigActiveToggle
-                  checked={newDocument.useAi !== false}
-                  onChange={(checked) => setNewDocument((current) => ({ ...current, useAi: checked }))}
-                  onText=""
-                  offText=""
-                />
-              </div>
+            <div className="config-modal-options">
+              <ConfigActiveToggle
+                checked={newDocument.active !== false}
+                onChange={(checked) => setNewDocument((current) => ({ ...current, active: checked }))}
+              />
+              <ConfigActiveToggle
+                checked={newDocument.required !== false}
+                onChange={(checked) => setNewDocument((current) => ({ ...current, required: checked }))}
+                onText="Obrigatório"
+                offText="Obrigatório"
+              />
+              <ConfigActiveToggle
+                checked={newDocument.useAi !== false}
+                onChange={(checked) => setNewDocument((current) => ({ ...current, useAi: checked }))}
+                onText="Usar análise por IA"
+                offText="Usar análise por IA"
+              />
             </div>
             <div className="document-modal-body">
               {documentPolicyError && <p className="form-error" role="alert">{documentPolicyError}</p>}
-              <section className="document-modal-panel">
+              <Card as="section" className="document-modal-panel">
                 <label className="field"><span>Abrangência para reaproveitamento</span><select value={newDocument.reuseScope} onChange={(event) => setNewDocument((current) => ({ ...current, reuseScope: event.target.value }))}><option value={DocumentReuseScope.REQUEST}>Somente esta solicitação</option><option value={DocumentReuseScope.TUTOR}>Tutor, entre seus pedidos</option><option value={DocumentReuseScope.ANIMAL}>Este animal, entre seus pedidos</option></select></label>
-                <label className="field"><span>Prazo para reaproveitamento em dias (opcional)</span><input type="number" min="1" max="36525" step="1" value={newDocument.reuseValidityDays} onChange={(event) => setNewDocument((current) => ({ ...current, reuseValidityDays: event.target.value }))} placeholder="Sem prazo" /></label>
+                <ConfigField
+                  label="Prazo para reaproveitamento em dias (opcional)"
+                  type="number"
+                  min={1}
+                  max={36525}
+                  step={1}
+                  value={newDocument.reuseValidityDays}
+                  onChange={(value) => setNewDocument((current) => ({ ...current, reuseValidityDays: value }))}
+                  placeholder="Sem prazo"
+                />
                 <small>Contado desde o envio original do arquivo. Vazio significa sem vencimento por idade; a conferência do conteúdo continua necessária.</small>
-              </section>
+              </Card>
               <div className="document-identity-grid">
-                <Field label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residencia" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
-                <label className="field document-sigla-field">
-                  <span>Sigla</span>
-                  <input
-                    value={newDocument.expectedDocument}
-                    placeholder="EX: CR"
-                    onChange={(event) => setNewDocument((current) => ({ ...current, expectedDocument: event.target.value.toUpperCase() }))}
-                  />
-                </label>
+                <ConfigField label="Nome" value={newDocument.name} placeholder="Ex: Comprovante de residencia" onChange={(value) => setNewDocument((current) => ({ ...current, name: value }))} />
+                <ConfigField
+                  label="Sigla"
+                  value={newDocument.expectedDocument}
+                  placeholder="EX: CR"
+                  onChange={(value) => setNewDocument((current) => ({ ...current, expectedDocument: value.toUpperCase() }))}
+                />
               </div>
 
-              <section className="document-modal-panel document-modal-panel--criteria">
+              <Card as="section" className="document-modal-panel document-modal-panel--criteria">
                 <div className="document-section-heading">
                   <span><ListChecks size={15} /> Critérios de análise</span>
                   <small>Digite um critério por linha. As alterações são salvas junto com o botão Salvar deste documento.</small>
@@ -7330,9 +7298,9 @@ function ConfigView({
                   onChange={setNewRejectionCriterion}
                   placeholder={"Ex: documento ileg\u00edvel\nRasura vis\u00edvel no documento"}
                 />
-              </section>
+              </Card>
               {newDocument.useAi !== false && (
-                <section className="document-modal-panel document-modal-panel--decision">
+                <Card as="section" className="document-modal-panel document-modal-panel--decision">
                   <div className="document-section-heading">
                     <span><ShieldCheck size={15} /> Decisão automática</span>
                   </div>
@@ -7340,24 +7308,24 @@ function ConfigView({
                     value={newDocument.minimumConfidence}
                     onChange={(value: number) => setNewDocument((current) => ({ ...current, minimumConfidence: value }))}
                   />
-                </section>
+                </Card>
               )}
             </div>
 
             <div className="form-actions document-modal-actions">
-              <button className="primary-action" type="submit">Salvar</button>
+              <Button type="submit">Salvar</Button>
             </div>
           </form>
-        </div>
+        </ConfigDialogBackdrop>
       )}
     </section>
   );
 
 }
 
-function SimpleConfigList({ title, items, allItems = items, filterValue = "active", onFilterChange, onCreate, onEdit, onPatch, showDescription = false }: AnyRecord) {
+function SimpleConfigList({ title, items, allItems = items, filterValue = "active", onFilterChange, onCreate, onEdit, showDescription = false }: AnyRecord) {
   return (
-    <div className="config-panel wide">
+    <Card className="config-panel wide">
       <ConfigSectionHeader title={title} createLabel="Criar item" onCreate={onCreate}>
         {onFilterChange && (
           <ConfigStatusFilter
@@ -7373,19 +7341,19 @@ function SimpleConfigList({ title, items, allItems = items, filterValue = "activ
           <EmptyState title={`Nenhum item ${filterValue === "active" ? "ativo" : "desativado"}`} text="Use o botão de criação para cadastrar novos itens nesta seção." />
         )}
         {items.map((item, index) => (
-          <article className="config-list-row" key={item.id} onClick={() => onEdit?.(item)} role="button" tabIndex={0}>
+          <ConfigRow key={item.id} onClick={() => onEdit?.(item)}>
             <span className="config-list-index">{index + 1}</span>
-            <div className="config-list-main">
+            <span className="config-list-main">
               <strong>{item.name || "Item sem nome"}</strong>
               {showDescription && <span>{formatSizeRange(item) || "Faixa de peso não informada"}</span>}
-            </div>
+            </span>
             <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
               {item.active === false ? "Inativo" : "Ativo"}
             </small>
-          </article>
+          </ConfigRow>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -7397,14 +7365,15 @@ function DocumentButtonPicker({ documents, selectedDocuments, onToggle }: AnyRec
         {documents.map((document) => {
           const selected = selectedDocuments.some((item) => item.id === document.id);
           return (
-            <button
-              className={selected ? "document-pill selected" : "document-pill"}
+            <Card
+              as="button"
+              aria-pressed={selected}
+              className="tw:min-h-10 tw:max-w-full tw:px-3 tw:py-2 tw:text-left tw:text-sm tw:font-medium tw:text-ui-text tw:hover:border-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent tw:aria-pressed:text-ui-accent-strong"
               key={document.id}
-              type="button"
               onClick={() => onToggle(document)}
             >
               {document.name || "Documento sem nome"}
-            </button>
+            </Card>
           );
         })}
       </div>

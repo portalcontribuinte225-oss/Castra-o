@@ -1,5 +1,7 @@
 import React from "react";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
+import { Button } from "../../components/button";
+import { IntegrationCard } from "../../components/integration-card";
 import { PanelHeader } from "../../components/ui";
 import { MessageContractForm } from "../message-contract/message-contract-form";
 import { MessageContractStatus } from "../message-contract/message-contract-status";
@@ -24,14 +26,11 @@ export function SmsSettings({ municipalityId, master, canManage, canEditContract
       {state.loading && <p role="status">Carregando configuração de SMS...</p>}
       {state.error && <p role="alert" className="form-error">{state.error}</p>}
       {state.notice && <p role="status">{state.notice}</p>}
-      {!state.ready && !state.loading && <button type="button" className="ghost-button" onClick={state.retry}>Carregar novamente</button>}
+      {!state.ready && !state.loading && <Button variant="outline" onClick={state.retry}>Carregar novamente</Button>}
       {state.ready && (
-        <div className="whatsapp-integration">
+        <div className="tw:grid tw:gap-3">
           {master && <SmsCredentials state={state} />}
-          <section className="whatsapp-section">
-            <div className="whatsapp-section-header">
-              <span className="whatsapp-section-label">Mensagens</span>
-            </div>
+          <IntegrationCard title="Mensagens">
             {!municipalityId && <p className="whatsapp-note">Selecione um município para ligar ou desligar as mensagens.</p>}
             <SmsUsesTable
               rows={state.config.uses}
@@ -41,7 +40,7 @@ export function SmsSettings({ municipalityId, master, canManage, canEditContract
               busy={busy || !municipalityId}
               onToggle={state.setUseActive}
             />
-          </section>
+          </IntegrationCard>
           {canEditContract && <MessageContractForm municipalityId={municipalityId} contract={contract} serviceSwitch />}
         </div>
       )}

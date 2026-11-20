@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { normalizeText } from "../utils";
+import { Input } from "./input";
 
 export interface ChecklistItem {
   id: string;
@@ -55,8 +56,7 @@ export function ScrollChecklist({ legend, hint = "", required = false, groups, s
       <legend>{legend}{required && <span className="required-asterisk">*</span>}</legend>
       {hint && <small className="form-hint">{hint}</small>}
       {total > CHECKLIST_SEARCH_THRESHOLD && (
-        <input
-          className="scroll-checklist-search"
+        <Input
           type="search"
           value={query}
           placeholder="Buscar"

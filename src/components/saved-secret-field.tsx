@@ -1,6 +1,8 @@
 import React from "react";
 import { secretPreview } from "../../shared/secret-preview-contract.js";
-import { Field } from "./ui";
+import { Button } from "./button";
+import { integrationActionFieldStyle } from "./integration-card";
+import { ConfigField } from "./ui";
 
 const MASK = "•";
 const PREVIEW_MASK_LENGTH = 24;
@@ -35,8 +37,8 @@ export function SavedSecretField({
   const masked = preview ? `${preview}${MASK.repeat(PREVIEW_MASK_LENGTH)}` : MASK.repeat(UNKNOWN_PREVIEW_MASK_LENGTH);
   return (
     <>
-      <div className="whatsapp-input-action-row">
-        <Field
+      <div className={integrationActionFieldStyle}>
+        <ConfigField
           label={label}
           type={saved ? "text" : "password"}
           value={saved ? masked : value}
@@ -46,14 +48,14 @@ export function SavedSecretField({
           onChange={onChange}
         />
         {showSave ? (
-          <button className="primary-action" type="button" onClick={onSave} disabled={saveDisabled}>{saveLabel}</button>
+          <Button onClick={onSave} disabled={saveDisabled}>{saveLabel}</Button>
         ) : confirming ? (
-          <div className="whatsapp-input-actions">
-            <button className="primary-action danger-action" type="button" onClick={onRemove}>Confirmar</button>
-            <button className="ghost-button" type="button" onClick={() => onConfirmingChange(false)}>Cancelar</button>
+          <div className="tw:flex tw:flex-wrap tw:gap-2">
+            <Button variant="danger" onClick={onRemove}>Confirmar</Button>
+            <Button variant="outline" onClick={() => onConfirmingChange(false)}>Cancelar</Button>
           </div>
         ) : (
-          <button className="ghost-button danger-action" type="button" onClick={() => onConfirmingChange(true)} disabled={removeDisabled}>{removeLabel}</button>
+          <Button variant="danger" onClick={() => onConfirmingChange(true)} disabled={removeDisabled}>{removeLabel}</Button>
         )}
       </div>
       {value && <p className="whatsapp-note">Começa com <code>{secretPreview(value)}</code>…</p>}

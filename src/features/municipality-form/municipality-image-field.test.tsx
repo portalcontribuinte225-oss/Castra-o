@@ -7,7 +7,8 @@ const noop = () => undefined;
 describe("MunicipalityImageField", () => {
   it("offers to choose an image of the types the e-mails can show", () => {
     const html = renderToStaticMarkup(<MunicipalityImageField label="Logo do órgão" value="" onChange={noop} />);
-    expect(html).toContain("<span>Logo do órgão</span>");
+    expect(html).toMatch(/<span id="[^"]+">Logo do órgão<\/span>/);
+    expect(html).toContain('aria-label="Selecionar logo do órgão"');
     expect(html).toContain('accept="image/png,image/jpeg,image/webp"');
     expect(html).toContain("PNG, JPG ou WEBP");
     expect(html).not.toContain("<img");
@@ -17,7 +18,9 @@ describe("MunicipalityImageField", () => {
     const html = renderToStaticMarkup(<MunicipalityImageField label="Brasão do município" value="data:image/png;base64,AAAA" onChange={noop} />);
     expect(html).toContain('src="data:image/png;base64,AAAA"');
     expect(html).toContain('alt="Brasão do município"');
+    expect(html).toContain('aria-label="Alterar brasão do município"');
     expect(html).toContain('aria-label="Remover brasão do município"');
+    expect(html.match(/<button\b/g)).toHaveLength(2);
     expect(html.indexOf('type="file"')).toBeLessThan(html.indexOf("<button"));
   });
 });

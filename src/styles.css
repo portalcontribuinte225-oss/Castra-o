@@ -310,7 +310,7 @@ button:disabled {
 }
 
 
-.sidebar nav button {
+.sidebar nav button:where(:not([data-ui-button])) {
   border: 1px solid #e5e7eb;
   background: #ffffff;
   color: #374151;
@@ -330,7 +330,7 @@ button:disabled {
 }
 
 
-.sidebar nav button:hover {
+.sidebar nav button:where(:not([data-ui-button])):hover {
   background: #f3f4f6;
   border-color: #d1d5db;
   color: #0a0a0a;
@@ -386,94 +386,6 @@ button:disabled {
 }
 
 
-.sidebar nav .config-nav-item {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 10px;
-  min-height: auto;
-  padding: 10px 12px;
-  border: none;
-  border-radius: 8px;
-  background: transparent;
-  box-shadow: none;
-  cursor: pointer;
-  text-align: left;
-  width: 100%;
-  flex-shrink: 0;
-  transition: background 120ms, color 120ms;
-}
-
-
-.sidebar nav .config-nav-item:hover {
-  background: #f1f5f9;
-  border: 0;
-  box-shadow: none;
-}
-
-
-.sidebar nav .config-nav-item.active {
-  background: #eff6ff;
-  border: 0;
-  color: #2563eb;
-  box-shadow: none;
-}
-
-
-.config-nav-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #d1d5db;
-  flex-shrink: 0;
-  transition: background 120ms;
-}
-
-
-.config-nav-item.active .config-nav-dot {
-  background: #2563eb;
-}
-
-
-.config-nav-text {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-
-.config-nav-label {
-  display: block;
-  font-size: 0.83rem;
-  font-weight: 500;
-  color: #374151;
-  line-height: 1.3;
-}
-
-
-.config-nav-item.active .config-nav-label {
-  color: #2563eb;
-  font-weight: 600;
-}
-
-
-.config-nav-chevron {
-  color: #d1d5db;
-  flex-shrink: 0;
-  transition: color 120ms, transform 180ms;
-}
-
-.config-nav-chevron.open {
-  transform: rotate(90deg);
-}
-
-.config-nav-item.active .config-nav-chevron {
-  color: #2563eb;
-}
-
-
 .config-nav-children {
   display: grid;
   gap: 1px;
@@ -481,36 +393,6 @@ button:disabled {
   padding: 2px 0 2px 12px;
   border-left: 1px solid #e5e7eb;
   flex-shrink: 0;
-}
-
-
-.sidebar nav .config-nav-child {
-  width: 100%;
-  min-height: 32px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  box-shadow: none;
-  color: #6b7280;
-  justify-content: flex-start;
-  font-size: 0.8rem;
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-
-.sidebar nav .config-nav-child:hover {
-  background: #f3f4f6;
-  color: #111827;
-}
-
-
-.sidebar nav .config-nav-child.active {
-  background: #ffffff;
-  color: #2563eb;
-  font-weight: 650;
-  box-shadow: none;
 }
 
 
@@ -780,72 +662,6 @@ button:disabled {
   height: 30px;
 }
 
-.brasao-upload-label {
-  display: block;
-  cursor: pointer;
-}
-
-.brasao-dropzone {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 20px 16px;
-  border: 1.5px dashed #d1d5db;
-  border-radius: 10px;
-  background: #f9fafb;
-  color: #6b7280;
-  font-size: 0.82rem;
-  transition: border-color 120ms, background 120ms;
-}
-
-.brasao-dropzone:hover {
-  border-color: #2563eb;
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.brasao-dropzone small {
-  font-size: 0.72rem;
-  color: #9ca3af;
-}
-
-.brasao-preview-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  background: #f9fafb;
-}
-
-.brasao-preview-img {
-  width: 52px;
-  height: 52px;
-  object-fit: contain;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.brasao-remove-btn {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px;
-  color: #9ca3af;
-  border-radius: 4px;
-  transition: color 120ms, background 120ms;
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-}
-
-.brasao-remove-btn:hover {
-  color: #ef4444;
-  background: #fef2f2;
-}
-
 .municipality-brasao-thumb {
   width: 28px;
   height: 28px;
@@ -880,12 +696,6 @@ button:disabled {
   object-fit: contain;
   border-radius: 8px;
   flex-shrink: 0;
-}
-
-.brasao-upload-label .field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
 }
 
 
@@ -994,19 +804,6 @@ button:disabled {
   right: auto;
 }
 
-
-.modal-backdrop > .config-clean-modal {
-  width: min(520px, calc(100vw - 32px));
-  max-height: calc(100dvh - 32px);
-  padding: 0;
-  gap: 0;
-  overflow: hidden;
-  border: 1px solid #dbe5f1;
-  border-radius: 12px;
-  background: #ffffff;
-  box-shadow: 0 22px 58px rgba(15, 23, 42, 0.18);
-}
-
 .modal-backdrop > :is(.config-sector-modal, .config-permission-modal, .config-user-modal) {
   width: min(680px, calc(100vw - 32px));
   height: var(--config-management-modal-height);
@@ -1034,89 +831,6 @@ button:disabled {
   --config-management-modal-height: min(86dvh, 820px);
 }
 
-:is(.sector-modal-header, .permission-modal-header, .config-user-modal > .modal-header) {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px 24px 14px;
-  border-bottom: 1px solid #eef2f6;
-  background: #ffffff;
-}
-
-:is(.sector-modal-titleblock, .permission-modal-titleblock, .config-user-modal .modal-header-text) {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
-:is(.sector-modal-titleblock, .permission-modal-titleblock, .config-user-modal .modal-header-text) h2 {
-  margin: 0;
-  color: #0f172a;
-  font-size: 1rem;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-:is(.sector-modal-titleblock, .permission-modal-titleblock, .config-user-modal .modal-header-text) :is(p, span) {
-  margin: 0;
-  color: #64748b;
-  font-size: 0.74rem;
-  font-weight: 500;
-  line-height: 1.35;
-}
-
-.permission-modal-head-actions {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  flex: 0 0 auto;
-}
-
-.permission-inline-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #334155;
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-.permission-inline-toggle input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.permission-inline-toggle .toggle-track {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  border-radius: 999px;
-  background: #cbd5e1;
-  transition: background 0.16s ease;
-}
-
-.permission-inline-toggle .toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
-  transition: transform 0.16s ease;
-}
-
-.permission-inline-toggle input:checked + .toggle-track {
-  background: #4f46e5;
-}
-
-.permission-inline-toggle input:checked + .toggle-track .toggle-thumb {
-  transform: translateX(16px);
-}
-
 :is(.sector-modal-body, .permission-modal-body, .config-management-body) {
   min-height: 0;
   display: grid;
@@ -1127,90 +841,24 @@ button:disabled {
   background: #ffffff;
 }
 
-:is(.sector-status-panel, .permission-status-panel, .config-management-body > .config-modal-options) {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 42px;
-  margin: 0 0 14px;
-  padding: 10px 12px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-  color: #334155;
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-:is(.sector-status-panel, .permission-status-panel) input,
 :is(.sector-switch-input, .permission-switch-input) {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-:is(.sector-status-panel, .permission-status-panel) .toggle-track {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  border-radius: 999px;
-  background: #cbd5e1;
-  transition: background 0.16s ease;
-}
-
-:is(.sector-status-panel, .permission-status-panel) .toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 999px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
-  transition: transform 0.16s ease;
-}
-
-:is(.sector-status-panel, .permission-status-panel) input:checked + .toggle-track,
 :is(.sector-switch-input, .permission-switch-input):checked + :is(.sector-row-toggle, .permission-row-toggle) {
   background: #4f46e5;
 }
 
-:is(.sector-status-panel, .permission-status-panel) input:checked + .toggle-track .toggle-thumb,
 :is(.sector-switch-input, .permission-switch-input):checked + :is(.sector-row-toggle, .permission-row-toggle) > span {
   transform: translateX(16px);
-}
-
-:is(.sector-name-field, .permission-name-field) {
-  display: grid;
-  gap: 6px;
-  margin: 0 0 16px;
-}
-
-:is(.sector-name-field, .permission-name-field) > span {
-  color: #64748b;
-  font-size: 0.68rem;
-  font-weight: 600;
-}
-
-:is(.sector-name-field, .permission-name-field) input {
-  width: 100%;
-  min-height: 36px;
-  padding: 0 12px;
-  border: 1px solid #dbe5f1;
-  border-radius: 9px;
-  background: #ffffff;
-  color: #0f172a;
-  font-size: 0.8rem;
 }
 
 :is(.sector-links-panel, .permission-catalog-panel) {
   display: grid;
   gap: 14px;
   padding: 18px 20px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: #f8fafc;
 }
 
 :is(.sector-links-head, .permission-catalog-head) {
@@ -1300,179 +948,8 @@ button:disabled {
   background: #ffffff;
 }
 
-:is(.sector-modal-footer, .permission-modal-footer, .config-management-footer) .primary-action {
-  min-height: 38px;
-  border-radius: 999px;
-  padding-inline: 18px;
-  font-size: 0.78rem;
-  background: #e8f0fb;
-  border-color: #0f172a;
-  color: #0f172a;
-}
-
-.config-clean-modal > .modal-header {
-  position: relative;
-  top: auto;
-  min-height: 0;
-  margin: 0;
-  padding: 16px 18px;
-  border: 0;
-  border-bottom: 1px solid #eef2f6;
-  border-radius: 12px 12px 0 0;
-  background: #ffffff;
-}
-
-.config-clean-modal .modal-header-text h2 {
-  color: #0f172a;
-  font-size: 0.92rem;
-  font-weight: 650;
-  letter-spacing: 0;
-}
-
-.config-clean-modal .modal-header-close {
-  width: 28px;
-  height: 28px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: #94a3b8;
-}
-
-.config-clean-modal .modal-header-close:hover {
-  background: #fff1f2;
-  color: #e11d48;
-}
-
-.config-clean-modal > :not(.modal-header):not(.config-clean-actions) {
-  margin-inline: 18px;
-}
-
-.config-clean-modal .field {
-  gap: 6px;
-}
-
-.config-clean-modal .field > span {
-  color: #64748b;
-  font-size: 0.68rem;
-  font-weight: 600;
-  letter-spacing: 0;
-  text-transform: none;
-}
-
-.config-clean-modal .field input,
-.config-clean-modal .field select,
-.config-clean-modal .field textarea {
-  min-height: 34px;
-  border-color: #dbe5f1;
-  border-radius: 8px;
-  background: #ffffff;
-  font-size: 0.78rem;
-}
-
-.config-clean-modal .config-modal-options {
-  display: block;
-  margin-top: 14px;
-  margin-bottom: 10px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.config-clean-modal .config-active-toggle {
-  display: flex;
-  flex-direction: row-reverse;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  min-height: 42px;
-  padding: 10px 12px;
-  border: 1px solid #dbe5f1;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.config-clean-modal .config-active-toggle > span:last-child {
-  color: #334155;
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-.config-clean-modal .config-active-toggle .toggle-track {
-  width: 36px;
-  height: 20px;
-  background: #e2e8f0;
-}
-
-.config-clean-modal .config-active-toggle input:checked + .toggle-track {
-  background: #4f46e5;
-}
-
-.config-clean-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin: 16px 0 0;
-  padding: 14px 18px 16px;
-  border-top: 1px solid #eef2f6;
-  background: #ffffff;
-}
-
-.config-clean-actions .ghost-button,
-.config-clean-actions .primary-action {
-  min-height: 34px;
-  border-radius: 999px;
-  padding-inline: 16px;
-  font-size: 0.78rem;
-}
-
-.config-clean-actions .primary-action {
-  background: #4f46e5;
-  border-color: #4f46e5;
-}
-
-.config-clean-actions .primary-action:hover:not(:disabled) {
-  background: #4338ca;
-  border-color: #4338ca;
-}
-
-.config-clean-modal .checkbox-row {
-  min-height: 36px;
-  padding: 8px 10px;
-  border-bottom: 1px solid #eef2f6;
-  color: #1f2937;
-  font-size: 0.78rem;
-  font-weight: 450;
-}
-
-.config-clean-modal .checkbox-row:last-child {
-  border-bottom: 0;
-}
-
-.config-clean-modal .checkbox-row input {
-  width: 15px;
-  height: 15px;
-  accent-color: #4f46e5;
-}
-
-.config-clean-modal .checkbox-row > span {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.config-clean-modal .checkbox-row--all {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: #f8fafc;
-  color: #0f172a;
-  font-weight: 650;
-}
-
 .permission-group-card {
   overflow: hidden;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
 }
 
 .permission-group-card--blue {
@@ -5340,27 +4817,6 @@ main {
 }
 
 
-.sector-add-btn {
-  border: 1px dashed #b0c8d8;
-  background: none;
-  color: var(--blue);
-  border-radius: 6px;
-  width: 28px;
-  height: 28px;
-  display: inline-grid;
-  place-items: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: border-color 0.15s, background 0.15s;
-}
-
-
-.sector-add-btn:hover {
-  border-color: var(--blue);
-  background: #eff8ff;
-}
-
-
 .sector-picker-modal {
   background: #fff;
   border-radius: 14px;
@@ -5370,37 +4826,6 @@ main {
   display: grid;
   gap: 14px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.18);
-}
-
-
-.sector-picker-list {
-  display: grid;
-  gap: 6px;
-}
-
-
-.sector-picker-list small {
-  color: var(--muted);
-  padding: 8px 0;
-}
-
-
-.sector-picker-list button {
-  border: 1px solid #d7e5ec;
-  background: #fff;
-  border-radius: 8px;
-  padding: 10px 14px;
-  text-align: left;
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--ink);
-  transition: border-color 0.15s, background 0.15s;
-}
-
-
-.sector-picker-list button:hover {
-  border-color: var(--blue);
-  background: #eff8ff;
 }
 
 
@@ -5620,9 +5045,6 @@ main {
 
 
 .agenda-modal-block {
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius);
-  background: #f8fbfd;
   padding: 12px;
   display: grid;
   gap: 10px;
@@ -5643,109 +5065,7 @@ main {
 }
 
 
-.agenda-block-title .toggle-switch-field {
-  min-width: 148px;
-}
-
-
-.agenda-kind-selector {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 4px;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius);
-  background: #eef6fa;
-}
-
-
-.agenda-kind-selector button {
-  min-height: 34px;
-  border: 0;
-  border-radius: calc(var(--radius) - 2px);
-  background: transparent;
-  color: var(--ink);
-  font-weight: 600;
-}
-
-
-.agenda-kind-selector button.selected {
-  background: #ffffff;
-  color: var(--teal-dark);
-  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.1);
-}
-
-
-.ai-settings-layout {
-  display: grid;
-  grid-template-columns: minmax(320px, 520px) minmax(260px, 1fr);
-  gap: 12px;
-  align-items: start;
-}
-
-
-.ai-settings-card {
-  display: grid;
-  gap: 7px;
-  align-content: start;
-  padding: 12px;
-  background: transparent;
-}
-
-
-.external-provider-link {
-  min-height: 38px;
-  border-radius: var(--radius);
-  background: var(--teal-soft);
-  color: var(--teal-dark);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 12px;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-
-.ai-settings-actions {
-  display: flex;
-  gap: 8px;
-  justify-self: end;
-}
-
-.ai-save-key-action {
-  min-height: 42px;
-}
-
-
-.ai-rules-card {
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius);
-  background: transparent;
-  padding: 14px;
-  display: grid;
-  gap: 8px;
-}
-
-
-.ai-rules-card p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.45;
-}
-
-
 /* -- WhatsApp config ------------------------------------------------ */
-
-.whatsapp-statusbar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 0 14px;
-  font-size: 0.85rem;
-  color: var(--muted);
-  flex-wrap: wrap;
-}
 
 
 .whatsapp-dot {
@@ -5790,57 +5110,12 @@ main {
 .whatsapp-status-err { color: #b91c1c; }
 
 
-.whatsapp-integration {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-}
-
-
-.whatsapp-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: transparent;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: 18px 20px;
-}
-
-
-.whatsapp-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 2px;
-}
-
-
 .whatsapp-section-label {
   font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.07em;
   color: var(--subtle);
-}
-
-
-.whatsapp-fields-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
-}
-
-
-.whatsapp-fields-row .field {
-  margin: 0;
-}
-
-
-.whatsapp-save-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
 }
 
 
@@ -5874,23 +5149,6 @@ main {
   flex: 1;
   height: 1px;
   background: var(--line);
-}
-
-
-.whatsapp-input-action-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  align-items: end;
-}
-
-.whatsapp-input-action-row .field {
-  margin: 0;
-}
-
-.whatsapp-input-actions {
-  display: flex;
-  gap: 8px;
 }
 
 
@@ -6309,38 +5567,6 @@ main {
 }
 
 
-.config-status-filter {
-  display: flex;
-  gap: 6px;
-  margin-left: auto;
-}
-
-
-.config-status-filter button {
-  min-height: 34px;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius);
-  background: #ffffff;
-  color: var(--muted);
-  padding: 0 10px;
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-
-.config-status-filter button.selected {
-  border-color: var(--teal);
-  background: var(--teal);
-  color: #ffffff;
-}
-
-
-.config-status-filter span {
-  font-size: 0.72rem;
-  opacity: 0.78;
-}
-
-
 .config-editor-grid {
   display: flex;
   flex-direction: column;
@@ -6352,53 +5578,11 @@ main {
 }
 
 
-.config-section-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 54px;
-  margin: 0 0 14px;
-  padding: 0 0 14px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-
-.config-section-header h2 {
-  margin: 0;
-  font-size: 1.05rem;
-  letter-spacing: 0;
-}
-
-
 .config-editor-grid > .empty-state {
   width: 100%;
   border-radius: var(--radius);
   background: transparent;
   box-shadow: none;
-}
-
-
-.config-list-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 14px 20px;
-  border-bottom: 1px solid #e5e7eb;
-  background: transparent;
-  cursor: pointer;
-  transition: background 120ms;
-  border-radius: 0;
-}
-
-
-.config-list-row:last-child {
-  border-bottom: none;
-}
-
-
-.config-list-row:hover {
-  background: #f9fafb;
 }
 
 
@@ -6563,35 +5747,6 @@ main {
   letter-spacing: 0;
 }
 
-.document-settings-card {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.document-settings-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 36px;
-  padding: 7px 10px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.document-settings-item span {
-  min-width: 0;
-  color: #0f172a;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
 .document-modal-body {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
@@ -6608,10 +5763,6 @@ main {
   display: grid;
   gap: 10px;
   padding: 12px 14px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: none;
 }
 
 .document-modal-panel--criteria {
@@ -6675,19 +5826,6 @@ main {
   font-weight: 500;
 }
 
-.document-analysis-modal .field input {
-  min-height: 38px;
-  border-color: #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.document-analysis-modal .field input:focus,
-.document-criteria-textarea:focus {
-  border-color: #9fd5bb;
-  box-shadow: 0 0 0 3px rgba(31, 138, 95, 0.10);
-}
-
 
 .document-criteria-column {
   display: flex;
@@ -6695,10 +5833,7 @@ main {
   height: clamp(340px, 48dvh, 560px);
   min-width: 0;
   padding: 8px;
-  border: 1px solid #dbe5f1;
   border-left-width: 3px;
-  border-radius: 10px;
-  background: #ffffff;
 }
 
 .document-criteria-column--green {
@@ -6735,23 +5870,6 @@ main {
 
 .document-criteria-column--green .document-criteria-count { background: #e7f7ed; }
 .document-criteria-column--red .document-criteria-count { background: #fff1f3; }
-
-.document-criteria-textarea {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  box-sizing: border-box;
-  padding: 7px 8px;
-  border: 1px solid #dbe5f1;
-  border-radius: 8px;
-  font-size: 0.8rem;
-  font-family: inherit;
-  line-height: 1.5;
-  resize: none;
-  outline: none;
-  background: #ffffff;
-  color: #0f172a;
-}
 
 .document-confidence-track-row {
   display: grid;
@@ -6866,16 +5984,6 @@ main {
   background: #ffffff;
 }
 
-.document-modal-actions .ghost-button,
-.document-modal-actions .primary-action {
-  min-height: 38px;
-  border-radius: 999px;
-}
-
-.document-modal-actions .primary-action {
-  padding-inline: 22px;
-}
-
 
 .config-modal.process-work-modal {
   width: min(1420px, calc(100vw - 12px));
@@ -6890,7 +5998,6 @@ main {
 }
 
 
-.config-modal.compact .field input,
 .config-modal.compact .field select {
   min-height: 40px;
 }
@@ -6930,25 +6037,6 @@ main {
 }
 
 
-.document-pill {
-  min-height: 32px;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius);
-  background: #ffffff;
-  color: var(--ink);
-  padding: 0 10px;
-  font-size: 0.86rem;
-  font-weight: 600;
-}
-
-
-.document-pill.selected {
-  border-color: var(--teal);
-  background: var(--teal-soft);
-  color: var(--teal-dark);
-}
-
-
 .toggle-switch {
   grid-column: 1;
   grid-row: 1 / span 2;
@@ -6979,146 +6067,6 @@ main {
   padding: 0;
   border: 0;
   background: transparent;
-}
-
-.config-modal-options.stacked {
-  align-items: flex-start;
-  flex-direction: column;
-  justify-content: center;
-  gap: 10px;
-}
-
-
-.config-modal > .panel-header .config-active-toggle,
-.config-modal-options .config-active-toggle {
-  grid-column: auto;
-  grid-row: auto;
-  width: auto;
-  height: auto;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-
-.config-modal > .panel-header .config-active-toggle input,
-.config-modal-options .config-active-toggle input {
-  display: none;
-}
-
-
-.config-modal > .panel-header .config-active-toggle .toggle-track,
-.config-modal-options .config-active-toggle .toggle-track {
-  width: 36px;
-  height: 20px;
-  border-radius: 99px;
-  background: var(--line);
-  position: relative;
-}
-
-
-.config-modal > .panel-header .config-active-toggle input:checked + .toggle-track,
-.config-modal-options .config-active-toggle input:checked + .toggle-track {
-  background: var(--teal);
-}
-
-
-.config-modal > .panel-header .config-active-toggle .toggle-thumb,
-.config-modal-options .config-active-toggle .toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ffffff;
-  transition: left 0.2s;
-}
-
-
-.config-modal > .panel-header .config-active-toggle input:checked + .toggle-track .toggle-thumb,
-.config-modal-options .config-active-toggle input:checked + .toggle-track .toggle-thumb {
-  left: 18px;
-}
-
-
-.config-modal > .panel-header .config-active-toggle > span:last-child,
-.config-modal-options .config-active-toggle > span:last-child {
-  display: inline;
-  color: var(--ink);
-  font-size: 0.9rem;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-
-.config-active-toggle {
-  grid-column: auto;
-  grid-row: auto;
-  width: auto;
-  height: auto;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  cursor: pointer;
-}
-
-
-.config-active-toggle input {
-  display: none;
-}
-
-
-.config-active-toggle .toggle-track {
-  width: 36px;
-  height: 20px;
-  border-radius: 99px;
-  background: var(--line);
-  position: relative;
-  flex: 0 0 auto;
-}
-
-
-.config-active-toggle input:checked + .toggle-track {
-  background: var(--teal);
-}
-
-
-.config-active-toggle .toggle-thumb {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: #ffffff;
-  transition: left 0.2s;
-}
-
-
-.config-active-toggle input:checked + .toggle-track .toggle-thumb {
-  left: 18px;
-}
-
-
-.config-active-toggle > span:last-child {
-  display: inline;
-  color: var(--ink);
-  font-size: 0.9rem;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
 }
 
 
@@ -7162,40 +6110,10 @@ main {
 }
 
 
-.weekday-picker button {
-  min-width: 0;
-  min-height: 38px;
-  border: 1px solid #e5e7eb;
-  border-radius: calc(var(--radius) - 2px);
-  background: #f8fbfd;
-  color: #475569;
-  font-size: 0.86rem;
-  font-weight: 600;
-}
-
-
-.weekday-picker button:hover {
-  border-color: #bfdbfe;
-  background: #eef8fb;
-  color: var(--teal-dark);
-}
-
-
-.weekday-picker button.selected {
-  border-color: var(--teal);
-  background: var(--teal);
-  color: #ffffff;
-  box-shadow: 0 1px 4px rgba(20, 121, 184, 0.2);
-}
-
-
 .agenda-slots-field {
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #e5e7eb;
-  border-radius: var(--radius);
-  background: #ffffff;
 }
 
 
@@ -7231,11 +6149,6 @@ main {
 }
 
 
-.agenda-slots-header .secondary-action {
-  min-height: 38px;
-}
-
-
 .agenda-slots-list {
   display: grid;
   gap: 8px;
@@ -7244,12 +6157,6 @@ main {
 
 .agenda-slot-row {
   grid-template-columns: minmax(130px, 1fr) minmax(90px, 0.7fr) 44px;
-}
-
-
-.agenda-slot-row .icon-button {
-  height: 40px;
-  width: 40px;
 }
 
 
@@ -7263,11 +6170,6 @@ main {
   .agenda-slots-header,
   .agenda-slot-row {
     grid-template-columns: 1fr;
-  }
-
-
-  .agenda-slot-row .icon-button {
-    justify-self: end;
   }
 
 }
@@ -7472,7 +6374,6 @@ main {
   }
 
 
-  .config-section-header,
   .config-section-actions {
     align-items: stretch;
     flex-direction: column;
@@ -7789,7 +6690,7 @@ main {
 
 
 .sidebar nav button.active,
-.sidebar nav button[class*="active"] {
+.sidebar nav button:where(:not([data-ui-button]))[class*="active"] {
   background: #ffffff;
   border-color: #bfdbfe;
   color: #2563eb;
@@ -8014,14 +6915,6 @@ form textarea:where(:not([data-ui-input])):focus {
   background: var(--teal-soft) !important;
   color: var(--teal-dark) !important;
   font-weight: 600 !important;
-}
-
-
-.config-status-filter button.active {
-  background: var(--teal) !important;
-  color: #fff !important;
-  font-weight: 600 !important;
-  box-shadow: none !important;
 }
 
 
@@ -9190,7 +8083,7 @@ body * {
 }
 
 
-.sidebar nav button,
+.sidebar nav button:where(:not([data-ui-button])),
 .request-filter-tabs button,
 .request-today-segment button,
 .ag-view-btn,
@@ -9201,7 +8094,7 @@ body * {
 }
 
 
-.sidebar nav button,
+.sidebar nav button:where(:not([data-ui-button])),
 .topbar-search input,
 .topbar-municipality-filter select,
 .ag-select,
@@ -11953,13 +10846,6 @@ main {
 }
 
 
-.sidebar nav .config-nav-item.active,
-.sidebar nav .config-nav-child.active {
-  background: #eef5ff;
-  color: #1d4ed8;
-}
-
-
 .panel,
 .hero-panel,
 .metric-card,
@@ -11989,7 +10875,6 @@ main {
 .panel:hover,
 .metric-card:hover,
 .request-card:hover,
-.config-list-row:hover,
 .adoption-card:hover,
 .triage-card:hover {
   border-color: var(--ui-border-strong);
@@ -11998,7 +10883,6 @@ main {
 
 
 .primary-action,
-.config-create-action,
 .panel-header > .primary-action {
   min-height: 40px;
   border: 1px solid var(--ui-action);
@@ -12009,8 +10893,7 @@ main {
 }
 
 
-.primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled) {
+.primary-action:hover:not(:disabled) {
   background: var(--ui-action-hover);
   border-color: var(--ui-action-hover);
   box-shadow: 0 10px 24px rgba(37, 99, 235, 0.22);
@@ -12048,82 +10931,9 @@ main {
   color: var(--ui-ink-soft);
 }
 
-
-.config-section-header {
-  min-height: 50px;
-  margin-bottom: 12px;
-  padding-bottom: 0;
-  border-bottom: 0;
-}
-
-
-.config-section-header > div {
-  display: grid;
-  gap: 8px;
-}
-
-
-.config-section-header .config-status-filter {
-  margin-left: 0;
-}
-
-
-.config-create-action {
-  padding-inline: 15px;
-  white-space: nowrap;
-}
-
-
-.config-section-header {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  gap: 12px !important;
-  flex-wrap: wrap !important;
-}
-
-.config-section-heading {
-  min-width: 0 !important;
-  display: grid !important;
-  gap: 4px !important;
-}
-
-.config-section-tools {
-  margin-left: auto !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  gap: 8px !important;
-  flex-wrap: wrap !important;
-  min-width: 0 !important;
-}
-
-.config-section-tools .config-status-filter {
-  margin-left: 0 !important;
-}
-
-.config-create-action svg,
 .primary-action svg {
   flex: 0 0 auto !important;
 }
-
-@media (max-width: 760px) {
-  .config-section-header,
-  .config-section-tools,
-  .config-section-tools .config-status-filter,
-  .config-create-action {
-    width: 100% !important;
-  }
-
-  .config-section-tools {
-    justify-content: flex-start !important;
-  }
-
-  .config-create-action {
-    justify-content: center !important;
-  }
-}
-.config-status-filter,
 .tab-bar,
 .internal-adoption-filters,
 .adoption-filter-rail {
@@ -12137,12 +10947,6 @@ main {
 }
 
 
-.config-status-filter {
-  gap: 0;
-}
-
-
-.config-status-filter button,
 .request-filter-tabs button,
 .tab-bar button,
 .tab-bar-item {
@@ -12154,8 +10958,6 @@ main {
 }
 
 
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .request-filter-tabs button.selected,
 .tab-bar button.active,
 .tab-bar-item.active {
@@ -12168,7 +10970,6 @@ main {
 
 .workspace-heading .toolbar,
 .config-management-bar,
-.whatsapp-statusbar,
 .adoption-hero-filters {
   border: 1px solid var(--ui-border);
   border-radius: 14px;
@@ -12244,24 +11045,6 @@ form textarea:where(:not([data-ui-input])):focus,
   flex-direction: column;
   grid-template-columns: none;
   justify-content: stretch;
-}
-
-
-.config-list-row {
-  width: 100%;
-  min-height: 72px;
-  padding: 0;
-  gap: 0;
-  border: 1px solid var(--ui-border);
-  border-radius: 15px;
-  background: transparent;
-  overflow: hidden;
-  box-shadow: none;
-}
-
-
-.config-list-row:last-child {
-  border-bottom: 1px solid var(--ui-border);
 }
 
 
@@ -12368,22 +11151,6 @@ form textarea:where(:not([data-ui-input])):focus,
   border-bottom: 0;
 }
 
-
-.config-workspace .ai-settings-layout,
-.config-workspace .whatsapp-integration {
-  gap: 10px;
-}
-
-
-.config-workspace .ai-settings-card,
-.config-workspace .ai-rules-card,
-.config-workspace .whatsapp-section {
-  border: 1px solid var(--ui-border);
-  border-radius: 15px;
-  background: transparent;
-  box-shadow: none;
-}
-
 .config-workspace .config-modal-options {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
@@ -12396,42 +11163,7 @@ form textarea:where(:not([data-ui-input])):focus,
 }
 
 
-.config-workspace .ai-rules-card,
-.config-workspace .whatsapp-section {
-  padding: 16px 18px;
-}
-
-
-.config-workspace .external-provider-link {
-  border: 1px solid #bfdbfe;
-  border-radius: 11px;
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-
-
-.config-workspace .whatsapp-statusbar {
-  margin-bottom: 10px;
-  padding: 10px 12px;
-}
-
-
 @media (max-width: 760px) {
-
-  .config-section-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-
-  .config-create-action {
-    width: 100%;
-  }
-
-
-  .config-list-row {
-    min-height: 84px;
-  }
 
 
   .config-list-index {
@@ -13017,7 +11749,7 @@ form textarea:where(:not([data-ui-input])):focus,
 
 
 .modal-backdrop > :is(.workflow-modal, .config-modal, .auth-modal, .request-preview-modal) > .modal-header,
-.modal-backdrop > :is(.document-preview-modal, .adoption-form-modal, .adoption-confirm-modal, .public-request-details-modal) > .modal-header {
+.modal-backdrop > :is(.document-preview-modal, .adoption-form-modal, .adoption-confirm-modal, .public-request-details-modal, .sector-picker-modal) > .modal-header {
   position: relative;
   top: auto;
   min-height: 0;
@@ -13028,6 +11760,11 @@ form textarea:where(:not([data-ui-input])):focus,
   background: transparent;
 }
 
+.modal-backdrop > :is(.config-user-modal, .config-sector-modal, .config-permission-modal) > .modal-header {
+  margin: 0;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--ui-border);
+}
 
 .modal-header-icon {
   display: none;
@@ -13089,8 +11826,7 @@ form textarea:where(:not([data-ui-input])):focus,
 }
 
 
-.config-modal-options,
-.agenda-modal-block {
+.config-modal-options {
   border-color: #dfe7f1;
   border-radius: 11px;
   background: #ffffff;
@@ -13185,41 +11921,6 @@ form textarea:where(:not([data-ui-input])):focus,
   padding: 0;
   border: 0;
   background: transparent;
-}
-
-.config-management-body > .config-modal-options {
-  margin: 0;
-}
-
-.config-management-body > .config-modal-options .config-active-toggle {
-  width: 100%;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-}
-
-.config-modal-options .config-active-toggle,
-.document-settings-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 36px;
-  padding: 7px 10px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-}
-
-.config-modal-options .config-active-toggle > span:last-child,
-.document-settings-item span {
-  min-width: 0;
-  color: #0f172a;
-  font-size: 0.8rem;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
 }
 
 
@@ -13447,14 +12148,6 @@ form textarea:where(:not([data-ui-input])):focus,
 }
 
 
-.config-modal .agenda-modal-block {
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-}
-
-
 .config-modal .agenda-modal-block > strong {
   margin-bottom: 10px;
   color: #0f172a;
@@ -13464,21 +12157,6 @@ form textarea:where(:not([data-ui-input])):focus,
 
 .config-modal .modal-form-grid {
   gap: 10px;
-}
-
-
-.config-modal .agenda-kind-selector {
-  padding: 3px;
-  border: 1px solid #d7e2ef;
-  border-radius: 10px;
-  background: #f8fbff;
-}
-
-
-.config-modal .agenda-kind-selector button {
-  min-height: 32px;
-  border-radius: 8px;
-  box-shadow: none;
 }
 
 
@@ -13524,9 +12202,6 @@ form textarea:where(:not([data-ui-input])):focus,
   gap: 12px;
   margin: 0;
   padding: 7px 10px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
 }
 
 .agenda-modal-head > div {
@@ -13535,7 +12210,7 @@ form textarea:where(:not([data-ui-input])):focus,
   min-width: 0;
 }
 
-.agenda-modal-head span,
+.agenda-modal-head > div > span,
 .agenda-occurrence-header span,
 .agenda-block-title small,
 .agenda-mode-note {
@@ -13559,18 +12234,6 @@ form textarea:where(:not([data-ui-input])):focus,
   overflow-x: hidden;
   padding: 0 2px 12px;
   scrollbar-gutter: stable;
-}
-
-.config-modal .agenda-modal-layout--modern .agenda-modal-block {
-  padding: 12px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
-  box-shadow: none;
-}
-
-.config-modal .agenda-modal-layout--modern .agenda-modal-block--identity {
-  background: #ffffff;
 }
 
 .config-modal .agenda-block-title {
@@ -13612,9 +12275,6 @@ form textarea:where(:not([data-ui-input])):focus,
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #dbe5f1;
-  border-radius: 10px;
-  background: #ffffff;
 }
 
 .agenda-occurrence-header {
@@ -13636,7 +12296,6 @@ form textarea:where(:not([data-ui-input])):focus,
 
 .agenda-slots-field--compact {
   padding: 10px;
-  background: #ffffff;
 }
 
 .agenda-config-modal .form-actions {
@@ -13760,7 +12419,7 @@ main {
   gap: 7px;
 }
 
-.sidebar nav button {
+.sidebar nav button:where(:not([data-ui-button])) {
   min-height: 40px;
   padding: 0 12px;
   border: 1px solid #dfe7f1;
@@ -13772,11 +12431,11 @@ main {
   box-shadow: none;
 }
 
-.sidebar nav button svg {
+.sidebar nav button:where(:not([data-ui-button])) svg {
   color: #73849c;
 }
 
-.sidebar nav button:hover {
+.sidebar nav button:where(:not([data-ui-button])):hover {
   background: #ffffff;
   border-color: #cbd8e8;
 }
@@ -13790,32 +12449,6 @@ main {
 
 .sidebar nav button.active svg {
   color: #2563eb;
-}
-
-.sidebar nav button.config-nav-child {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  border-radius: 6px;
-  min-height: 28px;
-  padding: 4px 8px;
-  font-size: 0.86rem;
-  font-weight: 500;
-  color: #6b7280;
-}
-
-.sidebar nav button.config-nav-child:hover {
-  background: rgba(0,0,0,0.04);
-  border: none;
-  color: #374151;
-}
-
-.sidebar nav button.config-nav-child.active {
-  background: transparent;
-  border: none;
-  box-shadow: none;
-  color: #2563eb;
-  font-weight: 600;
 }
 
 .sidebar-footer {
@@ -15267,9 +13900,7 @@ main {
 .topbar-context-chip strong,
 .workspace-heading h2,
 .panel-header h2,
-.panel-header h3,
-.config-section-header h2,
-.config-section-header h3 {
+.panel-header h3 {
   color: var(--ui-ink);
   font-weight: 650;
   letter-spacing: 0;
@@ -15279,8 +13910,7 @@ main {
 .sidebar-user-info span,
 .topbar-context-chip span,
 .workspace-heading p,
-.panel-header p,
-.config-section-header p {
+.panel-header p {
   color: var(--ui-muted);
   font-weight: 450;
   letter-spacing: 0;
@@ -15305,16 +13935,8 @@ main {
   padding-inline: 12px;
 }
 
-.sidebar nav .config-nav-item,
-.sidebar nav .config-nav-child {
-  border: none;
-  background: transparent;
-  box-shadow: none;
-}
-
 .sidebar nav > button svg,
-.sidebar-user-avatar,
-.config-nav-dot {
+.sidebar-user-avatar {
   color: var(--ui-muted);
 }
 
@@ -15346,14 +13968,6 @@ main {
   height: 32px;
   border-radius: 13px;
   background: var(--ui-action);
-}
-
-.sidebar nav .config-nav-item.active,
-.sidebar nav .config-nav-child.active {
-  border-color: transparent;
-  background: var(--ui-action-soft);
-  color: var(--ui-action-hover);
-  box-shadow: none;
 }
 
 .sidebar-footer {
@@ -15428,7 +14042,6 @@ main {
 .panel:hover,
 .metric-card:hover,
 .request-card:hover,
-.config-list-row:hover,
 .adoption-card:hover,
 .triage-card:hover {
   border-color: var(--ui-border-strong);
@@ -15436,7 +14049,6 @@ main {
 }
 
 .primary-action,
-.config-create-action,
 .panel-header > .primary-action {
   min-height: 42px;
   border: 1px solid var(--ui-action);
@@ -15448,8 +14060,7 @@ main {
   box-shadow: none;
 }
 
-.primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled) {
+.primary-action:hover:not(:disabled) {
   border-color: var(--ui-action-hover);
   background: var(--ui-action-hover);
   box-shadow: none;
@@ -15704,12 +14315,9 @@ form textarea:where(:not([data-ui-input])):focus,
 }
 
 .primary-action,
-.config-create-action,
 .panel-header > .primary-action,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .request-filter-tabs button.selected,
 .tab-bar button.active,
 .tab-bar-item.active {
@@ -15719,8 +14327,7 @@ form textarea:where(:not([data-ui-input])):focus,
   box-shadow: none !important;
 }
 
-.primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled) {
+.primary-action:hover:not(:disabled) {
   border-color: #111827 !important;
   background: #111827 !important;
   box-shadow: none !important;
@@ -15741,12 +14348,6 @@ form textarea:where(:not([data-ui-input])):focus,
 .brand-mark {
   background: #020817 !important;
   color: #ffffff !important;
-}
-
-.sidebar nav .config-nav-item.active,
-.sidebar nav .config-nav-child.active {
-  background: #f1f5f9 !important;
-  color: #020817 !important;
 }
 
 .topbar-context-chip i {
@@ -16238,10 +14839,6 @@ form textarea:where(:not([data-ui-input])):focus,
 
   .document-identity-grid,
   .document-modal-panel--criteria {
-    grid-template-columns: 1fr;
-  }
-
-  .document-settings-card {
     grid-template-columns: 1fr;
   }
 
@@ -17876,7 +16473,6 @@ h6,
 .topbar-page-heading p,
 .workspace-heading p,
 .panel-header p,
-.config-section-header p,
 .clean-requests-workspace .tc-label,
 .field label,
 .form-field label,
@@ -17924,7 +16520,6 @@ h6,
 .brand-mark,
 .metric-icon,
 .primary-action,
-.config-create-action,
 .panel-header > .primary-action {
   border-color: var(--ui-action) !important;
   background: var(--ui-action) !important;
@@ -17933,7 +16528,6 @@ h6,
 }
 
 .primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled),
 .panel-header > .primary-action:hover:not(:disabled) {
   border-color: var(--ui-action-hover) !important;
   background: var(--ui-action-hover) !important;
@@ -17967,9 +16561,7 @@ h6,
 
 .sidebar nav > button:hover,
 .sidebar-action-item:hover,
-.sidebar-user-card:hover,
-.sidebar nav .config-nav-item:hover,
-.sidebar nav .config-nav-child:hover {
+.sidebar-user-card:hover {
   background: var(--ink-50) !important;
   color: var(--ink-800) !important;
 }
@@ -17992,19 +16584,11 @@ h6,
   color: var(--selected-ink) !important;
 }
 
-.sidebar nav .config-nav-item.active,
-.sidebar nav .config-nav-child.active {
-  background: var(--selected-bg) !important;
-  color: var(--selected-ink) !important;
-}
-
-.config-nav-item.active .config-nav-dot,
 .topbar-context-chip i {
   background: var(--selected-marker) !important;
 }
 
 .request-filter-tabs,
-.config-status-filter,
 .tab-bar,
 .internal-adoption-filters,
 .adoption-filter-rail,
@@ -18016,7 +16600,6 @@ h6,
 
 .request-filter-tabs button,
 .request-today-segment button,
-.config-status-filter button,
 .tab-bar button,
 .tab-bar-item,
 .ag-view-btn {
@@ -18028,7 +16611,6 @@ h6,
 
 .request-filter-tabs button:hover:not(.selected),
 .request-today-segment button:hover:not(.selected),
-.config-status-filter button:hover,
 .tab-bar button:hover,
 .tab-bar-item:hover,
 .ag-view-btn:hover {
@@ -18038,8 +16620,6 @@ h6,
 
 .request-filter-tabs button.selected,
 .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .tab-bar button.active,
 .tab-bar-item.active,
 .ag-view-btn.is-active {
@@ -18167,8 +16747,6 @@ textarea::placeholder,
 /* Neutral specificity locks for existing late overrides */
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .request-filter-tabs button.selected,
 .request-today-segment button.selected,
 .tab-bar button.active,
@@ -18214,12 +16792,6 @@ textarea::placeholder,
 .danger-action:hover:not(:disabled) {
   border-color: var(--status-danger-ink) !important;
   background: color-mix(in srgb, var(--status-danger-bg) 82%, var(--surface)) !important;
-}
-
-.config-workspace .external-provider-link {
-  border-color: var(--ui-border-strong) !important;
-  background: var(--selected-bg) !important;
-  color: var(--selected-ink) !important;
 }
 /* Neutral background lock: no beige page wash */
 body,
@@ -18285,16 +16857,12 @@ main,
 
 .sidebar nav > button:hover,
 .sidebar-action-item:hover,
-.sidebar-user-card:hover,
-.sidebar nav .config-nav-item:hover,
-.sidebar nav .config-nav-child:hover {
+.sidebar-user-card:hover {
   background: #edf4fb !important;
 }
 
 .sidebar nav > button.active,
-.sidebar nav > button[class*="active"],
-.sidebar nav .config-nav-item.active,
-.sidebar nav .config-nav-child.active {
+.sidebar nav > button[class*="active"] {
   background: var(--selected-bg) !important;
   color: var(--selected-ink) !important;
 }
@@ -18308,8 +16876,6 @@ main,
 .request-today-segment button.selected,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .tab-bar button.active,
 .tab-bar-item.active,
 .ag-view-btn.is-active {
@@ -18395,7 +16961,6 @@ main,
 .adoption-command-stats span,
 .request-filter-tabs button,
 .request-today-segment button,
-.config-status-filter button,
 .tab-bar button,
 .tab-bar-item,
 .ag-nav-btn,
@@ -18419,8 +16984,6 @@ main,
 .request-today-segment button.selected,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .tab-bar button.active,
 .tab-bar-item.active,
 .ag-view-btn.is-active,
@@ -18590,7 +17153,6 @@ main,
 .request-filter-tabs,
 .request-today-segment,
 .cr-stats-row,
-.config-status-filter,
 .tab-bar,
 .internal-adoption-filters,
 .adoption-filter-rail,
@@ -18625,7 +17187,6 @@ main,
 
 .request-filter-tabs button,
 .request-today-segment button,
-.config-status-filter button,
 .tab-bar button,
 .tab-bar-item,
 .ag-nav-btn,
@@ -18662,7 +17223,6 @@ main,
 
 .request-filter-tabs button:hover:not(.selected),
 .request-today-segment button:hover:not(.selected),
-.config-status-filter button:hover,
 .tab-bar button:hover,
 .tab-bar-item:hover,
 .ag-nav-btn:hover,
@@ -18679,8 +17239,6 @@ main,
 .request-today-segment button.selected,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .tab-bar button.active,
 .tab-bar-item.active,
 .ag-view-btn.is-active,
@@ -18722,8 +17280,6 @@ main,
 .request-today-segment button.selected,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .tab-bar button.active,
 .tab-bar-item.active,
 .ag-view-btn.is-active,
@@ -18736,7 +17292,6 @@ main,
 }
 
 .primary-action,
-.config-create-action,
 .panel-header > .primary-action,
 .adoption-form-modal .primary-action,
 .adoption-drawer-actions .primary-action,
@@ -18762,7 +17317,6 @@ main,
 }
 
 .primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled),
 .panel-header > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
@@ -19142,7 +17696,6 @@ textarea::placeholder,
 .form-field label,
 .access-field label,
 .access-field[data-label]::before,
-.config-section-header p,
 .panel-header p,
 .tc-label,
 .cr-label,
@@ -19162,7 +17715,6 @@ textarea::placeholder,
 }
 
 .primary-action,
-.config-create-action,
 .panel-header > .primary-action,
 .adoption-form-modal .primary-action,
 .adoption-drawer-actions .primary-action,
@@ -19201,23 +17753,18 @@ textarea::placeholder,
 
 .sidebar nav > button,
 .sidebar-action-item,
-.sidebar-user-card,
-.config-nav-item,
-.config-nav-child {
+.sidebar-user-card {
   font-weight: var(--type-weight-control) !important;
   letter-spacing: 0 !important;
 }
 
 .sidebar nav > button.active,
-.sidebar nav > button[class*="active"],
-.sidebar nav .config-nav-item.active,
-.sidebar nav .config-nav-child.active {
+.sidebar nav > button[class*="active"] {
   font-weight: var(--type-weight-control-active) !important;
 }
 
 .request-filter-tabs button,
 .request-today-segment button,
-.config-status-filter button,
 .tab-bar button,
 .tab-bar-item,
 .ag-nav-btn,
@@ -19226,8 +17773,6 @@ textarea::placeholder,
 .adoption-view-toggle button,
 .adoption-nav-modern .adoption-filter-group button,
 .compact-choice-field button,
-.weekday-picker button,
-.agenda-kind-selector button,
 .calendar-day-button,
 .cr-stats-row span,
 .adoption-command-stats span {
@@ -19240,16 +17785,12 @@ textarea::placeholder,
 .request-today-segment button.selected,
 .clean-requests-workspace .request-filter-tabs button.selected,
 .clean-requests-workspace .request-today-segment button.selected,
-.config-status-filter button.active,
-.config-status-filter button.selected,
 .tab-bar button.active,
 .tab-bar-item.active,
 .ag-view-btn.is-active,
 .adoption-view-toggle button.selected,
 .adoption-nav-modern .adoption-filter-group button.selected,
 .compact-choice-field button.selected,
-.weekday-picker button.selected,
-.agenda-kind-selector button.selected,
 .calendar-day-button.selected {
   font-weight: var(--type-weight-control-active) !important;
 }
@@ -19282,8 +17823,6 @@ h2,
 h3,
 .panel-header h2,
 .panel-header h3,
-.config-section-header h2,
-.config-section-header h3,
 .adoption-card-name,
 .adoption-list-info strong,
 .cr-title,
@@ -19329,7 +17868,6 @@ small,
 }
 
 .primary-action,
-.config-create-action,
 .panel-header > .primary-action,
 .adoption-form-modal .primary-action,
 .adoption-drawer-actions .primary-action,
@@ -19355,7 +17893,6 @@ small,
 }
 
 .primary-action svg,
-.config-create-action svg,
 .panel-header > .primary-action svg,
 .adoption-form-modal .primary-action svg,
 .adoption-drawer-actions .primary-action svg,
@@ -19369,7 +17906,6 @@ small,
 }
 
 .primary-action:hover:not(:disabled),
-.config-create-action:hover:not(:disabled),
 .panel-header > .primary-action:hover:not(:disabled),
 .adoption-form-modal .primary-action:hover:not(:disabled),
 .adoption-drawer-actions .primary-action:hover:not(:disabled),
@@ -19385,7 +17921,6 @@ small,
 }
 
 .primary-action:focus-visible,
-.config-create-action:focus-visible,
 .panel-header > .primary-action:focus-visible,
 .adoption-form-modal .primary-action:focus-visible,
 .adoption-drawer-actions .primary-action:focus-visible,
@@ -19439,7 +17974,6 @@ small,
 .workspace-heading-actions,
 .adoption-command-actions,
 .reports-filter-actions,
-.ai-settings-actions,
 .form-actions {
   display: flex !important;
   align-items: center !important;
@@ -19450,8 +17984,7 @@ small,
 
 .page-toolbar > .page-actions,
 .request-page-controls .workspace-heading-actions,
-.adoption-toolbar-actions,
-.config-section-tools {
+.adoption-toolbar-actions {
   margin-left: auto !important;
 }
 
@@ -19460,7 +17993,6 @@ small,
   .workspace-heading-actions,
   .adoption-command-actions,
   .reports-filter-actions,
-  .ai-settings-actions,
   .form-actions {
     width: 100% !important;
   }
@@ -19469,7 +18001,6 @@ small,
   .workspace-heading-actions > .primary-action,
   .adoption-command-actions > .primary-action,
   .reports-filter-actions > .primary-action,
-  .ai-settings-actions > .primary-action,
   .form-actions > .primary-action {
     flex: 1 1 auto !important;
   }
@@ -19894,14 +18425,6 @@ small,
   color: #b91c1c;
 }
 
-.whatsapp-sync-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-
 .whatsapp-switch-cell {
   display: flex;
   align-items: center;
@@ -19950,28 +18473,6 @@ small,
 
 .whatsapp-muted {
   color: var(--subtle);
-}
-
-.whatsapp-section-header {
-  gap: 16px;
-}
-
-.whatsapp-config-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #ffffff;
-  color: var(--muted);
-  cursor: pointer;
-}
-
-.whatsapp-config-btn:hover {
-  border-color: #2563eb;
-  color: #2563eb;
 }
 
 /* "Configurar template": the Meta text with each number in the tone of its select, one select per number and the preview. */

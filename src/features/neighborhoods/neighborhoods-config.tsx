@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { ConfigSectionHeader, ConfigStatusFilter, EmptyState } from "../../components/ui";
+import { Card } from "../../components/card";
+import { ConfigRow, ConfigSectionHeader, ConfigStatusFilter, EmptyState } from "../../components/ui";
 import { filterByMunicipalityScope, getItemMunicipalityId } from "../../domain";
 import type { AnyRecord } from "../../types";
 import { NeighborhoodFormModal } from "./neighborhood-form-modal";
@@ -66,7 +67,7 @@ export function NeighborhoodsConfig({ items, setItems, municipalityScopeId }: Ne
 
   return (
     <>
-      <div className="config-panel wide">
+      <Card className="config-panel wide">
         <ConfigSectionHeader title="Bairros" createLabel="Criar bairros" onCreate={() => openModal()}>
           <ConfigStatusFilter
             value={statusFilter}
@@ -83,18 +84,18 @@ export function NeighborhoodsConfig({ items, setItems, municipalityScopeId }: Ne
             />
           )}
           {visibleItems.map((item, index) => (
-            <article className="config-list-row" key={`${getItemMunicipalityId(item)}:${item.id}`} onClick={() => openModal(item)} role="button" tabIndex={0}>
+            <ConfigRow key={`${getItemMunicipalityId(item)}:${item.id}`} onClick={() => openModal(item)}>
               <span className="config-list-index">{index + 1}</span>
-              <div className="config-list-main">
+              <span className="config-list-main">
                 <strong>{item.name}</strong>
-              </div>
+              </span>
               <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
                 {item.active === false ? "Inativo" : "Ativo"}
               </small>
-            </article>
+            </ConfigRow>
           ))}
         </div>
-      </div>
+      </Card>
       {modalOpen && (
         <NeighborhoodFormModal isEditing={editingItem !== null} form={form} error={error} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} onSubmit={handleSubmit} onClose={closeModal} />
       )}

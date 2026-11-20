@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { ConfigSectionHeader, ConfigStatusFilter, EmptyState } from "../../components/ui";
+import { Card } from "../../components/card";
+import { ConfigRow, ConfigSectionHeader, ConfigStatusFilter, EmptyState } from "../../components/ui";
 import { filterByMunicipalityScope, getItemMunicipalityId } from "../../domain";
 import type { AnyRecord } from "../../types";
 import { BreedFormModal } from "./breed-form-modal";
@@ -106,7 +107,7 @@ export function BreedsConfig({ items, onSave, municipalityScopeId, speciesOption
 
   return (
     <>
-      <div className="config-panel wide">
+      <Card className="config-panel wide">
         <ConfigSectionHeader title="Raças" createLabel="Criar raça" onCreate={() => openModal()}>
           <ConfigStatusFilter
             value={statusFilter}
@@ -123,25 +124,22 @@ export function BreedsConfig({ items, onSave, municipalityScopeId, speciesOption
             />
           )}
           {visibleItems.map(({ item, speciesName }, index) => (
-            <article
-              className="config-list-row"
+            <ConfigRow
               key={`${getItemMunicipalityId(item)}:${item.id}`}
               onClick={() => openModal(item)}
-              role="button"
-              tabIndex={0}
             >
               <span className="config-list-index">{index + 1}</span>
-              <div className="config-list-main">
+              <span className="config-list-main">
                 <strong>{item.name}</strong>
                 <span>{speciesName || "Espécie não encontrada"}</span>
-              </div>
+              </span>
               <small className={item.active === false ? "schedule-status inactive" : "schedule-status active"}>
                 {item.active === false ? "Inativo" : "Ativo"}
               </small>
-            </article>
+            </ConfigRow>
           ))}
         </div>
-      </div>
+      </Card>
 
       {modalOpen && (
         <BreedFormModal

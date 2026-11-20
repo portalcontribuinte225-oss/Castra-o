@@ -52,8 +52,8 @@ beforeEach(() => {
 describe("e-mail contract", () => {
   it("counts the messages of the contract at the top, whether the account is configured or not", () => {
     const html = tab({ master: false, canEditContract: false });
-    expect(html).toContain("whatsapp-statusbar"); expect(html).toContain("12/500"); expect(html).toContain("Contrato vigente"); expect(html).toContain("Ativo");
-    expect(html.indexOf("whatsapp-statusbar")).toBeLessThan(html.indexOf("Templates"));
+    expect(html).toContain('aria-label="Estado da integração"'); expect(html).toContain("12/500"); expect(html).toContain("Contrato vigente"); expect(html).toContain("Ativo");
+    expect(html.indexOf('aria-label="Estado da integração"')).toBeLessThan(html.indexOf("Templates"));
     vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ configured: false })));
     expect(tab()).toContain("Inativo");
   });
@@ -87,10 +87,10 @@ describe("e-mail contract", () => {
 
   it("shows neither the counter nor the form while the screen is not loaded or no municipality is chosen", () => {
     vi.mocked(useEmailSettings).mockReturnValue(emailState(null));
-    expect(tab()).not.toContain("whatsapp-statusbar");
+    expect(tab()).not.toContain('aria-label="Estado da integração"');
     vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf()));
     const noMunicipality = tab({ municipalityId: "" });
-    expect(noMunicipality).not.toContain("whatsapp-statusbar");
+    expect(noMunicipality).not.toContain('aria-label="Estado da integração"');
   });
 });
 

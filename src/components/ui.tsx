@@ -1,9 +1,12 @@
-import type { ReactNode } from "react";
+import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import { Plus, X } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { AnyRecord } from "../types";
 import { statusLabels } from "../domain";
 import { Card } from "./card";
+import { Button } from "./button";
+import { CloseButton } from "./close-button";
+import { Input } from "./input";
 
 export function EmptyState({ title, text, action, onAction }: AnyRecord) {
   return (
@@ -26,19 +29,17 @@ export function InfoTile({ label, value }: AnyRecord) {
 
 export function ConfigSectionHeader({ title, createLabel, onCreate, children }: AnyRecord) {
   return (
-    <div className="config-section-header">
-      <div className="config-section-heading">
-        <h2>{title}</h2>
-      </div>
-      <div className="config-section-tools">
+    <div className="tw:mb-3 tw:flex tw:min-h-[50px] tw:flex-wrap tw:items-center tw:justify-between tw:gap-3">
+      <h2 className="tw:m-0 tw:text-base tw:font-semibold tw:text-ui-ink">{title}</h2>
+      {(children || createLabel) && <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2">
         {children}
         {createLabel && (
-          <button className="primary-action config-create-action" type="button" onClick={onCreate}>
-            <Plus size={15} />
+          <Button onClick={onCreate}>
+            <Plus size={15} aria-hidden="true" />
             {createLabel}
-          </button>
+          </Button>
         )}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -50,21 +51,37 @@ export function ConfigStatusFilter({ value, onChange, activeCount = 0, inactiveC
     { id: "all", label: "Todos" },
   ];
   return (
-    <div className="config-status-filter">
+    <div className="tw:flex tw:flex-wrap tw:gap-1.5" role="group" aria-label="Filtrar por situação">
       {items.map((item) => (
-        <button key={item.id} className={value === item.id ? "active" : ""} type="button" onClick={() => onChange(item.id)}>
+        <Button
+          key={item.id}
+          variant="custom"
+          aria-pressed={value === item.id}
+          className="tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong"
+          onClick={() => onChange(item.id)}
+        >
           {item.label}
-        </button>
+        </Button>
       ))}
     </div>
   );
 }
 
+export function ConfigRow({ className = "", children, ...props }: ComponentPropsWithoutRef<"button">) {
+  return (
+    <Card as="button" {...props} className={`config-list-row tw:flex tw:min-h-[72px] tw:w-full tw:items-center tw:overflow-hidden tw:p-0 tw:text-left tw:touch-manipulation tw:max-[760px]:min-h-[84px] tw:hover:border-ui-accent tw:hover:bg-card-page tw:focus-visible:outline-2 tw:focus-visible:-outline-offset-2 tw:focus-visible:outline-ui-accent ${className}`.trim()}>
+      {children}
+    </Card>
+  );
+}
+
 export function ConfigActiveToggle({ checked, onChange, onText = "Ativo", offText = "Inativo" }: AnyRecord) {
   return (
-    <label className="config-active-toggle">
-      <input type="checkbox" checked={!!checked} onChange={(event) => onChange(event.target.checked)} />
-      <span className="toggle-track"><span className="toggle-thumb" /></span>
+    <label className="tw:inline-flex tw:min-h-10 tw:w-fit tw:max-w-full tw:cursor-pointer tw:items-center tw:gap-2 tw:rounded-full tw:border tw:border-solid tw:border-card-border tw:bg-card-surface tw:px-3 tw:text-sm tw:font-medium tw:text-ui-text">
+      <input className="tw:peer tw:sr-only" type="checkbox" checked={!!checked} onChange={(event) => onChange(event.target.checked)} />
+      <span aria-hidden="true" className="tw:relative tw:h-5 tw:w-9 tw:shrink-0 tw:rounded-full tw:bg-[var(--ink-200)] tw:peer-checked:bg-ui-accent tw:peer-checked:[&>span]:translate-x-4 tw:peer-focus-visible:outline-2 tw:peer-focus-visible:outline-offset-2 tw:peer-focus-visible:outline-ui-accent">
+        <span className="tw:absolute tw:start-0.5 tw:top-0.5 tw:size-4 tw:rounded-full tw:bg-white tw:motion-safe:transition-transform" />
+      </span>
       <span>{checked ? onText : offText}</span>
     </label>
   );
@@ -104,7 +121,7 @@ export function PanelHeader({ title, action, onAction, aside, actionClassName = 
   );
 }
 
-export function ModalHeader({ title, subtitle, onClose, actions, icon: Icon }: AnyRecord) {
+export function ModalHeader({ title, subtitle, onClose, actions, icon: Icon, appearance }: AnyRecord) {
   return (
     <div className="modal-header">
       {Icon && (
@@ -117,9 +134,13 @@ export function ModalHeader({ title, subtitle, onClose, actions, icon: Icon }: A
         {subtitle && <p className="modal-header-sub">{subtitle}</p>}
       </div>
       {actions}
-      <button className="modal-header-close" type="button" onClick={onClose} aria-label="Fechar">
-        <X size={15} />
-      </button>
+      {appearance === "config" ? (
+        <CloseButton onClick={onClose} />
+      ) : (
+        <button className="modal-header-close" type="button" onClick={onClose} aria-label="Fechar">
+          <X size={15} />
+        </button>
+      )}
     </div>
   );
 }
@@ -142,6 +163,24 @@ export function Field({ label, value, onChange, placeholder, readOnly = false, i
         maxLength={maxLength}
         onChange={(event) => onChange?.(event.target.value)}
       />
+    </label>
+  );
+}
+
+export const configFieldStyle = "tw:grid tw:min-w-0 tw:content-start tw:gap-1.5 tw:text-sm tw:font-medium tw:text-ui-text";
+export const configTextareaStyle = "tw:block tw:w-full tw:min-w-0 tw:rounded-[var(--ui-radius-md)] tw:border tw:border-solid tw:border-card-border tw:bg-card-surface tw:px-[13px] tw:py-2.5 tw:text-sm tw:text-ui-ink tw:focus:border-ui-accent tw:focus:outline-hidden tw:aria-invalid:border-ui-danger tw:aria-invalid:focus:border-ui-danger";
+
+type ConfigFieldProps = Omit<ComponentPropsWithoutRef<"input">, "onChange"> & {
+  label: ReactNode;
+  invalid?: boolean;
+  onChange?: (value: string) => void;
+};
+
+export function ConfigField({ label, className = "", value, type = "text", invalid, onChange, ...props }: ConfigFieldProps) {
+  return (
+    <label className={`${configFieldStyle} ${className}`.trim()}>
+      <span>{label}</span>
+      <Input {...props} type={type} value={value ?? ""} aria-invalid={invalid || props["aria-invalid"]} onChange={(event) => onChange?.(event.target.value)} />
     </label>
   );
 }

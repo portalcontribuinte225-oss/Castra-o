@@ -16,7 +16,7 @@ export const CloseButton = forwardRef<HTMLButtonElement, CloseButtonProps>(funct
   ref,
 ) {
   return (
-    <button ref={ref} type="button" aria-label={label} disabled={disabled} onClick={onClick} className={closeButtonStyle}>
+    <button ref={ref} type="button" aria-label={label} data-ui-close-button="" disabled={disabled} onClick={onClick} className={closeButtonStyle}>
       <X size={17} aria-hidden="true" />
     </button>
   );

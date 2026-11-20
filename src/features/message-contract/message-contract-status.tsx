@@ -1,4 +1,5 @@
 import React from "react";
+import { Card } from "../../components/card";
 import type { MessageQuotaStatus } from "./message-contract-types";
 
 interface Props {
@@ -11,7 +12,7 @@ interface Props {
 export function MessageContractStatus({ active, live }: Props) {
   const endLabel = live?.contractEnd ? new Date(`${live.contractEnd}T00:00:00`).toLocaleDateString("pt-BR") : null;
   return (
-    <div className="whatsapp-statusbar">
+    <Card className="tw:mb-3 tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:px-4 tw:py-3 tw:text-sm tw:text-ui-text" role="status" aria-label="Estado da integração">
       <span className={`whatsapp-dot ${active ? "whatsapp-dot--on" : "whatsapp-dot--off"}`} />
       <span className={`whatsapp-statusbar-state ${active ? "whatsapp-status-ok" : "whatsapp-status-err"}`}>
         {active ? "Ativo" : "Inativo"}
@@ -34,6 +35,6 @@ export function MessageContractStatus({ active, live }: Props) {
           <span className="whatsapp-statusbar-text">Cota não configurada</span>
         </>
       )}
-    </div>
+    </Card>
   );
 }

@@ -1,4 +1,6 @@
 import React from "react";
+import { Button } from "../../components/button";
+import { IntegrationCard } from "../../components/integration-card";
 import { PanelHeader } from "../../components/ui";
 import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
@@ -32,17 +34,14 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
     <div className="config-panel wide">
       <PanelHeader title="E-mail" />
       {municipalityId && settings && <MessageContractStatus active={settings.configured && serviceOn} live={contract.live} />}
-      <div className="whatsapp-integration">
+      <div className="tw:grid tw:gap-3">
         {master && settings && <EmailCredentials account={settings.account} state={account} />}
-        <section className="whatsapp-section">
-          <div className="whatsapp-section-header">
-            <span className="whatsapp-section-label">Templates</span>
-          </div>
+        <IntegrationCard title="Templates">
           {email.loading && <p role="status">Carregando a integração de e-mail...</p>}
           {email.error && (
             <div role="alert">
               <p className="form-error">{email.error}</p>
-              {!email.ready && <button type="button" className="ghost-button" onClick={email.retry}>Carregar novamente</button>}
+              {!email.ready && <Button variant="outline" onClick={email.retry}>Carregar novamente</Button>}
             </div>
           )}
           {email.notice && <p role="status">{email.notice}</p>}
@@ -68,8 +67,8 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
               onToggle={email.toggle}
             />
           )}
-          {master && settings && <button type="button" className="primary-action" disabled={!email.dirty || email.saving} onClick={email.saveTemplates}>{email.saving ? "Salvando..." : "Salvar templates"}</button>}
-        </section>
+          {master && settings && <Button className="tw:justify-self-start" disabled={!email.dirty || email.saving} onClick={email.saveTemplates}>{email.saving ? "Salvando..." : "Salvar templates"}</Button>}
+        </IntegrationCard>
         {canEditContract && settings && <MessageContractForm municipalityId={municipalityId} contract={contract} serviceSwitch />}
       </div>
     </div>

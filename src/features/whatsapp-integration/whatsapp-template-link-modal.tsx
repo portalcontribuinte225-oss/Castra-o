@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { Button } from "../../components/button";
+import { ConfigDialogBackdrop } from "../../components/config-dialog";
 import { ModalHeader } from "../../components/ui";
 import { isWhatsappNoticeUse, templateFields, whatsappFieldLabels, whatsappUses } from "../../../shared/whatsapp-templates-contract.js";
 import {
@@ -45,9 +47,9 @@ export function WhatsappTemplateLinkModal({ row, samples, onSave, onClose }: Pro
   }
 
   return (
-    <div className="modal-backdrop">
+    <ConfigDialogBackdrop>
       <div className="config-modal" role="dialog" aria-modal="true" aria-label={`Configurar ${row.name}`}>
-        <ModalHeader title="Configurar template" subtitle={`${row.name} · ${row.language} · ${templateStatusLabel(row.status)}`} onClose={onClose} />
+        <ModalHeader appearance="config" title="Configurar template" subtitle={`${row.name} · ${row.language} · ${templateStatusLabel(row.status)}`} onClose={onClose} />
         <div className="whatsapp-link-section">
           <span className="whatsapp-section-label">Texto na Meta</span>
           {row.bodyText ? (
@@ -95,14 +97,14 @@ export function WhatsappTemplateLinkModal({ row, samples, onSave, onClose }: Pro
         )}
 
         {error && <p className="form-error" role="alert">{error}</p>}
-        <div className="form-actions">
-          {row.configured && <button className="ghost-button" type="button" disabled={saving} onClick={() => save("", [])}>Voltar ao padrão do nome</button>}
-          <button className="ghost-button" type="button" disabled={saving} onClick={onClose}>Cancelar</button>
-          <button className="primary-action" type="button" disabled={saving || Boolean(row.structureReason) || !use || missing > 0} onClick={() => save(use, fields)}>
+        <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-2">
+          {row.configured && <Button variant="outline" disabled={saving} onClick={() => save("", [])}>Voltar ao padrão do nome</Button>}
+          <Button variant="outline" disabled={saving} onClick={onClose}>Cancelar</Button>
+          <Button disabled={saving || Boolean(row.structureReason) || !use || missing > 0} onClick={() => save(use, fields)}>
             {saving ? "Salvando..." : "Salvar"}
-          </button>
+          </Button>
         </div>
       </div>
-    </div>
+    </ConfigDialogBackdrop>
   );
 }

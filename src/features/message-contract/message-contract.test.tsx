@@ -47,14 +47,10 @@ describe("contract form", () => {
     const html = form();
     expect(html).toContain("Contrato e cota"); expect(html).toContain("Limite mensal");
     expect(html).not.toContain("Ações");
-    expect(html).not.toContain("whatsapp-section-heading");
-    const row = html.slice(html.indexOf("whatsapp-save-row"), html.indexOf("whatsapp-note"));
-    expect(row.indexOf("Salvar cota")).toBeGreaterThan(-1);
-    expect(row.indexOf("Encerrar contrato")).toBeGreaterThan(row.indexOf("Salvar cota"));
-    expect(row.indexOf("Zerar cota do mês")).toBeGreaterThan(row.indexOf("Encerrar contrato"));
-    expect(row).toContain('class="ghost-button danger-action"');
-    expect(row).toContain('class="ghost-button"');
-    expect(html).not.toMatch(/whatsapp-btn|whatsapp-confirm|whatsapp-actions-row/);
+    const labels = Array.from(html.matchAll(/<button[^>]*data-ui-button=""[^>]*>([^<]*)<\/button>/g), ([, label]) => label);
+    expect(labels).toEqual(["Salvar cota", "Encerrar contrato", "Zerar cota do mês"]);
+    expect(html).toMatch(/<button[^>]*tw:border-ui-danger[^>]*>Encerrar contrato<\/button>/);
+    expect(html.match(/data-ui-input=""/g)).toHaveLength(3);
   });
 
   it("asks for confirmation in the same line before ending the contract", () => {
@@ -78,14 +74,16 @@ describe("contract form", () => {
 
   it("offers the switch of the service for SMS and e-mail only, once the municipality has a contract", () => {
     const withSwitch = form({}, "municipality-a", true);
-    expect(withSwitch).toContain("config-active-toggle"); expect(withSwitch).toContain("Serviço ativo para este município");
+    expect(withSwitch).toContain("Serviço ativo para este município");
     expect(withSwitch).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
     expect(withSwitch.indexOf("Contrato e cota")).toBeLessThan(withSwitch.indexOf("Serviço ativo"));
     expect(withSwitch.indexOf("Serviço ativo")).toBeLessThan(withSwitch.indexOf("Limite mensal"));
-    expect(form({}, "municipality-a", false)).not.toContain("config-active-toggle");
-    expect(form({ live: null }, "municipality-a", true)).not.toContain("config-active-toggle");
+    expect(form({}, "municipality-a", false)).not.toContain('type="checkbox"');
+    expect(form({ live: null }, "municipality-a", true)).not.toContain('type="checkbox"');
     const off = form({ live: { ...live, enabled: false } }, "municipality-a", true);
-    expect(off).toContain("Serviço desativado para este município"); expect(off).not.toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
+    expect(off).toContain("Serviço desativado para este município");
+    expect(off).toContain('type="checkbox"');
+    expect(off).not.toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
   });
 
   it("shows what was saved, told apart from a failure", () => {

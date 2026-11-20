@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { Button } from "../../components/button";
+import { IntegrationCard } from "../../components/integration-card";
 import { WhatsappTemplateLinkModal } from "./whatsapp-template-link-modal";
 import { WhatsappTemplatesTable } from "./whatsapp-templates-table";
 import type { useWhatsappTemplates } from "./use-whatsapp-templates";
@@ -18,17 +20,14 @@ interface Props {
 export function WhatsappTemplatesPanel({ municipalityId, master, readOnly, canSync, templates }: Props) {
   const [configuring, setConfiguring] = useState<WhatsappTemplateRow | null>(null);
   return (
-    <section className="whatsapp-section">
-      <div className="whatsapp-section-header">
-        <span className="whatsapp-section-label">Templates da Meta</span>
-      </div>
+    <IntegrationCard title="Templates da Meta">
       {!municipalityId && <p>Selecione um município para ver os templates.</p>}
       {readOnly && <p>Você não tem permissão para ligar ou desligar templates.</p>}
       {templates.loading && <p role="status">Carregando templates...</p>}
       {templates.error && (
         <div role="alert">
           <p className="form-error">{templates.error}</p>
-          {!templates.ready && <button type="button" className="ghost-button" onClick={templates.retry}>Carregar novamente</button>}
+          {!templates.ready && <Button variant="outline" onClick={templates.retry}>Carregar novamente</Button>}
         </div>
       )}
       {templates.notice && <p role="status">{templates.notice}</p>}
@@ -53,6 +52,6 @@ export function WhatsappTemplatesPanel({ municipalityId, master, readOnly, canSy
           onClose={() => setConfiguring(null)}
         />
       )}
-    </section>
+    </IntegrationCard>
   );
 }

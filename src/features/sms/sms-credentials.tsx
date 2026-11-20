@@ -1,7 +1,9 @@
 import React from "react";
 import { SmsEnvironment } from "../../../shared/sms-contract.js";
+import { Button } from "../../components/button";
+import { IntegrationCard, integrationActionFieldStyle } from "../../components/integration-card";
 import { SavedSecretField } from "../../components/saved-secret-field";
-import { ConfigActiveToggle, Field } from "../../components/ui";
+import { ConfigActiveToggle, ConfigField } from "../../components/ui";
 import { formatPhone } from "../../utils";
 import type { SmsTestOutcome } from "./sms-types";
 import type { useSmsSettings } from "./use-sms-settings";
@@ -29,11 +31,7 @@ export function SmsCredentials({ state }: { state: SmsState }) {
   // A saved token stays inside its field (start visible, rest masked); saving and removing never show together.
   const tokenSaved = config.hasToken && !token;
   return (
-    <section className="whatsapp-section">
-      <div className="whatsapp-section-header">
-        <span className="whatsapp-section-label">Credenciais</span>
-        <ConfigActiveToggle checked={config.active} onChange={state.toggleActive} />
-      </div>
+    <IntegrationCard title="Credenciais" actions={<ConfigActiveToggle checked={config.active} onChange={state.toggleActive} />}>
       <SavedSecretField
         label="Token de API SMSMais"
         placeholder="Cole o token da SMSMais"
@@ -56,11 +54,9 @@ export function SmsCredentials({ state }: { state: SmsState }) {
       {config.hasToken && <p className="whatsapp-note">Ambiente salvo: {environmentLabel(config.environment)}. Última validação: {displayDate(config.lastValidatedAt)}.</p>}
       {config.environment === SmsEnvironment.SANDBOX && <p role="status">Token de homologação: não envia SMS nem ativa o canal.</p>}
       {secureStorageUnavailable && <p role="alert">A configuração segura do servidor está indisponível. Procure o responsável técnico para salvar um token ou ativar o SMS.</p>}
-      <div className="form-actions">
-        <button type="button" className="ghost-button" disabled={busy || (!token && !config.hasToken)} onClick={state.testConnection}>
-          {state.testing ? "Consultando..." : "Testar conexão / Consultar saldo"}
-        </button>
-      </div>
+      <Button variant="outline" className="tw:justify-self-start" disabled={busy || (!token && !config.hasToken)} onClick={state.testConnection}>
+        {state.testing ? "Consultando..." : "Testar conexão / Consultar saldo"}
+      </Button>
       {connection && (
         <div role="status">
           <p>Conexão validada. Ambiente: {environmentLabel(connection.environment)}.</p>
@@ -71,13 +67,13 @@ export function SmsCredentials({ state }: { state: SmsState }) {
       )}
 
       <div className="whatsapp-section-heading"><span>Teste de envio</span></div>
-      <div className="whatsapp-input-action-row">
-        <Field label="Número" type="tel" autoComplete="tel" value={state.testPhone} placeholder="(00) 00000-0000" onChange={(value: string) => state.setTestPhone(formatPhone(value))} />
-        <button className="primary-action" type="button" onClick={state.sendTest} disabled={busy || !config.hasToken}>
+      <div className={integrationActionFieldStyle}>
+        <ConfigField label="Número" type="tel" autoComplete="tel" value={state.testPhone} placeholder="(00) 00000-0000" onChange={(value) => state.setTestPhone(formatPhone(value))} />
+        <Button onClick={state.sendTest} disabled={busy || !config.hasToken}>
           {state.sendingTest ? "Enviando..." : "Enviar teste"}
-        </button>
+        </Button>
       </div>
       {state.testOutcome && <p className={state.testOutcome.sent ? "sms-status confirmed" : "sms-status"}>{testText(state.testOutcome)}</p>}
-    </section>
+    </IntegrationCard>
   );
 }

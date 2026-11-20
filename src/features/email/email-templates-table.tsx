@@ -1,5 +1,6 @@
 import React from "react";
 import { Lock } from "lucide-react";
+import { Input } from "../../components/input";
 import type { EmailUseRow } from "./email-integration-types";
 
 interface Props {
@@ -40,16 +41,14 @@ export function EmailTemplatesTable({ rows, master, municipal, serviceOn, drafts
                 <td>{row.label}</td>
                 <td>
                   {master ? (
-                    <label className="field">
-                      <input
-                        aria-label={`ID do template: ${row.label}`}
-                        maxLength={200}
-                        autoComplete="off"
-                        placeholder="Cole o ID aqui"
-                        value={drafts[row.key] ?? row.templateId ?? ""}
-                        onChange={(event) => onEditId(row.key, event.target.value)}
-                      />
-                    </label>
+                    <Input
+                      aria-label={`ID do template: ${row.label}`}
+                      maxLength={200}
+                      autoComplete="off"
+                      placeholder="Cole o ID aqui"
+                      value={drafts[row.key] ?? row.templateId ?? ""}
+                      onChange={(event) => onEditId(row.key, event.target.value)}
+                    />
                   ) : (row.configured ? "Configurado" : "Sem template")}
                 </td>
                 {master && (

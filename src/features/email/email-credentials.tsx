@@ -1,6 +1,7 @@
 import React from "react";
+import { IntegrationCard, integrationFieldsStyle } from "../../components/integration-card";
 import { SavedSecretField } from "../../components/saved-secret-field";
-import { Field } from "../../components/ui";
+import { ConfigField } from "../../components/ui";
 import type { EmailAccountView } from "./email-integration-types";
 import type { useEmailAccount } from "./use-email-account";
 
@@ -12,17 +13,12 @@ export function EmailCredentials({ account, state }: { account: EmailAccountView
   // A saved key stays inside its field (start visible, rest masked); saving and removing never show together.
   const keySaved = Boolean(account?.hasPrivateKey) && !form.privateKey;
   return (
-    <section className="whatsapp-section">
-      <div className="whatsapp-section-header">
-        <span className="whatsapp-section-label">Credenciais</span>
+    <IntegrationCard title="Credenciais">
+      <div className={integrationFieldsStyle}>
+        <ConfigField label="ID do serviço (Service ID)" value={form.serviceId} placeholder="service_xxxxxxx" autoComplete="off" onChange={(value) => edit({ serviceId: value })} />
+        <ConfigField label="Chave pública (Public Key)" value={form.publicKey} placeholder="Chave pública da conta" autoComplete="off" onChange={(value) => edit({ publicKey: value })} />
       </div>
-      <div className="whatsapp-fields-row">
-        <Field label="ID do serviço (Service ID)" value={form.serviceId} placeholder="service_xxxxxxx" autoComplete="off" onChange={(value) => edit({ serviceId: value })} />
-        <Field label="Chave pública (Public Key)" value={form.publicKey} placeholder="Chave pública da conta" autoComplete="off" onChange={(value) => edit({ publicKey: value })} />
-      </div>
-      <div className="whatsapp-fields-row">
-        <Field label="Endereço público do sistema" value={form.publicUrl} placeholder="https://seu-sistema.exemplo.com.br" autoComplete="off" onChange={(value) => edit({ publicUrl: value })} />
-      </div>
+      <ConfigField label="Endereço público do sistema" value={form.publicUrl} placeholder="https://seu-sistema.exemplo.com.br" autoComplete="off" onChange={(value) => edit({ publicUrl: value })} />
       <p className="whatsapp-note">Usado para o brasão e o logo do órgão aparecerem nos e-mails.</p>
       <SavedSecretField
         label="Chave privada (Private Key)"
@@ -44,6 +40,6 @@ export function EmailCredentials({ account, state }: { account: EmailAccountView
       />
       <p className="whatsapp-note">Requer “Allow EmailJS API for non-browser applications” ligado no EmailJS (Account &gt; Security).</p>
       {status && <span className={statusOk ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{status}</span>}
-    </section>
+    </IntegrationCard>
   );
 }

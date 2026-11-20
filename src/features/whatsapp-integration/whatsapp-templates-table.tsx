@@ -1,5 +1,6 @@
 import React from "react";
 import { Lock, Settings } from "lucide-react";
+import { Button } from "../../components/button";
 import { isNotUsedBySystem, lockReason, NOT_USED_BY_SYSTEM_TEXT, templateRowKey, templateStatusLabel, templateStatusTone, variableOrderHint } from "./whatsapp-template-display";
 import type { WhatsappTemplateList, WhatsappTemplateRow } from "./whatsapp-integration-types";
 
@@ -19,8 +20,8 @@ export function WhatsappTemplatesTable({ list, syncing, busy, readOnly, canSync,
   const syncedAt = list.syncedAt ? new Date(list.syncedAt).toLocaleString("pt-BR") : "";
   return (
     <div className="whatsapp-grid-wrap">
-      <div className="whatsapp-sync-row">
-        <button type="button" className="primary-action" disabled={readOnly || syncing || !canSync} onClick={onSync}>{syncing ? "Sincronizando..." : "Sincronizar"}</button>
+      <div className="tw:mb-2.5 tw:flex tw:flex-wrap tw:items-center tw:gap-3">
+        <Button disabled={readOnly || syncing || !canSync} onClick={onSync}>{syncing ? "Sincronizando..." : "Sincronizar"}</Button>
         <span>{syncedAt ? `Última sincronização: ${syncedAt}` : "Ainda não sincronizado"}</span>
       </div>
       {list.templates.length === 0 ? (
@@ -52,9 +53,9 @@ export function WhatsappTemplatesTable({ list, syncing, busy, readOnly, canSync,
                     ><span className="whatsapp-switch-knob" /></button>
                     {locked && <span role="img" aria-label={locked} title={locked}><Lock size={14} aria-hidden="true" /></span>}
                     {master && row.configurable && (
-                      <button type="button" className="whatsapp-config-btn" title="Configurar" aria-label={`Configurar ${row.name}`} onClick={() => onConfigure(row)}>
+                      <Button variant="outline" title="Configurar" aria-label={`Configurar ${row.name}`} onClick={() => onConfigure(row)}>
                         <Settings size={15} aria-hidden="true" />
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>

@@ -20,7 +20,7 @@ export function WhatsappIntegrationTab({ municipalityId, master, readOnly, canEd
     <div className="config-panel wide">
       <PanelHeader title="Canais de notificação por município" />
       {municipalityId && <MessageContractStatus active={credentials.isActive} live={contract.live} />}
-      <div className="whatsapp-integration">
+      <div className="tw:grid tw:gap-3">
         {master
           ? <WhatsappCredentials municipalityId={municipalityId} credentials={credentials} />
           : <p className="whatsapp-note">A conexão com o WhatsApp (credenciais e teste de envio) é configurada pela administração da plataforma.</p>}

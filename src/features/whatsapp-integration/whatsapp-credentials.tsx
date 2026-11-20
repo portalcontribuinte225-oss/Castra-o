@@ -1,6 +1,8 @@
 import React from "react";
+import { Button } from "../../components/button";
+import { IntegrationCard, integrationActionFieldStyle, integrationFieldsStyle } from "../../components/integration-card";
 import { SavedSecretField } from "../../components/saved-secret-field";
-import { ConfigActiveToggle, Field } from "../../components/ui";
+import { ConfigActiveToggle, ConfigField } from "../../components/ui";
 import type { useWhatsappCredentials } from "./use-whatsapp-credentials";
 
 type Credentials = ReturnType<typeof useWhatsappCredentials>;
@@ -15,19 +17,15 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
   const tokenSaved = Boolean(settings.hasAccessToken) && !settings.accessToken;
   const showSave = !tokenSaved || idsChanged;
   return (
-    <section className="whatsapp-section">
-      <div className="whatsapp-section-header">
-        <span className="whatsapp-section-label">Credenciais</span>
-        <ConfigActiveToggle checked={Boolean(settings.active)} onChange={toggleActive} />
-      </div>
-      <div className="whatsapp-fields-row">
+    <IntegrationCard title="Credenciais" actions={<ConfigActiveToggle checked={Boolean(settings.active)} onChange={toggleActive} />}>
+      <div className={integrationFieldsStyle}>
         <label className="field">
           <span>Provedor</span>
           <select value={settings.provider || "cloud_api"} onChange={(event) => patch({ provider: event.target.value })}>
             <option value="cloud_api">WhatsApp Cloud API</option>
           </select>
         </label>
-        <Field
+        <ConfigField
           label="ID da conta do WhatsApp Business (WABA)"
           value={settings.wabaId || ""}
           placeholder="WhatsApp Business Account ID da Meta"
@@ -35,15 +33,13 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
           onChange={(value) => patch({ wabaId: value })}
         />
       </div>
-      <div className="whatsapp-fields-row">
-        <Field
-          label="ID do número remetente"
-          value={settings.phoneNumberId || ""}
-          placeholder="Phone Number ID da Meta"
-          autoComplete="off"
-          onChange={(value) => patch({ phoneNumberId: value })}
-        />
-      </div>
+      <ConfigField
+        label="ID do número remetente"
+        value={settings.phoneNumberId || ""}
+        placeholder="Phone Number ID da Meta"
+        autoComplete="off"
+        onChange={(value) => patch({ phoneNumberId: value })}
+      />
       <SavedSecretField
         label="Token de acesso"
         placeholder="Cole o token da Cloud API"
@@ -65,13 +61,13 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
       {saveStatus && <span className={saveStatus.includes("sucesso") ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{saveStatus}</span>}
 
       <div className="whatsapp-section-heading"><span>Teste de envio</span></div>
-      <div className="whatsapp-input-action-row">
-        <Field label="Número" value={testPhone} placeholder="(00) 00000-0000" onChange={setTestPhone} />
-        <button className="primary-action" type="button" onClick={sendTest} disabled={testing || !municipalityId || !hasCredentials}>
+      <div className={integrationActionFieldStyle}>
+        <ConfigField label="Número" value={testPhone} placeholder="(00) 00000-0000" onChange={setTestPhone} />
+        <Button onClick={sendTest} disabled={testing || !municipalityId || !hasCredentials}>
           {testing ? "Enviando..." : "Enviar teste"}
-        </button>
+        </Button>
       </div>
       {testStatus && <p className={testStatus.includes("sucesso") ? "sms-status confirmed" : "sms-status"}>{testStatus}</p>}
-    </section>
+    </IntegrationCard>
   );
 }

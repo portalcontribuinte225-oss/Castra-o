@@ -1,5 +1,7 @@
 import React from "react";
-import { ConfigActiveToggle, Field } from "../../components/ui";
+import { Button } from "../../components/button";
+import { IntegrationCard, integrationFieldsStyle } from "../../components/integration-card";
+import { ConfigActiveToggle, ConfigField } from "../../components/ui";
 import type { MessageContract } from "./use-message-contract";
 
 // The contract of one channel as the platform's administrator edits it: the monthly limit and the dates, ending it today or starting the month
@@ -9,45 +11,38 @@ export function MessageContractForm({ municipalityId, contract, serviceSwitch }:
   const patch = (changes: Record<string, string>) => setSettings((current) => ({ ...current, ...changes }));
   const saved = saveStatus.includes("sucesso") || saveStatus.includes("zerada") || saveStatus.includes("encerrado") || saveStatus.includes("ativado");
   return (
-    <section className="whatsapp-section">
-      <div className="whatsapp-section-header">
-        <span className="whatsapp-section-label">Contrato e cota</span>
-        {serviceSwitch && live?.plan ? (
-          <ConfigActiveToggle checked={live.enabled !== false} onChange={setEnabled} onText="Serviço ativo para este município" offText="Serviço desativado para este município" />
-        ) : null}
+    <IntegrationCard
+      title="Contrato e cota"
+      actions={serviceSwitch && live?.plan ? (
+        <ConfigActiveToggle checked={live.enabled !== false} onChange={setEnabled} onText="Serviço ativo para este município" offText="Serviço desativado para este município" />
+      ) : null}
+    >
+      <div className={integrationFieldsStyle}>
+        <ConfigField label="Limite mensal" value={settings.plan} placeholder="Ex: 500" onChange={(value) => patch({ plan: value })} />
+        <ConfigField label="Início" type="date" value={settings.contractStart} onChange={(value) => patch({ contractStart: value })} />
+        <ConfigField label="Fim" type="date" value={settings.contractEnd} onChange={(value) => patch({ contractEnd: value })} />
       </div>
-      <div className="whatsapp-fields-row">
-        <Field label="Limite mensal" value={settings.plan} placeholder="Ex: 500" onChange={(value) => patch({ plan: value })} />
-        <label className="field">
-          <span>Início</span>
-          <input type="date" value={settings.contractStart} onChange={(event) => patch({ contractStart: event.target.value })} />
-        </label>
-        <label className="field">
-          <span>Fim</span>
-          <input type="date" value={settings.contractEnd} onChange={(event) => patch({ contractEnd: event.target.value })} />
-        </label>
-      </div>
-      <div className="whatsapp-save-row">
-        <button className="primary-action" type="button" onClick={save} disabled={!municipalityId}>Salvar cota</button>
+      <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2">
+        <Button onClick={save} disabled={!municipalityId}>Salvar cota</Button>
         {confirmingEnd ? (
           <>
             <span className="whatsapp-inline-status">Encerrar contrato hoje ({new Date().toLocaleDateString("pt-BR")})?</span>
-            <button className="primary-action danger-action" type="button" onClick={endContractToday}>Confirmar</button>
-            <button className="ghost-button" type="button" onClick={() => setConfirmingEnd(false)}>Cancelar</button>
+            <Button variant="danger" onClick={endContractToday}>Confirmar</Button>
+            <Button variant="outline" onClick={() => setConfirmingEnd(false)}>Cancelar</Button>
           </>
         ) : (
           <>
-            <button className="ghost-button danger-action" type="button" onClick={() => setConfirmingEnd(true)} disabled={!settings.plan || !municipalityId}>
+            <Button variant="danger" onClick={() => setConfirmingEnd(true)} disabled={!settings.plan || !municipalityId}>
               Encerrar contrato
-            </button>
-            <button className="ghost-button" type="button" onClick={resetUsed} disabled={!live?.plan || !municipalityId}>
+            </Button>
+            <Button variant="outline" onClick={resetUsed} disabled={!live?.plan || !municipalityId}>
               Zerar cota do mês
-            </button>
+            </Button>
           </>
         )}
         {saveStatus && <span className={saved ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{saveStatus}</span>}
       </div>
       <p className="whatsapp-note">Encerrar bloqueia novos envios imediatamente. Zerar reinicia a contagem deste mês.</p>
-    </section>
+    </IntegrationCard>
   );
 }

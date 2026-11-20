@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { Field } from "../../components/ui";
+import { ConfigField } from "../../components/ui";
 import { formatCep, onlyDigits } from "../../utils";
 import { lookupCep } from "../animal-services/cep-lookup";
 import { withCepAddress } from "./municipality-address";
@@ -39,20 +39,20 @@ export function MunicipalityAddressFields({ form, setForm, canEditCity }: Munici
   return (
     <>
       <div className="modal-form-grid">
-        <Field label="CEP" value={form.cep} placeholder="00000-000" onChange={changeCep} />
-        <Field label="Número" value={form.addressNumber} placeholder="Número" onChange={(value) => patch({ addressNumber: value })} />
+        <ConfigField label="CEP" value={form.cep} placeholder="00000-000" onChange={changeCep} />
+        <ConfigField label="Número" value={form.addressNumber} placeholder="Número" onChange={(value) => patch({ addressNumber: value })} />
       </div>
       {status === "loading" && <p className="helper-text" role="status">Buscando o CEP...</p>}
       {status === "notFound" && <p className="helper-text" role="status">CEP não encontrado. Preencha o endereço manualmente.</p>}
-      <Field label="Rua" value={form.address} placeholder="Rua, avenida..." onChange={(value) => patch({ address: value })} />
+      <ConfigField label="Rua" value={form.address} placeholder="Rua, avenida..." onChange={(value) => patch({ address: value })} />
       <div className="modal-form-grid">
-        <Field label="Complemento" value={form.addressComplement} placeholder="Sala, bloco..." onChange={(value) => patch({ addressComplement: value })} />
-        <Field label="Bairro" value={form.neighborhood} placeholder="Bairro" onChange={(value) => patch({ neighborhood: value })} />
+        <ConfigField label="Complemento" value={form.addressComplement} placeholder="Sala, bloco..." onChange={(value) => patch({ addressComplement: value })} />
+        <ConfigField label="Bairro" value={form.neighborhood} placeholder="Bairro" onChange={(value) => patch({ neighborhood: value })} />
       </div>
       {canEditCity ? (
         <div className="modal-form-grid">
-          <Field label="Município" value={form.name} placeholder="Município" onChange={(value) => patch({ name: value })} />
-          <Field label="UF" value={form.state} placeholder="UF" onChange={(value) => patch({ state: value.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 2) })} />
+          <ConfigField label="Município" value={form.name} placeholder="Município" onChange={(value) => patch({ name: value })} />
+          <ConfigField label="UF" value={form.state} placeholder="UF" onChange={(value) => patch({ state: value.replace(/[^a-zA-Z]/g, "").toUpperCase().slice(0, 2) })} />
         </div>
       ) : (
         <p className="helper-text">{[form.name, form.state].filter(Boolean).join(" / ")}</p>

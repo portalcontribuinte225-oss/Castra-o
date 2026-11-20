@@ -414,15 +414,15 @@ describe("SMS settings interface", () => {
     expect(html).toContain("Credenciais"); expect(html).toContain("Teste de envio");
     expect(html).toContain("Selecione um município para ligar ou desligar as mensagens.");
     expect(html.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(smsUses.length);
-    expect(html).not.toContain("whatsapp-statusbar");
+    expect(html).not.toContain('aria-label="Estado da integração"');
     expect(screen()).not.toContain("Selecione um município");
   });
 
   it("counts the messages of the contract at the top, and offers the contract only to who edits it", () => {
     const viewer = screen();
-    expect(viewer).toContain("whatsapp-statusbar"); expect(viewer).toContain("12/500"); expect(viewer).toContain("Contrato vigente");
+    expect(viewer).toContain('aria-label="Estado da integração"'); expect(viewer).toContain("12/500"); expect(viewer).toContain("Contrato vigente");
     expect(viewer).not.toContain("Contrato e cota"); expect(viewer).not.toContain("Salvar cota");
-    expect(viewer.indexOf("whatsapp-statusbar")).toBeLessThan(viewer.indexOf("Credenciais"));
+    expect(viewer.indexOf('aria-label="Estado da integração"')).toBeLessThan(viewer.indexOf("Credenciais"));
     const editor = screen({}, { canEditContract: true });
     expect(editor).toContain("Contrato e cota"); expect(editor).toContain("Salvar cota");
     expect(editor).toContain("Serviço ativo para este município"); expect(viewer).not.toContain("Serviço ativo para este município");
@@ -450,7 +450,7 @@ describe("SMS settings interface", () => {
     expect(screen({ ready: false, loading: true })).toContain("Carregando configuração de SMS...");
     const failed = screen({ ready: false, error: "Não foi possível carregar a configuração de SMS." });
     expect(failed).toContain("Não foi possível carregar a configuração de SMS."); expect(failed).toContain("Carregar novamente");
-    expect(failed).not.toContain("Credenciais"); expect(failed).not.toContain("<table"); expect(failed).not.toContain("whatsapp-statusbar");
+    expect(failed).not.toContain("Credenciais"); expect(failed).not.toContain("<table"); expect(failed).not.toContain('aria-label="Estado da integração"');
     expect(screen({ error: "Informe um token antes de ativar o SMS." })).toContain("<table");
   });
 

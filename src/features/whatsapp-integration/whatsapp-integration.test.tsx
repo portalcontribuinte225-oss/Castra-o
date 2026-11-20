@@ -95,7 +95,7 @@ describe("templates table", () => {
     expect(html).toContain("Não comparecimento");
     expect(html).toContain('<span class="whatsapp-muted">Não usado pelo sistema</span>');
     expect(html).toContain('Agendamento confirmado<small class="whatsapp-muted"> (pelo nome)</small>');
-    expect(html).not.toContain("whatsapp-config-btn");
+    expect(html).not.toMatch(/<button[^>]*aria-label="Configurar /);
     expect(html).not.toContain("Fora do padrão");
     expect(html).toContain("Última sincronização");
     expect(html).toContain('title="{{1}} Nome do tutor · {{2}} Data do agendamento');
@@ -122,11 +122,12 @@ describe("templates table", () => {
   });
 
   it("explains the empty state and blocks synchronization without credentials or for read-only users", () => {
+    const disabledSyncButton = /<button\b[^>]*\bdisabled=""[^>]*>Sincronizar<\/button>/;
     const empty = renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={{ syncedAt: "", templates: [], fieldSamples: {} }} canSync={false} />);
     expect(empty).toContain("Ainda não sincronizado");
     expect(empty).toContain("Nenhum template carregado");
-    expect(empty).toContain('disabled="">Sincronizar');
-    expect(renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(row())} readOnly />)).toContain('disabled="">Sincronizar');
+    expect(empty).toMatch(disabledSyncButton);
+    expect(renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(row())} readOnly />)).toMatch(disabledSyncButton);
     expect(renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(row())} syncing />)).toContain("Sincronizando...");
     expect(renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(row())} readOnly />)).toMatch(/role="switch"[^>]*disabled/);
   });
@@ -151,7 +152,7 @@ describe("template configuration", () => {
     const html = renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} master list={listOf(
       row({ configured: true }), row({ name: "castracao_codigo_verificacao", label: "Códigos de acesso", configurable: false }),
     )} />);
-    expect(html.match(/class="whatsapp-config-btn"/g)).toHaveLength(1);
+    expect(html.match(/<button[^>]*aria-label="Configurar /g)).toHaveLength(1);
     expect(html).toContain('aria-label="Configurar castracao_confirmacao_agendamento"');
     expect(html).not.toContain('aria-label="Configurar castracao_codigo_verificacao"');
     expect(html).toContain("Agendamento confirmado</td>");
@@ -160,6 +161,7 @@ describe("template configuration", () => {
   it("shows the Meta text with each number highlighted, the notice, one select per number and the preview", () => {
     const html = modal();
     expect(html).toContain("Configurar template");
+    expect(html).toMatch(/<button[^>]*aria-label="Fechar"[^>]*data-ui-close-button/);
     expect(html).toContain("castracao_confirmacao_agendamento · pt_BR · Aprovado");
     expect(html).toContain('Olá <span class="whatsapp-link-var whatsapp-link-var--0">{{1}}</span>, seu atendimento é em <span class="whatsapp-link-var whatsapp-link-var--1">{{2}}</span>');
     expect(html).toContain('<option value="schedule_confirmed" selected="">Agendamento confirmado</option>');
@@ -168,14 +170,14 @@ describe("template configuration", () => {
     expect(html).toContain("Olá Maria Silva, seu atendimento é em 20/11/2026 às 09:00, no Unidade Veterinária Municipal.");
     expect(html).not.toContain("Escolha o que vai em");
     expect(html).not.toContain("Voltar ao padrão do nome");
-    expect(html).not.toMatch(/<button class="primary-action"[^>]*disabled/);
+    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Salvar<\/button>/);
   });
 
   it("asks for the missing numbers, offers going back to the name for a configured template and explains what cannot be configured", () => {
     const incomplete = modal({ configured: true, linkedUse: "no_show", fields: [WhatsappTemplateField.TUTOR_NAME] });
     expect(incomplete).toContain('<option value="no_show" selected="">Não comparecimento</option>');
     expect(incomplete).toContain("Escolha o que vai em {{2}}");
-    expect(incomplete).toMatch(/<button class="primary-action"[^>]*disabled/);
+    expect(incomplete).toMatch(/<button[^>]*disabled=""[^>]*>Salvar<\/button>/);
     expect(incomplete).toContain("Voltar ao padrão do nome");
     const unknown = modal({ label: "", uses: [], fields: [] });
     expect(unknown).toContain('<option value="" selected="">Escolha o aviso</option>');
@@ -228,7 +230,7 @@ describe("access token", () => {
   it("keeps the saved token inside its own field, start visible and the rest masked, with only the removal beside it", () => {
     const html = credentials();
     expect(html).toContain(`value="EAAFAKE0${"•".repeat(24)}"`);
-    expect(html).toMatch(/<input type="text" readonly=""[^>]*value="EAAFAKE0/);
+    expect(html).toMatch(/<input(?=[^>]*type="text")(?=[^>]*readonly="")(?=[^>]*data-ui-input="")[^>]*value="EAAFAKE0/);
     expect(html).not.toContain("Token salvo");
     expect(html).toContain("Remover token");
     expect(html).not.toContain("Salvar credenciais");
@@ -250,17 +252,17 @@ describe("access token", () => {
   });
 
   it("uses the standard buttons of the app, the removal marked as dangerous", () => {
-    expect(credentials()).toContain('class="ghost-button danger-action"');
-    expect(credentials({ hasAccessToken: false })).toContain('class="primary-action"');
+    expect(credentials()).toMatch(/<button[^>]*data-ui-button[^>]*tw:border-ui-danger[^>]*>Remover token<\/button>/);
+    expect(credentials({ hasAccessToken: false })).toMatch(/<button[^>]*data-ui-button[^>]*>Salvar credenciais<\/button>/);
     const confirming = credentials({}, { confirmingRemoval: true });
-    expect(confirming).toContain('class="primary-action danger-action"');
-    expect(confirming).toContain('class="ghost-button"');
+    expect(confirming).toMatch(/<button[^>]*data-ui-button[^>]*tw:border-ui-danger[^>]*>Confirmar<\/button>/);
+    expect(confirming).toMatch(/<button[^>]*data-ui-button[^>]*>Cancelar<\/button>/);
   });
 
-  it("keeps the token field and the number test in the same field-plus-button layout", () => {
+  it("uses standard fields for credentials and the test number", () => {
     const html = credentials();
-    expect(html.match(/whatsapp-input-action-row/g)).toHaveLength(2);
-    expect(html).not.toContain("whatsapp-test-row");
+    expect(html.match(/data-ui-input=""/g)).toHaveLength(4);
+    expect(html).toMatch(/<button[^>]*data-ui-button[^>]*>Enviar teste<\/button>/);
     expect(html).not.toContain("Variáveis");
   });
 
@@ -287,7 +289,7 @@ describe("access token", () => {
 describe("integration tab", () => {
   it("orders the screen: status, credentials with the test, templates, then contract and quota last", () => {
     const html = tab();
-    const order = ["whatsapp-statusbar", "Credenciais", "Teste de envio", "Templates da Meta", "Contrato e cota"].map((text) => html.indexOf(text));
+    const order = ['aria-label="Estado da integração"', "Credenciais", "Teste de envio", "Templates da Meta", "Contrato e cota"].map((text) => html.indexOf(text));
     expect(order.every((position) => position >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
@@ -303,7 +305,7 @@ describe("integration tab", () => {
 
   it("counts the messages at the top for who only reads the contract, and offers the form only to who edits it", () => {
     const viewer = tab({ canEditContract: false });
-    expect(viewer).toContain("whatsapp-statusbar"); expect(viewer).toContain("12/500"); expect(viewer).toContain("Contrato vigente");
+    expect(viewer).toContain('aria-label="Estado da integração"'); expect(viewer).toContain("12/500"); expect(viewer).toContain("Contrato vigente");
     for (const hidden of ["Contrato e cota", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(viewer).not.toContain(hidden);
     expect(viewer).toContain("EAAFAKE0");
     expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("whatsapp", "municipality-a");
@@ -313,15 +315,15 @@ describe("integration tab", () => {
     const html = tab({ master: false, canEditContract: false });
     for (const hidden of ["Credenciais", "Token de acesso", "ID do número remetente", "Teste de envio", "Enviar teste", "Remover token", "Contrato e cota"]) expect(html).not.toContain(hidden);
     expect(html).toContain("é configurada pela administração da plataforma");
-    expect(html).toContain("whatsapp-statusbar"); expect(html).toContain("12/500"); expect(html).toContain("Templates da Meta");
-    expect(html.indexOf("whatsapp-statusbar")).toBeLessThan(html.indexOf("Templates da Meta"));
+    expect(html).toContain('aria-label="Estado da integração"'); expect(html).toContain("12/500"); expect(html).toContain("Templates da Meta");
+    expect(html.indexOf('aria-label="Estado da integração"')).toBeLessThan(html.indexOf("Templates da Meta"));
     expect(tab()).not.toContain("é configurada pela administração da plataforma");
     expect(tab()).not.toContain("Serviço ativo para este município");
   });
 
   it("asks for a municipality before anything else and hides the status bar", () => {
     const html = tab({ municipalityId: "" });
-    expect(html).not.toContain("whatsapp-statusbar");
+    expect(html).not.toContain('aria-label="Estado da integração"');
     expect(html).toContain("Selecione um município");
     expect(html.match(/disabled=""/g)?.length).toBeGreaterThanOrEqual(3);
   });
