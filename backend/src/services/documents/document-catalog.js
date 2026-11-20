@@ -1,3 +1,4 @@
+import { isComplaintPhotoId } from "../../../../shared/complaint-photo-contract.js";
 import { DocumentReuseScope, DocumentReuseState } from "../../../../shared/document-reuse-contract.js";
 import { listDocumentSources, readDocumentSource } from "../../repositories/document-sources.js";
 import { canonicalDocumentDefinition, PHOTO_DEFINITION, requestDocumentDefinitions, isExcludedDocument } from "./document-policy.js";
@@ -58,6 +59,7 @@ export async function catalogReusableDocuments(client, { userId, municipalityId,
 export async function readReusableDocument(client, { userId, municipalityId, animalId, sourceRequestId, attachmentId, hash, settings }) {
   const source = await readDocumentSource(client, { userId, municipalityId, sourceRequestId, attachmentId });
   const document = source.document;
+  if (isComplaintPhotoId(document?.documentId)) throw documentError("Documento indisponível para este contexto.", 404);
   const configured = (settings?.documentTypes || []).find((definition) => definition.id === document.documentId)
     || requestDocumentDefinitions(settings, source).find((definition) => definition.id === document.documentId);
   const definition = document.documentId === PHOTO_DEFINITION.id ? PHOTO_DEFINITION : canonicalDocumentDefinition(configured || {});

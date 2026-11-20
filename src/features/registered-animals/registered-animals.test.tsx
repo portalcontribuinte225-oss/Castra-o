@@ -1,7 +1,9 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { COMPLAINT_PHOTO_IDS } from "../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus, DocumentReuseScope, DocumentReuseState } from "../../../shared/document-reuse-contract.js";
+import { RequestKind } from "../../../shared/request-contract.js";
 import { normalizeDocumentType } from "../../domain";
 import { RequestStep, requestSteps } from "../request-steps/request-steps";
 import { TutorArea } from "../tutor-access/tutor-area";
@@ -104,6 +106,21 @@ describe("document reuse boundaries", () => {
     expect(body.workflow_data).toMatchObject({ scheduleOccurrenceKey: "day:a", scheduleSlotTime: "08:00" });
     expect(JSON.stringify(body)).not.toContain("secret"); expect(JSON.stringify(body.reusedDocuments)).not.toContain("approved");
     expect(buildRequestPayload({ signedAt: "old-signature" }, user).declarationAccepted).toBe(false);
+  });
+
+  it("sends the reporter's own name, e-mail, privacy choice, and photos", () => {
+    const documents = [{ documentId: COMPLAINT_PHOTO_IDS[0], fileName: "ocorrencia.jpg" }];
+    expect(buildRequestPayload({
+      request_type: RequestKind.COMPLAINT, tutor_name: "Pessoa denunciante", tutor_email: "teste@example.com",
+      is_confidential: true, documents,
+    }, user)).toMatchObject({
+      tutor_name: "Pessoa denunciante", tutor_email: "teste@example.com", is_confidential: true, documents,
+    });
+    expect(buildRequestPayload({ tutor_email: "", is_confidential: false }, user)).toMatchObject({
+      tutor_name: user.name, tutor_email: "", is_confidential: false,
+    });
+    expect(buildRequestPayload({ tutor: "Nome do formulário", email: "form@example.com" }, user))
+      .toMatchObject({ tutor_name: "Nome do formulário", tutor_email: "form@example.com" });
   });
 });
 

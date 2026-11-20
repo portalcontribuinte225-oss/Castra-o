@@ -1,7 +1,9 @@
 import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
+import { COMPLAINT_PHOTO_IDS, COMPLAINT_PHOTO_MAX_MB } from "../../shared/complaint-photo-contract.js";
 import { DocumentReuseScope, MAX_REQUEST_JSON_BYTES, MAX_DOCUMENT_REUSE_VALIDITY_DAYS,
   normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../shared/document-reuse-contract.js";
+import { RequestKind } from "../../shared/request-contract.js";
 import { assertMaterializedRequestSize, decodeDocumentContent } from "../src/services/documents/document-content.js";
 import { canonicalDocumentDefinition, documentCriteriaFingerprint, PHOTO_DEFINITION } from "../src/services/documents/document-policy.js";
 import { hasValidDocumentReceipt, signDocumentReceipt } from "../src/services/documents/document-provenance.js";
@@ -18,6 +20,7 @@ const OWNER = "tutor-1", MUNICIPALITY = "municipality-1", ANIMAL = "animal-1";
 const TUTOR = { id: OWNER, role: "tutor", municipality_id: MUNICIPALITY };
 const STAFF = { id: "reviewer-1", role: "analista", municipality_id: MUNICIPALITY };
 const PDF = `data:application/pdf;base64,${Buffer.from("%PDF-1.4\ntest document\n").toString("base64")}`;
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII=";
 const definition = (overrides = {}) => canonicalDocumentDefinition({ id: "identity", name: "Identidade", reuseScope: "tutor", required: true, ...overrides });
 const settingsFor = (documents = [definition()]) => ({ documentTypes: documents,
   requestTypes: [{ id: "procedure", name: "CASTRACAO", documents: documents.map(({ id }) => ({ id })) }] });
@@ -142,6 +145,68 @@ test("all supported request type aliases enforce required documents", async () =
       body: { ...args.body, documents: [{ documentId: "identity", dataUrl: PDF }] } }));
   }
   await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), submission({ body: { requestType: "DENUNCIA" } })));
+});
+
+test("complaint photos occupy only the reserved slots and are validated independently of municipal document settings", async () => {
+  const [firstId] = COMPLAINT_PHOTO_IDS;
+  const settings = settingsFor([definition(), definition({ id: firstId, name: "Custom name", maxSizeMb: 12 })]);
+  const upload = { documentId: firstId, dataUrl: PNG, fileName: "ocorrencia.png", animalId: ANIMAL, municipalityId: "other",
+    status: "approved", internalEvidence: true };
+  const submitPhotos = (documents) => prepareRequestDocuments(clientFor([]), submission({
+    user: null, tutorId: null, settings, body: { request_type: RequestKind.COMPLAINT, requestTypeId: "procedure", documents },
+  }));
+  assert.deepEqual(await submitPhotos([]), []);
+  const photos = await submitPhotos(COMPLAINT_PHOTO_IDS.map((documentId) => ({ ...upload, documentId })));
+  assert.deepEqual(photos.map((photo) => photo.documentId), COMPLAINT_PHOTO_IDS);
+  assert.equal(new Set(photos.map((photo) => photo.attachmentId)).size, COMPLAINT_PHOTO_IDS.length);
+  assert.ok(photos.every((photo) => photo.requestId === "new-request" && photo.municipalityId === MUNICIPALITY
+    && photo.status === "attached" && photo.animalId === null && photo.reuseScope === DocumentReuseScope.REQUEST
+    && photo.internalEvidence === false));
+
+  const oversized = Buffer.alloc(COMPLAINT_PHOTO_MAX_MB * 1024 * 1024 + 1);
+  oversized.set(Buffer.from(PNG.split(",")[1], "base64"));
+  await assert.rejects(() => submitPhotos([upload, upload]), { status: 400 });
+  await assert.rejects(() => submitPhotos([...photos, { ...upload, documentId: "complaint_photo_4" }]), { status: 400 });
+  await assert.rejects(() => submitPhotos([...photos, { ...upload, documentId: PHOTO_DEFINITION.id }]), { status: 400 });
+  await assert.rejects(() => submitPhotos([...photos, { documentId: "identity", dataUrl: PDF }]), { status: 400 });
+  await assert.rejects(() => submitPhotos([{ ...upload, dataUrl: PDF }]), { status: 400 });
+  await assert.rejects(() => submitPhotos([{ ...upload, dataUrl: PDF.replace("application/pdf", "image/png") }]), { status: 400 });
+  await assert.rejects(() => submitPhotos([{ ...upload, dataUrl: `data:image/png;base64,${oversized.toString("base64")}` }]), { status: 400 });
+  await assert.rejects(() => prepareRequestDocuments(clientFor([]), submission({
+    settings, body: { request_type: "procedure", declarationAccepted: true, documents: [upload] },
+  })), { status: 400 });
+});
+
+test("complaint photos are kept with the case through staff evidence updates and cannot be reviewed or reused", async () => {
+  const [firstId, secondId] = COMPLAINT_PHOTO_IDS;
+  const settings = settingsFor([definition({ id: firstId, name: "Custom name" })]);
+  const [photo] = await prepareRequestDocuments(clientFor([]), submission({
+    requestId: "original", body: { request_type: RequestKind.COMPLAINT, documents: [{ documentId: firstId, dataUrl: PNG }] },
+  }));
+  const source = row(photo, { request_type: RequestKind.COMPLAINT });
+  const previous = { ...source, documents: [photo] };
+  const context = { previous, user: STAFF, municipalityId: MUNICIPALITY, settings, now: NOW };
+  assert.deepEqual(decorateRequestDocuments(previous, settings).documents, [photo]);
+  const documents = await applyDocumentReviews(clientFor([]), {
+    ...context, patch: { documentEvidence: { documentId: "evidencia-staff", dataUrl: PDF } },
+  });
+  assert.deepEqual(documents[0], photo);
+  assert.equal(documents[1].internalEvidence, true);
+  await assert.rejects(() => applyDocumentReviews(clientFor([]), {
+    ...context, patch: { documentReviews: [{ attachmentId: photo.attachmentId, decision: "approved" }] },
+  }), { status: 409 });
+  await assert.rejects(() => applyDocumentReviews(clientFor([]), {
+    ...context, patch: { documents: [photo, { documentId: secondId, dataUrl: PNG }] },
+  }), { status: 400 });
+  const ref = { sourceRequestId: source.id, attachmentId: photo.attachmentId, hash: photo.hash };
+  const catalogContext = { userId: OWNER, municipalityId: MUNICIPALITY, animalId: ANIMAL, requestTypeId: "procedure", settings };
+  assert.deepEqual(await catalogReusableDocuments(clientFor([source]), catalogContext), []);
+  for (const municipalityId of [MUNICIPALITY, "other"]) {
+    await assert.rejects(() => readReusableDocument(clientFor([source]), { ...catalogContext, ...ref, municipalityId }), { status: 404 });
+  }
+  await assert.rejects(() => prepareRequestDocuments(clientFor([source]), submission({
+    body: { request_type: RequestKind.COMPLAINT, reusedDocuments: [ref] },
+  })), { status: 400 });
 });
 
 test("reuse resolves persisted bytes and immutable origin under shared row lock", async () => {

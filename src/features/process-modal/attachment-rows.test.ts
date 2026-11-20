@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COMPLAINT_PHOTO_IDS } from "../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
 import { AttachmentState, attachmentDescription, buildAttachmentRows, canReviewAttachment, isBlockingAttachment, isPendingAttachment } from "./attachment-rows";
 
@@ -64,5 +65,25 @@ describe("buildAttachmentRows", () => {
     expect(rows.filter(canReviewAttachment).map(({ id }) => id)).toEqual(["old-address", "rejected-extra"]);
     expect(rows.filter(isPendingAttachment).map(({ id }) => id)).toEqual(["old-address"]);
     expect(rows.some(isBlockingAttachment)).toBe(false);
+  });
+
+  it("displays complaint photos without a review or a pending requirement", () => {
+    const photo = {
+      documentId: COMPLAINT_PHOTO_IDS[0],
+      attachmentId: "photo-upload",
+      documentName: "Foto da ocorrência 1",
+      fileName: "ocorrencia.jpg",
+      status: DocumentReviewStatus.ATTACHED,
+    };
+    const [, row] = buildAttachmentRows({
+      requestDocument: { ...requestDocument, kind: "complaint-request", label: "Denúncia" },
+      documentTypes: [],
+      uploads: [photo],
+    });
+
+    expect(row).toMatchObject({ document: photo, available: true, state: AttachmentState.INFO, title: photo.documentName });
+    expect(attachmentDescription(row)).toBe("Foto enviada com a denúncia");
+    expect(canReviewAttachment(row)).toBe(false);
+    expect(isPendingAttachment(row)).toBe(false);
   });
 });

@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { COMPLAINT_PHOTO_IDS, COMPLAINT_PHOTO_MAX_MB, COMPLAINT_PHOTO_MIME_TYPES, isComplaintPhotoId } from "../../../../shared/complaint-photo-contract.js";
 import { DocumentReuseScope, normalizeDocumentReusePolicy } from "../../../../shared/document-reuse-contract.js";
 import { resolveRequestTypes } from "../../../../shared/request-types-contract.js";
+import { isInternalUser } from "../../tenant.js";
 
 export function canonicalDocumentDefinition(document = {}) {
   return { ...document, ...normalizeDocumentReusePolicy(document), required: document.required !== false,
@@ -25,7 +27,7 @@ export function requestDocumentDefinitions(settings, input) {
     for (const reference of Array.isArray(type.documents) ? type.documents : []) {
       const configured = (settings.documentTypes || []).find((item) => item.id === reference.id);
       const definition = canonicalDocumentDefinition({ ...reference, ...(configured || {}) });
-      if (!definition.active || typeof definition.id !== "string") continue;
+      if (!definition.active || typeof definition.id !== "string" || isComplaintPhotoId(definition.id)) continue;
       const known = definitions.get(definition.id);
       definitions.set(definition.id, known ? { ...known, required: known.required || definition.required } : definition);
     }
@@ -51,6 +53,16 @@ export function isExcludedDocument(document) {
     || document.documentName === "Requerimento municipal";
 }
 
+export function documentsVisibleToUser(documents, user) {
+  if (isInternalUser(user) || !Array.isArray(documents)) return documents;
+  return documents.filter((document) => !isComplaintPhotoId(document?.documentId));
+}
+
 export const PHOTO_DEFINITION = Object.freeze({ id: "animal_photo", name: "Foto de registro animal", required: false,
   active: true, reuseScope: DocumentReuseScope.ANIMAL, reuseValidityDays: null,
   accept: ["image/png", "image/jpeg", "image/gif", "image/webp"], maxSizeMb: 5 });
+
+export const COMPLAINT_PHOTO_DEFINITIONS = COMPLAINT_PHOTO_IDS.map((id, index) => canonicalDocumentDefinition({
+  id, name: `Foto da ocorrência ${index + 1}`, required: false, reuseScope: DocumentReuseScope.REQUEST,
+  accept: COMPLAINT_PHOTO_MIME_TYPES, maxSizeMb: COMPLAINT_PHOTO_MAX_MB,
+}));

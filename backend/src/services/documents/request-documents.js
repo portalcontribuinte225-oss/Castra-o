@@ -1,16 +1,22 @@
 import { randomUUID } from "node:crypto";
+import { isComplaintPhotoId } from "../../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus, MAX_REQUEST_DOCUMENTS } from "../../../../shared/document-reuse-contract.js";
+import { isProcedureRequest, RequestKind } from "../../../../shared/request-contract.js";
 import { isInternalUser } from "../../tenant.js";
 import { readDocumentSource } from "../../repositories/document-sources.js";
 import { assertMaterializedRequestSize, decodeDocumentContent, documentError } from "./document-content.js";
-import { PHOTO_DEFINITION, canonicalDocumentDefinition, requestDocumentDefinitions } from "./document-policy.js";
+import { COMPLAINT_PHOTO_DEFINITIONS, PHOTO_DEFINITION, canonicalDocumentDefinition, requestDocumentDefinitions } from "./document-policy.js";
 import { signDocumentReceipt } from "./document-provenance.js";
 import { describeStoredDocument, isReusableForAnimal } from "./stored-document.js";
 import { checkOriginalDocument } from "./document-catalog.js";
-import { isProcedureRequest } from "../../../../shared/request-contract.js";
+
+function requestKind(body) {
+  return body.request_type ?? body.requestType ?? body.requestTypeId ?? body.type;
+}
 
 export function definitionsForRequest(settings, body) {
-  return [...requestDocumentDefinitions(settings, body), PHOTO_DEFINITION];
+  const complaintPhotos = requestKind(body) === RequestKind.COMPLAINT ? COMPLAINT_PHOTO_DEFINITIONS : [];
+  return [...requestDocumentDefinitions(settings, body), PHOTO_DEFINITION, ...complaintPhotos];
 }
 
 export function createReceivedDocument(upload, definition, { requestId, ownerUserId, municipalityId, animalIds, now = new Date(), internalEvidence = false }) {
@@ -32,14 +38,16 @@ export async function prepareRequestDocuments(client, { body, user, tutorId, mun
   const uploads = body.documents === undefined ? [] : body.documents;
   const references = body.reusedDocuments === undefined ? [] : body.reusedDocuments;
   if (!Array.isArray(uploads) || !Array.isArray(references) || uploads.length + references.length > MAX_REQUEST_DOCUMENTS) throw documentError("Quantidade ou formato dos anexos inválido.");
-  const definitions = definitionsForRequest(settings, body);
+  const internal = Boolean(user && isInternalUser(user));
+  const kind = requestKind(body);
+  const definitions = !internal && kind === RequestKind.COMPLAINT ? COMPLAINT_PHOTO_DEFINITIONS : definitionsForRequest(settings, body);
   const documents = [];
   const seen = new Set();
   for (const reference of [...references].sort((a, b) => String(a?.sourceRequestId).localeCompare(String(b?.sourceRequestId)))) {
     if (user?.role !== "tutor" || !tutorId || user.id !== tutorId || animalIds.length !== 1) throw documentError("Entre na conta proprietária para reaproveitar documentos.", 403);
     const source = await readDocumentSource(client, { ...reference, userId: tutorId, municipalityId, lock: true });
     const definition = definitions.find((item) => item.id === source.document?.documentId);
-    if (!definition) throw documentError("Este documento não pertence aos requisitos atuais.");
+    if (!definition || isComplaintPhotoId(definition.id)) throw documentError("Este documento não pertence aos requisitos atuais.");
     if (seen.has(definition.id)) throw documentError("Selecione apenas um arquivo por tipo de documento.");
     const description = describeStoredDocument(source, definition, { now });
     if (description.attachmentId !== reference.attachmentId || description.hash !== reference.hash
@@ -58,15 +66,16 @@ export async function prepareRequestDocuments(client, { body, user, tutorId, mun
   for (const upload of uploads) {
     if (!upload || typeof upload !== "object" || seen.has(upload.documentId)) throw documentError("Anexo duplicado ou inválido.");
     let definition = definitions.find((item) => item.id === upload.documentId);
-    const internalEvidence = !definition && isInternalUser(user) && /^evidencia-/.test(upload.documentId || "");
+    const internalEvidence = !definition && internal && /^evidencia-/.test(upload.documentId || "");
     if (internalEvidence) definition = canonicalDocumentDefinition({ id: upload.documentId, name: "Evidência da apuração" });
     if (!definition) throw documentError("Tipo de documento não permitido para este pedido.");
-    documents.push(createReceivedDocument(upload, definition, { requestId, ownerUserId: tutorId, municipalityId, animalIds, now, internalEvidence }));
+    documents.push(createReceivedDocument(upload, definition, { requestId, ownerUserId: tutorId, municipalityId,
+      animalIds: isComplaintPhotoId(definition.id) ? [] : animalIds, now, internalEvidence }));
     seen.add(definition.id);
     assertMaterializedRequestSize({ ...body, documents });
   }
   // The Documents step is fixed: a public procedure always carries the declaration and the required documents.
-  const publicProcedure = !isInternalUser(user) && isProcedureRequest(body.request_type ?? body.requestType ?? body.requestTypeId ?? body.type);
+  const publicProcedure = !internal && isProcedureRequest(kind);
   if (publicProcedure) {
     if (body.declarationAccepted !== true) throw documentError("Leia e aceite a declaração deste novo pedido.");
     for (const definition of definitions.filter((item) => item.required && item.active)) {

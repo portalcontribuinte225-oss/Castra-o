@@ -2064,16 +2064,6 @@ button:disabled {
 }
 
 
-.access-field--textarea {
-  align-items: flex-start;
-}
-
-
-.access-field--textarea .access-field-icon {
-  margin-top: 12px;
-}
-
-
 .access-field.is-invalid input,
 .access-field.is-invalid textarea {
   border-color: #ef4444;
@@ -3297,11 +3287,6 @@ button:disabled {
 .internal-notes-field textarea {
   min-height: 92px;
   resize: vertical;
-}
-
-
-.form-subsection-title {
-  /* overridden below in single-request-form context */
 }
 
 
@@ -13845,7 +13830,6 @@ form textarea:focus,
 }
 
 
-.nr-shell .form-subsection-title,
 .nr-shell .anm-type-label {
   color: #64748b;
   font-size: 0.72rem;
@@ -14234,15 +14218,6 @@ form textarea:focus,
 
 .nr-shell .access-field input:read-only {
   background: #f1f5f9;
-}
-
-
-.nr-shell .form-subsection-title {
-  margin-top: 8px;
-  padding-top: 0;
-  border-top: 0;
-  font-size: 0.66rem;
-  letter-spacing: 0.09em;
 }
 
 
@@ -18487,15 +18462,71 @@ form textarea:focus,
   line-height: 1.45;
 }
 
-.public-access-inline .access-type-picker,
-.public-report-inline .two-column-fields {
+.public-access-inline .access-type-picker {
   max-width: none;
 }
 
-.public-report-inline.public-inline-card {
+.public-report-inline .form-sub-card-title {
+  margin: 0;
+}
+
+.public-report-inline .field :is(input, textarea) {
+  min-width: 0;
+  border-radius: var(--ui-radius-md);
+}
+
+.public-report-inline .field input {
+  min-height: 44px;
+}
+
+.public-report-inline .checkbox-row {
+  width: fit-content;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.public-report-inline .checkbox-row input {
+  min-height: 0;
+  accent-color: var(--blue);
+}
+
+.public-report-inline :is(input, textarea, button):focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.complaint-photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.complaint-photo-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 110px), 144px));
+  gap: 10px;
+  margin: 0;
   padding: 0;
-  border: 0;
-  background: transparent;
+  list-style: none;
+}
+
+.complaint-photo-item {
+  position: relative;
+}
+
+.complaint-photo-item img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1;
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius-md);
+  object-fit: cover;
+}
+
+.complaint-photo-remove {
+  position: absolute;
+  top: 6px;
+  right: 6px;
 }
 
 .nr-shell--public .nr-topbar-stepper {
@@ -18932,6 +18963,7 @@ form textarea:focus,
   .public-service-panel .svc-grid-2,
   .public-service-panel .svc-grid-3,
   .public-inline-card .two-column-fields,
+  .public-report-inline :is(.two-column-fields, .address-lookup-grid, .address-city-grid),
   .nr-shell .documents-step-grid {
     grid-template-columns: 1fr;
   }

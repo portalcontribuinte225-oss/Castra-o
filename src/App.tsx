@@ -136,7 +136,6 @@ import {
   isGlobalRole,
   isMasterRole,
   isValidCpf,
-  isValidPhone,
   maskCpf,
   normalizeSearchKey,
   normalizeText,
@@ -208,6 +207,7 @@ import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedu
 import type { AnimalRecord } from "./features/animal-services/animal-service-types";
 import { RequestTracking } from "./features/request-tracking/request-tracking";
 import { RequestAccess } from "./features/request-access/request-access";
+import { PublicReportPanel } from "./features/complaint/public-report-panel";
 import { registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
@@ -1897,7 +1897,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 onCreatePassword={publicServiceDone.cpf && isProcedureRequest(publicServiceDone.request_type)
                   ? () => openRequestAccess({ protocol: publicServiceDone.protocol, cpf: onlyDigits(String(publicServiceDone.cpf)) }) : undefined}
               />
-            ) : procedureService && !selectedMunicipalityId ? (
+            ) : (procedureService || activePublicService === "report") && !selectedMunicipalityId ? (
               <p role="status">Selecione o município na página para continuar.</p>
             ) : procedureService ? (
               <NewRequest
@@ -1941,17 +1941,15 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
               />
             ) : activePublicService === "report" ? (
               <PublicReportPanel
+                key={selectedMunicipalityId}
                 municipalityName={activeMunicipality?.name || "Sistema municipal"}
-                municipalityId={selectedMunicipalityId}
                 onSubmit={async (payload) => {
                   const created = await createRequest({
                     ...payload,
                     request_type: RequestType.COMPLAINT,
                     municipality_id: selectedMunicipalityId,
                   });
-                  const normalized = onRequestCreated?.(created, { openAdmin: true }) || normalizeRequest(created);
-                  setPublicServiceDone(normalized);
-                  return created;
+                  if (selectedMunicipalityId === publicMunicipalityRef.current) setPublicServiceDone(normalizeRequest(created));
                 }}
               />
             ) : null}
@@ -2158,149 +2156,6 @@ function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
   );
 }
 
-function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }: AnyRecord) {
-  const [form, setForm] = useState({
-    name: "", cpf: "", contact: "", email: "", description: "", confidential: false,
-    cep: "", number: "", address: "", neighborhood: "", city: "", state: "",
-  });
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-
-  function patch(field, value) {
-    setForm((f) => ({ ...f, [field]: value }));
-  }
-
-  async function lookupReporterCep(value) {
-    const cleanCep = value.replace(/\D/g, "");
-    const maskedCep = formatCep(value);
-    patch("cep", maskedCep);
-
-    if (cleanCep.length !== 8) return;
-
-    try {
-      const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
-      const data = await response.json();
-      if (data.erro) return;
-
-      setForm((current) => ({
-        ...current,
-        cep: maskedCep,
-        address: data.logradouro || current.address,
-        neighborhood: data.bairro || current.neighborhood,
-        city: data.localidade || current.city,
-        state: data.uf || current.state,
-      }));
-    } catch {
-      // busca de CEP é apenas conveniência; falha silenciosa não bloqueia o preenchimento manual
-    }
-  }
-
-  async function submitReport(event) {
-    event.preventDefault();
-    if (!form.name.trim()) {
-      setError("Informe o nome do denunciante.");
-      return;
-    }
-    if (!isValidCpf(form.cpf)) {
-      setError("Informe um CPF válido do denunciante.");
-      return;
-    }
-    if (!isValidPhone(form.contact)) {
-      setError("Informe um telefone válido em Contato.");
-      return;
-    }
-    if (!form.description.trim()) {
-      setError("Descreva a situação observada.");
-      return;
-    }
-    setError("");
-    setSaving(true);
-    try {
-      await onSubmit?.({
-        tutor_name: form.name.trim(),
-        tutor_email: form.email.trim(),
-        cpf: form.cpf.trim(),
-        phone: form.contact.trim(),
-        cep: form.cep.trim(),
-        address: [form.address.trim(), form.number.trim()].filter(Boolean).join(", "),
-        neighborhood: form.neighborhood.trim(),
-        city: form.city.trim(),
-        state: form.state.trim(),
-        notes: form.description.trim(),
-        is_confidential: form.confidential,
-      });
-    } catch (err: any) {
-      setError(err.message || "Não foi possível registrar a denúncia.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <section className="public-inline-card public-report-inline">
-      <form className="single-request-form clean-form" onSubmit={submitReport}>
-        <div className="form-sub-card">
-          <span className="form-sub-card-title">Denunciante</span>
-          <div className="two-column-fields">
-            <div className="access-field" data-label="Nome">
-              <input type="text" value={form.name} onChange={(e) => patch("name", e.target.value)} placeholder="Nome completo" />
-            </div>
-            <div className="access-field" data-label="CPF">
-              <input type="text" value={form.cpf} onChange={(e) => patch("cpf", formatCpf(e.target.value))} placeholder="000.000.000-00" />
-            </div>
-          </div>
-          <div className="two-column-fields">
-            <div className="access-field" data-label="Telefone">
-              <input type="tel" value={form.contact} onChange={(e) => patch("contact", formatPhone(e.target.value))} placeholder="(00) 00000-0000" />
-            </div>
-            <div className="access-field" data-label="Email">
-              <input type="email" value={form.email} onChange={(e) => patch("email", e.target.value)} placeholder="Opcional" />
-            </div>
-          </div>
-          <label className="checkbox-row">
-            <input type="checkbox" checked={form.confidential} onChange={(event) => patch("confidential", event.target.checked)} />
-            Manter meus dados em sigilo
-          </label>
-        </div>
-
-        <div className="form-sub-card">
-          <span className="form-sub-card-title">Local da ocorrência</span>
-          <div className="address-lookup-grid">
-            <div className="access-field" data-label="CEP">
-              <input type="text" placeholder={`00000-000 (${municipalityName})`} value={form.cep} onChange={(e) => lookupReporterCep(e.target.value)} />
-            </div>
-            <div className="access-field" data-label="Número">
-              <input type="text" placeholder="Número" value={form.number} onChange={(e) => patch("number", e.target.value)} />
-            </div>
-            <div className="access-field" data-label="UF">
-              <input type="text" placeholder="UF" value={form.state} maxLength={2} onChange={(e) => patch("state", e.target.value.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase())} />
-            </div>
-          </div>
-          <div className="access-field" data-label="Endereço">
-            <input type="text" placeholder="Rua, complemento ou referência" value={form.address} onChange={(e) => patch("address", e.target.value)} />
-          </div>
-          <div className="address-city-grid">
-            <div className="access-field" data-label="Bairro">
-              <input type="text" placeholder="Bairro" value={form.neighborhood} onChange={(e) => patch("neighborhood", e.target.value)} />
-            </div>
-            <div className="access-field" data-label="Cidade">
-              <input type="text" placeholder="Cidade" value={form.city} onChange={(e) => patch("city", e.target.value)} />
-            </div>
-          </div>
-        </div>
-
-        <label className="access-form-label">
-          <span>Descrição</span>
-          <div className="access-field"><textarea value={form.description} onChange={(e) => patch("description", e.target.value)} placeholder="Descreva a situação observada" rows={6} /></div>
-        </label>
-        {error && <p className="form-error">{error}</p>}
-        <div className="public-inline-actions">
-          <button className="primary-action" type="submit" disabled={saving}>{saving ? "Enviando..." : "Enviar denúncia"}</button>
-        </div>
-      </form>
-    </section>
-  );
-}
 function PetWelcomeArt({ className = "", onGoToAdoption, onPublicRequest }: AnyRecord) {
   return (
     <section className={`public-hero ${className}`.trim()}>

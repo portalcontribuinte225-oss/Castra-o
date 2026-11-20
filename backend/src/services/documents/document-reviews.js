@@ -1,3 +1,4 @@
+import { isComplaintPhotoId } from "../../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus, MAX_REQUEST_DOCUMENTS } from "../../../../shared/document-reuse-contract.js";
 import { isInternalUser } from "../../tenant.js";
 import { assertMaterializedRequestSize, decodeDocumentContent, documentError } from "./document-content.js";
@@ -30,7 +31,7 @@ function normalizeExisting(previous, document, index, definition) {
 export function decorateRequestDocuments(request, settings = {}) {
   const definitions = definitionsForRequest(settings, request);
   return { ...request, documents: (Array.isArray(request.documents) ? request.documents : []).map((document, index) => {
-    if (isExcludedDocument(document)) return document;
+    if (isExcludedDocument(document) || isComplaintPhotoId(document?.documentId)) return document;
     try {
       const definition = definitionFor(document, definitions);
       const source = { ...request, document, document_index: index };
@@ -55,6 +56,7 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
   if (!Array.isArray(supplied) || !Array.isArray(reviews) || supplied.length > MAX_REQUEST_DOCUMENTS || reviews.length > MAX_REQUEST_DOCUMENTS) throw documentError("Anexos ou decisões inválidos.");
   const definitions = definitionsForRequest(settings, previous);
   const normalizedOld = oldDocuments.map((document, index) => {
+    if (isComplaintPhotoId(document?.documentId)) return document;
     if (isExcludedDocument(document)) return { ...document, internalEvidence: true };
     try { return normalizeExisting(previous, document, index, definitionFor(document, definitions)); }
     catch { return { ...document, status: DocumentReviewStatus.ATTACHED, review: undefined, receipt: undefined }; }
@@ -65,6 +67,9 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
     const existing = normalizedOld.find((item) => upload.attachmentId && item.attachmentId === upload.attachmentId)
       || (patch.documents === undefined ? normalizedOld[index] : normalizedOld.find((item) => item.documentId === upload.documentId && item.dataUrl === upload.dataUrl));
     if (existing && existing.dataUrl === upload.dataUrl && existing.documentId === upload.documentId) return existing;
+    if (isComplaintPhotoId(upload.documentId) || isComplaintPhotoId(existing?.documentId)) {
+      throw documentError("As fotos da ocorrência são enviadas no registro da denúncia.");
+    }
     const evidence = /^evidencia-/.test(upload.documentId || "");
     const definition = definitions.find((item) => item.id === upload.documentId)
       || (evidence ? canonicalDocumentDefinition({ id: upload.documentId, name: "Evidência da apuração", required: false }) : null);
@@ -81,7 +86,7 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
     const note = review.decision === DocumentReviewStatus.REJECTED && typeof review.note === "string" ? review.note.trim() : "";
     if (review.decision === DocumentReviewStatus.REJECTED && (!note || note.length > MAX_REVIEW_NOTE)) throw documentError(`Informe o que precisa ser corrigido no documento (até ${MAX_REVIEW_NOTE} caracteres).`);
     const document = documents.find((item) => item.attachmentId === review.attachmentId);
-    if (!document || isExcludedDocument(document)) throw documentError("O arquivo a revisar não está mais disponível.", 409);
+    if (!document || isExcludedDocument(document) || isComplaintPhotoId(document.documentId)) throw documentError("O arquivo a revisar não está mais disponível.", 409);
     const definition = definitionFor(document, definitions);
     const content = decodeDocumentContent(document, definition);
     document.status = review.decision;

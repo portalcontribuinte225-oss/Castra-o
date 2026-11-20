@@ -1,3 +1,4 @@
+import { isComplaintPhotoId } from "../../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus } from "../../../../shared/document-reuse-contract.js";
 import { isExcludedDocument } from "../documents/document-policy.js";
 
@@ -9,7 +10,8 @@ const toIso = (value) => {
 // Allow-list projection: nothing from the request is exposed unless it is named here.
 // No tutor, contact, address, file name or review reason ever leaves through this view.
 export function buildTrackingView(row) {
-  const documents = (Array.isArray(row.documents) ? row.documents : []).filter((document) => !isExcludedDocument(document));
+  const documents = (Array.isArray(row.documents) ? row.documents : [])
+    .filter((document) => !isExcludedDocument(document) && !isComplaintPhotoId(document.documentId));
   const count = (status) => documents.filter((document) => document.status === status).length;
   const approved = count(DocumentReviewStatus.APPROVED);
   const needsCorrection = count(DocumentReviewStatus.REJECTED);

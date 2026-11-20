@@ -9,7 +9,9 @@ import { followUpDestination, readStartInput, sameContact } from "../src/service
 import { createTrackingToken, readTrackingToken } from "../src/services/request-tracking/tracking-token.js";
 import { buildTrackingView } from "../src/services/request-tracking/tracking-view.js";
 import { AuthPurpose, AUTH_CHALLENGE_SECONDS, AUTH_RETRY_SECONDS } from "../../shared/auth-contract.js";
+import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
 import { NotificationChannel } from "../../shared/notification-contract.js";
+import { RequestKind } from "../../shared/request-contract.js";
 import { TRACKING_TOKEN_SECONDS, normalizeTrackingProtocol } from "../../shared/request-tracking-contract.js";
 import { registerTestSession } from "./fixtures/session-user.js";
 
@@ -376,6 +378,13 @@ test("the public projection keeps only whitelisted fields and tolerates missing 
     ["createdAt", "documents", "protocol", "requestType", "schedule", "status", "updatedAt"]);
   const unknownStatus = buildTrackingView(trackedRow({ documents: [{ documentId: "identity", status: "something-new" }, null, "text"] }));
   assert.deepEqual(unknownStatus.documents, { total: 1, approved: 0, needsCorrection: 0, pending: 1 });
+});
+
+test("complaint photos do not appear as pending documents in public tracking", () => {
+  const view = buildTrackingView(trackedRow({ request_type: RequestKind.COMPLAINT,
+    documents: [{ documentId: COMPLAINT_PHOTO_IDS[0], status: "attached", dataUrl: "private-photo" }] }));
+  assert.deepEqual(view.documents, { total: 0, approved: 0, needsCorrection: 0, pending: 0 });
+  assert.equal(JSON.stringify(view).includes("private-photo"), false);
 });
 
 test("start input accepts common formats and rejects anything else", () => {

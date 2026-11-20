@@ -1,3 +1,4 @@
+import { isComplaintPhotoId } from "../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
 import type { AnyRecord } from "../../types";
 
@@ -31,6 +32,7 @@ function isAnimalPhoto(document: AnyRecord) {
 }
 
 function stateOf(document: AnyRecord): AttachmentState {
+  if (isComplaintPhotoId(document.documentId)) return AttachmentState.INFO;
   if (document.internalEvidence || document.documentId?.startsWith?.("evidencia-") || document.documentName === "Evidência da apuração") return AttachmentState.INFO;
   if (document.status === DocumentReviewStatus.APPROVED) return AttachmentState.APPROVED;
   if (document.status === DocumentReviewStatus.REJECTED) return AttachmentState.REJECTED;
@@ -102,7 +104,10 @@ export const attachmentStateClasses: Record<AttachmentState, string> = {
 
 export function attachmentDescription(row: AttachmentRow): string {
   if (row.state === AttachmentState.SYSTEM) return "Gerado automaticamente pelo sistema";
-  if (row.state === AttachmentState.INFO) return row.kind === "photo" ? "Foto de identificação do animal" : "Evidência anexada pela equipe";
+  if (row.state === AttachmentState.INFO) {
+    if (isComplaintPhotoId(row.document?.documentId)) return "Foto enviada com a denúncia";
+    return row.kind === "photo" ? "Foto de identificação do animal" : "Evidência anexada pela equipe";
+  }
   if (row.state === AttachmentState.MISSING) return row.required ? "Documento obrigatório não enviado" : "Documento não enviado";
   if (row.state === AttachmentState.REJECTED) return row.document?.review?.note || "Indeferido na conferência";
   if (row.state === AttachmentState.APPROVED) return row.document?.review ? "Deferido na conferência" : row.document?.provider ? "Aprovado pela análise automática" : "Documento disponível";

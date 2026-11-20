@@ -4,8 +4,9 @@ import assert from "node:assert/strict";
 import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
+import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
-import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
+import { REQUEST_CONTACT_CPF_KEY, RequestKind } from "../../shared/request-contract.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { EMAIL_ACTIVE_USES_CONFIG_KEY } from "../../shared/email-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
@@ -17,6 +18,7 @@ const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
 const ADMIN = { id: "44444444-4444-4444-8444-444444444444", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
 const SECRET = "request-route-tests-only";
 const VALID_CPF = "52998224725";
+const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jP1sAAAAASUVORK5CYII=";
 const FUTURE_DATE = `01/01/${new Date().getFullYear() + 1}`;
 const clientFetch = globalThis.fetch;
 const clone = (value) => structuredClone(value);
@@ -77,6 +79,9 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
         if (sql.includes("FROM municipalities m LEFT JOIN config")) {
           return { rows: [...configuration].map(([key, value]) => ({ key, value: clone(value), municipality_id: values[0] })) };
         }
+        if (sql.startsWith("SELECT municipality_id, key, value FROM config")) {
+          return { rows: values[0].flatMap((municipality_id) => values[1].map((key) => ({ municipality_id, key, value: clone(configuration.get(key)) }))) };
+        }
         if (sql.includes("SELECT value FROM config")) {
           // The notification channels read their settings through the pool, after the request was committed.
           if (source === "pool") {
@@ -99,10 +104,10 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
           assertInsertShape(sql, values);
           requestRow = {
             id: values[37] || REQUEST_ID, tutor_id: values[0], protocol: values[1],
-            tutor_name: values[2], tutor_email: values[3], cpf: values[4], phone: values[5],
+            tutor_name: values[2], tutor_email: values[3], cpf: values[4], phone: values[5], address: values[6],
             animals: JSON.parse(values[16]), request_type: values[17], municipality_id: values[19],
             schedule_date: values[21], documents: JSON.parse(values[30]), tags: JSON.parse(values[31]),
-            workflow_data: JSON.parse(values[32]), origin: values[35], status: "NOVA", history: [],
+            workflow_data: JSON.parse(values[32]), origin: values[35], is_confidential: values[36], status: "NOVA", history: [],
           };
           return { rows: [clone(requestRow)] };
         }
@@ -110,6 +115,9 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
           if (sql.includes("WHERE tutor_id = $1")) {
             assert.match(sql, /AND municipality_id = \$2/);
             return { rows: requestRow?.tutor_id === values[0] && requestRow?.municipality_id === values[1] ? [clone(requestRow)] : [] };
+          }
+          if (sql.includes("WHERE municipality_id = $1 ORDER BY")) {
+            return { rows: requestRow?.municipality_id === values[0] ? [clone(requestRow)] : [] };
           }
           if (sql.includes("FOR UPDATE")) unlocks.push(await acquireLock());
           const match = requestRow?.id === values[0] && (!sql.includes("municipality_id = $2") || requestRow.municipality_id === values[1]);
@@ -256,6 +264,66 @@ test("a public request with a tutor creates no account nor password, and the ans
   assert.equal(row().tutor_id, null);
   assert.equal(stats.calls.some(({ sql }) => sql.includes("INSERT INTO users") || sql.includes("tutor_profiles")), false);
   assert.equal(stats.calls.some(({ sql, values }) => sql.includes("pg_advisory_xact_lock") && !String(values[0]).startsWith("schedule:")), false);
+});
+
+test("a public confidential complaint saves photos and shares reporter identity and photos only with authorized staff", async (t) => {
+  const { request, row, stats } = await fixture(t);
+  const reporter = { tutor_name: "Pessoa Teste", tutor_email: "pessoa@example.test", cpf: VALID_CPF, phone: "(48) 3333-4444" };
+  const location = "Rua da ocorrência";
+  const response = await request({ body: { municipalityId: MUNICIPALITY_ID, request_type: RequestKind.COMPLAINT,
+    ...reporter, address: location,
+    notes: "Relato de teste", is_confidential: true, documents: [{ documentId: COMPLAINT_PHOTO_IDS[0], dataUrl: PNG }] } });
+  assert.equal(response.status, 201);
+  assert.equal(response.cacheControl, "no-store");
+  assert.ok(response.body.request.protocol);
+  assert.equal(row().is_confidential, true);
+  assert.equal(row().tutor_name, "Pessoa Teste");
+  assert.equal(row().tutor_email, "pessoa@example.test");
+  const [photo] = row().documents;
+  assert.equal(photo.dataUrl, PNG);
+  assert.equal(photo.requestId, row().id);
+  assert.equal(photo.municipalityId, MUNICIPALITY_ID);
+  const write = stats.calls.findIndex(({ sql }) => sql.startsWith("UPDATE requests SET documents"));
+  assert.ok(write > stats.calls.findIndex(({ sql }) => sql.includes("INSERT INTO requests")));
+  assert.equal(stats.calls[write].source, "client");
+  assert.deepEqual(stats.calls[write].values.slice(1), [row().id, MUNICIPALITY_ID]);
+  assert.ok(stats.calls.findIndex(({ sql }) => sql === "COMMIT") > write);
+
+  const staff = await request({ method: "GET", user: ADMIN });
+  assert.equal(staff.status, 200);
+  assert.deepEqual(staff.body[0].documents, [photo]);
+  for (const [field, value] of Object.entries(reporter)) assert.equal(staff.body[0][field], value);
+  const foreign = await request({ method: "GET", user: { ...ADMIN, municipalityId: OTHER_MUNICIPALITY_ID } });
+  assert.equal(foreign.status, 200);
+  assert.deepEqual(foreign.body, []);
+  const partner = await request({ method: "GET", user: { ...ADMIN, role: "ong" } });
+  assert.equal(partner.status, 200);
+  assert.deepEqual(partner.body[0].documents, []);
+  for (const field of ["tutor_id", ...Object.keys(reporter)]) assert.equal(partner.body[0][field], null);
+  assert.equal(partner.body[0].address, location);
+  assert.equal((await request({ method: "GET" })).status, 401);
+});
+
+test("the request list retains the reporter's identity for the authenticated complaint owner", async (t) => {
+  const reporter = { tutor_id: ADMIN.id, tutor_name: "Pessoa Teste", tutor_email: "pessoa@example.test", cpf: VALID_CPF, phone: "(48) 3333-4444" };
+  const existing = { ...pendingRequest(), ...reporter, request_type: RequestKind.COMPLAINT, is_confidential: true };
+  const { request } = await fixture(t, { existing });
+  const owner = await request({ method: "GET", user: { ...ADMIN, role: "tutor" } });
+  assert.equal(owner.status, 200);
+  for (const [field, value] of Object.entries(reporter)) assert.equal(owner.body[0][field], value);
+  const partner = await request({ method: "GET", user: { ...ADMIN, id: "55555555-5555-4555-8555-555555555555", role: "ong" } });
+  assert.equal(partner.status, 200);
+  for (const field of Object.keys(reporter)) assert.equal(partner.body[0][field], null);
+});
+
+test("invalid complaint photo content rolls back the request before storing its documents", async (t) => {
+  const { request, stats } = await fixture(t);
+  const response = await request({ body: { municipalityId: MUNICIPALITY_ID, request_type: RequestKind.COMPLAINT,
+    tutor_name: "Pessoa Teste", cpf: VALID_CPF, phone: "(48) 3333-4444",
+    notes: "Relato de teste", documents: [{ documentId: COMPLAINT_PHOTO_IDS[0], dataUrl: "data:image/png;base64,YQ==" }] } });
+  assert.equal(response.status, 400);
+  assert.equal(stats.calls.some(({ sql }) => sql.startsWith("UPDATE requests SET documents") || sql === "COMMIT"), false);
+  assert.equal(stats.calls.at(-1).sql, "ROLLBACK");
 });
 
 test("the registered notice goes after the answer to whoever accepted the notices, and is kept in the history", async (t) => {

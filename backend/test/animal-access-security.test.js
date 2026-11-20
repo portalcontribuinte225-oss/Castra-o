@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import express from "express";
 import animalRoutes from "../src/routes/animals.js";
 import { pool } from "../src/db/index.js";
+import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
+import { RequestKind } from "../../shared/request-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { assertInsertShape } from "./fixtures/insert-shape.js";
 
@@ -18,7 +20,7 @@ const FORGED_CPF = "11111111111";
 const TARGET_CPF = "11144477735";
 const clientFetch = globalThis.fetch;
 
-async function fixture(t, { existingAnimal = true, globalCollision = false, chipless = false } = {}) {
+async function fixture(t, { existingAnimal = true, globalCollision = false, chipless = false, requestHistory = [] } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
   process.env.JWT_SECRET = "animal-access-tests-only";
   const calls = [];
@@ -46,7 +48,7 @@ async function fixture(t, { existingAnimal = true, globalCollision = false, chip
       if (sql.includes("JOIN LATERAL")) return { rows: [{ id: "source", municipality_id: MUNICIPALITY, cpf: CPF, matched_animal: {} }] };
       assert.equal(values[2], MUNICIPALITY);
       assert.match(sql, /r\.municipality_id = \$3/);
-      return { rows: [] };
+      return { rows: structuredClone(requestHistory) };
     }
     if (sql.includes("INSERT INTO request_protocol_counters")) return { rows: [{ seq: 1 }] };
     if (sql.includes("INSERT INTO animals")) {
@@ -97,6 +99,19 @@ test("authenticated animal owner and history are scoped by persisted municipalit
   const historyQueries = calls.filter(({ sql }) => sql.includes("ORDER BY occurred_at") || sql.includes("signature_data_url"));
   assert.ok(historyQueries.length >= 2);
   assert.ok(historyQueries.every(({ values }) => values.includes(MUNICIPALITY) && values.includes(OWNER_ID)));
+});
+
+test("animal history hides complaint photos from the owner and retains them for the authorized staff", async (t) => {
+  const photo = { documentId: COMPLAINT_PHOTO_IDS[0], dataUrl: "case-photo" };
+  const otherDocument = { documentId: "identity" };
+  const { request } = await fixture(t, { requestHistory: [{ request_type: RequestKind.COMPLAINT, documents: [photo, otherDocument] }] });
+  const consult = (user) => request("/consult", { animalId: ANIMAL_ID }, user);
+  const tutor = await consult(TUTOR);
+  assert.equal(tutor.status, 200);
+  assert.deepEqual(tutor.body.history[0].data.registration.documents, [otherDocument]);
+  const staff = await consult(STAFF);
+  assert.equal(staff.status, 200);
+  assert.deepEqual(staff.body.history[0].data.registration.documents, [photo, otherDocument]);
 });
 
 test("the owner consults an animal by id, including an animal without microchip", async (t) => {

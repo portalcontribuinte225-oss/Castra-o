@@ -3,6 +3,7 @@ import { pool } from "../db/index.js";
 import { auth } from "../middleware/auth.js";
 import { normalizeCpf, isValidCpf } from "../utils.js";
 import { isInternalUser, pickMunicipalityId } from "../tenant.js";
+import { documentsVisibleToUser } from "../services/documents/document-policy.js";
 import { mine, fromRequest, requestContext, documentContent, confirmMicrochip, animalEndpoint } from "../services/registered-animals/animal-handlers.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { withoutRequestContactCpf } from "../../../shared/request-contract.js";
@@ -299,7 +300,7 @@ async function buildAnimalHistory(client, animal, req) {
         responsible_unit: request.responsible_unit,
         veterinarian: request.veterinarian,
         notes: request.notes,
-        documents: request.documents || [],
+        documents: documentsVisibleToUser(request.documents || [], req.user),
         signature_data_url: request.signature_data_url,
         signed_at: request.signed_at,
         created_at: request.created_at,
