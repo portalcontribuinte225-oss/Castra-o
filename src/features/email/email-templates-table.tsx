@@ -60,17 +60,19 @@ export function EmailTemplatesTable({ rows, master, municipal, serviceOn, drafts
                   </td>
                 )}
                 {municipal && (
-                  <td className="whatsapp-switch-cell">
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={on}
-                      aria-label={`${on ? "Desativar" : "Ativar"} ${row.label}`}
-                      className={`whatsapp-switch${on ? " whatsapp-switch--on" : ""}`}
-                      disabled={busy || !serviceOn || (!on && !row.configured)}
-                      onClick={() => onToggle(row)}
-                    ><span className="whatsapp-switch-knob" /></button>
-                    {lockReason && <span role="img" aria-label={lockReason} title={lockReason}><Lock size={14} aria-hidden="true" /></span>}
+                  <td>
+                    <div className="integration-table-actions">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={on}
+                        aria-label={`${on ? "Desativar" : "Ativar"} ${row.label}`}
+                        className={`whatsapp-switch${on ? " whatsapp-switch--on" : ""}`}
+                        disabled={busy || !serviceOn || (!on && !row.configured)}
+                        onClick={() => onToggle(row)}
+                      ><span className="whatsapp-switch-knob" /></button>
+                      {lockReason && <span role="img" aria-label={lockReason} title={lockReason}><Lock size={14} aria-hidden="true" /></span>}
+                    </div>
                   </td>
                 )}
               </tr>

@@ -39,21 +39,25 @@ export function SmsUsesTable({ rows, municipalityName, channelActive, serviceOn,
               <tr key={row.key}>
                 <td>{row.label}</td>
                 <td>
-                  {smsTexts(row.key, municipalityName || undefined).map(({ outcome, text }) => (
-                    <p key={text}>{outcome && <><strong>{OUTCOME_LABELS[outcome]}</strong><br /></>}{text}</p>
-                  ))}
+                  <div className="tw:grid tw:gap-1.5">
+                    {smsTexts(row.key, municipalityName || undefined).map(({ outcome, text }) => (
+                      <p className="tw:m-0" key={text}>{outcome && <><strong>{OUTCOME_LABELS[outcome]}</strong><br /></>}{text}</p>
+                    ))}
+                  </div>
                 </td>
-                <td className="whatsapp-switch-cell">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-label={`${on ? "Desativar" : "Ativar"} ${row.label}`}
-                    className={`whatsapp-switch${on ? " whatsapp-switch--on" : ""}`}
-                    disabled={busy || !open}
-                    onClick={() => onToggle(row.key, !on)}
-                  ><span className="whatsapp-switch-knob" /></button>
-                  {!open && <span role="img" aria-label={lockReason} title={lockReason}><Lock size={14} aria-hidden="true" /></span>}
+                <td>
+                  <div className="integration-table-actions">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={on}
+                      aria-label={`${on ? "Desativar" : "Ativar"} ${row.label}`}
+                      className={`whatsapp-switch${on ? " whatsapp-switch--on" : ""}`}
+                      disabled={busy || !open}
+                      onClick={() => onToggle(row.key, !on)}
+                    ><span className="whatsapp-switch-knob" /></button>
+                    {!open && <span role="img" aria-label={lockReason} title={lockReason}><Lock size={14} aria-hidden="true" /></span>}
+                  </div>
                 </td>
               </tr>
             );

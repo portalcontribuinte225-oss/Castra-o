@@ -46,7 +46,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
           )}
           {email.notice && <p role="status">{email.notice}</p>}
           {identity && (
-            <p>
+            <p className="tw:m-0">
               Identificação nos e-mails: <strong>{identity.name}</strong>{identity.departmentName ? ` · ${identity.departmentName}` : ""}
               {` · Brasão: ${imageText[identity.brasao] || identity.brasao} · Logo do órgão: ${imageText[identity.departmentLogo] || identity.departmentLogo}`}
             </p>

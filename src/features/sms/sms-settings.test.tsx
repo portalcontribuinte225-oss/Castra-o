@@ -340,6 +340,7 @@ describe("SMS settings interface", () => {
 
   it("locks every switch while the channel is inactive, and unlocks them with the stored state once it is active", () => {
     const locked = screen();
+    expect(locked.match(/<td><div class="integration-table-actions">/g)).toHaveLength(smsUses.length);
     expect(locked.match(/role="switch"/g)).toHaveLength(smsUses.length);
     expect(locked.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(smsUses.length);
     expect(locked.match(/aria-label="O SMS precisa estar ativo na plataforma para ligar as mensagens\."/g)).toHaveLength(smsUses.length);

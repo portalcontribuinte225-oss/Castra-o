@@ -170,6 +170,7 @@ describe("e-mail tab for a municipal viewer", () => {
 
   it("shows a switch per message, on only when it is both active and configured, and locks the unconfigured ones", () => {
     const html = tab({ master: false });
+    expect(html.match(/<td><div class="integration-table-actions">/g)).toHaveLength(11);
     expect(html.match(/role="switch"/g)).toHaveLength(11);
     expect(on(html)).toBe(2);
     expect(html.match(/aria-label="Liga quando o master configurar o template\."/g)).toHaveLength(8);

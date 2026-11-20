@@ -99,6 +99,7 @@ describe("templates table", () => {
     expect(html).not.toContain("Fora do padrão");
     expect(html).toContain("Última sincronização");
     expect(html).toContain('title="{{1}} Nome do tutor · {{2}} Data do agendamento');
+    expect(html.match(/<td><div class="integration-table-actions">/g)).toHaveLength(4);
     const switches = html.match(/<button[^>]*role="switch"[^>]*>/g) || [];
     expect(switches).toHaveLength(4);
     expect(switches[0]).toContain('aria-checked="true"');
