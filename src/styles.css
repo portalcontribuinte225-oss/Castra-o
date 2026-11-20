@@ -22846,10 +22846,6 @@ small,
       flex-direction: column;
     }
 
-    .nr-shell--public .form-section:has(> :is(.choice-question, .choice-answer)) {
-      margin-block: auto;
-    }
-
     .nr-shell--public .choice-card {
       padding-block: clamp(20px, 4dvh, 48px);
     }
