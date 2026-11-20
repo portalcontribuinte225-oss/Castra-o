@@ -34,6 +34,11 @@ describe("RequestFormLayout", () => {
       }));
 
       expect(html).toContain(`role="region" aria-label="${label}"`);
+      const steps = html.match(/<ol[^>]*aria-label="Etapas da solicitação">(.*?)<\/ol>/)?.[1];
+      expect(steps?.match(/<li\b/g)).toHaveLength(requestSteps.length);
+      expect(steps?.match(/aria-current="step"/g)).toHaveLength(1);
+      expect(steps?.match(/<li[^>]*aria-current="step"[^>]*>(.*?)<\/li>/)?.[1]).toContain(label);
+      expect(steps).not.toContain("<button");
       expect(html).toMatch(/Campos da etapa<\/div><\/div><p[^>]*role="alert">Revise os dados<\/p><div class="nr-nav-row">/);
       expect(html.match(/Revise os dados/g)).toHaveLength(1);
       const footer = html.split('<div class="nr-nav-row">')[1];

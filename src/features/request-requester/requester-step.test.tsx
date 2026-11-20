@@ -19,7 +19,7 @@ const withContacts = (contacts = typed, overrides: Partial<RequesterStepProps> =
   contacts, tutorFields: { ...props.tutorFields, data: { ...data, ...contacts } }, ...overrides,
 });
 const entry = (first: boolean) => ({ entry: { first, onFirst: noop, onRegistered: noop } });
-const yesDisabled = /<button[^>]*disabled=""[^>]*><strong>Sim, quero/;
+const yesDisabled = /<button[^>]*disabled=""[^>]*><strong[^>]*>Sim, quero/;
 const chosen = /aria-pressed="true"/;
 
 describe("how the person wants to request, on the public form", () => {
@@ -27,14 +27,15 @@ describe("how the person wants to request, on the public form", () => {
     const markup = html(entry(false));
     expect(markup).toContain("Como deseja solicitar?");
     expect(markup).toContain("Primeira solicitação"); expect(markup).toContain("Animal já cadastrado");
-    expect(markup).toContain('class="choice-card"'); expect(markup).not.toMatch(chosen);
+    expect(markup.match(/<button[^>]*aria-pressed="false"/g)).toHaveLength(2);
+    expect(markup).not.toMatch(chosen);
     expect(markup).not.toContain("Esse animal tem alguém");
     expect(markup).not.toContain("compact-choice-field");
   });
 
   it("is marked invalid only when the person tried to go on without choosing", () => {
-    expect(html(entry(false))).not.toContain("is-invalid");
-    expect(html({ ...entry(false), showErrors: true })).toContain("choice-question is-invalid");
+    expect(html(entry(false))).not.toContain('aria-invalid="true"');
+    expect(html({ ...entry(false), showErrors: true })).toContain('aria-label="Como deseja solicitar?" aria-invalid="true"');
   });
 
   it("shrinks to one line with Alterar once a first request is chosen, and the question about the tutor follows", () => {
@@ -59,8 +60,8 @@ describe("the question about the tutor", () => {
   });
 
   it("is marked invalid only when the person tried to go on without answering", () => {
-    expect(html({ showErrors: true })).toContain("choice-question is-invalid");
-    expect(html({ showErrors: true, tutorship: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } })).not.toContain("is-invalid");
+    expect(html({ showErrors: true })).toContain('aria-label="Esse animal tem alguém que cuida dele?" aria-invalid="true"');
+    expect(html({ showErrors: true, tutorship: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } })).not.toContain('aria-invalid="true"');
   });
 
   it("shrinks to one line once answered, with a way to change the answer", () => {
@@ -107,7 +108,7 @@ describe("with a tutor", () => {
   });
 
   it("is marked invalid when the person tried to go on without answering about the notices", () => {
-    expect(html({ tutorship: AnimalTutorship.WITH_TUTOR, ...withContacts(), showErrors: true })).toContain("choice-question is-invalid");
+    expect(html({ tutorship: AnimalTutorship.WITH_TUTOR, ...withContacts(), showErrors: true })).toContain('aria-label="Quer acompanhar esta solicitação?" aria-invalid="true"');
   });
 });
 

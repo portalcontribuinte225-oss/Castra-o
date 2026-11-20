@@ -1,8 +1,8 @@
-import { Fragment } from "react";
 import type { ReactNode } from "react";
-import { CheckCircle2, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { requestSteps } from "./request-steps";
 import type { RequestStep } from "./request-steps";
+import { RequestStepper } from "./request-stepper";
 
 interface RequestFormLayoutProps {
   stepIndex: number;
@@ -28,32 +28,8 @@ export function RequestFormLayout({
 
   return (
     <div className={`nr-shell nr-shell--${internal ? "internal" : "public"}`}>
-      <div className={internal ? "nr-topbar nr-topbar--internal" : "nr-topbar"}>
-        <div className="nr-topbar-stepper">
-          <div className="nr-stepper" aria-label="Etapas da solicitação">
-            {requestSteps.map(({ step, label }, index) => {
-              const isCurrent = index === stepIndex;
-              const isDone = index < stepIndex;
-              return (
-                <Fragment key={step}>
-                  <button
-                    type="button"
-                    className={`nr-step${isCurrent ? " nr-step--current" : ""}${isDone ? " nr-step--done" : ""}${isCurrent && stepInvalid ? " nr-step--invalid" : ""}`}
-                    disabled
-                    aria-label={label}
-                    aria-current={isCurrent ? "step" : undefined}
-                  >
-                    <span className="nr-step-circle" aria-hidden="true">
-                      {isDone ? <CheckCircle2 size={13} strokeWidth={2.5} /> : index + 1}
-                    </span>
-                    <span className="nr-step-label">{label}</span>
-                  </button>
-                  {index < requestSteps.length - 1 && <span className="nr-step-connector" aria-hidden="true" />}
-                </Fragment>
-              );
-            })}
-          </div>
-        </div>
+      <div className={`nr-topbar${internal ? " nr-topbar--internal" : ""} tw:@container/request-steps`}>
+        <RequestStepper stepIndex={stepIndex} stepInvalid={stepInvalid} />
         {exit && (
           <button className="nr-topbar-continue nr-topbar-home primary-action" type="button" onClick={exit.onClick}>{exit.label}</button>
         )}

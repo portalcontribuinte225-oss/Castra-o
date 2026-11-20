@@ -50,7 +50,8 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import "./styles.css";
-import petHeroImage from "./assets/caogato.avif";
+import { HeroCard } from "./features/public-home/hero-card";
+import { PublicMetrics } from "./features/public-home/public-metrics";
 import type { AnyRecord } from "./types";
 import {
   CONFIG_KEYS,
@@ -1871,8 +1872,8 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
       {activePublicService ? (
         <section className="public-service-workspace">
           <aside className="public-service-rail">
-            <PetWelcomeArt
-              className="public-hero--compact"
+            <HeroCard
+              variant={requestFormOpen ? "request" : "service"}
               onGoToAdoption={scrollToAdoption}
               onPublicRequest={() => openPublicService("procedure_form")}
             />
@@ -1956,36 +1957,14 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
         </section>
       ) : (
         <>
-          <PetWelcomeArt
+          <HeroCard
             onGoToAdoption={scrollToAdoption}
             onPublicRequest={() => openPublicService("procedure_form")}
           />
 
           {nextMutirao && <MutiraoBanner scheduleDay={nextMutirao} onJoin={joinMutirao} />}
 
-          <div className="public-stats-row">
-            <div className="public-stat-card">
-              <HeartHandshake size={20} />
-              <div>
-                <strong>0</strong>
-                <span>adotados</span>
-              </div>
-            </div>
-            <div className="public-stat-card">
-              <ClipboardCheck size={20} />
-              <div>
-                <strong>0</strong>
-                <span>castrações</span>
-              </div>
-            </div>
-            <div className="public-stat-card">
-              <Users size={20} />
-              <div>
-                <strong>0</strong>
-                <span>ONGs parceiras</span>
-              </div>
-            </div>
-          </div>
+          <PublicMetrics />
 
           <section className="public-adoption-section" ref={adoptionSectionRef}>
             <AdoptionCarousel adoptionAnimals={adoptionAnimals} sharedAdoption={sharedAdoption} onInterestSent={onInterestSent} />
@@ -2155,25 +2134,6 @@ function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
   );
 }
 
-function PetWelcomeArt({ className = "", onGoToAdoption, onPublicRequest }: AnyRecord) {
-  return (
-    <section className={`public-hero ${className}`.trim()}>
-      <div className="hero-art" aria-hidden="true" style={{ backgroundImage: `url(${petHeroImage})` }} />
-      <div className="hero-content">
-        <h1 className="hero-title">Cuidado e proteção para quem não tem voz</h1>
-        <p className="hero-subtitle">Castração gratuita, adoção responsável e bem-estar animal - digital e acessível.</p>
-        <div className="hero-actions">
-          <button type="button" className="hero-cta primary" onClick={onGoToAdoption}>
-            Quero adotar
-          </button>
-          <button type="button" className="hero-cta outline" onClick={onPublicRequest}>
-            Agendar castração
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
 function MutiraoBanner({ scheduleDay, onJoin }: AnyRecord) {
   if (!scheduleDay) return null;
   const time = scheduleDay.offeredSlot?.time || scheduleDay.startTime || "";

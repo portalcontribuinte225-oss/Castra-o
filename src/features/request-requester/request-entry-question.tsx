@@ -1,4 +1,4 @@
-import { ChoiceQuestion } from "../../components/ui";
+import { ChoiceQuestion } from "../../components/choice-question";
 
 export const RequestEntry = Object.freeze({ FIRST: "first", REGISTERED: "registered" });
 

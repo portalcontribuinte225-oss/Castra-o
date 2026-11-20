@@ -1,8 +1,9 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
 import { Plus, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import type { AnyRecord } from "../types";
 import { statusLabels } from "../domain";
+import { Card } from "./card";
 
 export function EmptyState({ title, text, action, onAction }: AnyRecord) {
   return (
@@ -69,16 +70,27 @@ export function ConfigActiveToggle({ checked, onChange, onText = "Ativo", offTex
   );
 }
 
-export function Metric({ title, value, icon: Icon, trend }: AnyRecord) {
+interface MetricProps {
+  title: string;
+  value: ReactNode;
+  icon?: LucideIcon;
+  trend?: ReactNode;
+  compact?: boolean;
+}
+
+export function Metric({ title, value, icon: Icon, trend, compact = false }: MetricProps) {
+  const MetricSurface = compact ? Card : "div";
   return (
-    <div className="metric-card">
-      <div className="metric-icon">{Icon && <Icon size={22} />}</div>
-      <div>
-        <span>{title}</span>
-        <strong>{value}</strong>
+    <MetricSurface className={compact ? "tw:flex tw:items-center tw:gap-3 tw:px-5 tw:py-4 tw:shadow-[0_4px_16px_rgba(15,23,42,0.05)]" : "metric-card"}>
+      <div className={compact ? "tw:shrink-0 tw:text-ui-accent" : "metric-icon"}>
+        {Icon && <Icon size={compact ? 20 : 22} aria-hidden="true" />}
+      </div>
+      <div className={compact ? "tw:flex tw:flex-col" : undefined}>
+        <span className={compact ? "tw:text-[0.7rem] tw:text-ui-muted" : undefined}>{title}</span>
+        <strong className={compact ? "tw:order-first tw:text-[1.05rem] tw:font-bold tw:text-ui-ink" : undefined}>{value}</strong>
         {trend && <small>{trend}</small>}
       </div>
-    </div>
+    </MetricSurface>
   );
 }
 
@@ -161,53 +173,6 @@ export function CompactChoiceField({ label, value, options, onChange, invalid = 
           );
         })}
       </div>
-    </div>
-  );
-}
-
-export interface ChoiceOption {
-  value: string;
-  label: string;
-  description: string;
-  disabled?: boolean;
-}
-
-interface ChoiceQuestionProps {
-  question: string;
-  options: ChoiceOption[];
-  // "" while the question has no answer: nothing is chosen for the person.
-  value: string;
-  onChange: (value: string) => void;
-  invalid?: boolean;
-  // What the choice depends on, under the cards (channels still loading, a contact missing).
-  children?: ReactNode;
-}
-
-// A question answered by choosing one of a few large cards. Once answered it shrinks to one line, and "Alterar" brings the cards back.
-export function ChoiceQuestion({ question, options, value, onChange, invalid = false, children }: ChoiceQuestionProps) {
-  const [changing, setChanging] = useState(false);
-  const answer = options.find((option) => option.value === value);
-  if (answer && !changing) {
-    return (
-      <div className="choice-answer">
-        <span>{question} <strong>{answer.label}</strong></span>
-        <button className="inline-link-button" type="button" onClick={() => setChanging(true)}>Alterar</button>
-      </div>
-    );
-  }
-  return (
-    <div className={`choice-question${invalid ? " is-invalid" : ""}`} role="group" aria-label={question}>
-      <p className="choice-question-title">{question}</p>
-      <div className="choice-card-grid">
-        {options.map((option) => (
-          <button key={option.value} type="button" className="choice-card" aria-pressed={option.value === value} disabled={option.disabled}
-            onClick={() => { setChanging(false); onChange(option.value); }}>
-            <strong>{option.label}</strong>
-            <span>{option.description}</span>
-          </button>
-        ))}
-      </div>
-      {children}
     </div>
   );
 }

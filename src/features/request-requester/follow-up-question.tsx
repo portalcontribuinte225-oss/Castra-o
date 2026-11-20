@@ -1,4 +1,4 @@
-import { ChoiceQuestion } from "../../components/ui";
+import { ChoiceQuestion } from "../../components/choice-question";
 import type { FollowUpValue, TutorContacts } from "../request-follow-up/follow-up";
 
 const FollowUpAnswer = Object.freeze({ YES: "yes", NO: "no" });

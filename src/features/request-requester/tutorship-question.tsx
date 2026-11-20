@@ -1,5 +1,5 @@
 import { AnimalTutorship } from "../../../shared/request-tutorship-contract.js";
-import { ChoiceQuestion } from "../../components/ui";
+import { ChoiceQuestion } from "../../components/choice-question";
 
 const options = [
   { value: AnimalTutorship.WITH_TUTOR, label: "Sim, tem tutor", description: "Eu ou outra pessoa cuida dele e se responsabiliza por ele." },
