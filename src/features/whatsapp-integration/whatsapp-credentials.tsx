@@ -34,12 +34,6 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
   return (
     <IntegrationCard title="Credenciais" actions={<ConfigActiveToggle checked={Boolean(settings.active)} onChange={toggleActive} disabled={locked} />}>
       <div className={integrationFieldsStyle}>
-        <label className="field">
-          <span>Provedor</span>
-          <select value={settings.provider || "cloud_api"} onChange={(event) => patch({ provider: event.target.value })} disabled={locked}>
-            <option value="cloud_api">WhatsApp Cloud API</option>
-          </select>
-        </label>
         <ConfigField
           label="ID da conta do WhatsApp Business (WABA)"
           value={settings.wabaId || ""}
@@ -48,15 +42,15 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
           disabled={locked}
           onChange={(value) => patch({ wabaId: value })}
         />
+        <ConfigField
+          label="ID do número remetente"
+          value={settings.phoneNumberId || ""}
+          placeholder="Phone Number ID da Meta"
+          autoComplete="off"
+          disabled={locked}
+          onChange={(value) => patch({ phoneNumberId: value })}
+        />
       </div>
-      <ConfigField
-        label="ID do número remetente"
-        value={settings.phoneNumberId || ""}
-        placeholder="Phone Number ID da Meta"
-        autoComplete="off"
-        disabled={locked}
-        onChange={(value) => patch({ phoneNumberId: value })}
-      />
       <SavedSecretField
         label="Token de acesso"
         placeholder="Cole o token da Cloud API"

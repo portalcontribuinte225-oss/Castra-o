@@ -95,7 +95,6 @@ export const initialAiSettings: AnyRecord = {
 
 export const initialWhatsappSettings: AnyRecord = {
   active: false,
-  provider: "cloud_api",
   phoneNumberId: "",
   wabaId: "",
   accessToken: "",

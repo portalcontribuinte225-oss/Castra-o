@@ -310,10 +310,10 @@ describe("integration tab", () => {
     expect([...order].sort((a, b) => a - b)).toEqual(order);
   });
 
-  it("keeps the credentials fields, drops the retired template and language fields, and shows the quota summary", () => {
+  it("shows the editable credentials and quota summary without the fixed provider field", () => {
     const html = tab();
     for (const label of ["ID da conta do WhatsApp Business (WABA)", "ID do número remetente", "Token de acesso", "Remover token", "Enviar teste", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).toContain(label);
-    for (const retired of ["Template de confirmação", "Idioma", "Variáveis do template", "var-chip", "Vincular", "Mensagens de acesso e segurança por WhatsApp"]) expect(html).not.toContain(retired);
+    for (const retired of ["WhatsApp Cloud API", "Template de confirmação", "Idioma", "Variáveis do template", "var-chip", "Vincular", "Mensagens de acesso e segurança por WhatsApp"]) expect(html).not.toContain(retired);
     expect(html).toContain("12/500");
     expect(html).toContain("Contrato vigente");
     expect(html).toContain("EAAFAKE0");
