@@ -34,7 +34,7 @@ export function ShareAdoptionButton({ animal, look = ShareButtonLook.FULL }: { a
   const label = (outcome && FEEDBACK[outcome]) || "Compartilhar";
   const icon = outcome === ShareOutcome.COPIED ? <Check size={15} aria-hidden="true" /> : <Share2 size={15} aria-hidden="true" />;
   if (look === ShareButtonLook.ICON) {
-    return <button className="ghost-button" type="button" onClick={share} title={label} aria-label={label}>{icon}</button>;
+    return <Button variant="outline" className="tw:w-10 tw:shrink-0 tw:px-0" onClick={share} title={label} aria-label={label}>{icon}</Button>;
   }
   return (
     <Button variant="outline" className="tw:w-full" onClick={share} aria-live="polite">

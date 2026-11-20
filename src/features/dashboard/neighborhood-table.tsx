@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
 import { NOT_INFORMED_LABEL } from "./dashboard-data";
 import { EMPTY_VALUE, formatDate, formatNumber, formatPercent } from "./dashboard-format";
 import { NeighborhoodColumn, sortNeighborhoodRows, type NeighborhoodRow } from "./neighborhood-metrics";
@@ -42,7 +44,7 @@ export function NeighborhoodTable({ rows }: { rows: NeighborhoodRow[] }) {
     descending: current.column === column ? !current.descending : column !== NeighborhoodColumn.NAME,
   }));
   return (
-    <div className="dash-table-scroll">
+    <Card role="region" aria-label="Tabela de bairros" tabIndex={0} className="tw:max-h-[520px] tw:min-w-0 tw:overflow-auto tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent">
       <table className="reports-table dash-table">
         <caption className="dash-sr-only">Bairros com solicitações, fila, realizações e último atendimento</caption>
         <thead>
@@ -52,10 +54,10 @@ export function NeighborhoodTable({ rows }: { rows: NeighborhoodRow[] }) {
               const Arrow = sort.descending ? ArrowDown : ArrowUp;
               return (
                 <th key={column.id} scope="col" className={column.numeric ? "is-numeric" : ""} aria-sort={active ? (sort.descending ? "descending" : "ascending") : "none"}>
-                  <button className="dash-sort" type="button" title={column.title} onClick={() => sortBy(column.id)}>
+                  <Button variant="custom" className="tw:border-card-border tw:bg-card-surface tw:text-xs tw:font-semibold tw:text-ui-text tw:enabled:hover:bg-card-page" title={column.title} onClick={() => sortBy(column.id)}>
                     {column.label}
                     {active && <Arrow size={12} aria-hidden="true" />}
-                  </button>
+                  </Button>
                 </th>
               );
             })}
@@ -80,6 +82,6 @@ export function NeighborhoodTable({ rows }: { rows: NeighborhoodRow[] }) {
           ))}
         </tbody>
       </table>
-    </div>
+    </Card>
   );
 }

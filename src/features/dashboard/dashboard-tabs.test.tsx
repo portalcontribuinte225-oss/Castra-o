@@ -77,10 +77,11 @@ describe("dashboard tabs", () => {
     expect(html).toContain("Entradas e realizadas");
     expect(html).toMatch(/aria-pressed="true"[^>]*>90 dias/);
     expect(html.match(/type="date"/g)).toHaveLength(2);
+    expect(html.match(/data-ui-input=""/g)).toHaveLength(2);
   });
 
   it("shows six cards on every tab", () => {
-    TABS.forEach(({ Tab }) => expect(renderToStaticMarkup(<Tab data={filled} />).match(/class="metric-card"/g)).toHaveLength(6));
+    TABS.forEach(({ Tab }) => expect(renderToStaticMarkup(<Tab data={filled} />).match(/data-dashboard-metric=""/g)).toHaveLength(6));
   });
 
   it("marks the registered neighborhoods without any visit and points to where they are registered when there are none", () => {

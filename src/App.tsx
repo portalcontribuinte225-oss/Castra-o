@@ -110,12 +110,12 @@ import {
   getRequestTypeName,
 } from "./analytics";
 import {
-  CompactChoiceField,
   ConfigActiveToggle,
   ConfigField,
   ConfigRow,
   ConfigSectionHeader,
   ConfigStatusFilter,
+  configFieldStyle,
   configTextareaStyle,
   EmptyState,
   Field,
@@ -130,6 +130,7 @@ import { CloseButton } from "./components/close-button";
 import { ConfigDialogBackdrop } from "./components/config-dialog";
 import { Input } from "./components/input";
 import { useModalFocus } from "./components/modal-focus";
+import { WorkspaceMobileNavigation } from "./components/workspace-mobile-navigation";
 import {
   dataUrlToUint8Array,
   escapeHtml,
@@ -267,6 +268,7 @@ const menu = [
   { id: "relatorios", label: "Relatórios", icon: Activity },
   { id: "config", label: "Configurações", icon: Settings },
 ];
+const mobileWorkspaceQuery = "(max-width: 1120px)";
 
 const environmentConfigTabs: ConfigTabItem[] = [
   { id: "agenda", label: "Agenda" },
@@ -408,6 +410,10 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [accessRequests, setAccessRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [usesMobileMenu, setUsesMobileMenu] = useState(() => window.matchMedia(mobileWorkspaceQuery).matches);
+  const sidebar = useRef<HTMLElement>(null);
+  const sidebarTrigger = useRef<HTMLButtonElement>(null);
+  const accountButton = useRef<HTMLButtonElement>(null);
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(localStorage.getItem("castragestao:municipalityId") || "");
   const [accessLink, setAccessLink] = useState(() => readAccessLink(window.location.search));
   const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem(GLOBAL_MUNICIPALITY_FILTER_KEY) || "");
@@ -421,6 +427,23 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("sidebar-collapsed") === "true");
   const [sidebarResetOpen, setSidebarResetOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const mobileDialogOpen = Boolean(currentUser && usesMobileMenu && mobileOpen);
+
+  useEffect(() => {
+    const query = window.matchMedia(mobileWorkspaceQuery);
+    function updateLayout() {
+      setUsesMobileMenu(query.matches);
+      if (!query.matches) setMobileOpen(false);
+    }
+    query.addEventListener("change", updateLayout);
+    updateLayout();
+    return () => query.removeEventListener("change", updateLayout);
+  }, []);
+
+  useEffect(() => {
+    if (sidebar.current) sidebar.current.inert = usesMobileMenu && !mobileOpen;
+  }, [usesMobileMenu, mobileOpen, currentUser]);
+  useModalFocus(sidebar, mobileDialogOpen, sidebarTrigger.current);
   // A shared adoption link opens the public page on the animal; whoever is signed in sees the app as usual.
   const sharedAdoption = useSharedAdoption(!currentUser, handleMunicipalitySelect);
 
@@ -745,6 +768,18 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
 
   function closeSidebarReset() { setSidebarResetOpen(false); }
 
+  function openMobileMenu(event: React.MouseEvent<HTMLButtonElement>) {
+    sidebarTrigger.current = event.currentTarget;
+    setMobileOpen(true);
+  }
+
+  function navigateWorkspace(id: string) {
+    setConfigMenuOpen(false);
+    setConfigArea("");
+    setActive(id);
+    setMobileOpen(false);
+  }
+
   function handleGlobalMunicipalityFilter(id) {
     setGlobalMunicipalityFilterId(id);
     if (id) {
@@ -875,10 +910,19 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     title: "Sistema de castra\u00e7\u00e3o",
     subtitle: "Gest\u00e3o operacional de atendimento animal.",
   };
+  const sidebarIsCollapsed = sidebarCollapsed && !usesMobileMenu;
 
   return (
-    <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}`}>
-      <aside className={`sidebar${mobileOpen ? " open" : ""}${sidebarCollapsed ? " collapsed" : ""}`}>
+    <div className={`app-shell${sidebarIsCollapsed ? " sidebar-collapsed" : ""}`}>
+      <aside
+        ref={sidebar}
+        id="workspace-sidebar"
+        className={`sidebar${mobileDialogOpen ? " open" : ""}${sidebarIsCollapsed ? " collapsed" : ""}`}
+        data-managed-dialog={mobileDialogOpen ? "" : undefined}
+        role={mobileDialogOpen ? "dialog" : undefined}
+        aria-modal={mobileDialogOpen || undefined}
+        aria-label={mobileDialogOpen ? "Menu principal" : undefined}
+      >
         <div className="brand">
           {(() => {
             const sideMun = !isGlobalRole(currentUser.role) ? municipalities.find((m) => m.id === currentUser.municipalityId) : null;
@@ -900,14 +944,18 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
               </span>
             )}
           </div>
-          <button
-            className="sidebar-toggle-btn"
-            type="button"
-            onClick={() => setSidebarCollapsed(v => { const next = !v; localStorage.setItem("sidebar-collapsed", String(next)); return next; })}
-            aria-label={sidebarCollapsed ? "Expandir menu" : "Recolher menu"}
-          >
-            <ChevronLeft size={15} className={`sidebar-toggle-icon${sidebarCollapsed ? " rotated" : ""}`} />
-          </button>
+          {usesMobileMenu ? (
+            <CloseButton aria-label="Fechar menu" onClick={() => setMobileOpen(false)} />
+          ) : (
+            <Button
+              variant="outline"
+              className="sidebar-toggle-btn tw:w-10 tw:shrink-0 tw:px-0"
+              onClick={() => setSidebarCollapsed(v => { const next = !v; localStorage.setItem("sidebar-collapsed", String(next)); return next; })}
+              aria-label={sidebarIsCollapsed ? "Expandir menu" : "Recolher menu"}
+            >
+              <ChevronLeft size={15} aria-hidden="true" className={`sidebar-toggle-icon${sidebarIsCollapsed ? " rotated" : ""}`} />
+            </Button>
+          )}
         </div>
 
         <nav aria-label="Menu principal">
@@ -915,9 +963,13 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             const Icon = item.icon;
             return (
               <React.Fragment key={item.id}>
-                <button
-                  className={`${active === item.id ? "active" : ""} ${item.id === "config" ? "sidebar-parent" : ""}`}
-                  title={sidebarCollapsed ? item.label : undefined}
+                <Button
+                  variant="custom"
+                  className="tw:w-full tw:justify-start tw:gap-2 tw:border-transparent tw:bg-transparent tw:text-left tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:data-[selected=true]:border-ui-accent tw:data-[selected=true]:bg-ui-accent-soft tw:data-[selected=true]:font-semibold tw:data-[selected=true]:text-ui-accent-strong"
+                  data-selected={active === item.id}
+                  title={sidebarIsCollapsed ? item.label : undefined}
+                  aria-label={sidebarIsCollapsed ? item.label : undefined}
+                  aria-current={active === item.id ? "page" : undefined}
                   aria-expanded={item.id === "config" ? configMenuOpen : undefined}
                   aria-controls={item.id === "config" && configMenuOpen ? "settings-navigation" : undefined}
                   onClick={() => {
@@ -925,18 +977,15 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                       setConfigMenuOpen((open) => !open);
                       return;
                     }
-                    setConfigMenuOpen(false);
-                    setConfigArea("");
-                    setActive(item.id);
-                    setMobileOpen(false);
+                    navigateWorkspace(item.id);
                   }}
                 >
-                  <Icon size={18} />
-                  <span>{item.label}</span>
+                  <Icon size={18} aria-hidden="true" className="tw:shrink-0" />
+                  <span className="tw:min-w-0 tw:flex-1 tw:truncate">{item.label}</span>
                   {item.id === "config" && (
                     <ChevronRight className={configMenuOpen ? "sidebar-chevron open" : "sidebar-chevron"} size={16} />
                   )}
-                </button>
+                </Button>
                 {item.id === "config" && configMenuOpen && (
                   <div className="sidebar-subnav" id="settings-navigation" role="group" aria-label="Subabas de configurações">
                     {visibleConfigSidebarItems.map((subitem) => {
@@ -1000,39 +1049,41 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
         <div className="sidebar-footer">
           {userMenuOpen && (
             <>
-              <button className="sidebar-action-item" type="button" onClick={() => { setSidebarResetOpen(true); setUserMenuOpen(false); }}>
-                <KeyRound size={15} />
+              <Button variant="outline" className="sidebar-action-item tw:w-full tw:justify-start" aria-label="Alterar senha" onClick={() => { setSidebarResetOpen(true); setUserMenuOpen(false); }}>
+                <KeyRound size={15} aria-hidden="true" />
                 <span>Alterar senha</span>
-              </button>
-              <button className="sidebar-action-item sidebar-action-logout" type="button" onClick={() => setCurrentUser(null)}>
-                <LogOut size={15} />
+              </Button>
+              <Button variant="outline" className="sidebar-action-item tw:w-full tw:justify-start tw:enabled:hover:text-ui-danger" aria-label="Sair" onClick={() => setCurrentUser(null)}>
+                <LogOut size={15} aria-hidden="true" />
                 <span>Sair</span>
-              </button>
+              </Button>
             </>
           )}
-          <button
-            className={`sidebar-user-card${userMenuOpen ? " open" : ""}`}
-            type="button"
+          <Button
+            ref={accountButton}
+            variant="outline"
+            className="sidebar-user-card tw:w-full tw:justify-start tw:gap-2 tw:p-2 tw:text-left tw:aria-expanded:border-ui-accent tw:aria-expanded:bg-ui-accent-soft"
             onClick={() => setUserMenuOpen((v) => !v)}
+            aria-label={sidebarIsCollapsed ? "Menu da conta" : undefined}
             aria-expanded={userMenuOpen}
           >
-            <div className="sidebar-user-avatar">
-              <ShieldCheck size={15} />
-            </div>
-            <div className="sidebar-user-info">
+            <span className="sidebar-user-avatar">
+              <ShieldCheck size={15} aria-hidden="true" />
+            </span>
+            <span className="sidebar-user-info">
               <strong>{currentUser.name || "Usuário"}</strong>
               <span>{userRoleLabel(currentUser.role)}</span>
-            </div>
+            </span>
             <ChevronDown size={14} className={userMenuOpen ? "sidebar-chevron open" : "sidebar-chevron"} />
-          </button>
+          </Button>
         </div>
       </aside>
 
       <main>
         <header className="topbar">
-          <button className="icon-button mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Abrir menu">
+          <Button variant="outline" className="mobile-menu tw:w-10 tw:px-0" onClick={openMobileMenu} aria-label="Abrir menu" aria-controls="workspace-sidebar" aria-expanded={mobileDialogOpen}>
             <Menu size={20} />
-          </button>
+          </Button>
           <div className="main-reader">
             <div className="topbar-page-heading">
               <h1>{activePageHeading.title}</h1>
@@ -1053,18 +1104,20 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                 </select>
               </label>
             )}
-            <label className="topbar-search" aria-label="Buscar no sistema">
-              <Search size={20} />
-              <input
+            <label className="tw:relative tw:min-w-0 tw:w-[min(32vw,360px)] tw:max-[1120px]:flex-1 tw:max-[760px]:basis-full">
+              <Search size={18} aria-hidden="true" className="tw:pointer-events-none tw:absolute tw:left-3 tw:top-1/2 tw:-translate-y-1/2 tw:text-ui-muted" />
+              <Input
+                className="tw:pl-10"
                 type="search"
+                aria-label="Buscar no sistema"
                 value={globalSearch}
                 onChange={(event) => setGlobalSearch(event.target.value)}
                 placeholder="Protocolo, CPF, tutor, microchip..."
               />
             </label>
-            <button className="icon-button" aria-label="Notificações">
+            <Button variant="outline" className="tw:w-10 tw:px-0" aria-label="Notificações">
               <Bell size={20} />
-            </button>
+            </Button>
           </div>
         </header>
 
@@ -1122,39 +1175,13 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
         </Suspense>
       </main>
 
-      {mobileOpen && (
-        <div className="sidebar-overlay" onClick={() => setMobileOpen(false)} />
+      {mobileDialogOpen && (
+        <div className="sidebar-overlay" aria-hidden="true" onClick={() => setMobileOpen(false)} />
       )}
 
-      <nav className="mobile-bottom-nav" aria-label="Navegação principal">
-        {[menu[0], menu[1], menu[3], menu[5]].map((item) => {
-          const Icon = item.icon;
-          const shortLabels: Record<string, string> = {
-            dashboard: "Dashboard",
-            admin: "Solicitações",
-            adocao: "Adoção",
-            config: "Config",
-          };
-          return (
-            <button
-              key={item.id}
-              className={active === item.id ? "active" : ""}
-              onClick={() => { setActive(item.id); setMobileOpen(false); }}
-              aria-label={item.label}
-              type="button"
-            >
-              <Icon size={22} />
-              <span>{shortLabels[item.id] ?? item.label}</span>
-            </button>
-          );
-        })}
-        <button type="button" onClick={() => setMobileOpen(true)} aria-label="Mais opções">
-          <Menu size={22} />
-          <span>Menu</span>
-        </button>
-      </nav>
+      <WorkspaceMobileNavigation items={visibleMenu} active={active} menuOpen={mobileDialogOpen} onNavigate={navigateWorkspace} onOpenMenu={openMobileMenu} />
 
-      {sidebarResetOpen && <div className="modal-backdrop"><div className="workflow-modal reset-form" role="dialog" aria-modal="true"><PasswordChangeForm onChanged={(user) => { setCurrentUser(user); closeSidebarReset(); }} onCancel={closeSidebarReset} /></div></div>}
+      {sidebarResetOpen && <PasswordChangeForm modal returnFocus={accountButton.current} onChanged={(user) => { setCurrentUser(user); closeSidebarReset(); }} onCancel={closeSidebarReset} />}
     </div>
   );
 }
@@ -3839,6 +3866,33 @@ function PwaInstallPrompt() {
 }
 
 
+type AdoptionChoice = {
+  value: string;
+  label: string;
+  icon?: typeof PawPrint;
+};
+
+const adoptionSelectedButtonStyle = "tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong";
+const adoptionPrimaryButtonStyle = "tw:border-[color:var(--action-primary-border)] tw:bg-[var(--action-primary)] tw:font-semibold tw:text-[color:var(--action-primary-ink)] tw:enabled:hover:bg-[var(--action-primary-hover)]";
+const adoptionIconButtonStyle = "tw:w-10 tw:shrink-0 tw:px-0";
+const adoptionBlueButtonStyle = "tw:border-[color:var(--teal)] tw:bg-[var(--teal)] tw:text-white tw:enabled:hover:brightness-95";
+
+function AdoptionChoiceGroup({ label, choices, value, onChange }: { label: string; choices: AdoptionChoice[]; value: string; onChange: (value: string) => void }) {
+  return (
+    <div role="group" aria-label={label} className="tw:flex tw:flex-wrap tw:gap-1.5">
+      {choices.map((choice) => {
+        const Icon = choice.icon;
+        return (
+          <Button key={choice.value} variant="custom" aria-pressed={value === choice.value} className={adoptionSelectedButtonStyle} onClick={() => onChange(choice.value)}>
+            {Icon && <Icon size={15} aria-hidden={true} />}
+            {choice.label}
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
 function AdoptionView({
   adoptionAnimals,
   setAdoptionAnimals,
@@ -3878,6 +3932,20 @@ function AdoptionView({
   const [adoptionModalCepStatus, setAdoptionModalCepStatus] = useState("");
   const [isSavingAdoption, setIsSavingAdoption] = useState(false);
   const canManageAdoptions = canManagePublicAnimalFlows(currentUser.role);
+  const adoptionToolbar = useRef<HTMLDivElement>(null);
+  const drawerLayer = useRef<HTMLDivElement>(null);
+  const editorLayer = useRef<HTMLDivElement>(null);
+  const confirmLayer = useRef<HTMLDivElement>(null);
+  const drawerTrigger = useRef<HTMLButtonElement | null>(null);
+  const editorTrigger = useRef<HTMLButtonElement | null>(null);
+  const confirmTrigger = useRef<HTMLButtonElement | null>(null);
+  const photoInput = useRef<HTMLInputElement>(null);
+  const editorTitle = useId();
+  const confirmTitle = useId();
+  const confirmPanel = useId();
+  useModalFocus(drawerLayer, Boolean(selectedAdoptionAnimal), drawerTrigger.current);
+  useModalFocus(editorLayer, canManageAdoptions && isFormOpen, editorTrigger.current);
+  useModalFocus(confirmLayer, Boolean(adoptionConfirmModal), confirmTrigger.current);
   const availableAnimals = adoptionAnimals.filter((animal) => !animal.status || animal.status === ADOPTION_STATUS_AVAILABLE);
   const inProgressAnimals = adoptionAnimals.filter((animal) => animal.status === ADOPTION_STATUS_IN_PROGRESS);
   const adoptedAnimals = adoptionAnimals.filter((animal) => animal.status === ADOPTION_STATUS_ADOPTED);
@@ -3895,7 +3963,7 @@ function AdoptionView({
     Number(Boolean(adoptionFilters.species)) +
     Number(Boolean(adoptionFilters.sex));
   const statusQuickFilters = [
-    { value: ADOPTION_STATUS_AVAILABLE, label: `Disponiveis (${availableAnimals.length})`, icon: HeartHandshake },
+    { value: ADOPTION_STATUS_AVAILABLE, label: `Disponíveis (${availableAnimals.length})`, icon: HeartHandshake },
     { value: ADOPTION_STATUS_IN_PROGRESS, label: `Triagem (${inProgressAnimals.length})`, icon: Clock },
     { value: ADOPTION_STATUS_ADOPTED, label: `Adotados (${adoptedAnimals.length})`, icon: CheckCircle2 },
   ];
@@ -3903,7 +3971,7 @@ function AdoptionView({
     { value: "", label: "Todas", icon: PawPrint },
     ...speciesFilterOptions.map((species) => ({
       value: species,
-      label: normalizeText(species).includes("fel") ? "Gatos" : normalizeText(species).includes("can") ? "Caes" : species,
+      label: normalizeText(species).includes("fel") ? "Gatos" : normalizeText(species).includes("can") ? "Cães" : species,
       icon: normalizeText(species).includes("fel") ? Cat : normalizeText(species).includes("can") ? Dog : PawPrint,
     })),
   ];
@@ -3930,7 +3998,27 @@ function AdoptionView({
     return photo.length;
   }
 
-  function openAnimalForm() {
+  function restoreAvailableAdoptionFocus(trigger: HTMLButtonElement | null) {
+    requestAnimationFrame(() => {
+      if (trigger?.isConnected) return;
+      const fallback = drawerLayer.current?.querySelector<HTMLButtonElement>("[data-ui-close-button]")
+        ?? adoptionToolbar.current?.querySelector<HTMLButtonElement>("[aria-pressed=true]");
+      fallback?.focus();
+    });
+  }
+
+  function showAdoptionDrawer(animal: AnyRecord, trigger: HTMLButtonElement) {
+    drawerTrigger.current = trigger;
+    setSelectedAdoptionAnimal(animal);
+  }
+
+  function closeAdoptionDrawer() {
+    restoreAvailableAdoptionFocus(drawerTrigger.current);
+    setSelectedAdoptionAnimal(null);
+  }
+
+  function openAnimalForm(trigger: HTMLButtonElement) {
+    editorTrigger.current = trigger;
     setEditingAnimalId(null);
     setAnimalForm(emptyAnimalForm);
     setFormError("");
@@ -3939,13 +4027,15 @@ function AdoptionView({
 
   function closeAnimalForm(force = false) {
     if (isSavingAnimal && !force) return;
+    restoreAvailableAdoptionFocus(editorTrigger.current);
     setEditingAnimalId(null);
     setAnimalForm(emptyAnimalForm);
     setFormError("");
     setIsFormOpen(false);
   }
 
-  function editAnimal(animal) {
+  function editAnimal(animal: AnyRecord, trigger: HTMLButtonElement) {
+    editorTrigger.current = trigger;
     setEditingAnimalId(getAnimalKey(animal));
     setAnimalForm({
       name: animal.name || animal.animal_name || "",
@@ -4089,13 +4179,13 @@ function AdoptionView({
     }
   }
 
-  async function openInterestsModal(animal) {
+  async function openInterestsModal(animal: AnyRecord, trigger: HTMLButtonElement) {
     try {
       const list = await api.getInterests(animal.id);
-      setSelectedAdoptionAnimal({ ...animal, interests: list });
+      showAdoptionDrawer({ ...animal, interests: list }, trigger);
     } catch (err) {
       console.error("Erro ao carregar interessados:", err);
-      setSelectedAdoptionAnimal(animal);
+      showAdoptionDrawer(animal, trigger);
     }
   }
 
@@ -4110,7 +4200,8 @@ function AdoptionView({
     }
   }
 
-  function openAdoptionConfirmModal(animal) {
+  function openAdoptionConfirmModal(animal: AnyRecord, trigger: HTMLButtonElement) {
+    confirmTrigger.current = trigger;
     setAdoptionConfirmModal(animal);
     setAdoptionModalForm({ ...emptyAdoptionModalForm, adopted_at: new Date().toISOString().slice(0, 10) });
     setAdoptionModalStep(0);
@@ -4119,6 +4210,7 @@ function AdoptionView({
 
   function closeAdoptionConfirmModal() {
     if (isSavingAdoption) return;
+    restoreAvailableAdoptionFocus(confirmTrigger.current);
     setAdoptionConfirmModal(null);
   }
 
@@ -4179,6 +4271,7 @@ function AdoptionView({
       const normalized = normalizeAdoptionAnimal(updated);
       setAdoptionAnimals((current) => current.map((item) => item.id === adoptionConfirmModal.id ? { ...item, ...normalized } : item));
       setSelectedAdoptionAnimal((current) => current && current.id === adoptionConfirmModal.id ? { ...current, ...normalized } : current);
+      restoreAvailableAdoptionFocus(confirmTrigger.current);
       setAdoptionConfirmModal(null);
     } catch (err) {
       console.error("Erro ao confirmar adoção:", err);
@@ -4190,157 +4283,37 @@ function AdoptionView({
   return (
     <section className="content-grid adoption-workspace">
       <div className="adoption-shell">
-        <div className="page-toolbar adoption-command-controls">
+        <div ref={adoptionToolbar} className="page-toolbar adoption-command-controls">
           {canManageAdoptions && (
-            <nav className="adoption-nav adoption-nav-modern" aria-label="Filtros de adocao">
-              <div className="adoption-filter-group" aria-label="Filtrar por status">
-                {statusQuickFilters.map((filter) => {
-                  const Icon = filter.icon;
-                  return (
-                    <button key={filter.value} className={adoptionStatusFilter === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionStatusFilter(filter.value)}>
-                      <Icon size={15} />
-                      <span>{filter.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="adoption-filter-sep" />
-              <div className="adoption-filter-group" aria-label="Filtrar por especie">
-                {speciesQuickFilters.map((filter) => {
-                  const Icon = filter.icon;
-                  return (
-                    <button key={`species-${filter.value || "all"}`} className={adoptionFilters.species === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, species: filter.value }))}>
-                      <Icon size={15} />
-                      <span>{filter.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="adoption-filter-sep" />
-              <div className="adoption-filter-group" aria-label="Filtrar por sexo">
-                {sexQuickFilters.map((filter) => {
-                  const Icon = filter.icon;
-                  return (
-                    <button key={`sex-${filter.value || "all"}`} className={adoptionFilters.sex === filter.value ? "selected" : ""} type="button" onClick={() => setAdoptionFilters((current) => ({ ...current, sex: filter.value }))}>
-                      <Icon size={15} />
-                      <span>{filter.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
+            <nav className="tw:flex tw:min-w-0 tw:flex-1 tw:flex-wrap tw:items-center tw:gap-3" aria-label="Filtros de adoção">
+              <AdoptionChoiceGroup label="Filtrar por status" choices={statusQuickFilters} value={adoptionStatusFilter} onChange={setAdoptionStatusFilter} />
+              <AdoptionChoiceGroup label="Filtrar por espécie" choices={speciesQuickFilters} value={adoptionFilters.species} onChange={(species) => setAdoptionFilters((current) => ({ ...current, species }))} />
+              <AdoptionChoiceGroup label="Filtrar por sexo" choices={sexQuickFilters} value={adoptionFilters.sex} onChange={(sex) => setAdoptionFilters((current) => ({ ...current, sex }))} />
               {activeFilterCount > 0 && (
-                <button className="ghost-button adoption-clear-btn" type="button" onClick={() => { setAdoptionStatusFilter(ADOPTION_STATUS_AVAILABLE); setAdoptionFilters({ species: "", sex: "" }); }}>
+                <Button variant="outline" onClick={() => { setAdoptionStatusFilter(ADOPTION_STATUS_AVAILABLE); setAdoptionFilters({ species: "", sex: "" }); }}>
                   Limpar filtros
-                </button>
+                </Button>
               )}
             </nav>
           )}
 
-          <div className="adoption-toolbar-actions">
-            <div className="adoption-view-toggle" aria-label="Modo de visualizacao">
-              <button className={adoptionViewMode === "grid" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("grid")} title="Grade" aria-label="Grade">
-                <LayoutDashboard size={15} />
-              </button>
-              <button className={adoptionViewMode === "list" ? "selected" : ""} type="button" onClick={() => setAdoptionViewMode("list")} title="Lista" aria-label="Lista">
-                <ListChecks size={15} />
-              </button>
+          <div className="adoption-toolbar-actions tw:flex tw:flex-wrap tw:items-center tw:gap-2">
+            <div role="group" className="tw:flex tw:gap-1.5" aria-label="Modo de visualização">
+              <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionSelectedButtonStyle}`} aria-pressed={adoptionViewMode === "grid"} onClick={() => setAdoptionViewMode("grid")} title="Grade" aria-label="Grade">
+                <LayoutDashboard size={15} aria-hidden="true" />
+              </Button>
+              <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionSelectedButtonStyle}`} aria-pressed={adoptionViewMode === "list"} onClick={() => setAdoptionViewMode("list")} title="Lista" aria-label="Lista">
+                <ListChecks size={15} aria-hidden="true" />
+              </Button>
             </div>
             {canManageAdoptions && (
-              <div className="page-actions adoption-command-actions">
-                <button className="primary-action adoption-create-button" type="button" onClick={openAnimalForm}>
-                  <Plus size={16} />
-                  Cadastrar animal
-                </button>
-              </div>
+              <Button variant="custom" className={adoptionPrimaryButtonStyle} onClick={(event) => openAnimalForm(event.currentTarget)}>
+                <Plus size={16} aria-hidden="true" />
+                Cadastrar animal
+              </Button>
             )}
           </div>
         </div>
-
-        {canManageAdoptions && isFormOpen && (
-          <div
-            className="modal-backdrop"
-            onMouseDown={(event) => {
-              if (event.target === event.currentTarget) closeAnimalForm();
-            }}
-          >
-            <form className="adoption-form-modal" onSubmit={publishAnimal} role="dialog" aria-modal="true">
-              <ModalHeader title={editingAnimalId ? "Editar animal para adoção" : "Cadastrar animal para adoção"} onClose={closeAnimalForm} />
-              <div className="adoption-editor-grid">
-                <div className="adoption-photo-column">
-                  <label className="animal-photo-uploader">
-                    {animalForm.photos.length > 0 ? (
-                      <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Prévia principal do animal" />
-                    ) : (
-                      <span>
-                        <UploadCloud size={28} />
-                        Fotos do animal
-                      </span>
-                    )}
-                    <input type="file" accept="image/*" multiple onChange={handlePhotoChange} />
-                  </label>
-                  <small>Máximo: 5 imagens, 2 MB por imagem, 8 MB no total.</small>
-                  {animalForm.photos.length > 0 && (
-                    <div className="animal-photo-picker">
-                      {animalForm.photos.map((photo, index) => (
-                        <div className="animal-photo-option" key={`${photo}-${index}`}>
-                          <button
-                            className={animalForm.mainPhotoIndex === index ? "selected" : ""}
-                            type="button"
-                            onClick={() => updateAnimalForm("mainPhotoIndex", index)}
-                          >
-                            <img src={photo} alt={`Foto ${index + 1}`} />
-                            <span>{animalForm.mainPhotoIndex === index ? "Principal" : "Usar principal"}</span>
-                          </button>
-                          <button className="animal-photo-remove" type="button" onClick={() => removeAnimalPhoto(index)} aria-label="Excluir foto">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="adoption-editor-fields">
-                  <div className="animal-main-grid">
-                    <Field label="Nome" value={animalForm.name} onChange={(value) => updateAnimalForm("name", value)} />
-                    <Field label="Idade aproximada" value={animalForm.age} onChange={(value) => updateAnimalForm("age", value)} />
-                  </div>
-                  <div className="animal-choice-grid">
-                    <CompactChoiceField
-                      label="Espécie"
-                      value={animalForm.species}
-                      options={activeSpecies}
-                      onChange={(value) => updateAnimalForm("species", value)}
-                    />
-                    <CompactChoiceField
-                      label="Sexo"
-                      value={animalForm.sex}
-                      options={["Femea", "Macho"]}
-                      onChange={(value) => updateAnimalForm("sex", value)}
-                    />
-                  </div>
-                  <label className="field">
-                    <span>Descrição para a página pública</span>
-                    <textarea
-                      value={animalForm.tone}
-                      placeholder="Temperamento, história, cuidados e perfil do adotante indicado"
-                      onChange={(event) => updateAnimalForm("tone", event.target.value)}
-                    />
-                  </label>
-                </div>
-              </div>
-              {formError && <p className="form-error">{formError}</p>}
-              <div className="form-actions">
-                <button className="ghost-button" type="button" onClick={() => closeAnimalForm()}>
-                  Cancelar
-                </button>
-                <button className="primary-action" type="submit" disabled={isSavingAnimal}>
-                  {isSavingAnimal ? "Salvando..." : editingAnimalId ? "Salvar alterações" : "Publicar na galeria"}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
 
         <div className="adoption-board-layout">
           <div className="adoption-results-panel">
@@ -4357,50 +4330,49 @@ function AdoptionView({
                   const interestCount = getAdoptionInterestCount(animal);
                   const displayName = animal.name || animal.animal_name || "Animal";
                   return (
-                    <article className="adoption-card adoption-card-modern" key={animal.id || animal.name}>
-                      <button
-                        type="button"
-                        className={`animal-photo ${getAnimalGradient(animal)}`}
-                        onClick={() => setSelectedAdoptionAnimal(animal)}
+                    <Card as="article" className="adoption-card adoption-card-modern tw:relative" key={animal.id || animal.name}>
+                      <Card as="button"
+                        className={`animal-photo ${getAnimalGradient(animal)} tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent`}
+                        onClick={(event) => showAdoptionDrawer(animal, event.currentTarget)}
                         aria-label={`Abrir ficha de ${displayName}`}
                       >
-                        {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={44} />}
-                        <h3 className="adoption-card-name">{displayName}</h3>
-                      </button>
+                        {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt="" /> : <PawPrint size={44} aria-hidden="true" />}
+                        <span className="adoption-card-name">{displayName}</span>
+                      </Card>
 
                       {canManageAdoptions && (
                         <>
-                          <button className="adoption-card-delete-top" type="button" aria-label="Excluir" onClick={() => deleteAnimal(animal)}>
-                            <X size={14} />
-                          </button>
-                          <button
-                            className={interestCount > 0 ? "adoption-interest-indicator has-interest interest-button" : "adoption-interest-indicator interest-button"}
-                            type="button"
-                            onClick={() => openInterestsModal(animal)}
+                          <Button variant="danger" className={`${adoptionIconButtonStyle} tw:absolute tw:right-2 tw:top-2 tw:z-[3]`} aria-label={`Excluir ${displayName}`} onClick={() => deleteAnimal(animal)}>
+                            <X size={14} aria-hidden="true" />
+                          </Button>
+                          <Button
+                            variant="custom"
+                            className={`tw:absolute tw:left-2 tw:top-2 tw:z-[3] ${interestCount > 0 ? "tw:border-ui-accent tw:bg-ui-accent-soft tw:text-ui-accent-strong" : "tw:border-card-border tw:bg-card-surface tw:text-ui-muted"}`}
+                            onClick={(event) => openInterestsModal(animal, event.currentTarget)}
                             title="Interessados"
-                            aria-label="Interessados"
+                            aria-label={`Interessados em ${displayName}: ${interestCount}`}
                           >
-                            <Users size={13} />
+                            <Users size={13} aria-hidden="true" />
                             <span>{interestCount}</span>
-                          </button>
-                          <div className="adoption-card-photo-actions">
-                            <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar">
-                              <Edit3 size={15} />
-                            </button>
+                          </Button>
+                          <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-1.5 tw:p-2">
+                            <Button variant="outline" className={adoptionIconButtonStyle} onClick={(event) => editAnimal(animal, event.currentTarget)} title="Editar" aria-label={`Editar ${displayName}`}>
+                              <Edit3 size={15} aria-hidden="true" />
+                            </Button>
                             {animal.status !== ADOPTION_STATUS_ADOPTED && <ShareAdoptionButton animal={animal} look={ShareButtonLook.ICON} />}
                             {animal.status === ADOPTION_STATUS_ADOPTED ? (
-                              <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar">
-                                <RefreshCw size={15} />
-                              </button>
+                              <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label={`Reativar ${displayName}`}>
+                                <RefreshCw size={15} aria-hidden="true" />
+                              </Button>
                             ) : (
-                              <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adoção" aria-label="Concluir adoção">
-                                <CheckCircle2 size={15} />
-                              </button>
+                              <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={(event) => openAdoptionConfirmModal(animal, event.currentTarget)} title="Concluir adoção" aria-label={`Concluir adoção de ${displayName}`}>
+                                <CheckCircle2 size={15} aria-hidden="true" />
+                              </Button>
                             )}
                           </div>
                         </>
                       )}
-                    </article>
+                    </Card>
                   );
                 })}
               </div>
@@ -4414,30 +4386,30 @@ function AdoptionView({
                   const daysInProgram = getAdoptionDaysInProgram(animal);
                   const displayName = animal.name || animal.animal_name || "Animal";
                   return (
-                    <article className="adoption-list-row" key={animal.id || animal.name}>
-                      <button className={`adoption-list-thumb ${getAnimalGradient(animal)}`} type="button" onClick={() => setSelectedAdoptionAnimal(animal)} aria-label={`Abrir ficha de ${displayName}`}>
-                        {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={22} />}
-                      </button>
+                    <Card as="article" className="adoption-list-row" key={animal.id || animal.name}>
+                      <Card as="button" className={`adoption-list-thumb ${getAnimalGradient(animal)} tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent`} onClick={(event) => showAdoptionDrawer(animal, event.currentTarget)} aria-label={`Abrir ficha de ${displayName}`}>
+                        {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt="" /> : <PawPrint size={22} aria-hidden="true" />}
+                      </Card>
                       <div className="adoption-list-info">
                         <strong>{displayName}</strong>
-                        <span>{[animal.species, animal.sex, animal.age].filter(Boolean).join(" - ") || "Dados basicos nao informados"}</span>
+                        <span>{[animal.species, animal.sex, animal.age].filter(Boolean).join(" - ") || "Dados básicos não informados"}</span>
                       </div>
                       <span className={`adoption-card-status ${statusView.className}`}>{statusView.label}</span>
-                      <span className="adoption-list-muted"><Users size={13} /> {interestCount}</span>
+                      <span className="adoption-list-muted"><Users size={13} aria-hidden="true" /> {interestCount}</span>
                       <span className="adoption-list-muted">{daysInProgram !== null ? `${daysInProgram} dias` : "Sem data"}</span>
                       {canManageAdoptions && (
                         <div className="adoption-list-actions">
-                          <button className="ghost-button" type="button" onClick={() => setSelectedAdoptionAnimal(animal)} title="Ver ficha" aria-label="Ver ficha"><Eye size={15} /></button>
-                          <button className="ghost-button" type="button" onClick={() => editAnimal(animal)} title="Editar" aria-label="Editar"><Edit3 size={15} /></button>
+                          <Button variant="outline" className={adoptionIconButtonStyle} onClick={(event) => showAdoptionDrawer(animal, event.currentTarget)} title="Ver ficha" aria-label={`Ver ficha de ${displayName}`}><Eye size={15} aria-hidden="true" /></Button>
+                          <Button variant="outline" className={adoptionIconButtonStyle} onClick={(event) => editAnimal(animal, event.currentTarget)} title="Editar" aria-label={`Editar ${displayName}`}><Edit3 size={15} aria-hidden="true" /></Button>
                           {animal.status !== ADOPTION_STATUS_ADOPTED && <ShareAdoptionButton animal={animal} look={ShareButtonLook.ICON} />}
                           {animal.status === ADOPTION_STATUS_ADOPTED ? (
-                            <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label="Reativar"><RefreshCw size={15} /></button>
+                            <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label={`Reativar ${displayName}`}><RefreshCw size={15} aria-hidden="true" /></Button>
                           ) : (
-                            <button className="secondary-action" type="button" onClick={() => openAdoptionConfirmModal(animal)} title="Concluir adoção" aria-label="Concluir adoção"><CheckCircle2 size={15} /></button>
+                            <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={(event) => openAdoptionConfirmModal(animal, event.currentTarget)} title="Concluir adoção" aria-label={`Concluir adoção de ${displayName}`}><CheckCircle2 size={15} aria-hidden="true" /></Button>
                           )}
                         </div>
                       )}
-                    </article>
+                    </Card>
                   );
                 })}
               </div>
@@ -4452,22 +4424,24 @@ function AdoptionView({
         const daysInProgram = getAdoptionDaysInProgram(selectedAdoptionAnimal);
         const displayName = selectedAdoptionAnimal.name || selectedAdoptionAnimal.animal_name || "Animal";
         return (
-          <div className="adoption-drawer-layer">
-            <button className="adoption-drawer-scrim" type="button" aria-label="Fechar ficha" onClick={() => setSelectedAdoptionAnimal(null)} />
+          <div className="adoption-drawer-layer tw:z-[300]" ref={drawerLayer} data-managed-dialog="">
+            <div className="adoption-drawer-scrim" aria-hidden="true" onClick={closeAdoptionDrawer} />
             <aside className="adoption-drawer" role="dialog" aria-modal="true" aria-label={`Ficha de ${displayName}`}>
               <div className={`adoption-drawer-photo ${getAnimalGradient(selectedAdoptionAnimal)}`}>
                 {getAnimalMainPhoto(selectedAdoptionAnimal) ? <img src={getAnimalMainPhoto(selectedAdoptionAnimal)} alt={displayName} /> : <PawPrint size={48} />}
-                <button className="adoption-drawer-close" type="button" onClick={() => setSelectedAdoptionAnimal(null)} aria-label="Fechar ficha"><X size={16} /></button>
+                <div className="tw:absolute tw:right-3 tw:top-3">
+                  <CloseButton onClick={closeAdoptionDrawer} aria-label="Fechar ficha" />
+                </div>
                 <span className={`adoption-card-status ${statusView.className}`}>{statusView.label}</span>
               </div>
               <div className="adoption-drawer-body">
                 <h2>{displayName}</h2>
-                <p>{[selectedAdoptionAnimal.species, selectedAdoptionAnimal.sex, selectedAdoptionAnimal.age].filter(Boolean).join(" - ") || "Dados basicos nao informados"}</p>
+                <p>{[selectedAdoptionAnimal.species, selectedAdoptionAnimal.sex, selectedAdoptionAnimal.age].filter(Boolean).join(" - ") || "Dados básicos não informados"}</p>
                 <div className="adoption-drawer-facts">
-                  <span><small>Interesses</small><strong>{interestList.length}</strong></span>
-                  <span><small>No programa</small><strong>{daysInProgram !== null ? `${daysInProgram} dias` : "--"}</strong></span>
-                  <span><small>Microchip</small><strong>{selectedAdoptionAnimal.animal_microchip || selectedAdoptionAnimal.microchip || "--"}</strong></span>
-                  <span><small>Status</small><strong>{statusView.label}</strong></span>
+                  <Card className="tw:min-w-0 tw:px-3 tw:py-2"><small>Interesses</small><strong>{interestList.length}</strong></Card>
+                  <Card className="tw:min-w-0 tw:px-3 tw:py-2"><small>No programa</small><strong>{daysInProgram !== null ? `${daysInProgram} dias` : "--"}</strong></Card>
+                  <Card className="tw:min-w-0 tw:px-3 tw:py-2"><small>Microchip</small><strong>{selectedAdoptionAnimal.animal_microchip || selectedAdoptionAnimal.microchip || "--"}</strong></Card>
+                  <Card className="tw:min-w-0 tw:px-3 tw:py-2"><small>Status</small><strong>{statusView.label}</strong></Card>
                 </div>
                 {(selectedAdoptionAnimal.tone || selectedAdoptionAnimal.description) && (
                   <div className="adoption-drawer-section">
@@ -4481,29 +4455,29 @@ function AdoptionView({
                     <span>{interestList.length}</span>
                   </div>
                   <div className="adoption-drawer-interests">
-                    {interestList.length === 0 && <p>Nenhum interessado ainda.</p>}
+                    {interestList.length === 0 && <p role="status">Nenhum interessado ainda.</p>}
                     {interestList.map((item, index) => (
-                      <div className="adoption-drawer-interest" key={`${item.name || "interest"}-${index}`}>
+                      <Card className="adoption-drawer-interest" key={`${item.name || "interest"}-${index}`}>
                         <strong>{item.name || "Interessado"}</strong>
-                        <span>{item.phone || "Telefone nao informado"}</span>
+                        <span>{item.phone || "Telefone não informado"}</span>
                         {item.visit_date && <small>Visita: {formatAdoptionDate(item.visit_date)}</small>}
                         {canManageAdoptions && (
-                          <button className="ghost-button danger-action" type="button" onClick={() => removeInterest(selectedAdoptionAnimal.id, index)}>
+                          <Button variant="danger" className="tw:mt-1 tw:justify-self-start" onClick={() => removeInterest(selectedAdoptionAnimal.id, index)}>
                             Remover
-                          </button>
+                          </Button>
                         )}
-                      </div>
+                      </Card>
                     ))}
                   </div>
                 </div>
               </div>
               {canManageAdoptions && (
-                <div className="adoption-drawer-actions">
-                  <button className="ghost-button" type="button" onClick={() => editAnimal(selectedAdoptionAnimal)}><Edit3 size={15} /> Editar ficha</button>
+                <div className="adoption-drawer-actions tw:flex-wrap">
+                  <Button variant="outline" className="tw:flex-1" onClick={(event) => editAnimal(selectedAdoptionAnimal, event.currentTarget)}><Edit3 size={15} aria-hidden="true" /> Editar ficha</Button>
                   {selectedAdoptionAnimal.status === ADOPTION_STATUS_ADOPTED ? (
-                    <button className="secondary-action" type="button" onClick={() => updateAnimalStatus(selectedAdoptionAnimal, ADOPTION_STATUS_AVAILABLE)}><RefreshCw size={15} /> Reativar</button>
+                    <Button variant="outline" className="tw:flex-1" onClick={() => updateAnimalStatus(selectedAdoptionAnimal, ADOPTION_STATUS_AVAILABLE)}><RefreshCw size={15} aria-hidden="true" /> Reativar</Button>
                   ) : (
-                    <button className="primary-action" type="button" onClick={() => openAdoptionConfirmModal(selectedAdoptionAnimal)}><CheckCircle2 size={15} /> Concluir adoção</button>
+                    <Button variant="custom" className={`${adoptionPrimaryButtonStyle} tw:flex-1`} onClick={(event) => openAdoptionConfirmModal(selectedAdoptionAnimal, event.currentTarget)}><CheckCircle2 size={15} aria-hidden="true" /> Concluir adoção</Button>
                   )}
                 </div>
               )}
@@ -4511,66 +4485,159 @@ function AdoptionView({
           </div>
         );
       })()}
-      {adoptionConfirmModal && (
-        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) closeAdoptionConfirmModal(); }}>
-          <div className="auth-modal adoption-confirm-modal" role="dialog" aria-modal="true">
-            <ModalHeader
-              title={`Confirmar adoção - ${adoptionConfirmModal.name || adoptionConfirmModal.animal_name}`}
-              onClose={closeAdoptionConfirmModal}
-            />
+      {canManageAdoptions && isFormOpen && (
+        <div
+          className="modal-backdrop"
+          ref={editorLayer}
+          data-managed-dialog=""
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeAnimalForm();
+          }}
+        >
+          <Card as="form" className="adoption-form-modal" onSubmit={publishAnimal} role="dialog" aria-modal="true" aria-labelledby={editorTitle} aria-busy={isSavingAnimal}>
+            <header className="modal-header">
+              <div className="modal-header-text">
+                <h2 id={editorTitle}>{editingAnimalId ? "Editar animal para adoção" : "Cadastrar animal para adoção"}</h2>
+              </div>
+              <CloseButton onClick={() => closeAnimalForm()} disabled={isSavingAnimal} />
+            </header>
+            <div className="adoption-editor-grid">
+              <div className="adoption-photo-column">
+                <input ref={photoInput} type="file" accept="image/*" multiple hidden onChange={handlePhotoChange} />
+                <Button variant="outline" className="animal-photo-uploader" aria-label="Adicionar fotos do animal" onClick={() => photoInput.current?.click()}>
+                  {animalForm.photos.length > 0 ? (
+                    <img src={animalForm.photos[animalForm.mainPhotoIndex]} alt="Prévia principal do animal" />
+                  ) : (
+                    <span>
+                      <UploadCloud size={28} aria-hidden="true" />
+                      Fotos do animal
+                    </span>
+                  )}
+                </Button>
+                <small>Máximo: 5 imagens, 2 MB por imagem, 8 MB no total.</small>
+                {animalForm.photos.length > 0 && (
+                  <div className="animal-photo-picker">
+                    {animalForm.photos.map((photo, index) => (
+                      <div className="animal-photo-option" key={`${photo}-${index}`}>
+                        <Card as="button"
+                          className="tw:w-full tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent"
+                          aria-label={`Usar foto ${index + 1} como principal`}
+                          aria-pressed={animalForm.mainPhotoIndex === index}
+                          onClick={() => updateAnimalForm("mainPhotoIndex", index)}
+                        >
+                          <img src={photo} alt="" />
+                          <span>{animalForm.mainPhotoIndex === index ? "Principal" : "Usar principal"}</span>
+                        </Card>
+                        <Button variant="danger" className={`${adoptionIconButtonStyle} tw:absolute tw:right-1 tw:top-1`} onClick={() => removeAnimalPhoto(index)} aria-label={`Excluir foto ${index + 1}`}>
+                          <X size={14} aria-hidden="true" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
 
-            <div className="adoption-confirm-tabs">
-              <button
-                className={`adoption-confirm-tab${adoptionModalStep === 0 ? " active" : ""}`}
-                type="button"
-                onClick={() => setAdoptionModalStep(0)}
-              >
-                Tutor
-              </button>
-              <button
-                className={`adoption-confirm-tab${adoptionModalStep === 1 ? " active" : ""}`}
-                type="button"
-                onClick={() => setAdoptionModalStep(1)}
-              >
-                Procedimentos
-              </button>
-              <button
-                className={`adoption-confirm-tab${adoptionModalStep === 2 ? " active" : ""}`}
-                type="button"
-                onClick={() => setAdoptionModalStep(2)}
-              >
-                Dados do Animal
-              </button>
+              <div className="adoption-editor-fields">
+                <div className="animal-main-grid">
+                  <ConfigField label="Nome" value={animalForm.name} onChange={(value) => updateAnimalForm("name", value)} />
+                  <ConfigField label="Idade aproximada" value={animalForm.age} onChange={(value) => updateAnimalForm("age", value)} />
+                </div>
+                <div className="animal-choice-grid">
+                  <div className={configFieldStyle}>
+                    <span aria-hidden="true">Espécie</span>
+                    <AdoptionChoiceGroup label="Espécie" value={animalForm.species} choices={activeSpecies.map((value) => ({ value, label: value }))} onChange={(value) => updateAnimalForm("species", value)} />
+                  </div>
+                  <div className={configFieldStyle}>
+                    <span aria-hidden="true">Sexo</span>
+                    <AdoptionChoiceGroup label="Sexo" value={animalForm.sex} choices={[{ value: "Femea", label: "Fêmea" }, { value: "Macho", label: "Macho" }]} onChange={(value) => updateAnimalForm("sex", value)} />
+                  </div>
+                </div>
+                <label className={configFieldStyle}>
+                  <span>Descrição para a página pública</span>
+                  <textarea
+                    className={`${configTextareaStyle} tw:min-h-24 tw:resize-y`}
+                    value={animalForm.tone}
+                    placeholder="Temperamento, história, cuidados e perfil do adotante indicado"
+                    onChange={(event) => updateAnimalForm("tone", event.target.value)}
+                  />
+                </label>
+              </div>
+            </div>
+            {formError && <p className="form-error" role="alert">{formError}</p>}
+            <div className="form-actions">
+              <Button variant="outline" onClick={() => closeAnimalForm()} disabled={isSavingAnimal}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={isSavingAnimal}>
+                {isSavingAnimal ? "Salvando..." : editingAnimalId ? "Salvar alterações" : "Publicar na galeria"}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {adoptionConfirmModal && (
+        <div className="modal-backdrop" ref={confirmLayer} data-managed-dialog="" onMouseDown={(e) => { if (e.target === e.currentTarget) closeAdoptionConfirmModal(); }}>
+          <Card className="auth-modal adoption-confirm-modal" role="dialog" aria-modal="true" aria-labelledby={confirmTitle} aria-busy={isSavingAdoption}>
+            <header className="modal-header">
+              <div className="modal-header-text">
+                <h2 id={confirmTitle}>Confirmar adoção - {adoptionConfirmModal.name || adoptionConfirmModal.animal_name}</h2>
+              </div>
+              <CloseButton onClick={closeAdoptionConfirmModal} disabled={isSavingAdoption} />
+            </header>
+
+            <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:border-b tw:border-card-border tw:px-4 tw:pb-3" role="tablist" aria-label="Etapas da adoção" onKeyDown={(event) => {
+              const next = { ArrowLeft: (adoptionModalStep + 2) % 3, ArrowRight: (adoptionModalStep + 1) % 3, Home: 0, End: 2 }[event.key];
+              if (next === undefined) return;
+              event.preventDefault();
+              setAdoptionModalStep(next);
+              event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus();
+            }}>
+              {["Tutor", "Procedimentos", "Dados do Animal"].map((label, index) => (
+                <Button
+                  key={label}
+                  variant="custom"
+                  role="tab"
+                  id={`${confirmPanel}-${index}`}
+                  tabIndex={index === adoptionModalStep ? 0 : -1}
+                  aria-controls={confirmPanel}
+                  aria-selected={index === adoptionModalStep}
+                  className="tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:aria-selected:border-ui-accent tw:aria-selected:bg-ui-accent-soft tw:aria-selected:text-ui-accent-strong"
+                  onClick={() => setAdoptionModalStep(index)}
+                >
+                  {label}
+                </Button>
+              ))}
             </div>
 
-            <div className="adoption-confirm-body">
+            <div className="adoption-confirm-body" role="tabpanel" id={confirmPanel} aria-labelledby={`${confirmPanel}-${adoptionModalStep}`}>
               {adoptionModalStep === 0 && (
                 <div className="adoption-confirm-panel">
-                  <Field label="Nome" value={adoptionModalForm.tutor} onChange={(v) => updateAdoptionModalForm("tutor", v)} placeholder="Nome do tutor ou responsável" />
-                  <Field label="CPF" value={adoptionModalForm.cpf} onChange={(v) => updateAdoptionModalMasked("cpf", v)} placeholder="000.000.000-00" />
+                  <ConfigField label="Nome" value={adoptionModalForm.tutor} onChange={(v) => updateAdoptionModalForm("tutor", v)} placeholder="Nome do tutor ou responsável" />
+                  <ConfigField label="CPF" value={adoptionModalForm.cpf} inputMode="numeric" onChange={(v) => updateAdoptionModalMasked("cpf", v)} placeholder="000.000.000-00" />
                   <div className="address-lookup-grid">
-                    <Field label="CEP" value={adoptionModalForm.cep} onChange={(v) => updateAdoptionModalMasked("cep", v)} placeholder="00000-000" />
-                    <Field label="Número" value={adoptionModalForm.number} onChange={(v) => updateAdoptionModalForm("number", v)} placeholder="123" />
+                    <ConfigField label="CEP" value={adoptionModalForm.cep} inputMode="numeric" onChange={(v) => updateAdoptionModalMasked("cep", v)} placeholder="00000-000" />
+                    <ConfigField label="Número" value={adoptionModalForm.number} onChange={(v) => updateAdoptionModalForm("number", v)} placeholder="123" />
                   </div>
-                  {adoptionModalCepStatus && <p className="cep-status">{adoptionModalCepStatus}</p>}
-                  <Field label="Endereço completo" value={adoptionModalForm.address} onChange={(v) => updateAdoptionModalForm("address", v)} placeholder="Rua, complemento" />
-                  <Field label="Bairro" value={adoptionModalForm.neighborhood} onChange={(v) => updateAdoptionModalForm("neighborhood", v)} placeholder="Informe o bairro" />
+                  {adoptionModalCepStatus && <p className="cep-status" role="status">{adoptionModalCepStatus}</p>}
+                  <ConfigField label="Endereço completo" value={adoptionModalForm.address} onChange={(v) => updateAdoptionModalForm("address", v)} placeholder="Rua, complemento" />
+                  <ConfigField label="Bairro" value={adoptionModalForm.neighborhood} onChange={(v) => updateAdoptionModalForm("neighborhood", v)} placeholder="Informe o bairro" />
                   <div className="two-column-fields">
-                    <Field label="Cidade" value={adoptionModalForm.city} onChange={(v) => updateAdoptionModalForm("city", v)} placeholder="Cidade" />
-                    <Field label="UF" value={adoptionModalForm.state} onChange={(v) => updateAdoptionModalForm("state", v.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase())} placeholder="SP" />
+                    <ConfigField label="Cidade" value={adoptionModalForm.city} onChange={(v) => updateAdoptionModalForm("city", v)} placeholder="Cidade" />
+                    <ConfigField label="UF" value={adoptionModalForm.state} onChange={(v) => updateAdoptionModalForm("state", v.replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase())} placeholder="SP" />
                   </div>
-                  <Field label="Email" value={adoptionModalForm.email} onChange={(v) => updateAdoptionModalForm("email", v)} placeholder="email@exemplo.com" />
-                  <Field label="Celular" value={adoptionModalForm.phone} onChange={(v) => updateAdoptionModalMasked("phone", v)} placeholder="(00) 00000-0000" />
+                  <ConfigField label="E-mail" value={adoptionModalForm.email} inputMode="email" onChange={(v) => updateAdoptionModalForm("email", v)} placeholder="email@exemplo.com" />
+                  <ConfigField label="Celular" value={adoptionModalForm.phone} inputMode="tel" onChange={(v) => updateAdoptionModalMasked("phone", v)} placeholder="(00) 00000-0000" />
                 </div>
               )}
 
               {adoptionModalStep === 1 && (
                 <div className="adoption-confirm-panel">
-                  <Field label="Data da adoção" value={adoptionModalForm.adopted_at} onChange={(v) => updateAdoptionModalForm("adopted_at", v)} type="date" />
-                  <label className="field-label">
+                  <ConfigField label="Data da adoção" value={adoptionModalForm.adopted_at} onChange={(v) => updateAdoptionModalForm("adopted_at", v)} type="date" />
+                  <label className={configFieldStyle}>
                     Procedimentos realizados
                     <textarea
-                      className="adoption-notes-textarea"
+                      className={`${configTextareaStyle} tw:min-h-[130px] tw:resize-y`}
                       value={adoptionModalForm.procedimentos}
                       onChange={(e) => updateAdoptionModalForm("procedimentos", e.target.value)}
                       placeholder="Descreva os procedimentos realizados, observações e encaminhamentos..."
@@ -4582,40 +4649,40 @@ function AdoptionView({
 
               {adoptionModalStep === 2 && (
                 <div className="adoption-confirm-panel">
-                  <label className="field-label">
+                  <label className={configFieldStyle}>
                     Doenças pré-existentes
                     <textarea
-                      className="adoption-notes-textarea"
+                      className={`${configTextareaStyle} tw:min-h-[130px] tw:resize-y`}
                       value={adoptionModalForm.doencas}
                       onChange={(e) => updateAdoptionModalForm("doencas", e.target.value)}
                       placeholder="Ex: diabetes, displasia, cardiopatia..."
                       rows={2}
                     />
                   </label>
-                  <label className="field-label">
+                  <label className={configFieldStyle}>
                     Alergias conhecidas
                     <textarea
-                      className="adoption-notes-textarea"
+                      className={`${configTextareaStyle} tw:min-h-[130px] tw:resize-y`}
                       value={adoptionModalForm.alergias}
                       onChange={(e) => updateAdoptionModalForm("alergias", e.target.value)}
                       placeholder="Ex: alergia a penicilina, sensibilidade a frango..."
                       rows={2}
                     />
                   </label>
-                  <label className="field-label">
+                  <label className={configFieldStyle}>
                     Vacinas aplicadas
                     <textarea
-                      className="adoption-notes-textarea"
+                      className={`${configTextareaStyle} tw:min-h-[130px] tw:resize-y`}
                       value={adoptionModalForm.vacinas}
                       onChange={(e) => updateAdoptionModalForm("vacinas", e.target.value)}
                       placeholder="Ex: V8, antirrábica, giárdia..."
                       rows={2}
                     />
                   </label>
-                  <label className="field-label">
+                  <label className={configFieldStyle}>
                     Comportamento
                     <textarea
-                      className="adoption-notes-textarea"
+                      className={`${configTextareaStyle} tw:min-h-[130px] tw:resize-y`}
                       value={adoptionModalForm.comportamento}
                       onChange={(e) => updateAdoptionModalForm("comportamento", e.target.value)}
                       placeholder="Ex: sociável com crianças, não convive com outros animais, tímido..."
@@ -4627,11 +4694,11 @@ function AdoptionView({
             </div>
 
             <div className="adoption-confirm-footer">
-              <button className="primary-action" type="button" onClick={submitAdoptionConfirm} disabled={isSavingAdoption}>
+              <Button variant="custom" className={adoptionPrimaryButtonStyle} onClick={submitAdoptionConfirm} disabled={isSavingAdoption}>
                 {isSavingAdoption ? "Salvando..." : "Confirmar adoção"}
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         </div>
       )}
     </section>

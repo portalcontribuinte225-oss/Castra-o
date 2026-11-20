@@ -1,14 +1,17 @@
-import { useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   CheckCircle2,
   ShieldCheck,
-  X,
   XCircle,
 } from "lucide-react";
 import type { AnyRecord } from "../types";
 import { initialTeams } from "../domain";
 import { normalizeText } from "../utils";
-import { EmptyState } from "../components/ui";
+import { Button } from "../components/button";
+import { Card } from "../components/card";
+import { CloseButton } from "../components/close-button";
+import { useModalFocus } from "../components/modal-focus";
+import { configFieldStyle, configTextareaStyle } from "../components/ui";
 
 export function accessStatusLabel(status = "") {
   return (
@@ -40,8 +43,16 @@ export function AccessRequestsView({
   const [reviewing, setReviewing] = useState<AnyRecord | null>(null);
   const [reviewNote, setReviewNote] = useState("");
   const [feedback, setFeedback] = useState("");
-  const [feedbackSuccess, setFeedbackSuccess] = useState(false);
+  const [reviewError, setReviewError] = useState("");
   const [deciding, setDeciding] = useState(false);
+  const reviewTrigger = useRef<HTMLButtonElement>(null);
+  const activeFilter = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!reviewing && feedback && !reviewTrigger.current?.isConnected) {
+      activeFilter.current?.focus();
+    }
+  }, [feedback, reviewing]);
 
   const pendingCount = accessRequests.filter((item: AnyRecord) => item.status === "PENDENTE").length;
   const approvedCount = accessRequests.filter((item: AnyRecord) => item.status === "APROVADO").length;
@@ -53,9 +64,10 @@ export function AccessRequestsView({
   }, [accessRequests, filter]);
 
   async function decide(decision: string) {
-    if (!reviewing) return;
+    if (!reviewing || deciding) return;
     setDeciding(true);
     setFeedback("");
+    setReviewError("");
     try {
       const updated = await reviewAccessRequest?.(reviewing.id, {
         status: decision,
@@ -66,18 +78,18 @@ export function AccessRequestsView({
           ? `Acesso aprovado. Anote a senha inicial exibida somente agora: ${updated.credential.temporaryPassword}`
           : "Decisão registrada com sucesso.";
       setFeedback(msg);
-      setFeedbackSuccess(true);
       setReviewing(null);
       setReviewNote("");
-    } catch (err: any) {
-      setFeedbackSuccess(false);
-      setFeedback(err.message || "Não foi possível revisar o credenciamento.");
+    } catch (error) {
+      setReviewError((error instanceof Error && error.message) || "Não foi possível revisar o credenciamento.");
     } finally {
       setDeciding(false);
     }
   }
 
-  function openReview(item: AnyRecord) {
+  function openReview(item: AnyRecord, trigger: HTMLButtonElement) {
+    reviewTrigger.current = trigger;
+    setReviewError("");
     setReviewing(item);
     setReviewNote(item.reviewNote || "");
   }
@@ -90,22 +102,16 @@ export function AccessRequestsView({
   };
 
   return (
-    <section className="request-workspace triage-workspace clean-requests-workspace">
+    <section className="tw:grid tw:min-w-0 tw:gap-3.5">
       {feedback && (
-        <div className={`cr-feedback ${feedbackSuccess ? "is-ok" : "is-error"}`}>
-          {feedbackSuccess
-            ? <CheckCircle2 size={15} />
-            : <XCircle size={15} />}
+        <Card className="tw:flex tw:items-center tw:gap-2.5 tw:border-green-200 tw:bg-green-50 tw:px-4 tw:py-2 tw:text-green-800">
+          <CheckCircle2 size={17} aria-hidden="true" className="tw:shrink-0" />
           <span>{feedback}</span>
-          <button type="button" onClick={() => setFeedback("")} aria-label="Fechar">
-            <X size={13} />
-          </button>
-        </div>
+          <div className="tw:ml-auto"><CloseButton onClick={() => setFeedback("")} aria-label="Dispensar mensagem" /></div>
+        </Card>
       )}
 
-      <div className="page-toolbar request-page-controls">
-        <nav className="request-nav" aria-label="Filtros de credenciamento">
-          <div className="request-filter-tabs">
+        <div className="tw:flex tw:flex-wrap tw:gap-2" role="group" aria-label="Filtros de credenciamento">
             {FILTERS.map((item) => {
               const count =
                 item.id === "PENDENTE" ? pendingCount :
@@ -113,23 +119,27 @@ export function AccessRequestsView({
                 item.id === "RECUSADO" ? rejectedCount :
                 accessRequests.length;
               return (
-                <button
+                <Button
                   key={item.id}
-                  type="button"
-                  className={filter === item.id ? "selected" : ""}
+                  ref={filter === item.id ? activeFilter : undefined}
+                  variant="custom"
+                  aria-pressed={filter === item.id}
+                  className="tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong"
                   onClick={() => { setFeedback(""); setFilter(item.id); }}
                 >
-                  {item.label}<span>{count}</span>
-                </button>
+                  {item.label}
+                  <span className="tw:rounded-full tw:bg-card-page tw:px-2 tw:py-0.5 tw:text-xs tw:tabular-nums">{count}</span>
+                </Button>
               );
             })}
-          </div>
-        </nav>
-      </div>
+        </div>
 
-      <div className="triage-card-grid">
+      <div className="tw:grid tw:min-w-0 tw:gap-2.5">
         {filtered.length === 0 && (
-          <EmptyState title={emptyCopy[filter]?.title} text={emptyCopy[filter]?.text} />
+          <Card className="tw:grid tw:min-h-[86px] tw:content-center tw:gap-2 tw:px-5 tw:py-4" role="status">
+            <strong className="tw:text-base tw:font-semibold tw:text-ui-ink">{emptyCopy[filter]?.title}</strong>
+            <p className="tw:m-0 tw:text-sm tw:text-ui-muted">{emptyCopy[filter]?.text}</p>
+          </Card>
         )}
         {filtered.map((item) => {
           const sector = (teams.sectors || []).find(
@@ -138,51 +148,32 @@ export function AccessRequestsView({
           const sectorName = sector?.name || item.assignedSector || "-";
           const tone = statusTone(item.status || "PENDENTE");
           const name = item.organizationName || item.responsibleName || "Solicitante";
+          const details = [
+            ["Organização", name],
+            ["Tipo", item.requesterLabel || "-"],
+            ["E-mail", item.email || "-"],
+            ["Telefone", item.phone || "-"],
+            ["Cidade / UF", [item.city, item.state].filter(Boolean).join(" / ") || "-"],
+            ["Setor", sectorName],
+          ];
           return (
-            <article
-              className="triage-card clickable-triage-card"
+            <Card
+              as="button"
+              className="tw:grid tw:min-h-[76px] tw:min-w-0 tw:w-full tw:items-center tw:gap-3 tw:px-4 tw:py-3.5 tw:text-left tw:touch-manipulation tw:hover:border-ui-accent tw:hover:bg-card-page tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent tw:min-[480px]:grid-cols-2 tw:min-[1101px]:grid-cols-[2fr_1fr_2fr_1fr_1fr_1.2fr_auto]"
               key={item.id}
-              role="button"
-              tabIndex={0}
               aria-label={`Abrir credenciamento de ${name}`}
-              onClick={() => openReview(item)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  openReview(item);
-                }
-              }}
+              onClick={(event) => openReview(item, event.currentTarget)}
             >
-              <div className="tc-row cr-card-row">
-                <div className="tc-col tc-col--tutor">
-                  <span className="tc-label">Organização</span>
-                  <span className="tc-value">{name}</span>
-                </div>
-                <div className="tc-col tc-col--tipo">
-                  <span className="tc-label">Tipo</span>
-                  <span className="tc-value">{item.requesterLabel || "-"}</span>
-                </div>
-                <div className="tc-col">
-                  <span className="tc-label">E-mail</span>
-                  <span className="tc-value">{item.email || "-"}</span>
-                </div>
-                <div className="tc-col">
-                  <span className="tc-label">Telefone</span>
-                  <span className="tc-value">{item.phone || "-"}</span>
-                </div>
-                <div className="tc-col">
-                  <span className="tc-label">Cidade / UF</span>
-                  <span className="tc-value">{[item.city, item.state].filter(Boolean).join(" / ") || "-"}</span>
-                </div>
-                <div className="tc-col tc-col--responsavel">
-                  <span className="tc-label">Setor</span>
-                  <span className="tc-value">{sectorName}</span>
-                </div>
-                <div className="tc-col tc-col--status">
-                  <span className={`tc-result-badge tc-result-badge--${tone}`}>{accessStatusLabel(item.status)}</span>
-                </div>
-              </div>
-            </article>
+              {details.map(([label, value]) => (
+                <span key={label} className="tw:grid tw:min-w-0 tw:gap-1">
+                  <span className="tw:text-xs tw:font-medium tw:text-ui-muted">{label}</span>
+                  <span className="tw:wrap-anywhere tw:text-sm tw:text-ui-ink">{value}</span>
+                </span>
+              ))}
+              <span className="tw:justify-self-start">
+                <span className={`tc-result-badge tc-result-badge--${tone}`}>{accessStatusLabel(item.status)}</span>
+              </span>
+            </Card>
           );
         })}
       </div>
@@ -193,6 +184,8 @@ export function AccessRequestsView({
           note={reviewNote}
           onNoteChange={setReviewNote}
           deciding={deciding}
+          error={reviewError}
+          returnFocus={reviewTrigger.current}
           onApprove={() => decide("APROVADO")}
           onReject={() => decide("RECUSADO")}
           onClose={() => setReviewing(null)}
@@ -203,7 +196,10 @@ export function AccessRequestsView({
   );
 }
 
-function CrReviewModal({ item, note, onNoteChange, deciding, onApprove, onReject, onClose, teams }: AnyRecord) {
+function CrReviewModal({ item, note, onNoteChange, deciding, error, returnFocus, onApprove, onReject, onClose, teams }: AnyRecord) {
+  const overlay = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalFocus(overlay, true, returnFocus);
   const name = item.organizationName || item.responsibleName || "Solicitante";
   const tone = statusTone(item.status || "PENDENTE");
   const sector = (teams?.sectors || []).find(
@@ -212,19 +208,17 @@ function CrReviewModal({ item, note, onNoteChange, deciding, onApprove, onReject
   const sectorName = sector?.name || item.assignedSector || "Sem setor";
 
   return (
-    <div className="modal-backdrop">
-      <div className="ccm-modal" role="dialog" aria-modal="true">
+    <div className="modal-backdrop" data-managed-dialog="" ref={overlay}>
+      <Card className="ccm-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <header className="ccm-header">
           <div className="ccm-header-identity">
             <div className="ccm-header-identity-text">
               <span className="ccm-eyebrow">{item.requesterLabel || "Credenciamento"}</span>
-              <h2 className="ccm-headline">{name}</h2>
+              <h2 className="ccm-headline" id={titleId}>{name}</h2>
             </div>
             <div className="ccm-header-actions">
               <span className={`tc-result-badge tc-result-badge--${tone}`}>{accessStatusLabel(item.status)}</span>
-              <button className="ccm-close-btn" type="button" onClick={onClose} aria-label="Fechar">
-                <X size={17} />
-              </button>
+              <CloseButton disabled={deciding} onClick={onClose} />
             </div>
           </div>
         </header>
@@ -274,28 +268,32 @@ function CrReviewModal({ item, note, onNoteChange, deciding, onApprove, onReject
                 <p>{item.reviewNote}</p>
               </div>
             )}
-            <label className="field">
+            <label className={configFieldStyle}>
               <span>Observação / parecer técnico</span>
               <textarea
+                className={`${configTextareaStyle} tw:resize-y`}
+                data-ui-input=""
                 value={note}
+                disabled={deciding}
                 onChange={(e) => onNoteChange(e.target.value)}
                 placeholder="Descreva pendências, justificativa da aprovação ou motivo da recusa..."
                 rows={4}
               />
             </label>
+            {error && <p role="alert" className="tw:m-0 tw:text-sm tw:text-ui-danger">{error}</p>}
           </div>
         </div>
 
         <footer className="ccm-footer">
-          <button className="secondary-action danger-action" type="button" onClick={onReject} disabled={deciding}>
-            <XCircle size={15} /> Recusar
-          </button>
-          <button className="primary-action" type="button" onClick={onApprove} disabled={deciding}>
-            <ShieldCheck size={15} />
+          <Button variant="danger" onClick={onReject} disabled={deciding}>
+            <XCircle size={15} aria-hidden="true" /> Recusar
+          </Button>
+          <Button variant="custom" className="tw:border-[color:var(--action-primary-border)] tw:bg-[var(--action-primary)] tw:font-semibold tw:text-[color:var(--action-primary-ink)] tw:enabled:hover:bg-[var(--action-primary-hover)]" onClick={onApprove} disabled={deciding}>
+            <ShieldCheck size={15} aria-hidden="true" />
             {deciding ? "Processando..." : "Aprovar e criar usuário"}
-          </button>
+          </Button>
         </footer>
-      </div>
+      </Card>
     </div>
   );
 }

@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { Download, FileText, Search } from "lucide-react";
+import { Button } from "../components/button";
+import { Card } from "../components/card";
+import { ConfigField, EmptyState } from "../components/ui";
 import type { AnyRecord } from "../types";
 import {
   initialRequestTypes,
@@ -9,7 +12,6 @@ import {
   requestHasTag,
   requestResultLabel,
 } from "../domain";
-import { EmptyState } from "../components/ui";
 import {
   NO_NEIGHBORHOOD_FILTER,
   NO_NEIGHBORHOOD_LABEL,
@@ -189,116 +191,112 @@ export function ReportsView({
   }
 
   return (
-    <section className="content-grid">
-      <div className="page-toolbar reports-controls wide">
-          <div className="reports-filter-grid">
-            <label className="field reports-filter-field">
-              <span>Início</span>
-              <input type="date" value={filters.start} onChange={(e) => patchFilter("start", e.target.value)} />
-            </label>
-            <label className="field reports-filter-field">
-              <span>Fim</span>
-              <input type="date" value={filters.end} onChange={(e) => patchFilter("end", e.target.value)} />
-            </label>
-            <label className="field reports-filter-field">
-              <span>Tipo</span>
-              <select value={filters.type} onChange={(e) => patchFilter("type", e.target.value)}>
-                <option value="">Todos</option>
-                {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </label>
-            <label className="field reports-filter-field">
-              <span>Status</span>
-              <select value={filters.status} onChange={(e) => patchFilter("status", e.target.value)}>
-                <option value="">Todos</option>
-                {operationalStatusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
-              </select>
-            </label>
-            <label className="field reports-filter-field">
-              <span>Taxas</span>
-              <select value={filters.fee} onChange={(e) => patchFilter("fee", e.target.value)}>
-                <option value="">Todas</option>
-                <option value="charged">Com taxa</option>
-                <option value="free">Gratuitas</option>
-              </select>
-            </label>
-            <label className="field reports-filter-field">
-              <span>Agenda</span>
-              <select value={filters.agendaKind} onChange={(e) => patchFilter("agendaKind", e.target.value)}>
-                <option value="">Todas</option>
-                {agendaKindOptions.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
-              </select>
-            </label>
-            <label className="field reports-filter-field">
-              <span>Bairro do tutor</span>
-              <select value={filters.tutorNeighborhood} onChange={(e) => patchFilter("tutorNeighborhood", e.target.value)}>
-                <option value="">Todos</option>
-                <option value={NO_NEIGHBORHOOD_FILTER}>{NO_NEIGHBORHOOD_LABEL}</option>
-                {tutorNeighborhoodOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </label>
-            <label className="field reports-filter-field">
-              <span>Bairro do animal</span>
-              <select value={filters.animalNeighborhood} onChange={(e) => patchFilter("animalNeighborhood", e.target.value)}>
-                <option value="">Todos</option>
-                <option value={NO_NEIGHBORHOOD_FILTER}>{NO_NEIGHBORHOOD_LABEL}</option>
-                {animalNeighborhoodOptions.map((name) => <option key={name} value={name}>{name}</option>)}
-              </select>
-            </label>
+    <section className="tw:grid tw:min-w-0 tw:gap-4">
+      <Card className="tw:grid tw:min-w-0 tw:gap-3 tw:p-4">
+        <div className="reports-filter-grid tw:grid tw:min-w-0 tw:grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] tw:items-end tw:gap-3" role="group" aria-label="Filtros de relatórios">
+          <ConfigField label="Início" type="date" value={filters.start} onChange={(value) => patchFilter("start", value)} />
+          <ConfigField label="Fim" type="date" value={filters.end} onChange={(value) => patchFilter("end", value)} />
+          <label className="field reports-filter-field">
+            <span>Tipo</span>
+            <select value={filters.type} onChange={(e) => patchFilter("type", e.target.value)}>
+              <option value="">Todos</option>
+              {typeOptions.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+          <label className="field reports-filter-field">
+            <span>Status</span>
+            <select value={filters.status} onChange={(e) => patchFilter("status", e.target.value)}>
+              <option value="">Todos</option>
+              {operationalStatusOptions.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </label>
+          <label className="field reports-filter-field">
+            <span>Taxas</span>
+            <select value={filters.fee} onChange={(e) => patchFilter("fee", e.target.value)}>
+              <option value="">Todas</option>
+              <option value="charged">Com taxa</option>
+              <option value="free">Gratuitas</option>
+            </select>
+          </label>
+          <label className="field reports-filter-field">
+            <span>Agenda</span>
+            <select value={filters.agendaKind} onChange={(e) => patchFilter("agendaKind", e.target.value)}>
+              <option value="">Todas</option>
+              {agendaKindOptions.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+            </select>
+          </label>
+          <label className="field reports-filter-field">
+            <span>Bairro do tutor</span>
+            <select value={filters.tutorNeighborhood} onChange={(e) => patchFilter("tutorNeighborhood", e.target.value)}>
+              <option value="">Todos</option>
+              <option value={NO_NEIGHBORHOOD_FILTER}>{NO_NEIGHBORHOOD_LABEL}</option>
+              {tutorNeighborhoodOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+          <label className="field reports-filter-field">
+            <span>Bairro do animal</span>
+            <select value={filters.animalNeighborhood} onChange={(e) => patchFilter("animalNeighborhood", e.target.value)}>
+              <option value="">Todos</option>
+              <option value={NO_NEIGHBORHOOD_FILTER}>{NO_NEIGHBORHOOD_LABEL}</option>
+              {animalNeighborhoodOptions.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
 
-            <div className="page-actions reports-filter-actions">
-              <button
-                className="ghost-button"
-                type="button"
-                onClick={clearFilters}
-                disabled={!appliedFilters && !filters.start && !filters.end}
-              >
-                Limpar
-              </button>
-              <button className="primary-action" type="button" onClick={applyFilters}>
-                <Search size={15} />
-                Buscar
-              </button>
-              <button
-                className="secondary-action"
-                type="button"
-                onClick={exportPdf}
-                disabled={!appliedFilters}
-                title={!appliedFilters ? "Faça uma busca primeiro" : "Exportar relatório operacional"}
-              >
-                <Download size={15} />
-                Exportar
-              </button>
-              <button
-                className={`secondary-action${canProntuario ? "" : " disabled-look"}`}
-                type="button"
-                onClick={handleProntuario}
-                disabled={!canProntuario || prmLoading}
-                title={!canProntuario ? "Informe um microchip ou CPF na busca para gerar o prontuário" : "Gerar prontuário completo do animal"}
-              >
-                <FileText size={15} />
-                {prmLoading ? "Gerando..." : "Prontuário"}
-              </button>
-            </div>
+          <div className="tw:col-span-full tw:flex tw:min-w-0 tw:flex-wrap tw:justify-end tw:gap-2 tw:max-[480px]:justify-start">
+            <Button
+              variant="outline"
+              onClick={clearFilters}
+              disabled={!appliedFilters && !filters.start && !filters.end}
+            >
+              Limpar
+            </Button>
+            <Button
+              variant="custom"
+              className="tw:border-[color:var(--action-primary-border)] tw:bg-[var(--action-primary)] tw:font-semibold tw:text-[color:var(--action-primary-ink)] tw:enabled:hover:bg-[var(--action-primary-hover)]"
+              onClick={applyFilters}
+            >
+              <Search size={15} aria-hidden="true" />
+              Buscar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={exportPdf}
+              disabled={!appliedFilters}
+              title={!appliedFilters ? "Faça uma busca primeiro" : "Exportar relatório operacional"}
+            >
+              <Download size={15} aria-hidden="true" />
+              Exportar
+            </Button>
+            <Button
+              variant="outline"
+              onClick={handleProntuario}
+              disabled={!canProntuario || prmLoading}
+              aria-busy={prmLoading}
+              title={!canProntuario ? "Informe um microchip ou CPF na busca para gerar o prontuário" : "Gerar prontuário completo do animal"}
+            >
+              <FileText size={15} aria-hidden="true" />
+              {prmLoading ? "Gerando..." : "Prontuário"}
+            </Button>
           </div>
+        </div>
 
-          {prmError && (
-            <p className="reports-prm-error">{prmError}</p>
-          )}
-      </div>
-      <div className="panel wide reports-summary-panel">
-        <div className="reports-breakdown-grid">
+        {prmError && (
+          <p className="tw:m-0 tw:rounded-[var(--ui-radius-md)] tw:border tw:border-solid tw:border-ui-danger tw:bg-ui-danger-soft tw:px-3 tw:py-2 tw:text-sm tw:text-ui-danger" role="alert">{prmError}</p>
+        )}
+      </Card>
+      <section className="tw:grid tw:min-w-0 tw:gap-4" aria-label="Resumo e resultados da busca">
+        <div className="tw:grid tw:min-w-0 tw:grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] tw:gap-2.5">
           {reportBreakdowns.map((group) => (
-            <div className="reports-breakdown" key={group.title}>
-              <div className="reports-breakdown-head">
-                <span>{group.title}</span>
-                <strong>{sumValues(group.items)}</strong>
-              </div>
+            <Card as="section" className="reports-breakdown tw:min-w-0 tw:overflow-hidden" key={group.title} aria-label={group.title}>
+              <header className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-solid tw:border-card-border tw:p-3">
+                <h2 className="tw:m-0 tw:min-w-0 tw:break-words tw:text-sm tw:font-medium tw:text-ui-muted">{group.title}</h2>
+                <strong className="tw:shrink-0 tw:text-lg tw:font-semibold tw:text-ui-ink tw:tabular-nums">{sumValues(group.items)}</strong>
+              </header>
               <table>
                 <thead>
                   <tr>
-                    <th>Descrição</th>
-                    <th>Qtd.</th>
+                    <th scope="col">Descrição</th>
+                    <th scope="col">Qtd.</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -310,23 +308,24 @@ export function ReportsView({
                   ))}
                 </tbody>
               </table>
-            </div>
+            </Card>
           ))}
         </div>
-        <div className="reports-table-wrap">
+        <Card role="region" aria-label="Solicitações do relatório" tabIndex={0} className="tw:min-w-0 tw:overflow-x-auto tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent">
           <table className="reports-table">
+            <caption className="tw:sr-only">Solicitações encontradas no relatório</caption>
             <thead>
               <tr>
-                <th>Protocolo</th>
-                <th>Tutor</th>
-                <th>Microchip</th>
-                <th>Bairro do tutor</th>
-                <th>Bairro do animal</th>
-                <th>Tipo</th>
-                <th>Status</th>
-                <th>Resultado</th>
-                <th>Usuário</th>
-                <th>Taxa</th>
+                <th scope="col">Protocolo</th>
+                <th scope="col">Tutor</th>
+                <th scope="col">Microchip</th>
+                <th scope="col">Bairro do tutor</th>
+                <th scope="col">Bairro do animal</th>
+                <th scope="col">Tipo</th>
+                <th scope="col">Status</th>
+                <th scope="col">Resultado</th>
+                <th scope="col">Usuário</th>
+                <th scope="col">Taxa</th>
               </tr>
             </thead>
             <tbody>
@@ -346,14 +345,14 @@ export function ReportsView({
               ))}
             </tbody>
           </table>
-          {filteredRequests.length === 0 && (
-            <EmptyState
-              title={appliedFilters ? "Nenhum registro encontrado" : "Nenhum filtro aplicado"}
-              text={appliedFilters ? "Tente ajustar os filtros." : "Use os filtros acima e clique em Buscar."}
-            />
-          )}
-        </div>
-      </div>
+        </Card>
+        {filteredRequests.length === 0 && (
+          <EmptyState
+            title={appliedFilters ? "Nenhum registro encontrado" : "Nenhum filtro aplicado"}
+            text={appliedFilters ? "Tente ajustar os filtros." : "Use os filtros acima e clique em Buscar."}
+          />
+        )}
+      </section>
     </section>
   );
 }

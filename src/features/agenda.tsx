@@ -1,9 +1,13 @@
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import {
   CalendarDays, ChevronLeft, ChevronRight,
-  Clock, MapPin, X,
+  Clock, MapPin,
 } from "lucide-react";
 import type { AnyRecord } from "../types";
+import { Button } from "../components/button";
+import { Card } from "../components/card";
+import { CloseButton } from "../components/close-button";
+import { useModalFocus } from "../components/modal-focus";
 import {
   normalizeRequest,
   normalizeScheduleDateText,
@@ -26,6 +30,12 @@ const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "S
 const HOURS = Array.from({ length: 14 }, (_, i) => `${String(i + 7).padStart(2, "0")}:00`);
 
 type ViewMode = "month" | "week" | "day" | "year" | "list";
+type OpenDay = (date: string, trigger: HTMLButtonElement) => void;
+type OpenProcess = (request: AnyRecord, trigger: HTMLButtonElement) => void;
+
+const calendarFocus = "tw:focus-visible:outline-2 tw:focus-visible:-outline-offset-2 tw:focus-visible:outline-ui-accent";
+const calendarCellAction = `tw:appearance-none tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:touch-manipulation ${calendarFocus}`;
+const agendaCardAction = `tw:w-full tw:text-left tw:touch-manipulation tw:hover:border-ui-accent tw:hover:bg-card-page ${calendarFocus}`;
 
 function dateToStr(date: Date): string {
   return [
@@ -134,6 +144,7 @@ export function AgendaView({
   const [filterStatus, setFilterStatus] = useState("");
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
   const activeViewButton = useRef<HTMLButtonElement>(null);
+  const dayPanelReturnFocus = useRef<HTMLButtonElement>(null);
   const processReturnFocus = useRef<HTMLButtonElement>(null);
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
@@ -156,6 +167,22 @@ export function AgendaView({
     rejectRequestFromProcess,
     confirmSpecialRequest,
   } = useRequestActions({ patchRequest, runProcedureAction, currentUser, teams, showToast, setSelectedId });
+
+  function openDay(date: string, trigger: HTMLButtonElement) {
+    dayPanelReturnFocus.current = trigger;
+    setSelectedDay(date);
+  }
+
+  function openProcess(request: AnyRecord, trigger: HTMLButtonElement) {
+    processReturnFocus.current = trigger;
+    openRequest(request);
+  }
+
+  function closeProcess() {
+    if (!processReturnFocus.current?.isConnected) activeViewButton.current?.focus();
+    processReturnFocus.current = null;
+    closePreview();
+  }
 
   const normalized = useMemo(() => requests.map(normalizeRequest), [requests]);
 
@@ -255,6 +282,12 @@ export function AgendaView({
 
   const currentYear = currentDate.getFullYear();
   const yearOptions = Array.from({ length: 6 }, (_, i) => currentYear - 2 + i);
+  const summaryCards = [
+    { label: "hoje", value: summaryStats.todayReqs, valueStyle: "tw:text-ui-ink" },
+    { label: "semana", value: summaryStats.weekReqs, valueStyle: "tw:text-ui-ink" },
+    { label: "realizados", value: summaryStats.compareceram, valueStyle: "tw:text-ui-accent-strong" },
+    { label: "cancelados", value: summaryStats.canceladas, valueStyle: "tw:text-ui-danger" },
+  ];
 
   function goToMonth(month: number, year: number) {
     setCurrentDate(new Date(year, month, 1));
@@ -281,52 +314,56 @@ export function AgendaView({
         </div>
 
         <div className="ag-month-jump">
-          <select className="ag-select" value={currentDate.getMonth()} onChange={(e) => goToMonth(Number(e.target.value), currentYear)}>
+          <select className="ag-select" aria-label="Mês" value={currentDate.getMonth()} onChange={(e) => goToMonth(Number(e.target.value), currentYear)}>
             {MONTHS_FULL.map((label, index) => (
               <option key={label} value={index}>{label}</option>
             ))}
           </select>
-          <select className="ag-select" value={currentYear} onChange={(e) => goToMonth(currentDate.getMonth(), Number(e.target.value))}>
+          <select className="ag-select" aria-label="Ano" value={currentYear} onChange={(e) => goToMonth(currentDate.getMonth(), Number(e.target.value))}>
             {yearOptions.map((year) => (
               <option key={year} value={year}>{year}</option>
             ))}
           </select>
-          <button className="ag-nav-btn" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} /></button>
-          <button className="ag-nav-btn" onClick={next} aria-label="Próximo"><ChevronRight size={13} /></button>
+          <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} aria-hidden="true" /></Button>
+          <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" onClick={next} aria-label="Próximo"><ChevronRight size={13} aria-hidden="true" /></Button>
         </div>
 
         <div className="ag-header-fill" />
 
-        <div className="ag-views">
+        <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:max-[900px]:w-full tw:max-[900px]:justify-center" role="group" aria-label="Visualização da agenda">
           {viewTabs.map((tab) => (
-            <button
+            <Button
               key={tab.id}
               ref={view === tab.id ? activeViewButton : undefined}
-              className={`ag-view-btn${view === tab.id ? " is-active" : ""}`}
+              variant="outline"
+              className="tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong"
+              aria-pressed={view === tab.id}
               onClick={() => setView(tab.id)}
             >
               {tab.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
 
       <div className="ag-summary-row">
-        <div className="ag-side-stat"><strong>{summaryStats.todayReqs}</strong><span>hoje</span></div>
-        <div className="ag-side-stat"><strong>{summaryStats.weekReqs}</strong><span>semana</span></div>
-        <div className="ag-side-stat is-ok"><strong>{summaryStats.compareceram}</strong><span>realizados</span></div>
-        <div className="ag-side-stat is-warn"><strong>{summaryStats.canceladas}</strong><span>cancelados</span></div>
+        {summaryCards.map(({ label, value, valueStyle }) => (
+          <Card key={label} className="tw:grid tw:h-[clamp(66px,11vh,96px)] tw:content-center tw:justify-items-center tw:gap-1.5 tw:p-2 tw:text-center">
+            <strong className={`tw:text-[clamp(1.65rem,2.4vw,2.15rem)] tw:leading-none tw:font-semibold tw:tabular-nums ${valueStyle}`}>{value}</strong>
+            <span className="tw:text-[0.68rem] tw:leading-none tw:font-medium tw:text-ui-muted">{label}</span>
+          </Card>
+        ))}
       </div>
 
       <div className="ag-canvas">
         {view === "month" && (
-          <MonthView currentDate={currentDate} todayStr={todayStr} selectedDay={selectedDay} getDayInfo={getDayInfo} onDayClick={setSelectedDay} />
+          <MonthView currentDate={currentDate} todayStr={todayStr} selectedDay={selectedDay} getDayInfo={getDayInfo} onDayClick={openDay} />
         )}
         {view === "week" && (
-          <WeekView currentDate={currentDate} todayStr={todayStr} getDayInfo={getDayInfo} onDayClick={setSelectedDay} />
+          <WeekView currentDate={currentDate} todayStr={todayStr} getDayInfo={getDayInfo} onDayClick={openDay} />
         )}
         {view === "day" && (
-          <DayView currentDate={currentDate} getDayInfo={getDayInfo} onOpenRequest={openRequest} />
+          <DayView currentDate={currentDate} getDayInfo={getDayInfo} onOpenRequest={openProcess} />
         )}
         {view === "year" && (
           <YearView
@@ -337,11 +374,12 @@ export function AgendaView({
               const d = strToDate(ds);
               if (d) setCurrentDate(d);
               setView("month");
+              requestAnimationFrame(() => activeViewButton.current?.focus());
             }}
           />
         )}
         {view === "list" && (
-          <ListView filtered={filtered} onOpenRequest={openRequest} />
+          <ListView filtered={filtered} onOpenRequest={openProcess} />
         )}
       </div>
 
@@ -349,6 +387,7 @@ export function AgendaView({
         <DayPanel
           dateStr={selectedDay}
           getDayInfo={getDayInfo}
+          returnFocus={dayPanelReturnFocus.current}
           onClose={() => setSelectedDay(null)}
           onOpenRequest={(r: AnyRecord) => {
             processReturnFocus.current = activeViewButton.current;
@@ -372,10 +411,7 @@ export function AgendaView({
           municipalities={municipalities}
           currentUserName={currentUser?.name || ""}
           returnFocus={processReturnFocus.current}
-          onClose={() => {
-            processReturnFocus.current = null;
-            closePreview();
-          }}
+          onClose={closeProcess}
           onRejectProcess={rejectRequestFromProcess}
           onAssign={assignFromPreview}
           onAssume={assumeFromPreview}
@@ -391,7 +427,7 @@ export function AgendaView({
 }
 
 
-function MonthView({ currentDate, todayStr, selectedDay, getDayInfo, onDayClick }: AnyRecord) {
+function MonthView({ currentDate, todayStr, selectedDay, getDayInfo, onDayClick }: AnyRecord & { onDayClick: OpenDay }) {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
   const days = buildMonthGrid(year, month);
@@ -415,41 +451,46 @@ function MonthView({ currentDate, todayStr, selectedDay, getDayInfo, onDayClick 
           const level = occupancyLevel(pct);
 
           return (
-            <div
+            <button
               key={str}
+              type="button"
               className={[
                 "ag-cell",
+                calendarCellAction,
                 !inMonth && "is-other",
                 isWeekend && inMonth && "is-weekend",
                 isLotado && inMonth && "is-full",
                 isQuase && inMonth && "is-busy",
                 str === selectedDay && "is-selected",
               ].filter(Boolean).join(" ")}
-              onClick={() => onDayClick(str)}
+              aria-label={`Abrir agenda de ${str}${totalVacancies > 0 && inMonth ? `, ${occupied} de ${totalVacancies} vagas ocupadas` : ""}`}
+              aria-current={isToday ? "date" : undefined}
+              aria-haspopup="dialog"
+              onClick={(event) => onDayClick(str, event.currentTarget)}
             >
-              <div className="ag-cell-top">
+              <span className="ag-cell-top">
                 <span className={`ag-cell-day${isToday ? " is-today" : ""}`}>{date.getDate()}</span>
                 {totalVacancies > 0 && inMonth && (
                   <span className={`ag-cell-occ is-${level}`}>{occupied}/{totalVacancies}</span>
                 )}
-              </div>
+              </span>
 
               {totalVacancies > 0 && inMonth && (
-                <div className="ag-cell-prog">
-                  <div
-                    className="ag-cell-fill"
+                <span className="ag-cell-prog">
+                  <span
+                    className="ag-cell-fill tw:block"
                     style={{
                       width: `${Math.min(pct, 100)}%`,
                       background: pct >= 80 ? "#f43f5e" : pct >= 50 ? "#f59e0b" : "#14b8a6",
                     }}
                   />
-                </div>
+                </span>
               )}
 
               {reqs.length > 0 && inMonth && (
-                <div className="ag-cell-events">
+                <span className="ag-cell-events">
                   {reqs.slice(0, 2).map((r: AnyRecord) => (
-                    <div
+                    <span
                       key={r.id}
                       className="ag-ev"
                       style={{ "--c": statusColors(r).dot } as React.CSSProperties}
@@ -458,14 +499,14 @@ function MonthView({ currentDate, todayStr, selectedDay, getDayInfo, onDayClick 
                         <span className="ag-ev-time">{(r.scheduleSlotTime || r.scheduleTime).slice(0, 5)}</span>
                       )}
                       <span className="ag-ev-name">{r.tutor || "Tutor"}</span>
-                    </div>
+                    </span>
                   ))}
                   {reqs.length > 2 && (
-                    <div className="ag-ev-more">+{reqs.length - 2} mais</div>
+                    <span className="ag-ev-more">+{reqs.length - 2} mais</span>
                   )}
-                </div>
+                </span>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -474,7 +515,7 @@ function MonthView({ currentDate, todayStr, selectedDay, getDayInfo, onDayClick 
 }
 
 
-function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) {
+function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord & { onDayClick: OpenDay }) {
   const start = startOfWeek(currentDate);
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(start, i));
 
@@ -489,10 +530,14 @@ function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
           const { reqs, totalVacancies, available, pct } = getDayInfo(str);
           const level = occupancyLevel(pct);
           return (
-            <div
+            <button
               key={str}
-              className={["ag-week-col", isToday && "is-today", isWeekend && "is-weekend"].filter(Boolean).join(" ")}
-              onClick={() => onDayClick(str)}
+              type="button"
+              className={["ag-week-col", calendarCellAction, isToday && "is-today", isWeekend && "is-weekend"].filter(Boolean).join(" ")}
+              aria-label={`Abrir agenda de ${str}${totalVacancies > 0 ? `, ${available} vagas disponíveis` : ""}`}
+              aria-current={isToday ? "date" : undefined}
+              aria-haspopup="dialog"
+              onClick={(event) => onDayClick(str, event.currentTarget)}
             >
               <span className="ag-week-wd">{WEEKDAYS[date.getDay()]}</span>
               <span className={`ag-week-dn${isToday ? " is-today" : ""}`}>{date.getDate()}</span>
@@ -502,7 +547,7 @@ function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
               {reqs.length > 0 && (
                 <span className="ag-week-count">{reqs.length}</span>
               )}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -520,21 +565,24 @@ function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
                 return t.startsWith(String(hNum).padStart(2, "0"));
               });
               return (
-                <div
+                <button
                   key={str}
-                  className={`ag-week-cell${isWeekend ? " is-weekend" : ""}`}
-                  onClick={() => onDayClick(str)}
+                  type="button"
+                  className={`ag-week-cell ${calendarCellAction}${isWeekend ? " is-weekend" : ""}`}
+                  aria-label={`Abrir agenda de ${str}, horário ${hour}`}
+                  aria-haspopup="dialog"
+                  onClick={(event) => onDayClick(str, event.currentTarget)}
                 >
                   {hourReqs.map((r: AnyRecord) => (
-                    <div
+                    <span
                       key={r.id}
                       className="ag-wev"
                       style={{ "--c": statusColors(r).dot } as React.CSSProperties}
                     >
                       {r.tutor || "Tutor"}
-                    </div>
+                    </span>
                   ))}
-                </div>
+                </button>
               );
             })}
           </div>
@@ -545,7 +593,7 @@ function WeekView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
 }
 
 
-function DayView({ currentDate, getDayInfo, onOpenRequest }: AnyRecord) {
+function DayView({ currentDate, getDayInfo, onOpenRequest }: AnyRecord & { onOpenRequest: OpenProcess }) {
   const str = dateToStr(currentDate);
   const { reqs, totalVacancies, occupied, available, pct, sdays } = getDayInfo(str);
   const locationName = sdays[0]?.locationName || sdays[0]?.location_name || "";
@@ -591,7 +639,7 @@ function DayView({ currentDate, getDayInfo, onOpenRequest }: AnyRecord) {
               <div className="ag-tl-hour">{hour}</div>
               <div className="ag-tl-events">
                 {hourReqs.map((r: AnyRecord) => (
-                  <DayCard key={r.id} request={r} onClick={() => onOpenRequest(r)} />
+                  <DayCard key={r.id} request={r} onOpenRequest={onOpenRequest} />
                 ))}
               </div>
             </div>
@@ -602,7 +650,7 @@ function DayView({ currentDate, getDayInfo, onOpenRequest }: AnyRecord) {
             <div className="ag-tl-hour ag-tl-hour--muted">—</div>
             <div className="ag-tl-events">
               {unscheduled.map((r: AnyRecord) => (
-                <DayCard key={r.id} request={r} onClick={() => onOpenRequest(r)} />
+                <DayCard key={r.id} request={r} onOpenRequest={onOpenRequest} />
               ))}
             </div>
           </div>
@@ -618,17 +666,23 @@ function DayView({ currentDate, getDayInfo, onOpenRequest }: AnyRecord) {
   );
 }
 
-function DayCard({ request, onClick }: { request: AnyRecord; onClick: () => void }) {
+function DayCard({ request, onOpenRequest }: { request: AnyRecord; onOpenRequest: OpenProcess }) {
   const color = statusColors(request).dot;
   return (
-    <div className="ag-day-card" style={{ "--c": color } as React.CSSProperties} onClick={onClick}>
-      <div className="ag-day-card-accent" />
-      <div className="ag-day-card-body">
-        <div className="ag-day-card-top">
+    <Card
+      as="button"
+      className={`ag-day-card tw:p-0 ${agendaCardAction}`}
+      style={{ "--c": color } as React.CSSProperties}
+      aria-haspopup="dialog"
+      onClick={(event) => onOpenRequest(request, event.currentTarget)}
+    >
+      <span className="ag-day-card-accent" aria-hidden="true" />
+      <span className="ag-day-card-body">
+        <span className="ag-day-card-top">
           <span className="ag-day-card-name">{request.tutor || "Tutor"}</span>
           <AgendaStatusBadge request={request} />
-        </div>
-        <div className="ag-day-card-meta">
+        </span>
+        <span className="ag-day-card-meta">
           <span>{(request.animals || []).map((a: AnyRecord) => a.name).filter(Boolean).join(", ") || "Animal"}</span>
           <span className="ag-sep">·</span>
           <span>{requestTypeLabel(request)}</span>
@@ -638,9 +692,9 @@ function DayCard({ request, onClick }: { request: AnyRecord; onClick: () => void
               <span className="ag-day-card-time"><Clock size={10} />{request.scheduleSlotTime || request.scheduleTime}</span>
             </>
           )}
-        </div>
-      </div>
-    </div>
+        </span>
+      </span>
+    </Card>
   );
 }
 
@@ -673,24 +727,28 @@ function YearView({ currentDate, todayStr, getDayInfo, onDayClick }: AnyRecord) 
                 const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                 const { reqs, totalVacancies, available } = getDayInfo(ds);
                 const isLotado = totalVacancies > 0 && available === 0;
-                const hasReqs = reqs.length > 0 && inMonth;
+                const hasReqs = reqs.length > 0;
+                if (!inMonth) return <span key={ds} className="ag-yr-day is-other" aria-hidden="true">{date.getDate()}</span>;
 
                 return (
-                  <div
+                  <button
                     key={ds}
+                    type="button"
                     className={[
                       "ag-yr-day",
-                      !inMonth && "is-other",
+                      calendarCellAction,
                       isToday && "is-today",
-                      isWeekend && inMonth && "is-weekend",
-                      isLotado && inMonth && "is-full",
+                      isWeekend && "is-weekend",
+                      isLotado && "is-full",
                       hasReqs && !isLotado && "has-events",
                     ].filter(Boolean).join(" ")}
-                    title={inMonth ? `${ds}: ${reqs.length} agendamento(s)` : ""}
-                    onClick={() => inMonth && onDayClick(ds)}
+                    title={`${ds}: ${reqs.length} agendamento(s)`}
+                    aria-label={`Abrir mês de ${ds}, ${reqs.length} agendamento(s) neste dia`}
+                    aria-current={isToday ? "date" : undefined}
+                    onClick={() => onDayClick(ds)}
                   >
                     {date.getDate()}
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -708,7 +766,7 @@ function formatListGroupLabel(dateStr: string): string {
   return `${WEEKDAYS[date.getDay()]}, ${date.getDate()} de ${MONTHS_FULL[date.getMonth()]}`;
 }
 
-function ListView({ filtered, onOpenRequest }: AnyRecord) {
+function ListView({ filtered, onOpenRequest }: AnyRecord & { onOpenRequest: OpenProcess }) {
   const sorted = [...filtered].sort((a, b) =>
     requestDateStr(a).localeCompare(requestDateStr(b))
   );
@@ -735,19 +793,25 @@ function ListView({ filtered, onOpenRequest }: AnyRecord) {
       {groups.map((group) => (
         <div key={group.date} className="ag-list-group">
           <div className="ag-list-group-label">{formatListGroupLabel(group.date)}</div>
-          <div className="ag-list-box">
+          <div className="tw:grid tw:gap-2">
             {group.items.map((r) => (
-              <div key={r.id} className="ag-list-row" onClick={() => onOpenRequest(r)}>
-                <div className="ag-list-row-main">
+              <Card
+                key={r.id}
+                as="button"
+                className={`tw:flex tw:items-center tw:gap-3.5 tw:px-4 tw:py-3 ${agendaCardAction}`}
+                aria-haspopup="dialog"
+                onClick={(event) => onOpenRequest(r, event.currentTarget)}
+              >
+                <span className="ag-list-row-main tw:flex-wrap">
                   <span className="ag-list-time">{r.scheduleSlotTime || r.scheduleTime || "—"}</span>
                   <span className="ag-list-name">{r.tutor || "—"}</span>
                   <span className="ag-list-sub">
                     {(r.animals || []).map((a: AnyRecord) => a.name).filter(Boolean).join(", ") || "—"}
                   </span>
                   <span className="ag-type-chip">{requestTypeLabel(r)}</span>
-                </div>
+                </span>
                 <AgendaStatusBadge request={r} />
-              </div>
+              </Card>
             ))}
           </div>
         </div>
@@ -757,7 +821,10 @@ function ListView({ filtered, onOpenRequest }: AnyRecord) {
 }
 
 
-function DayPanel({ dateStr, getDayInfo, onClose, onOpenRequest }: AnyRecord) {
+function DayPanel({ dateStr, getDayInfo, onClose, onOpenRequest, returnFocus }: AnyRecord) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useModalFocus(panelRef, true, returnFocus);
   const { reqs, sdays, totalVacancies, occupied, pct } = getDayInfo(dateStr);
   const locationName = sdays[0]?.locationName || sdays[0]?.location_name || "";
   const date = strToDate(dateStr);
@@ -767,18 +834,18 @@ function DayPanel({ dateStr, getDayInfo, onClose, onOpenRequest }: AnyRecord) {
     : dateStr;
 
   return (
-    <>
-      <div className="ag-drawer-overlay" onClick={onClose} />
-      <aside className="ag-drawer">
+    <div ref={panelRef} data-managed-dialog="" className="tw:contents">
+      <div className="ag-drawer-overlay" aria-hidden="true" onClick={onClose} />
+      <aside className="ag-drawer" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="ag-drawer-head">
           <div className="ag-drawer-head-info">
             <span className="ag-drawer-kicker">{weekday}</span>
-            <h3 className="ag-drawer-date">{dateLabel}</h3>
+            <h3 className="ag-drawer-date" id={titleId}>{dateLabel}</h3>
             {locationName && (
               <span className="ag-drawer-loc"><MapPin size={11} /> {locationName}</span>
             )}
           </div>
-          <button className="ag-drawer-close" onClick={onClose} aria-label="Fechar"><X size={15} /></button>
+          <CloseButton aria-label="Fechar detalhes do dia" onClick={onClose} />
         </div>
 
         {totalVacancies > 0 && (
@@ -804,35 +871,38 @@ function DayPanel({ dateStr, getDayInfo, onClose, onOpenRequest }: AnyRecord) {
             </div>
           )}
           {reqs.map((r: AnyRecord) => (
-            <div
+            <Card
               key={r.id}
-              className="ag-drawer-card"
+              as="button"
+              className={`ag-drawer-card ${agendaCardAction}`}
+              aria-haspopup="dialog"
               onClick={() => onOpenRequest(r)}
             >
               <span
                 className="ag-drawer-card-avatar"
+                aria-hidden="true"
                 style={{ background: statusColors(r).bg, color: statusColors(r).color }}
               >
                 {initials(r.tutor) || "?"}
               </span>
-              <div className="ag-drawer-card-body">
-                <div className="ag-drawer-card-top">
+              <span className="ag-drawer-card-body">
+                <span className="ag-drawer-card-top">
                   <span className="ag-drawer-card-name">{r.tutor || "Tutor"}</span>
                   {(r.scheduleSlotTime || r.scheduleTime) && (
                     <span className="ag-drawer-card-time">{r.scheduleSlotTime || r.scheduleTime}</span>
                   )}
-                </div>
-                <div className="ag-drawer-card-meta">
+                </span>
+                <span className="ag-drawer-card-meta">
                   {(r.animals || []).map((a: AnyRecord) => a.name).filter(Boolean).join(", ") || "Animal"}
                   {" · "}
                   {requestTypeLabel(r)}
-                </div>
-              </div>
+                </span>
+              </span>
               <AgendaStatusBadge request={r} />
-            </div>
+            </Card>
           ))}
         </div>
       </aside>
-    </>
+    </div>
   );
 }

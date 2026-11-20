@@ -96,18 +96,17 @@ interface MetricProps {
 }
 
 export function Metric({ title, value, icon: Icon, trend, compact = false }: MetricProps) {
-  const MetricSurface = compact ? Card : "div";
   return (
-    <MetricSurface className={compact ? "tw:flex tw:items-center tw:gap-3 tw:px-5 tw:py-4 tw:shadow-[0_4px_16px_rgba(15,23,42,0.05)]" : "metric-card"}>
-      <div className={compact ? "tw:shrink-0 tw:text-ui-accent" : "metric-icon"}>
+    <Card data-dashboard-metric={compact ? undefined : ""} className={compact ? "tw:flex tw:items-center tw:gap-3 tw:px-5 tw:py-4 tw:shadow-[0_4px_16px_rgba(15,23,42,0.05)]" : "tw:flex tw:min-h-[104px] tw:min-w-0 tw:items-center tw:gap-3 tw:p-4 tw:max-[560px]:flex-col tw:max-[560px]:items-start"}>
+      <div className={compact ? "tw:shrink-0 tw:text-ui-accent" : "tw:grid tw:size-10 tw:shrink-0 tw:place-items-center tw:rounded-[var(--ui-radius-md)] tw:bg-[var(--ui-action)] tw:text-white"}>
         {Icon && <Icon size={compact ? 20 : 22} aria-hidden="true" />}
       </div>
-      <div className={compact ? "tw:flex tw:flex-col" : undefined}>
-        <span className={compact ? "tw:text-[0.7rem] tw:text-ui-muted" : undefined}>{title}</span>
-        <strong className={compact ? "tw:order-first tw:text-[1.05rem] tw:font-bold tw:text-ui-ink" : undefined}>{value}</strong>
-        {trend && <small>{trend}</small>}
+      <div className={compact ? "tw:flex tw:flex-col" : "tw:grid tw:min-w-0 tw:gap-1"}>
+        <span className={compact ? "tw:text-[0.7rem] tw:text-ui-muted" : "tw:text-sm tw:font-medium tw:text-ui-muted"}>{title}</span>
+        <strong className={compact ? "tw:order-first tw:text-[1.05rem] tw:font-bold tw:text-ui-ink" : "tw:truncate tw:text-xl tw:font-semibold tw:text-ui-ink tw:tabular-nums"}>{value}</strong>
+        {trend && <small className={compact ? undefined : "tw:text-xs tw:text-ui-muted"}>{trend}</small>}
       </div>
-    </MetricSurface>
+    </Card>
   );
 }
 

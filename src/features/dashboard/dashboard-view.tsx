@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { Button } from "../../components/button";
+import { Input } from "../../components/input";
 import type { AnyRecord } from "../../types";
 import { initialRequestTypes, initialTeams, normalizeRequest } from "../../domain";
 import type { DashboardData } from "./dashboard-data";
@@ -32,6 +34,9 @@ const PRESETS: { id: DashboardPeriod; label: string }[] = [
   { id: DashboardPeriod.LAST_90_DAYS, label: "90 dias" },
   { id: DashboardPeriod.LAST_12_MONTHS, label: "12 meses" },
 ];
+
+const pressedControlStyle = "tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:enabled:hover:bg-card-page tw:aria-pressed:border-[color:var(--ink-700)] tw:aria-pressed:bg-[var(--ui-action-soft)] tw:aria-pressed:font-semibold tw:aria-pressed:text-[color:var(--selected-ink)]";
+const dateRangeStyle = "tw:flex tw:min-w-0 tw:items-center tw:gap-2 tw:text-sm tw:font-medium tw:text-ui-text tw:max-[420px]:w-full";
 
 // The manager's dashboard: one row of controls (tab and period) above everything they scope, then the active tab, which
 // computes only its own numbers. The period is a preset or any two days typed in the date fields.
@@ -75,29 +80,29 @@ export function DashboardView({
   const ActiveTab = (TABS.find((item) => item.id === tab) || TABS[0]).view;
   return (
     <section className="dash-root">
-      <div className="page-toolbar dash-toolbar">
-        <nav className="tab-bar" aria-label="Abas do painel">
+      <div className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3">
+        <nav className="tw:grid tw:min-w-0 tw:max-w-full tw:grid-flow-col tw:auto-cols-fr tw:gap-1.5 tw:max-[900px]:w-full tw:max-[900px]:grid-flow-row tw:max-[900px]:grid-cols-3 tw:max-[480px]:grid-cols-2" aria-label="Abas do painel">
           {TABS.map((item) => (
-            <button key={item.id} type="button" className={tab === item.id ? "active" : ""} aria-pressed={tab === item.id} onClick={() => setTab(item.id)}>
+            <Button key={item.id} variant="custom" className={`${pressedControlStyle} tw:min-w-0 tw:max-[900px]:whitespace-normal`} aria-pressed={tab === item.id} onClick={() => setTab(item.id)}>
               {item.label}
-            </button>
+            </Button>
           ))}
         </nav>
-        <div className="dash-period" role="group" aria-label="Período">
-          <div className="tab-bar">
+        <div className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:gap-2" role="group" aria-label="Período">
+          <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:max-[900px]:w-full">
             {PRESETS.map((item) => (
-              <button key={item.id} type="button" className={period === item.id ? "active" : ""} aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>
+              <Button key={item.id} variant="custom" className={`${pressedControlStyle} tw:max-[480px]:flex-1`} aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>
                 {item.label}
-              </button>
+              </Button>
             ))}
           </div>
-          <label className="dash-range">
+          <label className={dateRangeStyle}>
             <span>De</span>
-            <input type="date" value={shown.from} max={shown.to} onChange={(event) => typeDay("from", event.target.value)} />
+            <Input type="date" value={shown.from} max={shown.to} onChange={(event) => typeDay("from", event.target.value)} />
           </label>
-          <label className="dash-range">
+          <label className={dateRangeStyle}>
             <span>até</span>
-            <input type="date" value={shown.to} min={shown.from} onChange={(event) => typeDay("to", event.target.value)} />
+            <Input type="date" value={shown.to} min={shown.from} onChange={(event) => typeDay("to", event.target.value)} />
           </label>
         </div>
       </div>
