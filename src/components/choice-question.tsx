@@ -19,9 +19,9 @@ interface ChoiceQuestionProps {
 }
 
 const choiceStyle = [
-  "tw:grid tw:content-center tw:gap-1.5 tw:px-5 tw:py-4.5 tw:text-left tw:motion-safe:transition-colors tw:disabled:cursor-default",
+  "tw:grid tw:content-center tw:gap-1.5 tw:border-[1.5px] tw:px-5 tw:py-4.5 tw:text-left tw:motion-safe:transition-colors tw:disabled:cursor-default",
   "tw:enabled:hover:border-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent",
-  "tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:inset-ring-1 tw:aria-pressed:inset-ring-ui-accent",
+  "tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft",
   "tw:data-[invalid=true]:border-ui-danger/50 tw:data-[invalid=true]:bg-ui-danger-soft tw:data-[invalid=true]:enabled:hover:border-ui-danger tw:data-[invalid=true]:focus-visible:outline-ui-danger",
   "tw:[@media(min-height:600px)]:@min-[720px]/request-form:py-[clamp(20px,4dvh,48px)]",
 ].join(" ");
