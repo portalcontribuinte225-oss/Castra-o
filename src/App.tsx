@@ -910,7 +910,9 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     title: "Sistema de castra\u00e7\u00e3o",
     subtitle: "Gest\u00e3o operacional de atendimento animal.",
   };
-  const sidebarIsCollapsed = sidebarCollapsed && !usesMobileMenu;
+  const settingsMenu = configMenuOpen ? visibleMenu.find((item) => item.id === "config") : undefined;
+  const sidebarMenu = settingsMenu ? [settingsMenu] : visibleMenu;
+  const sidebarIsCollapsed = sidebarCollapsed && !usesMobileMenu && !settingsMenu;
 
   return (
     <div className={`app-shell${sidebarIsCollapsed ? " sidebar-collapsed" : ""}`}>
@@ -950,7 +952,12 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             <Button
               variant="outline"
               className="sidebar-toggle-btn tw:w-10 tw:shrink-0 tw:px-0"
-              onClick={() => setSidebarCollapsed(v => { const next = !v; localStorage.setItem("sidebar-collapsed", String(next)); return next; })}
+              onClick={() => {
+                const collapsed = !sidebarIsCollapsed;
+                if (collapsed) setConfigMenuOpen(false);
+                setSidebarCollapsed(collapsed);
+                localStorage.setItem("sidebar-collapsed", String(collapsed));
+              }}
               aria-label={sidebarIsCollapsed ? "Expandir menu" : "Recolher menu"}
             >
               <ChevronLeft size={15} aria-hidden="true" className={`sidebar-toggle-icon${sidebarIsCollapsed ? " rotated" : ""}`} />
@@ -958,9 +965,10 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           )}
         </div>
 
-        <nav aria-label="Menu principal">
-          {visibleMenu.map((item) => {
-            const Icon = item.icon;
+        <nav aria-label={settingsMenu ? "Configurações" : "Menu principal"}>
+          {sidebarMenu.map((item) => {
+            const settingsExpanded = item === settingsMenu;
+            const Icon = settingsExpanded ? ChevronLeft : item.icon;
             return (
               <React.Fragment key={item.id}>
                 <Button
@@ -969,9 +977,9 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                   data-selected={active === item.id}
                   title={sidebarIsCollapsed ? item.label : undefined}
                   aria-label={sidebarIsCollapsed ? item.label : undefined}
-                  aria-current={active === item.id ? "page" : undefined}
-                  aria-expanded={item.id === "config" ? configMenuOpen : undefined}
-                  aria-controls={item.id === "config" && configMenuOpen ? "settings-navigation" : undefined}
+                  aria-current={!settingsExpanded && active === item.id ? "page" : undefined}
+                  aria-expanded={item.id === "config" ? settingsExpanded : undefined}
+                  aria-controls={settingsExpanded ? "settings-navigation" : undefined}
                   onClick={() => {
                     if (item.id === "config") {
                       setConfigMenuOpen((open) => !open);
@@ -981,12 +989,12 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                   }}
                 >
                   <Icon size={18} aria-hidden="true" className="tw:shrink-0" />
-                  <span className="tw:min-w-0 tw:flex-1 tw:truncate">{item.label}</span>
-                  {item.id === "config" && (
-                    <ChevronRight className={configMenuOpen ? "sidebar-chevron open" : "sidebar-chevron"} size={16} />
+                  <span className="tw:min-w-0 tw:flex-1 tw:truncate">{settingsExpanded ? "Voltar ao menu" : item.label}</span>
+                  {item.id === "config" && !settingsExpanded && (
+                    <ChevronRight className="sidebar-chevron" size={16} aria-hidden="true" />
                   )}
                 </Button>
-                {item.id === "config" && configMenuOpen && (
+                {settingsExpanded && (
                   <div className="sidebar-subnav" id="settings-navigation" role="group" aria-label="Subabas de configurações">
                     {visibleConfigSidebarItems.map((subitem) => {
                       const subitemTabs = subitem.id === "environment"
