@@ -80,8 +80,19 @@ describe("the contacts for the notices of an animal without a tutor", () => {
 
   it("are asked as contacts for the notices, with neither marked as required", () => {
     const markup = renderToStaticMarkup(<RegistrationContactFields notices email="" phone="" onEmailChange={noop} onPhoneChange={noop} showErrors />);
-    expect(markup).toContain("Contato para os avisos"); expect(markup).toContain('data-label="E-mail"'); expect(markup).toContain('data-label="Celular"');
-    expect(markup).not.toContain("Celular *"); expect(markup).not.toContain("(opcional)");
-    expect(markup).not.toMatch(/aria-label="Celular para os avisos"[^>]*required/); expect(markup).not.toContain("field-error-message");
+    expect(markup).toContain("Contato para os avisos");
+    expect(markup).toMatch(/<span[^>]*>E-mail<\/span>/);
+    expect(markup).toMatch(/<span[^>]*>Celular<\/span>/);
+    expect(markup).not.toContain('required=""');
+    expect(markup).not.toContain('aria-invalid="true"');
+    expect(markup).not.toContain("aria-describedby");
+  });
+
+  it("links each invalid contact to its own error message", () => {
+    const markup = renderToStaticMarkup(<RegistrationContactFields notices email="bad" phone="123" onEmailChange={noop} onPhoneChange={noop} showErrors />);
+    const errors = [...markup.matchAll(/<input[^>]*aria-invalid="true" aria-describedby="([^"]+)"[^>]*\/><small id="([^"]+)"[^>]*>([^<]+)<\/small>/g)];
+    expect(errors.map(([, , , message]) => message)).toEqual(["Informe um e-mail válido.", MOBILE_PHONE_MESSAGE]);
+    expect(errors.every(([, descriptionId, messageId]) => descriptionId === messageId)).toBe(true);
+    expect(errors[0][1]).not.toBe(errors[1][1]);
   });
 });
