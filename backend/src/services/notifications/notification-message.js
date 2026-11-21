@@ -5,7 +5,8 @@ export const notificationEventLabels = Object.freeze({
   [NotificationEvent.SCHEDULE_CONFIRMED]: "Agendamento confirmado",
   [NotificationEvent.SCHEDULE_CHANGED]: "Agendamento alterado",
   [NotificationEvent.NO_SHOW]: "Não comparecimento",
-  [NotificationEvent.DOCUMENTS_REVIEWED]: "Documentos conferidos",
+  [NotificationEvent.DOCUMENTS_APPROVED]: "Documentos deferidos",
+  [NotificationEvent.DOCUMENTS_REJECTED]: "Documentos indeferidos",
   [NotificationEvent.COMPLETED]: "Atendimento concluído",
   [NotificationEvent.REQUEST_REJECTED]: "Solicitação indeferida",
 });
@@ -31,25 +32,27 @@ export function registeredNoticeText(request) {
 export function buildNotificationMessage(event, request) {
   if (event === NotificationEvent.REQUEST_REGISTERED) return { subject: notificationEventLabels[event], message: registeredNoticeText(request) };
   const protocol = String(request.protocol || "");
+  if (event === NotificationEvent.DOCUMENTS_APPROVED || event === NotificationEvent.DOCUMENTS_REJECTED) {
+    const approved = event === NotificationEvent.DOCUMENTS_APPROVED;
+    const outcome = approved ? "deferidos" : "indeferidos";
+    const guidance = approved ? "acompanhar o andamento" : "verificar o que precisa corrigir";
+    return {
+      subject: notificationEventLabels[event],
+      message: `Protocolo ${protocol}. Um ou mais documentos da sua solicitação foram ${outcome}. Consulte a solicitação para ${guidance}.`,
+    };
+  }
   const workflow = request.workflow_data || request.workflowData || {};
   const date = formatScheduleDate(request.schedule_date || "");
   const time = workflow.scheduleSlotTime || workflow.scheduleTime || "";
   const location = [request.schedule_location_name, request.schedule_address].filter(Boolean).join(" — ");
   const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.NO_SHOW].includes(event);
-  const documents = Array.isArray(request.documents) ? request.documents : [];
-  const approved = documents.filter((document) => document?.status === "approved").length;
-  const rejected = documents.filter((document) => document?.status === "rejected").length;
   const reason = rejectionReasonText(workflow);
   const isRejection = event === NotificationEvent.REQUEST_REJECTED;
-  const corrections = documents.filter((document) => document?.status === "rejected" && document.review?.note)
-    .map((document) => ` ${document.documentName || "Documento"}: ${document.review.note}.`).join("");
-  const documentSummary = event === NotificationEvent.DOCUMENTS_REVIEWED
-    ? ` Aprovados: ${approved}. Precisam de correção: ${rejected}.${corrections}` : "";
   const rejectionSummary = isRejection && reason ? ` Motivo: ${reason}.` : "";
   return {
     subject: notificationEventLabels[event] || "Atualização da solicitação",
     message: schedule
       ? `Solicitação ${protocol}: ${notificationEventLabels[event].toLowerCase()}. Data: ${date}${time ? `, ${time}` : ""}${location ? `. Local: ${location}` : ""}.`
-      : `Solicitação ${protocol}: ${isRejection ? "indeferida" : notificationEventLabels[event] || "há uma atualização"}.${documentSummary}${rejectionSummary} Para mais informações, procure o atendimento do município.`,
+      : `Solicitação ${protocol}: ${isRejection ? "indeferida" : notificationEventLabels[event] || "há uma atualização"}.${rejectionSummary} Para mais informações, procure o atendimento do município.`,
   };
 }

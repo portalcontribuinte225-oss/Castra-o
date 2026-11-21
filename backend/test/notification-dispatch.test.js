@@ -1,8 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { setImmediate } from "node:timers/promises";
 import { dispatchNotification } from "../src/services/notifications/dispatch-notification.js";
+import { buildEmailNotice } from "../src/services/notifications/email-notice-text.js";
 import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode } from "../../shared/notification-contract.js";
-import { WhatsappTemplateField, templateFields } from "../../shared/whatsapp-templates-contract.js";
+import { getWhatsappUse, WhatsappTemplateField, templateFields } from "../../shared/whatsapp-templates-contract.js";
+import { buildSmsText } from "../../shared/sms-messages-contract.js";
+import { getSmsUse } from "../../shared/sms-uses-contract.js";
+import { getEmailUse } from "../../shared/email-uses-contract.js";
 
 // Every channel starts in use: e-mail on with its template, WhatsApp active with a template per notice, SMS on for every notice.
 function fixture() {
@@ -40,19 +45,65 @@ const spent = (f, channel) => f.calls.some(([name, spentChannel]) => name === "q
 const SCHEDULE_CONFIRMED = NotificationEvent.SCHEDULE_CONFIRMED;
 const smsOff = { status: DeliveryStatus.SKIPPED, code: DeliveryCode.CHANNEL_DISABLED };
 
+test("all request notices are defined across the three channels and resolve an independent payload for each one", async () => {
+  for (const event of Object.values(NotificationEvent)) {
+    const f = fixture();
+    assert.ok(getSmsUse(event), `SMS use: ${event}`);
+    const email = getEmailUse(event);
+    const whatsapp = getWhatsappUse(event);
+    assert.ok(email && whatsapp, event);
+    f.active[event] = `castracao_${whatsapp.namePart}`;
+
+    const results = await dispatchNotification({ event, request: f.request }, f.dependencies);
+    assert.deepEqual(results, Object.values(NotificationChannel).map((channel) => sent(event, channel)), event);
+    const sentEmail = f.calls.find(([name]) => name === "email")[1];
+    assert.equal(sentEmail.templateId, `email_${event}`);
+    const notice = buildEmailNotice(event, sentEmail.request);
+    assert.equal(notice.subject, email.label);
+    assert.ok(notice.message.includes(f.request.protocol), event);
+    const sentSms = f.calls.find(([name]) => name === "sms")[1];
+    assert.ok(buildSmsText(sentSms.use, sentSms.data).includes(f.request.protocol), event);
+    const [, settings, , components] = f.calls.find(([name]) => name === "whatsapp");
+    assert.equal(settings.templateName, f.active[event]);
+    assert.equal(texts(components).length, whatsapp.fields.length);
+  }
+});
+
 test("a notice goes out by every channel the municipality uses, each on its own, with one result per channel", async () => {
   const f = fixture();
   const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
   assert.deepEqual(results, [sent(SCHEDULE_CONFIRMED, NotificationChannel.EMAIL), sent(SCHEDULE_CONFIRMED, NotificationChannel.WHATSAPP), sent(SCHEDULE_CONFIRMED, NotificationChannel.SMS)]);
-  assert.deepEqual(f.calls.filter(([kind]) => ["email", "whatsapp", "sms"].includes(kind)).map(([kind]) => kind), ["email", "whatsapp", "sms"]);
+  assert.deepEqual(f.calls.filter(([kind]) => ["email", "whatsapp", "sms"].includes(kind)).map(([kind]) => kind).sort(), ["email", "sms", "whatsapp"]);
   const email = f.calls.find(([kind]) => kind === "email")[1];
   assert.equal(email.toEmail, "citizen@example.com");
   assert.equal(email.toName, "Maria");
   assert.equal(email.templateId, `email_${SCHEDULE_CONFIRMED}`);
   assert.deepEqual(email.identityParams, { municipality_name: "Test Town" });
   assert.equal(f.calls.find(([kind]) => kind === "whatsapp")[2], "48999999999");
-  assert.deepEqual(f.calls.filter(([kind]) => kind === "quota"), [["quota", NotificationChannel.EMAIL, "municipality-a"], ["quota", NotificationChannel.WHATSAPP, "municipality-a"]]);
+  assert.deepEqual(f.calls.filter(([kind]) => kind === "quota").sort(), [["quota", NotificationChannel.EMAIL, "municipality-a"], ["quota", NotificationChannel.WHATSAPP, "municipality-a"]]);
   assert.deepEqual(f.calls.find(([kind]) => kind === "template"), ["template", "municipality-a", SCHEDULE_CONFIRMED]);
+});
+
+test("a pending e-mail does not delay WhatsApp or SMS", async () => {
+  const f = fixture();
+  let releaseEmail;
+  const emailGate = new Promise((resolve) => { releaseEmail = resolve; });
+  const sendEmail = f.dependencies.sendEmail;
+  f.dependencies.sendEmail = async (input) => {
+    const result = await sendEmail(input);
+    await emailGate;
+    return result;
+  };
+  const pending = dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
+  try {
+    await setImmediate();
+    assert.equal(ran(f, "email"), true);
+    assert.equal(ran(f, "whatsapp"), true);
+    assert.equal(ran(f, "sms"), true);
+  } finally {
+    releaseEmail();
+  }
+  assert.deepEqual(await pending, Object.values(NotificationChannel).map((channel) => sent(SCHEDULE_CONFIRMED, channel)));
 });
 
 test("the SMS gets the municipality, the notice, the phone informed and only the fields the text needs", async () => {
@@ -102,6 +153,14 @@ test("without a phone informed only the e-mail is tried", async () => {
   assert.deepEqual(f.calls.filter(([kind]) => kind === "quota"), [["quota", NotificationChannel.EMAIL, "municipality-a"]]);
 });
 
+test("without an e-mail address, neither the e-mail template nor its quota is touched", async () => {
+  const f = fixture();
+  f.request.workflow_data.followUp.email = "";
+  const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
+  assert.deepEqual(results.map(({ channel }) => channel), [NotificationChannel.WHATSAPP, NotificationChannel.SMS]);
+  assert.equal(ran(f, "emailTemplate") || ran(f, "identity") || ran(f, "email") || spent(f, NotificationChannel.EMAIL), false);
+});
+
 test("an e-mail use turned on without its template is reported, while the other channels still go out", async () => {
   const f = fixture();
   f.dependencies.resolveEmailTemplate = async () => ({ ok: false, code: DeliveryCode.NOT_CONFIGURED });
@@ -138,16 +197,24 @@ test("a template configured on screen gets each number from the field chosen for
   assert.deepEqual(texts(components), ["123/2026", "Maria", "Unidade Municipal", "Maria"]);
 });
 
-test("documents reviewed and completed send the protocol and the notice sentence", async () => {
-  for (const [event, sentence] of [[NotificationEvent.DOCUMENTS_REVIEWED, /Documentos conferidos/], [NotificationEvent.COMPLETED, /Atendimento concluído/]]) {
+test("each document outcome and completion use a distinct template and send only their own content", async () => {
+  for (const [event, sentence] of [
+    [NotificationEvent.DOCUMENTS_APPROVED, /foram deferidos/],
+    [NotificationEvent.DOCUMENTS_REJECTED, /foram indeferidos/],
+    [NotificationEvent.COMPLETED, /Atendimento concluído/],
+  ]) {
     const f = fixture();
     f.active[event] = `castracao_${event}`;
+    f.request.documents = [{ status: "rejected", review: { note: "internal review details" } }, { status: "attached" }];
     const results = await dispatchNotification({ event, request: f.request }, f.dependencies);
-    assert.equal(results[1].status, DeliveryStatus.SENT);
-    const components = f.calls.find(([kind]) => kind === "whatsapp")[3];
+    assert.deepEqual(results, Object.values(NotificationChannel).map((channel) => sent(event, channel)));
+    const [, settings, , components] = f.calls.find(([kind]) => kind === "whatsapp");
+    assert.equal(settings.templateName, `castracao_${event}`);
     assert.equal(components[0].parameters.length, 2);
     assert.equal(texts(components)[0], "123/2026");
     assert.match(texts(components)[1], sentence);
+    assert.doesNotMatch(texts(components)[1], /internal review details/);
+    assert.equal(f.calls.find(([kind]) => kind === "email")[1].templateId, `email_${event}`);
     assert.equal(f.calls.find(([kind]) => kind === "sms")[1].use, event);
   }
 });
@@ -288,7 +355,7 @@ test("a rejection reaches every channel in use with its reason, and never the st
 test("legacy requests preserve WhatsApp-only agenda behavior, never e-mail nor SMS", async () => {
   const f = fixture();
   f.request.workflow_data = {};
-  for (const event of [NotificationEvent.COMPLETED, NotificationEvent.DOCUMENTS_REVIEWED, NotificationEvent.NO_SHOW, NotificationEvent.REQUEST_REJECTED]) {
+  for (const event of [NotificationEvent.COMPLETED, NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.DOCUMENTS_REJECTED, NotificationEvent.NO_SHOW, NotificationEvent.REQUEST_REJECTED]) {
     assert.deepEqual(await dispatchNotification({ event, request: f.request, legacy: true }, f.dependencies), []);
   }
   f.dependencies.sendWhatsapp = async () => ({ status: DeliveryStatus.FAILED });

@@ -1,6 +1,6 @@
-import { DeliveryCode } from "../../../shared/notification-contract.js";
+import { DeliveryCode, NotificationEvent } from "../../../shared/notification-contract.js";
 import {
-  WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_APPROVED_STATUS, WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY, activateTemplate, activeUseKeys,
+  WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_APPROVED_STATUS, WHATSAPP_LEGACY_DOCUMENTS_LABEL, WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY, activateTemplate, activeUseKeys,
   cleanTemplateIdentity, deactivateTemplate, findTemplateLink, getWhatsappUse, isWhatsappTemplateUsable, noticeStructureReason,
   normalizeActiveTemplates, normalizeTemplateLinks, recognizeWhatsappTemplate, templateFields, templateLinkIssue, whatsappFieldLabels,
 } from "../../../shared/whatsapp-templates-contract.js";
@@ -14,6 +14,13 @@ function badRequest(message) {
 }
 
 const sameTemplate = (item, name, language) => item.name === name && item.language === language;
+
+function templateLabel(uses) {
+  if (uses.includes(NotificationEvent.DOCUMENTS_APPROVED) && uses.includes(NotificationEvent.DOCUMENTS_REJECTED)) {
+    return WHATSAPP_LEGACY_DOCUMENTS_LABEL;
+  }
+  return getWhatsappUse(uses[0])?.groupLabel || "";
+}
 
 export async function loadActiveTemplates(municipalityId, database) {
   return normalizeActiveTemplates(await readWhatsappConfigValue(WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, municipalityId, database));
@@ -37,7 +44,7 @@ export function buildTemplateRows(catalog, active, links = []) {
       language: entry.language,
       status: entry.status,
       category: entry.category,
-      label: first ? first.groupLabel : "",
+      label: templateLabel(uses),
       uses,
       variables: link ? fields.map((field) => whatsappFieldLabels[field]) : first ? [...first.variables] : [],
       reason: uses.length ? "" : reason,
@@ -66,7 +73,7 @@ export function buildTemplateRows(catalog, active, links = []) {
     const first = getWhatsappUse(keys[0]);
     const link = findTemplateLink(links, name, language);
     rows.push({
-      name, language, status: "NOT_FOUND", category: "", label: first.groupLabel, uses: keys, variables: [...first.variables], reason: "", active: true,
+      name, language, status: "NOT_FOUND", category: "", label: templateLabel(keys), uses: keys, variables: [...first.variables], reason: "", active: true,
       canActivate: false, configured: Boolean(link), linkedUse: link ? link.use : "", fields: templateFields(keys[0], link), bodyText: "", bodyVariables: 0,
       configurable: false, structureReason: "",
     });

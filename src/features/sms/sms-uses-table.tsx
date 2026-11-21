@@ -1,7 +1,6 @@
 import React from "react";
 import { Lock } from "lucide-react";
-import { DocumentsOutcome } from "../../../shared/notification-contract.js";
-import { smsTexts } from "../../../shared/sms-messages-contract.js";
+import { smsTextPreview } from "../../../shared/sms-messages-contract.js";
 import type { SmsUseRow } from "./sms-types";
 
 interface Props {
@@ -16,8 +15,6 @@ interface Props {
 
 const PLATFORM_OFF_REASON = "O SMS precisa estar ativo na plataforma para ligar as mensagens.";
 const SERVICE_OFF_REASON = "O serviço de SMS está desativado para este município.";
-// The documents message has one text for each result of the analysis; only one of them is sent.
-const OUTCOME_LABELS: Record<string, string> = { [DocumentsOutcome.APPROVED]: "Documentos aprovados", [DocumentsOutcome.REJECTED]: "Documentos não aprovados" };
 
 export function SmsUsesTable({ rows, municipalityName, channelActive, serviceOn, busy, onToggle }: Props) {
   const open = channelActive && serviceOn;
@@ -38,13 +35,7 @@ export function SmsUsesTable({ rows, municipalityName, channelActive, serviceOn,
             return (
               <tr key={row.key}>
                 <td>{row.label}</td>
-                <td>
-                  <div className="tw:grid tw:gap-1.5">
-                    {smsTexts(row.key, municipalityName || undefined).map(({ outcome, text }) => (
-                      <p className="tw:m-0" key={text}>{outcome && <><strong>{OUTCOME_LABELS[outcome]}</strong><br /></>}{text}</p>
-                    ))}
-                  </div>
-                </td>
+                <td>{smsTextPreview(row.key, municipalityName || undefined)}</td>
                 <td>
                   <div className="integration-table-actions">
                     <button

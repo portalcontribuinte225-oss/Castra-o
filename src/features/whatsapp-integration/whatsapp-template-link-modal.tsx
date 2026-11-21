@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { Button } from "../../components/button";
 import { ConfigDialogBackdrop } from "../../components/config-dialog";
 import { ModalHeader } from "../../components/ui";
-import { isWhatsappNoticeUse, templateFields, whatsappFieldLabels, whatsappUses } from "../../../shared/whatsapp-templates-contract.js";
+import { LEGACY_DOCUMENTS_REVIEWED } from "../../../shared/notification-contract.js";
+import { WHATSAPP_LEGACY_DOCUMENTS_LABEL, isWhatsappNoticeUse, templateFields, whatsappFieldLabels, whatsappUses } from "../../../shared/whatsapp-templates-contract.js";
 import {
   fieldsForVariables, firstMissingVariable, templateBodySegments, templatePreview, templateStatusLabel, variableTone,
 } from "./whatsapp-template-display";
@@ -34,7 +35,8 @@ export function WhatsappTemplateLinkModal({ row, samples, onSave, onClose }: Pro
 
   function chooseUse(next: string) {
     setUse(next);
-    setFields(fieldsForVariables(next ? templateFields(next) : [], row.bodyVariables));
+    const mapped = next && next === row.linkedUse ? row.fields : templateFields(next);
+    setFields(fieldsForVariables(mapped, row.bodyVariables));
   }
 
   async function save(nextUse: string, nextFields: string[]) {
@@ -67,6 +69,9 @@ export function WhatsappTemplateLinkModal({ row, samples, onSave, onClose }: Pro
               <span>Qual aviso este template envia?</span>
               <select value={use} onChange={(event) => chooseUse(event.target.value)}>
                 <option value="">Escolha o aviso</option>
+                {row.linkedUse === LEGACY_DOCUMENTS_REVIEWED && (
+                  <option value={LEGACY_DOCUMENTS_REVIEWED}>{WHATSAPP_LEGACY_DOCUMENTS_LABEL}</option>
+                )}
                 {noticeUses.map((notice) => <option key={notice.key} value={notice.key}>{notice.label}</option>)}
               </select>
             </label>

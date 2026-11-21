@@ -1,4 +1,6 @@
 import { DeliveryStatus, NotificationChannel, NotificationEvent } from "../../../shared/notification-contract.js";
+import { ProcedureAction, ProcedureStatus } from "../../../shared/request-procedure-contract.js";
+import { scheduleDate } from "../../../shared/schedule-contract.js";
 import { selectNotificationEvents } from "./notifications/notification-events.js";
 import { dispatchNotification } from "./notifications/dispatch-notification.js";
 import { notificationEventLabels } from "./notifications/notification-message.js";
@@ -9,6 +11,38 @@ const channelLabels = {
 const deliveryLabels = {
   [DeliveryStatus.SENT]: "aceito para envio", [DeliveryStatus.FAILED]: "falha no envio", [DeliveryStatus.SKIPPED]: "não enviado",
 };
+const agendaEvents = new Set([NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED]);
+
+function scheduleSignature(schedule) {
+  return JSON.stringify([scheduleDate(schedule?.date), schedule?.occurrenceKey, schedule?.slotTime, schedule?.locationName, schedule?.address, schedule?.addressUrl]);
+}
+
+function procedureEvents(events, { action, procedure, previousSchedule }) {
+  const otherEvents = events.filter((event) => !agendaEvents.has(event));
+  if (action === ProcedureAction.CONFIRM_SCHEDULE && events.includes(NotificationEvent.SCHEDULE_CONFIRMED)) {
+    return [NotificationEvent.SCHEDULE_CONFIRMED, ...otherEvents];
+  }
+  if (action === ProcedureAction.RESCHEDULE && procedure.status === ProcedureStatus.SCHEDULED
+    && scheduleSignature(previousSchedule) !== scheduleSignature(procedure.schedule)) {
+    return [NotificationEvent.SCHEDULE_CHANGED, ...otherEvents];
+  }
+  return otherEvents;
+}
+
+function requestForProcedure(request, { procedure, animal }) {
+  const { schedule } = procedure;
+  return {
+    ...request,
+    animal_name: animal?.name || request.animal_name,
+    species: animal?.species || request.species,
+    schedule_date: schedule?.date || "",
+    schedule_time: schedule?.slotTime || "",
+    schedule_location_name: schedule?.locationName || "",
+    schedule_address: schedule?.address || "",
+    schedule_address_url: schedule?.addressUrl || "",
+    workflow_data: { ...request.workflow_data, scheduleSlotTime: schedule?.slotTime || "", scheduleTime: schedule?.slotTime || "" },
+  };
+}
 
 // Each result becomes one entry of the request history. The request was committed already, so a history that cannot be written
 // is reported with the results instead of failing: reporting the request as failed would invite duplicate submissions.
@@ -29,16 +63,18 @@ export async function recordNotificationResults(results, request, { appendHistor
   return results;
 }
 
-export async function notifyRequestChanges(before, after, { appendHistory, dispatch = dispatchNotification }) {
+export async function notifyRequestChanges(before, after, { appendHistory, dispatch = dispatchNotification, procedureChange = null }) {
   const legacy = after.workflow_data?.followUp === undefined;
   const failureChannel = legacy ? NotificationChannel.WHATSAPP : NotificationChannel.EMAIL;
   if (after.workflow_data?.followUp?.enabled === false) return [];
-  const events = selectNotificationEvents(before, after).filter((event) => !legacy
-    || event === NotificationEvent.SCHEDULE_CONFIRMED || event === NotificationEvent.SCHEDULE_CHANGED);
+  const selected = selectNotificationEvents(before, after);
+  const events = (procedureChange ? procedureEvents(selected, procedureChange) : selected).filter((event) => !legacy || agendaEvents.has(event));
   const results = [];
   for (const event of events) {
     try {
-      results.push(...await dispatch({ event, request: after, legacy }));
+      const request = procedureChange && (agendaEvents.has(event) || event === NotificationEvent.NO_SHOW)
+        ? requestForProcedure(after, procedureChange) : after;
+      results.push(...await dispatch({ event, request, legacy }));
     } catch {
       results.push({ event, channel: failureChannel, status: DeliveryStatus.FAILED, reason: "Não foi possível preparar a notificação." });
     }

@@ -9,14 +9,15 @@ describe("notification action notices", () => {
     expect(notice).toEqual({ message: "Aviso aceito para envio por WhatsApp.", type: "success" });
   });
 
-  it("reports successful email fallback without exposing provider errors", () => {
+  it("reports partial delivery when another configured channel fails without exposing provider errors", () => {
     const notice = getNotificationNotice([
       { event, channel: NotificationChannel.WHATSAPP, status: DeliveryStatus.FAILED, reason: "private provider response" },
       { event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT },
     ]);
     expect(notice?.message).toContain("e-mail");
     expect(notice?.message).not.toContain("private");
-    expect(notice?.type).toBe("success");
+    expect(notice?.message).toContain("Alguns canais não enviaram o aviso");
+    expect(notice?.type).toBe("warning");
   });
 
   it("keeps saved business operation separate from failed notification", () => {
@@ -30,14 +31,14 @@ describe("notification action notices", () => {
     expect(getNotificationNotice([{ event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SKIPPED }])?.type).toBe("warning");
     const notice = getNotificationNotice([
       { event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT },
-      { event: NotificationEvent.DOCUMENTS_REVIEWED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED },
+      { event: NotificationEvent.DOCUMENTS_APPROVED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED },
     ]);
     expect(notice?.type).toBe("warning");
     expect(notice?.message).toContain("alguns avisos");
   });
 
   it("preserves document-notification failure when the following agenda update sends successfully", () => {
-    const documentResults = [{ event: NotificationEvent.DOCUMENTS_REVIEWED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED }];
+    const documentResults = [{ event: NotificationEvent.DOCUMENTS_REJECTED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED }];
     const agendaResults = [{ event, channel: NotificationChannel.WHATSAPP, status: DeliveryStatus.SENT }];
     const notice = getNotificationNotice(agendaResults, documentResults);
     expect(notice?.type).toBe("warning");

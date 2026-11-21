@@ -20,7 +20,7 @@ test("EmailJS uses an explicit notification template and sanitizes content", asy
     assert.ok(options.signal instanceof AbortSignal);
     return { ok: true };
   } });
-  const result = await sendNotificationEmail({ toEmail: emailInput.toEmail, templateId: emailInput.templateId, event: NotificationEvent.DOCUMENTS_REVIEWED,
+  const result = await sendNotificationEmail({ toEmail: emailInput.toEmail, templateId: emailInput.templateId, event: NotificationEvent.DOCUMENTS_APPROVED,
     request: { protocol: "1/2026", internal_token: "secret-key", documents: [{ message: "private reason" }] } }, sender);
   assert.equal(result.status, DeliveryStatus.SENT);
 });
@@ -84,34 +84,34 @@ test("transport failures keep finite diagnostic codes", async () => {
   }
 });
 
-test("document notifications report aggregate status without exposing documents", async () => {
-  await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event: NotificationEvent.DOCUMENTS_REVIEWED,
-    request: { protocol: "1/2026", documents: [
-      { status: "approved", fileName: "private-id.pdf" },
-      { status: "rejected", message: "sensitive rejection reason", documentId: "personal-id" },
-      { status: "attached", dataUrl: "private-content" },
-    ] },
-  }, async ({ templateParams }) => {
-    assert.match(templateParams.message, /não puderam ser aprovados/);
-    assert.equal(templateParams.documents_result, DocumentsOutcome.REJECTED);
-    assert.doesNotMatch(templateParams.message, /private|sensitive|personal/);
-    return { status: DeliveryStatus.SENT };
-  });
-  await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event: NotificationEvent.DOCUMENTS_REVIEWED,
-    request: { protocol: "1/2026", documents: [{ status: "approved" }, { status: "attached" }] },
-  }, async ({ templateParams }) => {
-    assert.match(templateParams.message, /Boas notícias! Seus documentos foram analisados e aprovados/);
-    assert.equal(templateParams.documents_result, DocumentsOutcome.APPROVED);
-    return { status: DeliveryStatus.SENT };
-  });
+test("document notifications use the event outcome even when another document has a different state", async () => {
+  const request = { protocol: "1/2026", documents: [
+    { status: "approved", fileName: "private-id.pdf" },
+    { status: "rejected", message: "sensitive rejection reason", documentId: "personal-id" },
+    { status: "attached", dataUrl: "private-content" },
+  ] };
+  for (const [event, result, subject, resultText] of [
+    [NotificationEvent.DOCUMENTS_APPROVED, DocumentsOutcome.APPROVED, "Documentos deferidos", /\bdeferidos?\./],
+    [NotificationEvent.DOCUMENTS_REJECTED, DocumentsOutcome.REJECTED, "Documentos indeferidos", /\bindeferidos?\./],
+  ]) {
+    await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: `notice_${event}`, event, request }, async ({ templateParams, templateId }) => {
+      assert.equal(templateId, `notice_${event}`);
+      assert.equal(templateParams.event, event);
+      assert.equal(templateParams.subject, subject);
+      assert.equal(templateParams.documents_result, result);
+      assert.match(templateParams.message, resultText);
+      assert.doesNotMatch(templateParams.message, /private|sensitive|personal/);
+      return { status: DeliveryStatus.SENT };
+    });
+  }
 });
 
 test("every notice carries its full text, the new subject and, for the no-show, the date of the missed visit", async () => {
   const request = { protocol: "1/2026", schedule_date: "2026-11-20", schedule_location_name: "Centro", workflow_data: { scheduleTime: "09:15" } };
   const expected = {
-    [NotificationEvent.SCHEDULE_CONFIRMED]: ["Agendamento confirmado", "Seu agendamento para castração foi confirmado! Esperamos você no dia 20/11/2026, às 09:15, na Centro. Protocolo: 1/2026."],
-    [NotificationEvent.NO_SHOW]: ["Não comparecimento", "Identificamos que você não compareceu ao agendamento de castração do dia 20/11/2026. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
-    [NotificationEvent.COMPLETED]: ["Atendimento concluído", "Seu atendimento de castração foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: 1/2026."],
+    [NotificationEvent.SCHEDULE_CONFIRMED]: ["Agendamento confirmado", "Seu agendamento foi confirmado! Esperamos você no dia 20/11/2026, às 09:15, na Centro. Protocolo: 1/2026."],
+    [NotificationEvent.NO_SHOW]: ["Não comparecimento", "Identificamos que você não compareceu ao atendimento agendado para o dia 20/11/2026. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
+    [NotificationEvent.COMPLETED]: ["Atendimento concluído", "Seu atendimento foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: 1/2026."],
     [NotificationEvent.REQUEST_REJECTED]: ["Solicitação indeferida", "Sua solicitação foi indeferida. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
   };
   for (const [event, [subject, message]] of Object.entries(expected)) {

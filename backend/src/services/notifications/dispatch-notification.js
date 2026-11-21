@@ -1,4 +1,4 @@
-import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, documentsOutcome, rejectionReasonText } from "../../../../shared/notification-contract.js";
+import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, rejectionReasonText } from "../../../../shared/notification-contract.js";
 import { WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
@@ -79,6 +79,7 @@ async function tryWhatsapp({ event, request, followUp }, dependencies) {
 }
 
 async function tryEmail({ event, request, followUp }, dependencies) {
+  if (!followUp.email) return null;
   const channel = NotificationChannel.EMAIL;
   const resolved = await dependencies.resolveEmailTemplate({ municipalityId: request.municipality_id, use: event });
   if (!resolved.ok && resolved.code === DeliveryCode.CHANNEL_DISABLED) return null;
@@ -97,8 +98,7 @@ async function tryEmail({ event, request, followUp }, dependencies) {
   return sanitizedTransportResult(event, channel, transport);
 }
 
-// Only the request fields the schedule, the protocol, the result of the documents and the access link need; the same safe whitelist the
-// other channels use.
+// Only the fields used in the SMS text are shared with the sender.
 function smsNoticeData(event, request) {
   const field = (name) => resolveWhatsappField(name, request);
   return {
@@ -106,7 +106,6 @@ function smsNoticeData(event, request) {
     date: field(WhatsappTemplateField.SCHEDULE_DATE),
     time: field(WhatsappTemplateField.SCHEDULE_TIME),
     location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
-    ...(event === NotificationEvent.DOCUMENTS_REVIEWED ? { outcome: documentsOutcome(request.documents) } : {}),
     ...(event === NotificationEvent.REQUEST_REJECTED ? { reason: rejectionReasonText(request.workflow_data || request.workflowData) } : {}),
     ...(event === NotificationEvent.REQUEST_REGISTERED ? { scheduled: Boolean(request.schedule_date), link: request.access_link?.url || "" } : {}),
   };
@@ -141,10 +140,7 @@ export async function dispatchNotification({ event, request, legacy = false }, o
   if (legacy) return [await attempt(event, NotificationChannel.WHATSAPP, () => tryLegacyWhatsapp({ event, request }, dependencies))];
   // Every channel the municipality uses for this notice sends on its own: a failure in one never stops the others.
   const channels = [[NotificationChannel.EMAIL, tryEmail], [NotificationChannel.WHATSAPP, tryWhatsapp], [NotificationChannel.SMS, trySms]];
-  const results = [];
-  for (const [channel, task] of channels) {
-    const outcome = await attempt(event, channel, () => task({ event, request, followUp }, dependencies));
-    if (outcome) results.push(outcome);
-  }
-  return results;
+  const results = await Promise.all(channels.map(([channel, task]) =>
+    attempt(event, channel, () => task({ event, request, followUp }, dependencies))));
+  return results.filter(Boolean);
 }

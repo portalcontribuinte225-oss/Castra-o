@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { notifyRequestChanges } from "../src/services/request-change-notifications.js";
 import { NotificationEvent, NotificationChannel, DeliveryStatus } from "../../shared/notification-contract.js";
+import { ProcedureAction, ProcedureStatus } from "../../shared/request-procedure-contract.js";
 
 const before = { id: "request-a", municipality_id: "municipality-a", status: "NOVA", workflow_data: { followUp: { enabled: true, email: "private@example.com" } } };
 const after = () => ({ ...structuredClone(before), status: "AGENDADA", history: [] });
@@ -76,5 +77,52 @@ test("legacy requests do not acquire completion or document notification consent
 
 test("unchanged state never sends a repeated notification", async () => {
   const result = await notifyRequestChanges(after(), after(), dependencies({ dispatch: async () => assert.fail("no repeated send") }));
+  assert.deepEqual(result, []);
+});
+
+test("the first confirmation uses the procedure actually confirmed instead of the nearest pending visit", async () => {
+  const request = { ...after(), schedule_date: "2026-11-23", schedule_location_name: "Unidade A" };
+  const procedureChange = {
+    action: ProcedureAction.CONFIRM_SCHEDULE, animal: { name: "Luna", species: "Gato" },
+    procedure: { status: ProcedureStatus.SCHEDULED, schedule: { date: "2026-11-30", slotTime: "09:15", locationName: "Unidade B" } },
+  };
+  const results = await notifyRequestChanges(before, request, dependencies({ procedureChange, dispatch: async ({ event, request: notice }) => {
+    assert.equal(event, NotificationEvent.SCHEDULE_CONFIRMED);
+    assert.equal(notice.schedule_date, "2026-11-30");
+    assert.equal(notice.schedule_location_name, "Unidade B");
+    assert.equal(notice.workflow_data.scheduleSlotTime, "09:15");
+    assert.equal(notice.animal_name, "Luna");
+    assert.equal(notice.species, "Gato");
+    return [{ event, channel: NotificationChannel.SMS, status: DeliveryStatus.SENT }];
+  } }));
+  assert.equal(results.length, 1);
+  assert.equal(request.schedule_date, "2026-11-23");
+});
+
+test("rescheduling a procedure uses its date even when the general agenda stays unchanged", async () => {
+  const request = { ...after(), schedule_date: "2026-11-23" };
+  const schedule = { date: "2026-11-30", slotTime: "09:15", locationName: "Unidade B" };
+  const procedureChange = {
+    action: ProcedureAction.RESCHEDULE, previousSchedule: { ...schedule, date: "2026-11-29" },
+    procedure: { status: ProcedureStatus.SCHEDULED, schedule },
+  };
+  const result = await notifyRequestChanges(request, { ...request }, dependencies({ procedureChange, dispatch: async ({ event, request: notice }) => {
+    assert.equal(event, NotificationEvent.SCHEDULE_CHANGED);
+    assert.equal(notice.schedule_date, schedule.date);
+    return [{ event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }];
+  } }));
+  assert.equal(result.length, 1);
+  assert.deepEqual(await notifyRequestChanges(request, { ...request }, dependencies({
+    procedureChange: { ...procedureChange, previousSchedule: schedule }, dispatch: async () => assert.fail("no notice for the same visit"),
+  })), []);
+});
+
+test("closing a procedure does not reschedule the request just because another visit became the nearest", async () => {
+  const first = { ...after(), schedule_date: "2026-11-23" };
+  const next = { ...after(), schedule_date: "2026-11-24" };
+  const result = await notifyRequestChanges(first, next, dependencies({
+    procedureChange: { action: ProcedureAction.ATTEND, procedure: { status: ProcedureStatus.DONE, schedule: { date: first.schedule_date } } },
+    dispatch: async () => assert.fail("no rescheduling without an agenda action"),
+  }));
   assert.deepEqual(result, []);
 });

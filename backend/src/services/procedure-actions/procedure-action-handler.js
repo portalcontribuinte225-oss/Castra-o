@@ -67,7 +67,9 @@ async function saveProcedureAction(client, { request, input, user, settings }) {
   if (attended && animalId) await applyProcedureAttendance(client, {
     request: rows[0], user, animalId, animalIndex: input.animalIndex, procedure: applied.procedure, chip,
   });
-  return rows[0];
+  return { request: rows[0], procedureChange: {
+    action: input.action, procedure: applied.procedure, previousSchedule: applied.previousSchedule, animal: applied.resolved[input.animalIndex],
+  } };
 }
 
 // POST /requests/:id/procedures/action updates the addressed procedure and the process fields derived from it.
@@ -90,12 +92,15 @@ export async function handleProcedureAction(req, res) {
     if (!isProcedureRequest(request.request_type)) fail("Este processo não tem procedimentos.", 409);
     if (!request.municipality_id) fail("Vincule o processo a uma prefeitura antes de atualizar os procedimentos.", 409);
     const settings = await loadRequestSettings(request.municipality_id, client);
-    saved = await saveProcedureAction(client, { request, input, user: req.user, settings });
+    const result = await saveProcedureAction(client, { request, input, user: req.user, settings });
+    saved = result.request;
     await client.query("COMMIT");
     committed = true;
     client.release();
     client = null;
-    saved.notificationResults = await notifyRequestChanges(request, saved, { appendHistory: appendRequestHistory });
+    saved.notificationResults = await notifyRequestChanges(request, saved, {
+      appendHistory: appendRequestHistory, procedureChange: result.procedureChange,
+    });
     res.json(decorateRequestDocuments({ ...saved, workflow_data: withoutRequestContactCpf(saved.workflow_data) }, settings));
   } catch (err) {
     if (committed) return res.json({ ...saved, workflow_data: withoutRequestContactCpf(saved.workflow_data),

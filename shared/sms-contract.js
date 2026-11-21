@@ -16,8 +16,9 @@ export const isSmsUseActive = (switches, key) => isUseOn(switches, getSmsUse(key
 
 // The rows as the screen shows them: every known use, in order, with its switch (the stored one, or the use's default).
 export function normalizeSmsUseRows(rows) {
-  const given = new Map((Array.isArray(rows) ? rows : []).map((row) => [row?.key, row?.active]));
-  return smsUses.map(({ key, kind, label, defaultActive }) => ({ key, kind, label, active: typeof given.get(key) === "boolean" ? given.get(key) : defaultActive }));
+  const entries = Array.isArray(rows) ? rows : [];
+  const active = normalizeSmsActiveUses({ active: Object.fromEntries(entries.map((row) => [row?.key, row?.active])) });
+  return smsUses.map(({ key, kind, label, defaultActive }) => ({ key, kind, label, active: active[key] ?? defaultActive }));
 }
 
 export function buildDefaultSmsConfig() {

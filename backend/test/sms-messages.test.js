@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { SMS_MAX_LENGTH, buildSmsTestText, buildSmsText, smsTexts, toSmsText } from "../../shared/sms-messages-contract.js";
+import { SMS_MAX_LENGTH, buildSmsTestText, buildSmsText, smsTextPreview, toSmsText } from "../../shared/sms-messages-contract.js";
 import { smsUses } from "../../shared/sms-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
-import { DocumentsOutcome, NotificationEvent } from "../../shared/notification-contract.js";
+import { NotificationEvent } from "../../shared/notification-contract.js";
 
 const CODE_USES = [AuthPurpose.PASSWORD_RESET, AuthPurpose.VERIFY_PHONE, AuthPurpose.REQUEST_TRACKING];
 const BASIC = /^[ -~]+$/;
-const full = { municipality: "Criciúma", protocol: "123/2026", date: "20/11/2026", time: "09:00", location: "Unidade Veterinária Municipal", code: "123456", minutes: "10", fields: "e-mail", outcome: DocumentsOutcome.APPROVED, reason: "Documentação incompleta", scheduled: true, link: "https://c.test/a" };
+const full = { municipality: "Criciúma", protocol: "123/2026", date: "20/11/2026", time: "09:00", location: "Unidade Veterinária Municipal", code: "123456", minutes: "10", fields: "e-mail", reason: "Documentação incompleta", scheduled: true, link: "https://c.test/a" };
 const LINK = "https://castracao.example.com/?m=criciuma&acessar=000123/2026";
 
 test("accents are removed and anything outside the basic SMS alphabet becomes a space", () => {
@@ -22,7 +22,7 @@ test("accents are removed and anything outside the basic SMS alphabet becomes a 
 });
 
 test("every use has a fixed text in plain ASCII that fits one SMS and starts with the municipality", () => {
-  assert.equal(smsUses.length, 11);
+  assert.equal(smsUses.length, 12);
   for (const { key } of smsUses) {
     const text = buildSmsText(key, full);
     assert.match(text, BASIC, key);
@@ -36,10 +36,10 @@ test("the texts are the agreed ones", () => {
   assert.equal(buildSmsText(AuthPurpose.PASSWORD_RESET, full), "Criciuma: recebemos um pedido para redefinir sua senha. Codigo: 123456. Valido por 10 minutos. Nao compartilhe.");
   assert.equal(buildSmsText(AuthPurpose.VERIFY_PHONE, full), "Criciuma: para confirmar seu telefone, informe o codigo 123456. Valido por 10 minutos. Nao compartilhe.");
   assert.equal(buildSmsText(AuthPurpose.REQUEST_TRACKING, full), "Criciuma: para consultar sua solicitacao, use o codigo 123456. Valido por 10 minutos. Nao compartilhe.");
-  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CONFIRMED, full), "Criciuma: castracao confirmada! Esperamos voce em 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CONFIRMED, full), "Criciuma: agendamento confirmado! Esperamos voce em 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CHANGED, full), "Criciuma: seu atendimento foi reagendado para 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.NO_SHOW, full), "Criciuma: voce nao compareceu ao agendamento de castracao de 20/11/2026. Fale com nossa equipe. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.COMPLETED, full), "Criciuma: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.NO_SHOW, full), "Criciuma: voce nao compareceu ao atendimento de 20/11/2026. Fale com nossa equipe. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.COMPLETED, full), "Criciuma: atendimento concluido! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, full), "Criciuma: sua solicitacao foi indeferida (Documentacao incompleta). Fale com nossa equipe. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, { ...full, reason: "" }), "Criciuma: sua solicitacao foi indeferida. Fale com nossa equipe. Protocolo: 123/2026.");
   assert.equal(buildSmsText(AuthPurpose.CONTACT_CHANGED, full), "Criciuma: seus dados foram atualizados (e-mail). Se nao foi voce, fale com nossa equipe.");
@@ -59,10 +59,9 @@ test("the registered notice gives the protocol and the analysis, the visit only 
   for (const { key } of smsUses) if (key !== NotificationEvent.REQUEST_REGISTERED) assert.equal(buildSmsText(key, full).includes("https://"), false, key);
 });
 
-test("the documents text follows the outcome: approved unless one document was rejected", () => {
-  assert.equal(buildSmsText(NotificationEvent.DOCUMENTS_REVIEWED, full), "Criciuma: seus documentos foram aprovados e a solicitacao segue para as proximas etapas. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.DOCUMENTS_REVIEWED, { ...full, outcome: DocumentsOutcome.REJECTED }), "Criciuma: seus documentos nao foram aprovados. Acesse a solicitacao para ver o motivo. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.DOCUMENTS_REVIEWED, { ...full, outcome: "anything" }), buildSmsText(NotificationEvent.DOCUMENTS_REVIEWED, full));
+test("each kind of document decision has a distinct message", () => {
+  assert.equal(buildSmsText(NotificationEvent.DOCUMENTS_APPROVED, full), "Criciuma: um ou mais documentos foram deferidos. Acesse sua solicitacao para acompanhar a analise. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.DOCUMENTS_REJECTED, full), "Criciuma: um ou mais documentos foram indeferidos. Acesse sua solicitacao para ver o motivo. Protocolo: 123/2026.");
 });
 
 test("the worst case still fits: long municipality, protocol, date, time and location are cut to make room", () => {
@@ -99,25 +98,20 @@ test("without a municipality name the text still starts with a neutral one, and 
     assert.ok(buildSmsText(AuthPurpose.PASSWORD_RESET, { ...full, municipality }).startsWith("Prefeitura: "), String(municipality));
   }
   for (const use of ["unknown", "initial_password", AuthPurpose.VERIFY_EMAIL, undefined]) assert.equal(buildSmsText(use, full), "", String(use));
-  assert.equal(buildSmsText(NotificationEvent.COMPLETED), "Prefeitura: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: .");
+  assert.equal(buildSmsText(NotificationEvent.COMPLETED), "Prefeitura: atendimento concluido! Obrigado pelo cuidado com seu animal. Protocolo: .");
 });
 
 test("the screen shows each message as it goes out, with the data in braces: filling them in gives exactly the text that is sent", () => {
   const filled = { "{protocolo}": "123/2026", "{data}": "20/11/2026", "{horario}": "09:00", "{unidade}": "Unidade Veterinaria Municipal",
     "{codigo}": "123456", "{minutos}": "10", "{campos_alterados}": "e-mail", "{motivo}": "Documentacao incompleta", "{link}": "https://c.test/a" };
   for (const { key } of smsUses) {
-    const shown = smsTexts(key, "Criciúma");
-    assert.ok(shown.length > 0, key);
-    for (const { outcome, text } of shown) {
-      assert.ok(text.startsWith("Criciuma: "), key);
-      const sent = Object.entries(filled).reduce((result, [name, value]) => result.replaceAll(name, value), text);
-      assert.equal(sent, buildSmsText(key, { ...full, outcome: outcome ?? undefined }), key);
-    }
-    assert.ok(smsTexts(key).every(({ text }) => text.startsWith("Municipio: ")), key);
+    const text = smsTextPreview(key, "Criciúma");
+    assert.ok(text.startsWith("Criciuma: "), key);
+    const sent = Object.entries(filled).reduce((result, [name, value]) => result.replaceAll(name, value), text);
+    assert.equal(sent, buildSmsText(key, full), key);
+    assert.ok(smsTextPreview(key).startsWith("Municipio: "), key);
   }
-  assert.deepEqual(smsTexts(AuthPurpose.PASSWORD_RESET, "Criciúma").map(({ outcome }) => outcome), [null]);
-  assert.deepEqual(smsTexts(NotificationEvent.DOCUMENTS_REVIEWED).map(({ outcome }) => outcome), [DocumentsOutcome.APPROVED, DocumentsOutcome.REJECTED]);
-  assert.deepEqual(smsTexts("unknown"), []);
+  assert.equal(smsTextPreview("unknown"), "");
 });
 
 test("the test message names the municipality, says it is a test and fits one SMS in plain ASCII", () => {

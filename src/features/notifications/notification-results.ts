@@ -19,7 +19,11 @@ export function getNotificationNotice(currentResults: NotificationResult[] = [],
   if (sent.length) {
     const channelLabels = { [NotificationChannel.WHATSAPP]: "WhatsApp", [NotificationChannel.EMAIL]: "e-mail", [NotificationChannel.SMS]: "SMS" };
     const channels = [...new Set(sent.map((result) => channelLabels[result.channel]))];
-    return { message: `Aviso aceito para envio por ${channels.join(" e ")}.`, type: "success" as const };
+    const accepted = `Aviso aceito para envio por ${channels.join(" e ")}.`;
+    if (sent.length !== results.length) {
+      return { message: `${accepted} Alguns canais não enviaram o aviso. Consulte o histórico.`, type: "warning" as const };
+    }
+    return { message: accepted, type: "success" as const };
   }
   return null;
 }

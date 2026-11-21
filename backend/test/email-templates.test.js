@@ -4,7 +4,7 @@ import { listEmailUses, resolveEmailTemplate, saveEmailTemplateIds, setEmailUseA
 import { EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY, isEmailUseActive, normalizeEmailActiveUses, normalizeEmailTemplateIds } from "../../shared/email-contract.js";
 import { EmailUseKind, emailUses, getEmailUse } from "../../shared/email-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
-import { DeliveryCode, NotificationEvent } from "../../shared/notification-contract.js";
+import { DeliveryCode, LEGACY_DOCUMENTS_REVIEWED, NotificationEvent } from "../../shared/notification-contract.js";
 import { fakeEmailDatabase } from "./fixtures/email-config-db.js";
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
@@ -22,12 +22,12 @@ function configured(extra = {}) {
   } });
 }
 
-test("there are eleven uses, seven notices and four access messages; neither phone confirmation nor the initial password is one of them", () => {
-  assert.equal(emailUses.length, 11);
-  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 7);
+test("there are twelve uses, eight notices and four access messages; neither phone confirmation nor the initial password is one of them", () => {
+  assert.equal(emailUses.length, 12);
+  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 8);
   assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.ACCESS).length, 4);
   assert.equal(getEmailUse("initial_password"), null);
-  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 11);
+  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 12);
   for (const event of Object.values(NotificationEvent)) assert.ok(getEmailUse(event), event);
   assert.equal(getEmailUse(AuthPurpose.VERIFY_PHONE), null);
   assert.deepEqual(emailUses.filter(({ defaultActive }) => defaultActive).map(({ key }) => key), [RESET]);
@@ -41,9 +41,10 @@ test("every use carries the recipient and the municipality identity, and only ag
   }
   const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.NO_SHOW];
   for (const use of emailUses) assert.equal(use.variables.includes("schedule_date"), schedule.includes(use.key), use.key);
-  assert.ok(getEmailUse(NotificationEvent.DOCUMENTS_REVIEWED).variables.includes("documents_result"));
+  assert.ok(getEmailUse(NotificationEvent.DOCUMENTS_APPROVED).variables.includes("documents_result"));
+  assert.ok(getEmailUse(NotificationEvent.DOCUMENTS_REJECTED).variables.includes("documents_result"));
   assert.ok(getEmailUse(AuthPurpose.CONTACT_CHANGED).variables.includes("changed_fields"));
-  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 7), ["Solicitação registrada", "Agendamento confirmado", "Agendamento reagendado", "Não comparecimento", "Documentos analisados", "Atendimento concluído", "Solicitação indeferida"]);
+  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 8), ["Solicitação registrada", "Agendamento confirmado", "Agendamento reagendado", "Não comparecimento", "Documentos deferidos", "Documentos indeferidos", "Atendimento concluído", "Solicitação indeferida"]);
   assert.ok(getEmailUse(RESET).variables.includes("codigo_recuperacao"));
   assert.equal(emailUses.some(({ variables }) => variables.includes("temporary_password")), false);
 });
@@ -57,11 +58,38 @@ test("stored templates and switches keep only known uses, and an explicit false 
   assert.equal(isEmailUseActive({}, CONFIRMED), false);
 });
 
+test("document notices inherit the old template and switch until an independent value is saved", async () => {
+  const approved = NotificationEvent.DOCUMENTS_APPROVED;
+  const rejected = NotificationEvent.DOCUMENTS_REJECTED;
+  const templateKey = `${EMAIL_TEMPLATES_CONFIG_KEY}:null`;
+  const activeKey = `${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`;
+  const database = configured({
+    [templateKey]: { templates: { [LEGACY_DOCUMENTS_REVIEWED]: "tpl_reviewed", [approved]: "tpl_approved" } },
+    [activeKey]: { active: { [LEGACY_DOCUMENTS_REVIEWED]: true, [rejected]: false } },
+  });
+
+  const documentRows = (await listEmailUses({ account, municipalityId: MUNICIPALITY, master: true, database }))
+    .filter(({ key }) => [approved, rejected].includes(key));
+  assert.deepEqual(documentRows.map(({ key, templateId, active }) => [key, templateId, active]), [
+    [approved, "tpl_approved", true], [rejected, "tpl_reviewed", false],
+  ]);
+  assert.equal((await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: approved, database })).ok, true);
+  assert.equal((await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: rejected, database })).code, DeliveryCode.CHANNEL_DISABLED);
+  await saveEmailTemplateIds({ patch: { [rejected]: "" }, database });
+  assert.deepEqual(database.store.get(templateKey), { templates: { [approved]: "tpl_approved" } });
+  await setEmailUseActive({ municipalityId: MUNICIPALITY, use: approved, active: false, database });
+  assert.deepEqual(database.store.get(activeKey), { active: { [approved]: false, [rejected]: false } });
+  const [approvedRow, rejectedRow] = (await listEmailUses({ account, municipalityId: MUNICIPALITY, master: true, database }))
+    .filter(({ key }) => [approved, rejected].includes(key));
+  assert.equal(approvedRow.templateId, "tpl_approved");
+  assert.equal(rejectedRow.templateId, "");
+});
+
 test("the master sees ids and variables; a municipal viewer only learns which uses are configured and on", async () => {
   const database = configured({ [`${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`]: { active: { [CONFIRMED]: true } } });
   const master = await listEmailUses({ account, municipalityId: MUNICIPALITY, master: true, database });
   const municipal = await listEmailUses({ account, municipalityId: MUNICIPALITY, master: false, database });
-  assert.equal(master.length, 11);
+  assert.equal(master.length, 12);
   assert.equal(master.find(({ key }) => key === RESET).templateId, "tpl_reset");
   assert.ok(master.find(({ key }) => key === RESET).variables.includes("code"));
   for (const row of municipal) assert.equal(Object.hasOwn(row, "templateId") || Object.hasOwn(row, "variables"), false);

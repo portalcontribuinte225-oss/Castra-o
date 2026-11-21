@@ -24,7 +24,7 @@ export const EmailVariable = Object.freeze({
   VALIDITY: "validade",
   VALIDITY_MINUTES: "validity_minutes",
   PURPOSE: "purpose",
-  // "approved" or "rejected": which text the documents notice carries, so one template can say either.
+  // A template can still serve both document notices and use "approved" or "rejected" to identify the decision.
   DOCUMENTS_RESULT: "documents_result",
   // The data that changed, such as "e-mail" or "telefone".
   CHANGED_FIELDS: "changed_fields",
@@ -40,6 +40,7 @@ const variable = EmailVariable;
 const field = WhatsappTemplateField;
 const commonVariables = [variable.TO_EMAIL, variable.TO_NAME, ...EMAIL_IDENTITY_VARIABLES];
 const noticeVariables = [variable.PROTOCOL, variable.EVENT, variable.SUBJECT, variable.MESSAGE];
+const documentVariables = [...noticeVariables, variable.DOCUMENTS_RESULT];
 // Request fields the agenda notices carry; they are resolved by the same safe whitelist WhatsApp uses.
 const scheduleFields = [field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.SCHEDULE_ADDRESS];
 const noShowFields = [field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME];
@@ -60,7 +61,8 @@ export const emailUses = Object.freeze([
   emailUse(NotificationEvent.SCHEDULE_CONFIRMED, EmailUseKind.NOTICE, "Agendamento confirmado", { variables: noticeVariables, requestFields: scheduleFields }),
   emailUse(NotificationEvent.SCHEDULE_CHANGED, EmailUseKind.NOTICE, "Agendamento reagendado", { variables: noticeVariables, requestFields: scheduleFields }),
   emailUse(NotificationEvent.NO_SHOW, EmailUseKind.NOTICE, "Não comparecimento", { variables: noticeVariables, requestFields: noShowFields }),
-  emailUse(NotificationEvent.DOCUMENTS_REVIEWED, EmailUseKind.NOTICE, "Documentos analisados", { variables: [...noticeVariables, variable.DOCUMENTS_RESULT] }),
+  emailUse(NotificationEvent.DOCUMENTS_APPROVED, EmailUseKind.NOTICE, "Documentos deferidos", { variables: documentVariables }),
+  emailUse(NotificationEvent.DOCUMENTS_REJECTED, EmailUseKind.NOTICE, "Documentos indeferidos", { variables: documentVariables }),
   emailUse(NotificationEvent.COMPLETED, EmailUseKind.NOTICE, "Atendimento concluído", { variables: noticeVariables }),
   emailUse(NotificationEvent.REQUEST_REJECTED, EmailUseKind.NOTICE, "Solicitação indeferida", { variables: noticeVariables }),
   emailUse(AuthPurpose.PASSWORD_RESET, EmailUseKind.ACCESS, "Recuperação de senha", { variables: codeVariables, defaultActive: true }),

@@ -472,8 +472,10 @@ router.patch("/:id", auth, async (req, res) => {
     savedRequest = rows[0];
     client.release();
     released = true;
-    rows[0].notificationResults = await notifyRequestChanges(existingRows[0], rows[0], { appendHistory: appendRequestHistory });
-    res.json(decorateRequestDocuments({ ...savedRequest, workflow_data: withoutRequestContactCpf(savedRequest.workflow_data) }, settings));
+    const requestWithDocuments = decorateRequestDocuments(savedRequest, settings);
+    const beforeNotice = body.documentReviews?.length ? decorateRequestDocuments(existingRows[0], settings) : existingRows[0];
+    requestWithDocuments.notificationResults = await notifyRequestChanges(beforeNotice, requestWithDocuments, { appendHistory: appendRequestHistory });
+    res.json({ ...requestWithDocuments, workflow_data: withoutRequestContactCpf(requestWithDocuments.workflow_data) });
   } catch (err) {
     if (committed) return res.json({ ...savedRequest, workflow_data: withoutRequestContactCpf(savedRequest.workflow_data),
       notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });

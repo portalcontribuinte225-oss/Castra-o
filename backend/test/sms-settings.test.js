@@ -177,7 +177,7 @@ test("sending a message builds the fixed text for the municipality through the p
   assert.equal(f.database.contractOf(MUNICIPALITY).currentPeriodUsed, 1, "a message that is off spends nothing");
   f.database.configs.set(`${SMS_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true } });
   assert.equal((await sendSmsUse(notice, deps)).status, DeliveryStatus.SENT);
-  assert.equal(sent[1].text, "Test Town: castracao confirmada! Esperamos voce em 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
+  assert.equal(sent[1].text, "Test Town: agendamento confirmado! Esperamos voce em 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
   assert.match(sent[1].messageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(sent[1].expiresAt, undefined);
   const spent = await sendSmsUse(notice, deps);

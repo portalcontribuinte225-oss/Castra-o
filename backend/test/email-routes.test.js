@@ -5,6 +5,7 @@ import express from "express";
 import emailRoutes from "../src/routes/email.js";
 import { pool } from "../src/db/index.js";
 import { EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_SETTINGS_PERMISSION, EMAIL_TEMPLATES_CONFIG_KEY } from "../../shared/email-contract.js";
+import { emailUses } from "../../shared/email-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
@@ -85,7 +86,7 @@ test("a municipal administrator reads only the municipal view: no account, no id
   assert.equal(response.body.municipal, true);
   assert.equal(response.body.configured, true);
   assert.deepEqual(response.body.identity, { name: "Test Town", departmentName: "", brasao: "missing", departmentLogo: "missing" });
-  assert.equal(response.body.uses.length, 11);
+  assert.deepEqual(response.body.uses.map(({ key }) => key), emailUses.map(({ key }) => key));
   for (const row of response.body.uses) assert.equal(Object.hasOwn(row, "templateId") || Object.hasOwn(row, "variables"), false);
   assert.equal(JSON.stringify(response.body).includes("tpl_"), false);
   assert.equal(database.calls.filter(({ sql }) => sql.includes("SELECT value FROM config")).every(({ values }) => values[1] === MUNICIPALITY || values[1] === null), true);

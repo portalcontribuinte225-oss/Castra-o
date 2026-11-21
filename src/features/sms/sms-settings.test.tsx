@@ -326,16 +326,15 @@ describe("SMS settings interface", () => {
     expect(typing).toContain("<code>typed-to</code>"); expect(typing).not.toMatch(/<button[^>]*disabled=""[^>]*>Salvar credenciais/);
   });
 
-  it("lists the nine messages with their text as it goes out, named for the municipality, and the two texts of the documents told apart", () => {
+  it("lists the final texts for the municipality and the decisions in independent rows", () => {
     const html = screen();
     expect(html.match(/<tr>/g)).toHaveLength(smsUses.length + 1);
     for (const use of smsUses) expect(html).toContain(use.label);
     expect(html).toContain("Test Town: recebemos um pedido para redefinir sua senha. Codigo: {codigo}. Valido por {minutos} minutos. Nao compartilhe.");
-    expect(html).toContain("Test Town: atendimento de castracao concluido! Obrigado pelo cuidado com seu animal. Protocolo: {protocolo}.");
+    expect(html).toContain("Test Town: atendimento concluido! Obrigado pelo cuidado com seu animal. Protocolo: {protocolo}.");
     expect(html).toContain("<th>Texto</th>"); expect(html).not.toContain("Exemplo");
-    expect(html).toContain("<strong>Documentos aprovados</strong><br/>Test Town: seus documentos foram aprovados e a solicitacao segue para as proximas etapas. Protocolo: {protocolo}.");
-    expect(html).toContain("<strong>Documentos não aprovados</strong><br/>Test Town: seus documentos nao foram aprovados. Acesse a solicitacao para ver o motivo. Protocolo: {protocolo}.");
-    expect(html.match(/<strong>Documentos/g)).toHaveLength(2);
+    expect(html).toContain("<td>Documentos deferidos</td><td>Test Town: um ou mais documentos foram deferidos. Acesse sua solicitacao para acompanhar a analise. Protocolo: {protocolo}.</td>");
+    expect(html).toContain("<td>Documentos indeferidos</td><td>Test Town: um ou mais documentos foram indeferidos. Acesse sua solicitacao para ver o motivo. Protocolo: {protocolo}.</td>");
     expect(screen({ config: { ...stored, municipalityName: "" } })).toContain("Municipio: recebemos um pedido para redefinir sua senha.");
   });
 

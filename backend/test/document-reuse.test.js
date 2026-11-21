@@ -4,6 +4,7 @@ import { COMPLAINT_PHOTO_IDS, COMPLAINT_PHOTO_MAX_MB } from "../../shared/compla
 import { DocumentReuseScope, MAX_REQUEST_JSON_BYTES, MAX_DOCUMENT_REUSE_VALIDITY_DAYS,
   normalizeDocumentReusePolicy, validateDocumentReusePolicy } from "../../shared/document-reuse-contract.js";
 import { RequestKind } from "../../shared/request-contract.js";
+import { NotificationEvent } from "../../shared/notification-contract.js";
 import { assertMaterializedRequestSize, decodeDocumentContent } from "../src/services/documents/document-content.js";
 import { canonicalDocumentDefinition, documentCriteriaFingerprint, PHOTO_DEFINITION } from "../src/services/documents/document-policy.js";
 import { hasValidDocumentReceipt, signDocumentReceipt } from "../src/services/documents/document-provenance.js";
@@ -11,6 +12,7 @@ import { describeStoredDocument } from "../src/services/documents/stored-documen
 import { createReceivedDocument, prepareRequestDocuments } from "../src/services/documents/request-documents.js";
 import { applyDocumentReviews, decorateRequestDocuments } from "../src/services/documents/document-reviews.js";
 import { catalogReusableDocuments, readReusableDocument } from "../src/services/documents/document-catalog.js";
+import { selectNotificationEvents } from "../src/services/notifications/notification-events.js";
 
 const oldSecret = process.env.JWT_SECRET;
 before(() => { process.env.JWT_SECRET = "isolated-document-reuse-tests"; });
@@ -269,12 +271,15 @@ test("manual decisions bind actor, bytes and current criteria; body status alone
 test("legacy review uses decorated file identity without renewing receipt date", async () => {
   const document = { documentId: "identity", dataUrl: PDF, fileName: "old.pdf", status: "approved", receivedAt: "2099-01-01" };
   const previous = { ...row(document), documents: [document] };
-  const id = decorateRequestDocuments(previous, settingsFor()).documents[0].attachmentId;
+  const beforeReview = decorateRequestDocuments(previous, settingsFor());
+  const id = beforeReview.documents[0].attachmentId;
   const [reviewed] = await applyDocumentReviews(null, { previous, patch: { documentReviews: [{ attachmentId: id, decision: "approved" }] },
     user: STAFF, municipalityId: MUNICIPALITY, settings: settingsFor(), now: NOW });
   assert.equal(reviewed.status, "approved");
   assert.equal(reviewed.receivedAt, "2026-10-01T00:00:00.000Z");
   assert.equal(hasValidDocumentReceipt(reviewed, row(reviewed)), true);
+  const afterReview = decorateRequestDocuments({ ...previous, documents: [reviewed] }, settingsFor());
+  assert.deepEqual(selectNotificationEvents(beforeReview, afterReview), [NotificationEvent.DOCUMENTS_APPROVED]);
 });
 
 test("catalog is metadata only, source scoped, and shared multi-animal photos are ineligible", async () => {

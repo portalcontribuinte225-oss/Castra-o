@@ -1,5 +1,6 @@
-import { NotificationEvent } from "./notification-contract.js";
+import { LEGACY_DOCUMENTS_REVIEWED, NotificationEvent } from "./notification-contract.js";
 import { AuthPurpose } from "./auth-contract.js";
+import { inheritDocumentNoticeValues } from "./use-switches-contract.js";
 
 export const WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY = "whatsapp_active_templates";
 export const WHATSAPP_CATALOG_CONFIG_KEY = "whatsapp_catalog";
@@ -8,6 +9,7 @@ export const WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY = "whatsapp_template_links";
 export const WHATSAPP_APPROVED_STATUS = "APPROVED";
 // Reason for a template whose name is simply not one of the system's notices (not a defect of the template).
 export const WHATSAPP_NOT_A_NOTICE_REASON = "O nome não indica um aviso do sistema.";
+export const WHATSAPP_LEGACY_DOCUMENTS_LABEL = "Documentos deferidos e indeferidos";
 export const WHATSAPP_DEFAULT_LANGUAGE = "pt_BR";
 export const WHATSAPP_MAX_VARIABLES = 20;
 // The longest body text kept from Meta; a longer body is treated as missing.
@@ -47,6 +49,14 @@ export const WhatsappAccessLayout = Object.freeze({ CODE: "code", CONTACT: "cont
 
 const field = WhatsappTemplateField;
 const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.PROTOCOL];
+const documentFields = [field.PROTOCOL, field.NOTIFICATION_MESSAGE];
+const documentOutcomeUses = [NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.DOCUMENTS_REJECTED];
+const templateAliases = Object.freeze({
+  [NotificationEvent.NO_SHOW]: ["cancelamento", "nao_compareceu"],
+  [NotificationEvent.DOCUMENTS_APPROVED]: ["documentos_aprovados", "documentos_conferidos"],
+  [NotificationEvent.DOCUMENTS_REJECTED]: ["documentos_rejeitados", "documentos_conferidos"],
+  [AuthPurpose.CONTACT_CHANGED]: ["dados_tutor_alterados"],
+});
 
 function notice(key, label, namePart, fields) {
   return Object.freeze({
@@ -65,8 +75,9 @@ export const whatsappUses = Object.freeze([
   notice(NotificationEvent.REQUEST_REGISTERED, "Solicitação registrada", "solicitacao_registrada", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "confirmacao_agendamento", scheduleFields),
   notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "reagendamento", scheduleFields),
-  notice(NotificationEvent.NO_SHOW, "Não comparecimento", "cancelamento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
-  notice(NotificationEvent.DOCUMENTS_REVIEWED, "Documentos conferidos", "documentos_conferidos", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
+  notice(NotificationEvent.NO_SHOW, "Não comparecimento", "nao_comparecimento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
+  notice(NotificationEvent.DOCUMENTS_APPROVED, "Documentos deferidos", "documentos_deferidos", documentFields),
+  notice(NotificationEvent.DOCUMENTS_REJECTED, "Documentos indeferidos", "documentos_indeferidos", documentFields),
   notice(NotificationEvent.COMPLETED, "Atendimento concluído", "atendimento_concluido", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   notice(NotificationEvent.REQUEST_REJECTED, "Solicitação indeferida", "indeferimento", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   access(AuthPurpose.PASSWORD_RESET, "Recuperação de senha", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
@@ -87,8 +98,11 @@ export function parseWhatsappTemplateName(name) {
 }
 
 function matchesUse(part, use) {
-  return part === use.namePart || (use.nameSuffix === true && part.startsWith(`${use.namePart}_`));
+  return part === use.namePart || templateAliases[use.key]?.includes(part)
+    || (use.nameSuffix === true && part.startsWith(`${use.namePart}_`));
 }
+
+const linkedUses = (link) => link.use === LEGACY_DOCUMENTS_REVIEWED ? [...documentOutcomeUses] : [link.use];
 
 const NOTICE_BUTTONS = new Set(["QUICK_REPLY", "PHONE_NUMBER", "URL"]);
 const noticeButtonsReason = (entry) => (entry.buttons.every((button) => NOTICE_BUTTONS.has(button)) ? "" : "Botão com variável ou de código não é suportado.");
@@ -109,6 +123,8 @@ function useReason(entry, use) {
     if (entry.category !== "AUTHENTICATION") return "Códigos de acesso precisam ser um template de autenticação.";
     return entry.buttons.length === 1 && entry.buttons[0] === "OTP_COPY_CODE" ? "" : "O template de código precisa do botão de copiar código.";
   }
+  if (use.key === AuthPurpose.CONTACT_CHANGED && parseWhatsappTemplateName(entry.name) === "dados_tutor_alterados"
+    && entry.category !== "UTILITY") return "O aviso de contato alterado precisa ser um template de utilidade.";
   return noticeButtonsReason(entry);
 }
 
@@ -125,7 +141,7 @@ export function recognizeWhatsappTemplate(entry, link = null) {
   if (link) {
     const reason = noticeStructureReason(entry)
       || (link.fields.length === entry.bodyVariables ? "" : `O corpo tem ${entry.bodyVariables} variável(is); a configuração tem ${link.fields.length}. Configure o template de novo.`);
-    return reason ? { uses: [], reason } : { uses: [link.use], reason: "" };
+    return reason ? { uses: [], reason } : { uses: linkedUses(link), reason: "" };
   }
   const part = parseWhatsappTemplateName(entry?.name);
   const candidates = part === null ? [] : whatsappUses.filter((use) => matchesUse(part, use));
@@ -157,7 +173,7 @@ export function cleanTemplateIdentity(name, language) {
 
 // Stored value: { active: { <use key>: { name, language } } }. Only known uses with a valid identity survive.
 export function normalizeActiveTemplates(stored) {
-  const source = stored?.active && typeof stored.active === "object" && !Array.isArray(stored.active) ? stored.active : {};
+  const source = inheritDocumentNoticeValues(stored?.active);
   const active = {};
   for (const use of whatsappUses) {
     const identity = cleanTemplateIdentity(source[use.key]?.name, source[use.key]?.language);
@@ -183,6 +199,7 @@ export function activeUseKeys(active, name, language) {
 
 const knownFields = new Set(Object.values(WhatsappTemplateField));
 export const isWhatsappNoticeUse = (key) => getWhatsappUse(key)?.kind === WhatsappUseKind.NOTICE;
+const isLinkUse = (key) => isWhatsappNoticeUse(key) || key === LEGACY_DOCUMENTS_REVIEWED;
 
 // Stored value: { links: [{ name, language, use, fields }] }. Only links to a notice whose fields are all known survive, one per template.
 export function normalizeTemplateLinks(stored) {
@@ -190,7 +207,7 @@ export function normalizeTemplateLinks(stored) {
   const links = [];
   for (const item of source) {
     const identity = cleanTemplateIdentity(item?.name, item?.language);
-    if (!identity || !isWhatsappNoticeUse(item.use) || !Array.isArray(item.fields) || item.fields.length > WHATSAPP_MAX_VARIABLES) continue;
+    if (!identity || !isLinkUse(item.use) || !Array.isArray(item.fields) || item.fields.length > WHATSAPP_MAX_VARIABLES) continue;
     if (!item.fields.every((value) => knownFields.has(value))) continue;
     if (findTemplateLink(links, identity.name, identity.language)) continue;
     links.push({ ...identity, use: item.use, fields: [...item.fields] });
@@ -204,13 +221,13 @@ export function findTemplateLink(links, name, language) {
 
 // The field that fills each numbered variable when the template sends the use: what its link chose, or the use's own order.
 export function templateFields(useKey, link = null) {
-  if (link && link.use === useKey) return [...link.fields];
+  if (link && linkedUses(link).includes(useKey)) return [...link.fields];
   return [...(getWhatsappUse(useKey)?.fields || [])];
 }
 
 // Why a link cannot be saved for a catalog entry ("" when it can).
 export function templateLinkIssue(entry, use, fields) {
-  if (!isWhatsappNoticeUse(use)) return "Escolha um aviso do sistema.";
+  if (!isLinkUse(use)) return "Escolha um aviso do sistema.";
   if (!Array.isArray(fields) || fields.some((value) => !knownFields.has(value))) return "Escolha uma variável do sistema para cada número.";
   const structural = noticeStructureReason(entry);
   if (structural) return structural;
