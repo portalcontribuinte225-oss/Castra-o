@@ -24,7 +24,7 @@ const channelOn: SmsConfig = { ...stored, active: true };
 const municipal: SmsConfig = { ...buildDefaultSmsConfig(), active: true, municipalityName: "Test Town" };
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: vi.fn(), saveStatus: "",
-  ready: true, loadFailed: false, retry: vi.fn(), saving: false,
+  ready: true, loadFailed: false, retry: vi.fn(), saving: false, serviceStatus: "",
   live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
   confirmingEnd: false, setConfirmingEnd: vi.fn(), save: vi.fn(), endContractToday: vi.fn(), resetUsed: vi.fn(), setEnabled: vi.fn(),
 };
@@ -427,11 +427,30 @@ describe("SMS settings interface", () => {
     expect(viewer.indexOf('aria-label="Estado da integração"')).toBeLessThan(viewer.indexOf("Credenciais"));
     const editor = screen({}, { canEditContract: true });
     expect(editor).toContain("Contrato e cota"); expect(editor).toContain("Salvar cota");
-    expect(editor).toContain("Serviço ativo para este município"); expect(viewer).not.toContain("Serviço ativo para este município");
+    expect(editor).toContain("Ativo no município"); expect(viewer).not.toContain("Ativo no município");
     expect(editor.indexOf("Mensagens")).toBeLessThan(editor.indexOf("Contrato e cota"));
     expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "municipality-a");
     screen({}, { canManage: false });
     expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "");
+  });
+
+  it("shows one activation switch in credentials for the selected SMS scope", () => {
+    const props = { canEditContract: true };
+    const platform = screen({ config: channelOn }, { ...props, municipalityId: "" });
+    expect(platform).toContain("Ativo na plataforma");
+    expect(platform).not.toContain("Ativo no município");
+    expect(platform.match(/type="checkbox"/g)).toHaveLength(1);
+
+    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: { ...contractState.live, enabled: false } });
+    const municipality = screen({ config: channelOn }, props);
+    expect(municipality).toContain("Inativo no município");
+    expect(municipality).not.toContain("Ativo na plataforma");
+    expect(municipality.match(/type="checkbox"/g)).toHaveLength(1);
+    expect(municipality.indexOf("Credenciais")).toBeLessThan(municipality.indexOf("Inativo no município"));
+    expect(municipality.indexOf("Inativo no município")).toBeLessThan(municipality.indexOf("Token de API SMSMais"));
+
+    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: null });
+    expect(screen({ config: channelOn }, props)).not.toContain('type="checkbox"');
   });
 
   it("locks the messages and marks the channel inactive while the service is switched off for the municipality, telling why", () => {

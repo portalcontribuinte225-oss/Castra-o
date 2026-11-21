@@ -35,7 +35,7 @@ const accountState = (overrides = {}) => ({
 
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
-  ready: true, loadFailed: false, retry: noop, saving: false,
+  ready: true, loadFailed: false, retry: noop, saving: false, serviceStatus: "",
   live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
   confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop,
 };
@@ -67,16 +67,31 @@ describe("e-mail contract", () => {
     expect(editor.indexOf("Templates")).toBeLessThan(editor.indexOf("Contrato e cota"));
   });
 
-  it("offers the service switch to who edits the contract, and locks the messages with the reason while the service is off", () => {
-    expect(tab()).toContain("Serviço ativo para este município");
-    expect(tab({ master: false, canEditContract: false })).not.toContain("Serviço ativo para este município");
+  it("places the one municipal switch in credentials only for an authorized master with an existing quota", () => {
+    const editor = tab();
+    expect(editor.match(/type="checkbox"/g)).toHaveLength(1);
+    expect(editor.indexOf("Credenciais")).toBeLessThan(editor.indexOf("Ativo no município"));
+    expect(editor.indexOf("Ativo no município")).toBeLessThan(editor.indexOf("ID do serviço"));
+    expect(editor.slice(editor.indexOf("Contrato e cota"))).not.toContain('type="checkbox"');
+    expect(tab({ master: false })).not.toContain('type="checkbox"');
+    expect(tab({ canEditContract: false })).not.toContain('type="checkbox"');
+    expect(tab({ municipalityId: "" })).not.toContain('type="checkbox"');
+    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, ready: false, live: undefined });
+    expect(tab()).not.toContain('type="checkbox"');
+    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: null });
+    expect(tab()).not.toContain('type="checkbox"');
+  });
+
+  it("shows the saved municipal state and locks each message with the reason while the service is off", () => {
     vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: { ...contractState.live, enabled: false } });
     const off = tab({ master: false, canEditContract: false });
     expect(off).toContain("Inativo");
     expect(off.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(emailUses.length);
     expect(off.match(/aria-label="O serviço de e-mail está desativado para este município\."/g)).toHaveLength(emailUses.length);
     expect(off).not.toContain('aria-checked="true"');
-    expect(tab()).toContain("Serviço desativado para este município");
+    const editor = tab();
+    expect(editor).toContain("Inativo no município");
+    expect(editor).not.toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
   });
 
   it("reads the contract of the e-mail channel for the municipality, and for none while the viewer cannot manage", () => {

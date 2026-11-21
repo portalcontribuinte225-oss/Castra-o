@@ -39,7 +39,7 @@ const credentialsState = {
 };
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
-  ready: true, loadFailed: false, retry: noop, saving: false,
+  ready: true, loadFailed: false, retry: noop, saving: false, serviceStatus: "",
   live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
   confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop,
 };
@@ -334,7 +334,7 @@ describe("integration tab", () => {
     expect(html).toContain('aria-label="Estado da integração"'); expect(html).toContain("12/500"); expect(html).toContain("Templates da Meta");
     expect(html.indexOf('aria-label="Estado da integração"')).toBeLessThan(html.indexOf("Templates da Meta"));
     expect(tab()).not.toContain("é configurada pela administração da plataforma");
-    expect(tab()).not.toContain("Serviço ativo para este município");
+    expect(tab().match(/type="checkbox"/g)).toHaveLength(1);
   });
 
   it("asks for a municipality before anything else and hides the status bar", () => {

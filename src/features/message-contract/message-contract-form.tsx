@@ -1,13 +1,11 @@
 import React from "react";
 import { Button } from "../../components/button";
 import { IntegrationCard, integrationFieldsStyle } from "../../components/integration-card";
-import { ConfigActiveToggle, ConfigField } from "../../components/ui";
+import { ConfigField } from "../../components/ui";
 import type { MessageContract } from "./use-message-contract";
 
-// The contract of one channel as the platform's administrator edits it: the monthly limit and the dates, ending it today or starting the month
-// over. SMS and e-mail also carry the switch of the service for the municipality, which needs a contract to hang on.
-export function MessageContractForm({ municipalityId, contract, serviceSwitch }: { municipalityId: string; contract: MessageContract; serviceSwitch: boolean }) {
-  const { settings, setSettings, ready, loadFailed, retry, saving, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed, setEnabled } = contract;
+export function MessageContractForm({ municipalityId, contract }: { municipalityId: string; contract: MessageContract }) {
+  const { settings, setSettings, ready, loadFailed, retry, saving, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed } = contract;
   if (municipalityId && !ready) {
     return (
       <IntegrationCard title="Contrato e cota">
@@ -22,14 +20,9 @@ export function MessageContractForm({ municipalityId, contract, serviceSwitch }:
   }
   const locked = !municipalityId || saving;
   const patch = (changes: Record<string, string>) => setSettings((current) => ({ ...current, ...changes }));
-  const saved = saveStatus.includes("sucesso") || saveStatus.includes("zerada") || saveStatus.includes("encerrado") || saveStatus.includes("ativado");
+  const saved = saveStatus.includes("sucesso") || saveStatus.includes("zerada") || saveStatus.includes("encerrado");
   return (
-    <IntegrationCard
-      title="Contrato e cota"
-      actions={serviceSwitch && live?.plan ? (
-        <ConfigActiveToggle checked={live.enabled !== false} onChange={setEnabled} onText="Serviço ativo para este município" offText="Serviço desativado para este município" disabled={locked} />
-      ) : null}
-    >
+    <IntegrationCard title="Contrato e cota">
       <div className={integrationFieldsStyle}>
         <ConfigField label="Limite mensal" value={settings.plan} placeholder="Ex: 500" onChange={(value) => patch({ plan: value })} disabled={locked} />
         <ConfigField label="Início" type="date" value={settings.contractStart} onChange={(value) => patch({ contractStart: value })} disabled={locked} />

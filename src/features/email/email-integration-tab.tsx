@@ -6,6 +6,7 @@ import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { MessageContractForm } from "../message-contract/message-contract-form";
 import { MessageContractStatus } from "../message-contract/message-contract-status";
+import { MessageServiceToggle } from "../message-contract/message-service-toggle";
 import { useMessageContract } from "../message-contract/use-message-contract";
 import { EmailCredentials } from "./email-credentials";
 import { EmailTemplatesTable } from "./email-templates-table";
@@ -35,7 +36,13 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
       <PanelHeader title="E-mail" />
       {municipalityId && settings && <MessageContractStatus active={contract.ready ? settings.configured && serviceOn : null} live={contract.live} />}
       <div className="tw:grid tw:gap-3">
-        {master && settings && <EmailCredentials account={settings.account} state={account} />}
+        {master && settings && (
+          <EmailCredentials
+            account={settings.account}
+            state={account}
+            actions={canEditContract && municipalityId ? <MessageServiceToggle contract={contract} /> : null}
+          />
+        )}
         <IntegrationCard title="Templates">
           {email.loading && <p role="status">Carregando a integração de e-mail...</p>}
           {email.error && (
@@ -69,7 +76,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
           )}
           {master && settings && <Button className="tw:justify-self-start" disabled={!email.dirty || email.saving} onClick={email.saveTemplates}>{email.saving ? "Salvando..." : "Salvar templates"}</Button>}
         </IntegrationCard>
-        {canEditContract && settings && <MessageContractForm municipalityId={municipalityId} contract={contract} serviceSwitch />}
+        {canEditContract && settings && <MessageContractForm municipalityId={municipalityId} contract={contract} />}
       </div>
     </div>
   );

@@ -8,12 +8,12 @@ import type { useEmailAccount } from "./use-email-account";
 type AccountState = ReturnType<typeof useEmailAccount>;
 
 // The platform account of the master: it is one for every municipality, so it never depends on a selected one.
-export function EmailCredentials({ account, state }: { account: EmailAccountView | null; state: AccountState }) {
+export function EmailCredentials({ account, state, actions }: { account: EmailAccountView | null; state: AccountState; actions?: React.ReactNode }) {
   const { form, edit, status, statusOk, saving, changed, fieldsChanged, confirmingRemoval, setConfirmingRemoval, save, removeKey } = state;
   // A saved key stays inside its field (start visible, rest masked); saving and removing never show together.
   const keySaved = Boolean(account?.hasPrivateKey) && !form.privateKey;
   return (
-    <IntegrationCard title="Credenciais">
+    <IntegrationCard title="Credenciais" actions={actions}>
       <div className={integrationFieldsStyle}>
         <ConfigField label="ID do serviço (Service ID)" value={form.serviceId} placeholder="service_xxxxxxx" autoComplete="off" onChange={(value) => edit({ serviceId: value })} />
         <ConfigField label="Chave pública (Public Key)" value={form.publicKey} placeholder="Chave pública da conta" autoComplete="off" onChange={(value) => edit({ publicKey: value })} />

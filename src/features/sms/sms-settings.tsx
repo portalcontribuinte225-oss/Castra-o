@@ -2,9 +2,10 @@ import React from "react";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { Button } from "../../components/button";
 import { IntegrationCard } from "../../components/integration-card";
-import { PanelHeader } from "../../components/ui";
+import { ConfigActiveToggle, PanelHeader } from "../../components/ui";
 import { MessageContractForm } from "../message-contract/message-contract-form";
 import { MessageContractStatus } from "../message-contract/message-contract-status";
+import { MessageServiceToggle } from "../message-contract/message-service-toggle";
 import { useMessageContract } from "../message-contract/use-message-contract";
 import { SmsCredentials } from "./sms-credentials";
 import { SmsUsesTable } from "./sms-uses-table";
@@ -19,6 +20,9 @@ export function SmsSettings({ municipalityId, master, canManage, canEditContract
   if (!municipalityId && !master) return <p>Selecione um município para configurar o SMS.</p>;
   const busy = state.loading || state.saving || state.testing || state.sendingTest;
   const serviceOn = contract.live?.enabled !== false;
+  const activationControl = municipalityId
+    ? canEditContract && <MessageServiceToggle contract={contract} />
+    : <ConfigActiveToggle checked={state.config.active} onChange={state.toggleActive} onText="Ativo na plataforma" offText="Inativo na plataforma" disabled={busy} />;
   return (
     <div className="config-panel wide">
       <PanelHeader title="SMS" />
@@ -29,7 +33,10 @@ export function SmsSettings({ municipalityId, master, canManage, canEditContract
       {!state.ready && !state.loading && <Button variant="outline" onClick={state.retry}>Carregar novamente</Button>}
       {state.ready && (
         <div className="tw:grid tw:gap-3">
-          {master && <SmsCredentials state={state} />}
+          {master && <SmsCredentials state={state} actions={activationControl} />}
+          {master && municipalityId && !state.config.active && (
+            <p className="whatsapp-note">O SMS da plataforma está inativo. Para ativá-lo, selecione “Todos os municípios”.</p>
+          )}
           <IntegrationCard title="Mensagens">
             {!municipalityId && <p className="whatsapp-note">Selecione um município para ligar ou desligar as mensagens.</p>}
             <SmsUsesTable
@@ -41,7 +48,7 @@ export function SmsSettings({ municipalityId, master, canManage, canEditContract
               onToggle={state.setUseActive}
             />
           </IntegrationCard>
-          {canEditContract && <MessageContractForm municipalityId={municipalityId} contract={contract} serviceSwitch />}
+          {canEditContract && <MessageContractForm municipalityId={municipalityId} contract={contract} />}
         </div>
       )}
     </div>

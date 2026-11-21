@@ -22,6 +22,7 @@ function localToday() {
 export function useMessageContract(channel: string, municipalityId: string) {
   const [settings, setSettings] = useState(emptySettings);
   const [saveStatus, setSaveStatus] = useState("");
+  const [serviceStatus, setServiceStatus] = useState("");
   const [status, setStatus] = useState<MessageQuotaStatus | null>(null);
   const [confirmingEnd, setConfirmingEnd] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -49,6 +50,7 @@ export function useMessageContract(channel: string, municipalityId: string) {
     setSaving(false);
     setConfirmingEnd(false);
     setSaveStatus("");
+    setServiceStatus("");
     setSettings(emptySettings);
     setStatus(null);
     if (!municipalityId) return;
@@ -68,12 +70,12 @@ export function useMessageContract(channel: string, municipalityId: string) {
     request: () => Promise<MessageQuotaStatus | null>,
     done: string,
     failure: string,
-    refreshForm = false,
+    { refreshForm = false, report = setSaveStatus } = {},
   ) {
     if (!ready || saving) return;
     const captured = revision.current;
     setSaving(true);
-    setSaveStatus("Salvando...");
+    report("Salvando...");
     try {
       const saved = await request();
       if (!current(captured)) return;
@@ -82,16 +84,16 @@ export function useMessageContract(channel: string, municipalityId: string) {
         setSettings(settingsOf(saved));
         setConfirmingEnd(false);
       }
-      setSaveStatus(done);
+      report(done);
     } catch (error) {
-      if (current(captured)) setSaveStatus(`${failure}: ${messageOf(error)}`);
+      if (current(captured)) report(`${failure}: ${messageOf(error)}`);
     } finally {
       if (current(captured)) setSaving(false);
     }
   }
 
   function saveQuota(input: MessageQuotaInput, done: string) {
-    return persist(() => api.saveMessageQuota(channel, municipalityId, input), done, "Não foi possível salvar", true);
+    return persist(() => api.saveMessageQuota(channel, municipalityId, input), done, "Não foi possível salvar", { refreshForm: true });
   }
 
   function save() {
@@ -111,14 +113,14 @@ export function useMessageContract(channel: string, municipalityId: string) {
   // The service of SMS or e-mail for the municipality, on or off; only the platform's administrator may.
   function setEnabled(enabled: boolean) {
     return persist(() => api.setMessageService(channel, municipalityId, enabled),
-      enabled ? "Serviço ativado." : "Serviço desativado.", "Não foi possível alterar o serviço");
+      enabled ? "Serviço ativado." : "Serviço desativado.", "Não foi possível alterar o serviço", { report: setServiceStatus });
   }
 
   function resetUsed() {
     return persist(() => api.resetMessageQuota(channel, municipalityId), "Cota do mês zerada.", "Erro ao zerar cota");
   }
 
-  return { settings, setSettings, ready, loadFailed, retry, saving, saveStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed, setEnabled };
+  return { settings, setSettings, ready, loadFailed, retry, saving, saveStatus, serviceStatus, live, confirmingEnd, setConfirmingEnd, save, endContractToday, resetUsed, setEnabled };
 }
 
 export type MessageContract = ReturnType<typeof useMessageContract>;

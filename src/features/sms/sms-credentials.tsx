@@ -3,7 +3,7 @@ import { SmsEnvironment } from "../../../shared/sms-contract.js";
 import { Button } from "../../components/button";
 import { IntegrationCard, integrationActionFieldStyle } from "../../components/integration-card";
 import { SavedSecretField } from "../../components/saved-secret-field";
-import { ConfigActiveToggle, ConfigField } from "../../components/ui";
+import { ConfigField } from "../../components/ui";
 import { formatPhone } from "../../utils";
 import type { SmsTestOutcome } from "./sms-types";
 import type { useSmsSettings } from "./use-sms-settings";
@@ -23,15 +23,15 @@ function testText({ sent, reason, detail, providerMessageId }: SmsTestOutcome) {
   return `Teste enviado ao provedor${providerMessageId ? ` (código ${providerMessageId})` : ""}. Confira se chegou ao celular: a entrega depende da operadora.`;
 }
 
-// The platform's SMSMais account, which only the master sees: its token is shown by its start, and the channel is switched on here for every municipality.
-export function SmsCredentials({ state }: { state: SmsState }) {
+// The platform's SMSMais account, which only the master sees, with the saved token masked.
+export function SmsCredentials({ state, actions }: { state: SmsState; actions?: React.ReactNode }) {
   const { config, token, connection, confirmingRemoval } = state;
   const busy = state.loading || state.saving || state.testing || state.sendingTest;
   const secureStorageUnavailable = config.secureStorageAvailable === false;
   // A saved token stays inside its field (start visible, rest masked); saving and removing never show together.
   const tokenSaved = config.hasToken && !token;
   return (
-    <IntegrationCard title="Credenciais" actions={<ConfigActiveToggle checked={config.active} onChange={state.toggleActive} />}>
+    <IntegrationCard title="Credenciais" actions={actions}>
       <SavedSecretField
         label="Token de API SMSMais"
         placeholder="Cole o token da SMSMais"
