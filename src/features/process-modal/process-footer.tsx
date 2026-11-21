@@ -1,5 +1,6 @@
 import { AlertCircle, ArrowRight, CalendarDays, CheckCircle2, FileText, Save, User, UserCheck } from "lucide-react";
 import { ProcedureAction, canApplyProcedureAction } from "../../../shared/request-procedure-contract.js";
+import { procedureScheduleSelection, scheduleDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
 import type { AnyRecord } from "../../types";
 import { ProcessTab } from "./process-labels";
@@ -21,7 +22,7 @@ interface ProcessFooterProps {
   currentChanged: boolean;
   canAssume: boolean;
   tutorSlot: (element: HTMLDivElement | null) => void;
-  on: Record<"assign" | "assume" | "showProcedures" | "noShow" | "reject" | "save" | "reschedule" | "prescription" | "confirmSchedule" | "attend" | "rejectProcess" | "confirmSpecial", () => void>;
+  on: Record<"assign" | "assume" | "showProcedures" | "noShow" | "reject" | "save" | "reschedule" | "cancelSchedule" | "prescription" | "confirmSchedule" | "attend" | "rejectProcess" | "confirmSpecial", () => void>;
 }
 
 function Note({ children }: { children: string }) {
@@ -39,16 +40,19 @@ function procedureActions({ procedure, busy, currentChanged, assignmentBlock, do
       ? <div className="prm-footer-end"><Button variant="outline" disabled={busy} onClick={on.prescription}><FileText size={15} aria-hidden="true" /> Consultar receita</Button></div>
       : <Note>Procedimento encerrado.</Note>;
   }
-  const scheduleBlock = assignmentBlock || documentsBlock;
+  const scheduledDate = scheduleDate(procedure.schedule?.date);
+  const scheduleAction = scheduledDate ? "Reagendar" : "Agendar";
+  const scheduleBlock = assignmentBlock || documentsBlock || (!procedureScheduleSelection(procedure.schedule) ? "Escolha a data, o local e o horário antes de confirmar a agenda" : "");
   return (
     <>
       <div className="prm-footer-start">
         {canApplyProcedureAction(status, ProcedureAction.NO_SHOW) && <Button variant="custom" className={noShowActionStyle} disabled={busy} onClick={on.noShow}>Não compareceu</Button>}
+        {scheduledDate && canApplyProcedureAction(status, ProcedureAction.CANCEL_SCHEDULE) && <Button variant="outline" disabled={busy} onClick={on.cancelSchedule}>Cancelar agendamento</Button>}
         <Button variant="custom" className={rejectActionStyle} disabled={busy || Boolean(assignmentBlock)} title={assignmentBlock || "Indeferir este procedimento"} onClick={on.reject}><AlertCircle size={15} aria-hidden="true" /> Indeferir</Button>
       </div>
       <div className="prm-footer-end">
         <Button variant="outline" disabled={busy || !currentChanged} onClick={on.save}><Save size={15} aria-hidden="true" /> Salvar alterações</Button>
-        <Button variant="outline" disabled={busy || Boolean(documentsBlock)} title={documentsBlock || "Reagendar este procedimento"} onClick={on.reschedule}><CalendarDays size={15} aria-hidden="true" /> Reagendar</Button>
+        <Button variant="outline" disabled={busy || Boolean(documentsBlock)} title={documentsBlock || `${scheduleAction} este procedimento`} onClick={on.reschedule}><CalendarDays size={15} aria-hidden="true" /> {scheduleAction}</Button>
         <Button variant="outline" disabled={busy} onClick={on.prescription}><FileText size={15} aria-hidden="true" /> Emitir receita</Button>
         {canApplyProcedureAction(status, ProcedureAction.CONFIRM_SCHEDULE) ? (
           <Button disabled={busy || Boolean(scheduleBlock)} title={scheduleBlock || "Confirmar a agenda deste procedimento"} onClick={on.confirmSchedule}><CheckCircle2 size={15} aria-hidden="true" /> Confirmar agenda</Button>

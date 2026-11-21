@@ -6,6 +6,7 @@ import { isInternalUser, pickMunicipalityId } from "../tenant.js";
 import { documentsVisibleToUser } from "../services/documents/document-policy.js";
 import { mine, fromRequest, requestContext, documentContent, confirmMicrochip, animalEndpoint } from "../services/registered-animals/animal-handlers.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
+import { insertRequestCreatedNotification } from "../repositories/staff-notifications.js";
 import { withoutRequestContactCpf } from "../../../shared/request-contract.js";
 
 const router = Router();
@@ -483,11 +484,12 @@ router.post("/:id/death", auth, requireAnimalContext, async (req, res) => {
       ],
     );
 
+    await insertRequestCreatedNotification(client, rows[0]);
     await client.query("COMMIT");
     res.status(201).json(rows[0]);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível registrar a solicitação de óbito." });
   } finally {
     client.release();
   }
@@ -602,11 +604,12 @@ router.post("/:id/transfer", auth, requireAnimalContext, async (req, res) => {
       ],
     );
 
+    await insertRequestCreatedNotification(client, rows[0]);
     await client.query("COMMIT");
     res.status(201).json(rows[0]);
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível registrar a solicitação de transferência." });
   } finally {
     client.release();
   }

@@ -95,31 +95,35 @@ export interface RequestFilterResults {
   pills: ActiveFilterPill[];
 }
 
-// `normalizedRequests` feeds the option lists (independent of the global search);
-// `listItems` is what the list actually shows before filters (after the global search).
-export function useRequestFilterResults({
-  filters,
-  normalizedRequests,
-  listItems,
-  users,
-  today,
-}: {
+interface RequestFilterResultsInput {
   filters: RequestListFilters;
   normalizedRequests: AnyRecord[];
   listItems: AnyRecord[];
   users: AnyRecord[];
   today: string;
-}): RequestFilterResults {
-  return useMemo(() => {
-    const context = { today };
-    const typeOptions = buildTypeOptions(normalizedRequests, filters.types);
-    const assigneeOptions = buildAssigneeOptions(normalizedRequests, users, filters.assignees);
-    return {
-      activeRequests: filterRequestItems(listItems, filters, context),
-      counts: buildRequestFacetCounts(listItems, filters, context),
-      typeOptions,
-      assigneeOptions,
-      pills: buildActiveFilterPills(filters, { types: typeOptions, assignees: assigneeOptions }),
-    };
-  }, [filters, normalizedRequests, listItems, users, today]);
+}
+
+// `normalizedRequests` feeds the option lists. `listItems` already respects search and any view-specific filters.
+export function buildRequestFilterResults({
+  filters, normalizedRequests, listItems, users, today,
+}: RequestFilterResultsInput): RequestFilterResults {
+  const context = { today };
+  const typeOptions = buildTypeOptions(normalizedRequests, filters.types);
+  const assigneeOptions = buildAssigneeOptions(normalizedRequests, users, filters.assignees);
+  return {
+    activeRequests: filterRequestItems(listItems, filters, context),
+    counts: buildRequestFacetCounts(listItems, filters, context),
+    typeOptions,
+    assigneeOptions,
+    pills: buildActiveFilterPills(filters, { types: typeOptions, assignees: assigneeOptions }),
+  };
+}
+
+export function useRequestFilterResults({
+  filters, normalizedRequests, listItems, users, today,
+}: RequestFilterResultsInput): RequestFilterResults {
+  return useMemo(
+    () => buildRequestFilterResults({ filters, normalizedRequests, listItems, users, today }),
+    [filters, normalizedRequests, listItems, users, today],
+  );
 }

@@ -19,12 +19,14 @@ const texts = Object.freeze({
   [NotificationEvent.REQUEST_REGISTERED]: (request) => registeredNoticeText(request),
   [NotificationEvent.SCHEDULE_CONFIRMED]: (request, protocol) => `Seu agendamento foi confirmado! Esperamos você no dia ${visit(request)}. Protocolo: ${protocol}.`,
   [NotificationEvent.SCHEDULE_CHANGED]: (request, protocol) => `Seu atendimento foi reagendado para o dia ${visit(request)}. Protocolo: ${protocol}.`,
+  [NotificationEvent.SCHEDULE_CANCELLED]: (request, protocol) => `O agendamento do dia ${visit(request)} foi cancelado. Protocolo ${protocol}.`,
   [NotificationEvent.NO_SHOW]: (request, protocol) => `Identificamos que você não compareceu ao atendimento agendado para o dia ${formatScheduleDate(request.schedule_date || "")}. Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`,
   [NotificationEvent.DOCUMENTS_APPROVED]: (_request, protocol) => `Um ou mais documentos da sua solicitação foram deferidos. Acesse a solicitação para acompanhar a análise. Protocolo: ${protocol}.`,
   [NotificationEvent.DOCUMENTS_REJECTED]: (_request, protocol) => `Um ou mais documentos da sua solicitação foram indeferidos. Acesse a solicitação para consultar o motivo e as orientações. Protocolo: ${protocol}.`,
   [NotificationEvent.REQUEST_REJECTED]: (request, protocol) => {
     const reason = rejectionReasonText(request.workflow_data || request.workflowData);
-    return `Sua solicitação foi indeferida.${reason ? ` Motivo: ${reason}.` : ""} Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`;
+    const outcome = request.procedure_name ? `O procedimento ${request.procedure_name} foi indeferido.` : "Sua solicitação foi indeferida.";
+    return `${outcome}${reason ? ` Motivo: ${reason}.` : ""} Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`;
   },
   [NotificationEvent.COMPLETED]: (_request, protocol) => `Seu atendimento foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: ${protocol}.`,
 });
@@ -35,7 +37,8 @@ export function buildEmailNotice(event, request) {
   const protocol = String(request.protocol || "");
   const documentsResult = documentsResults[event];
   return {
-    subject: getEmailUse(event)?.label || "Atualização da solicitação",
+    subject: event === NotificationEvent.REQUEST_REJECTED && request.procedure_name
+      ? "Procedimento indeferido" : getEmailUse(event)?.label || "Atualização da solicitação",
     message: texts[event]?.(request, protocol) || `Solicitação ${protocol}: há uma atualização.`,
     ...(documentsResult ? { [EmailVariable.DOCUMENTS_RESULT]: documentsResult } : {}),
   };

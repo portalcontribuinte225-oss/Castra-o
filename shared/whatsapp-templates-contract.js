@@ -49,10 +49,11 @@ export const WhatsappAccessLayout = Object.freeze({ CODE: "code", CONTACT: "cont
 
 const field = WhatsappTemplateField;
 const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.PROTOCOL];
+const scheduleOutcomeFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME];
 const documentFields = [field.PROTOCOL, field.NOTIFICATION_MESSAGE];
 const documentOutcomeUses = [NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.DOCUMENTS_REJECTED];
 const templateAliases = Object.freeze({
-  [NotificationEvent.NO_SHOW]: ["cancelamento", "nao_compareceu"],
+  [NotificationEvent.NO_SHOW]: ["nao_compareceu"],
   [NotificationEvent.DOCUMENTS_APPROVED]: ["documentos_aprovados", "documentos_conferidos"],
   [NotificationEvent.DOCUMENTS_REJECTED]: ["documentos_rejeitados", "documentos_conferidos"],
   [AuthPurpose.CONTACT_CHANGED]: ["dados_tutor_alterados"],
@@ -75,7 +76,8 @@ export const whatsappUses = Object.freeze([
   notice(NotificationEvent.REQUEST_REGISTERED, "Solicitação registrada", "solicitacao_registrada", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "confirmacao_agendamento", scheduleFields),
   notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "reagendamento", scheduleFields),
-  notice(NotificationEvent.NO_SHOW, "Não comparecimento", "nao_comparecimento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
+  notice(NotificationEvent.SCHEDULE_CANCELLED, "Agendamento cancelado", "cancelamento", scheduleOutcomeFields),
+  notice(NotificationEvent.NO_SHOW, "Não comparecimento", "nao_comparecimento", scheduleOutcomeFields),
   notice(NotificationEvent.DOCUMENTS_APPROVED, "Documentos deferidos", "documentos_deferidos", documentFields),
   notice(NotificationEvent.DOCUMENTS_REJECTED, "Documentos indeferidos", "documentos_indeferidos", documentFields),
   notice(NotificationEvent.COMPLETED, "Atendimento concluído", "atendimento_concluido", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
@@ -100,6 +102,14 @@ export function parseWhatsappTemplateName(name) {
 function matchesUse(part, use) {
   return part === use.namePart || templateAliases[use.key]?.includes(part)
     || (use.nameSuffix === true && part.startsWith(`${use.namePart}_`));
+}
+
+function scheduleOutcomeLinkIssue(name, use) {
+  const part = parseWhatsappTemplateName(name);
+  const opposite = use === NotificationEvent.NO_SHOW ? NotificationEvent.SCHEDULE_CANCELLED
+    : use === NotificationEvent.SCHEDULE_CANCELLED ? NotificationEvent.NO_SHOW : null;
+  return opposite && matchesUse(part, getWhatsappUse(opposite))
+    ? "Este template pertence ao outro aviso de agenda. Confira o vínculo." : "";
 }
 
 const linkedUses = (link) => link.use === LEGACY_DOCUMENTS_REVIEWED ? [...documentOutcomeUses] : [link.use];
@@ -139,7 +149,7 @@ export function noticeStructureReason(entry) {
 // screen configured one, otherwise the notice its name indicates.
 export function recognizeWhatsappTemplate(entry, link = null) {
   if (link) {
-    const reason = noticeStructureReason(entry)
+    const reason = scheduleOutcomeLinkIssue(entry.name, link.use) || noticeStructureReason(entry)
       || (link.fields.length === entry.bodyVariables ? "" : `O corpo tem ${entry.bodyVariables} variável(is); a configuração tem ${link.fields.length}. Configure o template de novo.`);
     return reason ? { uses: [], reason } : { uses: linkedUses(link), reason: "" };
   }
@@ -177,7 +187,8 @@ export function normalizeActiveTemplates(stored) {
   const active = {};
   for (const use of whatsappUses) {
     const identity = cleanTemplateIdentity(source[use.key]?.name, source[use.key]?.language);
-    if (identity) active[use.key] = identity;
+    // The previous alias must not be carried over as an activation for a different event.
+    if (identity && !scheduleOutcomeLinkIssue(identity.name, use.key)) active[use.key] = identity;
   }
   return active;
 }
@@ -210,7 +221,9 @@ export function normalizeTemplateLinks(stored) {
     if (!identity || !isLinkUse(item.use) || !Array.isArray(item.fields) || item.fields.length > WHATSAPP_MAX_VARIABLES) continue;
     if (!item.fields.every((value) => knownFields.has(value))) continue;
     if (findTemplateLink(links, identity.name, identity.language)) continue;
-    links.push({ ...identity, use: item.use, fields: [...item.fields] });
+    const movedCancellation = item.use === NotificationEvent.NO_SHOW && scheduleOutcomeLinkIssue(identity.name, item.use);
+    const use = movedCancellation ? NotificationEvent.SCHEDULE_CANCELLED : item.use;
+    if (!scheduleOutcomeLinkIssue(identity.name, use)) links.push({ ...identity, use, fields: [...item.fields] });
   }
   return links;
 }
@@ -229,7 +242,7 @@ export function templateFields(useKey, link = null) {
 export function templateLinkIssue(entry, use, fields) {
   if (!isLinkUse(use)) return "Escolha um aviso do sistema.";
   if (!Array.isArray(fields) || fields.some((value) => !knownFields.has(value))) return "Escolha uma variável do sistema para cada número.";
-  const structural = noticeStructureReason(entry);
+  const structural = scheduleOutcomeLinkIssue(entry.name, use) || noticeStructureReason(entry);
   if (structural) return structural;
   return fields.length === entry.bodyVariables ? "" : `O template tem ${entry.bodyVariables} variável(is); escolha uma para cada número.`;
 }

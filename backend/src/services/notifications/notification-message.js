@@ -4,6 +4,7 @@ export const notificationEventLabels = Object.freeze({
   [NotificationEvent.REQUEST_REGISTERED]: "Solicitação registrada",
   [NotificationEvent.SCHEDULE_CONFIRMED]: "Agendamento confirmado",
   [NotificationEvent.SCHEDULE_CHANGED]: "Agendamento alterado",
+  [NotificationEvent.SCHEDULE_CANCELLED]: "Agendamento cancelado",
   [NotificationEvent.NO_SHOW]: "Não comparecimento",
   [NotificationEvent.DOCUMENTS_APPROVED]: "Documentos deferidos",
   [NotificationEvent.DOCUMENTS_REJECTED]: "Documentos indeferidos",
@@ -45,14 +46,16 @@ export function buildNotificationMessage(event, request) {
   const date = formatScheduleDate(request.schedule_date || "");
   const time = workflow.scheduleSlotTime || workflow.scheduleTime || "";
   const location = [request.schedule_location_name, request.schedule_address].filter(Boolean).join(" — ");
-  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.NO_SHOW].includes(event);
+  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.SCHEDULE_CANCELLED, NotificationEvent.NO_SHOW].includes(event);
   const reason = rejectionReasonText(workflow);
   const isRejection = event === NotificationEvent.REQUEST_REJECTED;
+  const procedureRejection = isRejection && request.procedure_name;
   const rejectionSummary = isRejection && reason ? ` Motivo: ${reason}.` : "";
   return {
-    subject: notificationEventLabels[event] || "Atualização da solicitação",
+    subject: procedureRejection ? "Procedimento indeferido" : notificationEventLabels[event] || "Atualização da solicitação",
     message: schedule
       ? `Solicitação ${protocol}: ${notificationEventLabels[event].toLowerCase()}. Data: ${date}${time ? `, ${time}` : ""}${location ? `. Local: ${location}` : ""}.`
-      : `Solicitação ${protocol}: ${isRejection ? "indeferida" : notificationEventLabels[event] || "há uma atualização"}.${rejectionSummary} Para mais informações, procure o atendimento do município.`,
+      : `Solicitação ${protocol}: ${procedureRejection ? `procedimento ${procedureRejection} indeferido`
+        : isRejection ? "indeferida" : notificationEventLabels[event] || "há uma atualização"}.${rejectionSummary} Para mais informações, procure o atendimento do município.`,
   };
 }

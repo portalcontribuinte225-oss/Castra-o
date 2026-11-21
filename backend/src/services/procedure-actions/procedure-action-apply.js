@@ -10,7 +10,12 @@ const ACTION_NOTES = Object.freeze({
   [ProcedureAction.ATTEND]: (next) => `atendimento realizado${next.microchip ? `. Microchip: ${next.microchip}` : ""}`,
   [ProcedureAction.NO_SHOW]: () => "não compareceu",
   [ProcedureAction.REJECT]: (next) => `indeferido (${next.rejection.reason}). Justificativa: ${next.rejection.note}`,
-  [ProcedureAction.RESCHEDULE]: (next, previous, input) => `reagendado de ${previous.schedule?.date || "sem data"} para ${next.schedule.date}${input.schedule.reason ? `. Motivo: ${input.schedule.reason}` : ""}`,
+  [ProcedureAction.RESCHEDULE]: (next, previous, input) => {
+    const change = previous.schedule?.date ? `reagendado de ${previous.schedule.date} para ${next.schedule.date}` : `horário selecionado para ${next.schedule.date}`;
+    return input.schedule.reason ? `${change}. Motivo: ${input.schedule.reason}` : change;
+  },
+  [ProcedureAction.CANCEL_SCHEDULE]: (_next, { schedule }) =>
+    `agendamento de ${[schedule.date, schedule.slotTime, schedule.locationName].filter(Boolean).join(" · ")} cancelado`,
   [ProcedureAction.PRESCRIPTION]: (next) => `receita registrada por ${next.prescription.professionalName}`,
 });
 
@@ -34,7 +39,7 @@ export function applyProcedureAction({ animals, procedure: previous, input, sche
     nextAnimal = { ...nextAnimal, hasChip: "Sim", microchip: next.microchip, confirmedMicrochip: next.microchip };
   }
   if (input.action === ProcedureAction.REJECT) next.rejection = input.rejection;
-  if (input.action === ProcedureAction.RESCHEDULE) next.schedule = schedule;
+  if ([ProcedureAction.CONFIRM_SCHEDULE, ProcedureAction.RESCHEDULE, ProcedureAction.CANCEL_SCHEDULE].includes(input.action)) next.schedule = schedule;
   if (input.action === ProcedureAction.PRESCRIPTION) next.prescription = { ...input.prescription, issuedAt: now.toISOString(), issuedBy: user.id };
   next = { ...next, status: procedureStatusAfter(previous.status, input.action), updatedAt: now.toISOString(), updatedBy: user.id };
   const resolved = animals.map((item, index) => (index === input.animalIndex

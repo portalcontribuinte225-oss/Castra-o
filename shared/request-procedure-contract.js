@@ -14,7 +14,7 @@ export const ProcedureStatus = Object.freeze({
 
 export const ProcedureAction = Object.freeze({
   SAVE: "save", CONFIRM_SCHEDULE: "confirm_schedule", ATTEND: "attend", NO_SHOW: "no_show",
-  REJECT: "reject", RESCHEDULE: "reschedule", PRESCRIPTION: "prescription",
+  REJECT: "reject", RESCHEDULE: "reschedule", CANCEL_SCHEDULE: "cancel_schedule", PRESCRIPTION: "prescription",
 });
 
 export const MAX_HEALTH_TEXT = 2000;
@@ -34,11 +34,13 @@ const ACTION_FROM = Object.freeze({
   [ProcedureAction.NO_SHOW]: [SCHEDULED],
   [ProcedureAction.REJECT]: OPEN,
   [ProcedureAction.RESCHEDULE]: OPEN,
+  [ProcedureAction.CANCEL_SCHEDULE]: [SCHEDULED],
   [ProcedureAction.PRESCRIPTION]: OPEN,
 });
 const ACTION_RESULT = Object.freeze({
   [ProcedureAction.CONFIRM_SCHEDULE]: SCHEDULED, [ProcedureAction.ATTEND]: DONE,
   [ProcedureAction.NO_SHOW]: NO_SHOW, [ProcedureAction.REJECT]: REJECTED,
+  [ProcedureAction.CANCEL_SCHEDULE]: WAITING,
 });
 
 export function canApplyProcedureAction(status, action) {

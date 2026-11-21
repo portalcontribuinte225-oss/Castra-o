@@ -126,3 +126,50 @@ test("closing a procedure does not reschedule the request just because another v
   }));
   assert.deepEqual(result, []);
 });
+
+test("cancellation uses only the removed procedure's schedule even when another date keeps the request scheduled", async () => {
+  const previousSchedule = { date: "20/11/2026", occurrenceKey: "day:removed", slotTime: "08:15", locationName: "Unidade A" };
+  const request = { ...after(), schedule_date: "2026-11-23", schedule_location_name: "Unidade B" };
+  const procedureChange = { action: ProcedureAction.CANCEL_SCHEDULE, previousSchedule, procedure: { status: ProcedureStatus.WAITING, schedule: null } };
+  const seen = [];
+  const result = await notifyRequestChanges({ ...request, schedule_date: previousSchedule.date }, request, dependencies({
+    procedureChange, dispatch: async ({ event, request: notice }) => {
+      seen.push(event);
+      assert.equal(notice.schedule_date, previousSchedule.date);
+      assert.equal(notice.workflow_data.scheduleSlotTime, "08:15");
+      assert.equal(notice.schedule_location_name, "Unidade A");
+      return [{ event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }];
+    },
+  }));
+  assert.deepEqual(seen, [NotificationEvent.SCHEDULE_CANCELLED]);
+  assert.equal(result.length, 1);
+  assert.equal(request.schedule_date, "2026-11-23");
+});
+
+test("procedure outcomes fire independently and do not inherit the aggregate cancellation cause", async () => {
+  const first = after();
+  const schedule = { date: "20/11/2026" };
+  const cases = [
+    [ProcedureAction.NO_SHOW, ProcedureStatus.NO_SHOW, "AGENDADA", "", NotificationEvent.NO_SHOW],
+    [ProcedureAction.NO_SHOW, ProcedureStatus.NO_SHOW, "CANCELADA", "Não compareceu", NotificationEvent.NO_SHOW],
+    [ProcedureAction.NO_SHOW, ProcedureStatus.NO_SHOW, "CANCELADA", "Indeferido", NotificationEvent.NO_SHOW],
+    [ProcedureAction.REJECT, ProcedureStatus.REJECTED, "AGENDADA", "", NotificationEvent.REQUEST_REJECTED],
+    [ProcedureAction.REJECT, ProcedureStatus.REJECTED, "CANCELADA", "Indeferido", NotificationEvent.REQUEST_REJECTED],
+  ];
+  for (const [action, procedureStatus, status, cancelReason, expected] of cases) {
+    const actual = [];
+    await notifyRequestChanges(first, { ...after(), status, workflow_data: { ...first.workflow_data, cancelReason } }, dependencies({
+      procedureChange: { action, procedure: { status: procedureStatus, name: "Castração", schedule, rejection: { reason: "Animal inelegível", note: "Nota interna" } } },
+      dispatch: async ({ event, request: notice }) => {
+        actual.push(event);
+        if (action === ProcedureAction.REJECT) {
+          assert.equal(notice.workflow_data.rejectionReason, "Animal inelegível");
+          assert.equal(notice.procedure_name, status === "AGENDADA" ? "Castração" : undefined);
+          assert.doesNotMatch(JSON.stringify(notice), /Nota interna/);
+        }
+        return [];
+      },
+    }));
+    assert.deepEqual(actual, [expected]);
+  }
+});

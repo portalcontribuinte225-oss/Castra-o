@@ -22,7 +22,7 @@ test("accents are removed and anything outside the basic SMS alphabet becomes a 
 });
 
 test("every use has a fixed text in plain ASCII that fits one SMS and starts with the municipality", () => {
-  assert.equal(smsUses.length, 12);
+  assert.equal(smsUses.length, 13);
   for (const { key } of smsUses) {
     const text = buildSmsText(key, full);
     assert.match(text, BASIC, key);
@@ -38,6 +38,7 @@ test("the texts are the agreed ones", () => {
   assert.equal(buildSmsText(AuthPurpose.REQUEST_TRACKING, full), "Criciuma: para consultar sua solicitacao, use o codigo 123456. Valido por 10 minutos. Nao compartilhe.");
   assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CONFIRMED, full), "Criciuma: agendamento confirmado! Esperamos voce em 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CHANGED, full), "Criciuma: seu atendimento foi reagendado para 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CANCELLED, full), "Criciuma: agendamento de 20/11/2026 as 09:00 cancelado. Protocolo 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.NO_SHOW, full), "Criciuma: voce nao compareceu ao atendimento de 20/11/2026. Fale com nossa equipe. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.COMPLETED, full), "Criciuma: atendimento concluido! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, full), "Criciuma: sua solicitacao foi indeferida (Documentacao incompleta). Fale com nossa equipe. Protocolo: 123/2026.");

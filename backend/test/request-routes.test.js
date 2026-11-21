@@ -9,12 +9,14 @@ import { NotificationEvent } from "../../shared/notification-contract.js";
 import { REQUEST_CONTACT_CPF_KEY, RequestKind } from "../../shared/request-contract.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { EMAIL_ACTIVE_USES_CONFIG_KEY } from "../../shared/email-contract.js";
+import { StaffNotificationType } from "../../shared/staff-notifications-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { assertInsertShape } from "./fixtures/insert-shape.js";
 
 const MUNICIPALITY_ID = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY_ID = "22222222-2222-4222-8222-222222222222";
 const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
+const SCHEDULE_DAY_ID = "77777777-7777-4777-8777-777777777777";
 const ADMIN = { id: "44444444-4444-4444-8444-444444444444", role: "admin_municipal", municipalityId: MUNICIPALITY_ID };
 const SECRET = "request-route-tests-only";
 const VALID_CPF = "52998224725";
@@ -33,10 +35,11 @@ function procedureBody(overrides = {}) {
   };
 }
 
-async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false, requiredDocument = false, registeredNotice = false } = {}) {
+async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false,
+  failStaffNotification = false, requiredDocument = false, registeredNotice = false, staffAccounts = [], teamUsers = [], permissionGroups = [] } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
-  const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0 };
+  const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0, staffNotifications: [] };
   const sessionUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
@@ -47,6 +50,8 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
     // as not configured, which leaves a result and a history entry without any transport.
     [EMAIL_ACTIVE_USES_CONFIG_KEY, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true, ...(registeredNotice ? { [NotificationEvent.REQUEST_REGISTERED]: true } : {}) } }],
     ["whatsapp", { active: false }],
+    ["castragestao:teams", { users: teamUsers }],
+    ["permission_groups", permissionGroups],
   ]);
   const lockTails = new Map();
   function acquireLock(key = "request-row") {
@@ -59,6 +64,7 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
   function connection(source) {
     const unlocks = [];
     const heldKeys = new Set();
+    const pendingStaffNotifications = [];
     return {
       async query(sql, values = []) {
         const session = resolveTestSession(sql, values, sessionUsers);
@@ -66,8 +72,22 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
         stats.calls.push({ sql, values, source });
         if (sql === "BEGIN") return { rows: [] };
         if (sql === "COMMIT" || sql === "ROLLBACK") {
+          if (sql === "COMMIT") stats.staffNotifications.push(...pendingStaffNotifications);
+          pendingStaffNotifications.length = 0;
           unlocks.reverse().forEach((unlock) => unlock()); unlocks.length = 0; heldKeys.clear();
           return { rows: [] };
+        }
+        if (sql.includes("INSERT INTO staff_notifications")) {
+          assert.equal(source, "client");
+          assert.equal(values[0], requestRow.municipality_id);
+          assert.equal(values[1], requestRow.id);
+          if (failStaffNotification) throw new Error("Simulated staff event failure");
+          pendingStaffNotifications.push(values);
+          return { rows: [] };
+        }
+        if (sql.includes("FROM users u JOIN municipalities m") && sql.includes("u.id = ANY")) {
+          return { rows: staffAccounts.filter((user) => user.municipality_id === values[0]
+            && (values[1].includes(user.id) || values[2].includes(user.email))) };
         }
         if (sql.includes("INSERT INTO auth_rate_limits")) return { rows: [{ attempts: 1 }] };
         if (sql.includes("DELETE FROM auth_rate_limits")) return { rows: [] };
@@ -96,7 +116,7 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
         }] };
         if (sql.includes("INSERT INTO animal_tutors") || sql.includes("INSERT INTO animal_records")) return { rows: [] };
         if (sql.startsWith("SELECT municipality_id FROM requests")) return { rows: requestRow?.id === values[0] ? [{ municipality_id: requestRow.municipality_id }] : [] };
-        if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: "77777777-7777-4777-8777-777777777777", date: FUTURE_DATE, active: true, slots: [{time:"08:00",vacancies:10}] }] };
+        if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: SCHEDULE_DAY_ID, date: FUTURE_DATE, active: true, slots: [{time:"08:00",vacancies:10}] }] };
         if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) return { rows: requestRow ? [clone(requestRow)] : [] };
         if (sql.includes("INSERT INTO request_protocol_counters")) return { rows: [{ seq: 1 }] };
         if (sql.includes("INSERT INTO requests")) {
@@ -205,6 +225,18 @@ test("configured no-Tutor POST saves without CPF and without any validation key"
   assert.equal(row().origin, "PUBLICA");
   assert.equal(response.body.request.id, row().id);
   assert.deepEqual(Object.keys(response.body), ["request"]);
+  assert.deepEqual(stats.staffNotifications, [[MUNICIPALITY_ID, row().id, StaffNotificationType.REQUEST_CREATED]]);
+  assert.ok(stats.calls.findIndex(({ sql }) => sql.includes("INSERT INTO staff_notifications")) < stats.calls.findIndex(({ sql }) => sql === "COMMIT"));
+});
+
+test("the creation transaction rolls back when it cannot record the staff alert", async (t) => {
+  const { request, stats } = await fixture(t, { failStaffNotification: true });
+  const response = await request({ body: procedureBody() });
+  assert.equal(response.status, 500);
+  assert.equal(response.body.error, "Não foi possível salvar a solicitação.");
+  assert.deepEqual(stats.staffNotifications, []);
+  assert.ok(stats.calls.some(({ sql }) => sql === "ROLLBACK"));
+  assert.equal(stats.calls.some(({ sql }) => sql === "COMMIT"), false);
 });
 
 test("legacy validation-key consultation routes no longer exist", async (t) => {
@@ -419,6 +451,29 @@ test("concurrent identical PATCHes serialize snapshots and produce only one noti
   assert.equal(stats.calls.slice(0, firstNotificationRead).some(({ sql }) => sql === "COMMIT"), true);
 });
 
+test("assignment is serialized, resolves legacy accounts and alerts an eligible reassignment", async (t) => {
+  const staff = (id, email, rest = {}) => ({ id, email, role: "analista", municipality_id: MUNICIPALITY_ID, active: true, ...rest });
+  const first = staff("55555555-5555-4555-8555-555555555555", "first@example.test");
+  const second = staff("66666666-6666-4666-8666-666666666666", "second@example.test");
+  const remote = staff("77777777-7777-4777-8777-777777777777", "remote@example.test", { municipality_id: OTHER_MUNICIPALITY_ID });
+  const inactive = staff("88888888-8888-4888-8888-888888888888", "inactive@example.test", { active: false });
+  const denied = staff("99999999-9999-4999-8999-999999999999", "denied@example.test");
+  const { request, stats } = await fixture(t, {
+    existing: pendingRequest(), staffAccounts: [first, second, remote, inactive, denied],
+    teamUsers: [{ id: "legacy-first", email: first.email }, { id: denied.id, permissionGroupId: "dashboard" }],
+    permissionGroups: [{ id: "dashboard", allowedMenuItems: ["dashboard"] }],
+  });
+  const assign = (assignedUserId) => request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { assignedUserId } });
+  const concurrent = await Promise.all([assign("legacy-first"), assign("legacy-first")]);
+  assert.ok(concurrent.every(({ status }) => status === 200));
+  assert.deepEqual(stats.staffNotifications.map((event) => event[3]), [first.id]);
+  for (const next of [first.id, second.id, first.id, ADMIN.id, remote.id, inactive.id, denied.id]) {
+    assert.equal((await assign(next)).status, 200);
+  }
+  assert.deepEqual(stats.staffNotifications, [first.id, second.id, first.id]
+    .map((recipient) => [MUNICIPALITY_ID, REQUEST_ID, StaffNotificationType.REQUEST_ASSIGNED, recipient]));
+});
+
 test("concurrent evidence uploads append both files to the locked request without replacing existing documents", async (t) => {
   const dataUrl = `data:application/pdf;base64,${Buffer.from("%PDF-1.4\nevidence\n").toString("base64")}`;
   const existing = { ...pendingRequest(), documents: [{ documentId: "identity", fileName: "identidade.pdf", dataUrl }] };
@@ -434,7 +489,8 @@ test("concurrent evidence uploads append both files to the locked request withou
 test("confirming a second procedure keeps the same general status and does not repeat the schedule notice", async (t) => {
   const configured = pendingRequest({ enabled: true, email: "own@example.test" });
   const existing = { ...configured, origin: "INTERNA", request_type: "Castração, Microchipagem", schedule_date: FUTURE_DATE,
-    animals: [{ name: "Luna", requestTypeIds: ["castration", "microchip"] }], workflow_data: { ...configured.workflow_data, scheduleSlotTime: "08:00" } };
+    animals: [{ name: "Luna", requestTypeIds: ["castration", "microchip"] }],
+    workflow_data: { ...configured.workflow_data, scheduleSlotTime: "08:00", scheduleOccurrenceKey: `day:${SCHEDULE_DAY_ID}` } };
   const { request, row, stats } = await fixture(t, { existing });
   const confirm = (requestTypeId) => request({ method: "POST", path: `/requests/${REQUEST_ID}/procedures/action`, user: ADMIN,
     body: { action: "confirm_schedule", animalIndex: 0, requestTypeId },

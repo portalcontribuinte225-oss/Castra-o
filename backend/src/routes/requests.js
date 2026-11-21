@@ -15,14 +15,16 @@ import { prepareRegisteredRequest, registerRequestAnimals } from "../services/re
 import { applyAnimalRequestTransition } from "../services/registered-animals/animal-transitions.js";
 import { prepareRequestDocuments, assertMaterializedRequestSize } from "../services/documents/request-documents.js";
 import { applyDocumentReviews, decorateRequestDocuments } from "../services/documents/document-reviews.js";
-import { documentsVisibleToUser } from "../services/documents/document-policy.js";
+import { visibleRequest } from "../services/request-visibility.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { lockRequestForUpdate } from "../services/locked-request.js";
 import { appendRequestHistory } from "../repositories/request-history.js";
+import { insertRequestCreatedNotification } from "../repositories/staff-notifications.js";
+import { recordRequestAssignmentNotification } from "../services/staff-notification-events.js";
 import { handleProcedureAction } from "../services/procedure-actions/procedure-action-handler.js";
 import { assertProcedurePatchPreservesState, protectStoredProcedures, stripSuppliedProcedures } from "../services/procedure-actions/procedure-request-state.js";
 import { reserveRequestSchedule, bookingChanged } from "../services/schedule/schedule-booking.js";
-import { isProcedureRequest, RequestKind, RequestOrigin, RequestStatus, RequestTag, withoutRequestContactCpf } from "../../../shared/request-contract.js";
+import { isProcedureRequest, RequestOrigin, RequestStatus, RequestTag, withoutRequestContactCpf } from "../../../shared/request-contract.js";
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(Object.values(RequestStatus));
@@ -103,17 +105,7 @@ router.get("/", auth, async (req, res) => {
       ? { text: "SELECT * FROM requests ORDER BY created_at DESC", values: [] }
       : { text: "SELECT * FROM requests WHERE municipality_id = $1 ORDER BY created_at DESC", values: [req.user.municipalityId] };
     const { rows } = await pool.query(query.text, query.values);
-    const internal = isInternalUser(req.user);
-    const visible = rows.map((row) => {
-      const hideReporter = row.request_type === RequestKind.COMPLAINT && row.is_confidential
-        && !internal && row.tutor_id !== req.user.id;
-      return {
-        ...row,
-        ...(hideReporter ? { tutor_id: null, tutor_name: null, tutor_email: null, cpf: null, phone: null } : {}),
-        workflow_data: withoutRequestContactCpf(row.workflow_data),
-        documents: documentsVisibleToUser(row.documents, req.user),
-      };
-    });
+    const visible = rows.map((row) => visibleRequest(row, req.user));
     const catalogs = await loadDocumentReviewSettings(visible.filter((row) => row.documents?.length).map((row) => row.municipality_id));
     res.json(visible.map((request) => request.documents?.length ? decorateRequestDocuments(request, catalogs.get(request.municipality_id)) : request));
   } catch (err) {
@@ -256,6 +248,7 @@ router.post("/", optionalAuth, async (req, res) => {
     });
     assertMaterializedRequestSize(rows[0]);
     await client.query("UPDATE requests SET documents = $1::jsonb WHERE id = $2 AND municipality_id = $3", [JSON.stringify(rows[0].documents), requestId, municipalityId]);
+    await insertRequestCreatedNotification(client, rows[0]);
 
     await client.query("COMMIT");
     committed = true;
@@ -467,6 +460,7 @@ router.patch("/:id", auth, async (req, res) => {
     );
     assertMaterializedRequestSize(rows[0]);
     await applyAnimalRequestTransition(client, { previous: existingRows[0], request: rows[0], user: req.user });
+    await recordRequestAssignmentNotification(client, { previous: existingRows[0], request: rows[0], actor: req.user });
     await client.query("COMMIT");
     committed = true;
     savedRequest = rows[0];

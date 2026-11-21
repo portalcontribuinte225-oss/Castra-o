@@ -3,6 +3,7 @@ import { isInternalUser } from "../../tenant.js";
 import { DeliveryStatus } from "../../../../shared/notification-contract.js";
 import { ProcedureAction, canApplyProcedureAction, isMicrochipProcedure, resolveRequestProcedures } from "../../../../shared/request-procedure-contract.js";
 import { RequestOrigin, RequestTag, isProcedureRequest, withoutRequestContactCpf } from "../../../../shared/request-contract.js";
+import { procedureScheduleSelection, scheduleDate } from "../../../../shared/schedule-contract.js";
 import { loadRequestSettings } from "../../repositories/request-settings.js";
 import { appendRequestHistory } from "../../repositories/request-history.js";
 import { isUuid } from "../../repositories/request-tracking.js";
@@ -40,8 +41,21 @@ async function saveProcedureAction(client, { request, input, user, settings }) {
   if (!procedure) fail("Procedimento não encontrado neste processo.", 404);
   if (!canApplyProcedureAction(procedure.status, input.action)) fail("Esta ação não está disponível para a situação atual do procedimento.", 409);
   checkPreconditions(request, input, settings);
-  const schedule = input.action === ProcedureAction.RESCHEDULE ? await reserveProcedureSchedule(client, {
-    request, animals, animalIndex: input.animalIndex, requestTypeId: input.requestTypeId, selection: input.schedule, municipalityId: request.municipality_id,
+  if (input.cancelledSchedule) {
+    const { date, occurrenceKey, time, updatedAt } = input.cancelledSchedule;
+    const current = procedure.schedule;
+    if (scheduleDate(current?.date) !== date || (current?.occurrenceKey || "") !== occurrenceKey
+      || (current?.slotTime || "") !== time || (procedure.updatedAt || "") !== updatedAt) {
+      fail("O agendamento mudou. Atualize a página e confira o horário antes de cancelar.", 409);
+    }
+  }
+  let selection = input.schedule;
+  if (input.action === ProcedureAction.CONFIRM_SCHEDULE) {
+    selection = procedureScheduleSelection(procedure.schedule);
+    if (!selection) fail("Escolha a data, o local e o horário antes de confirmar a agenda.", 409);
+  }
+  const schedule = selection ? await reserveProcedureSchedule(client, {
+    request, animals, animalIndex: input.animalIndex, requestTypeId: input.requestTypeId, selection, municipalityId: request.municipality_id,
   }) : null;
   const applied = applyProcedureAction({ animals, procedure, input, schedule, user });
   const state = deriveProcedureRequestState(request, applied.resolved);
@@ -53,7 +67,9 @@ async function saveProcedureAction(client, { request, input, user, settings }) {
   const attended = input.action === ProcedureAction.ATTEND;
   const chip = attended && isMicrochipProcedure(applied.procedure.name) ? applied.procedure.microchip : "";
   const primaryChip = input.animalIndex === 0 && chip ? chip : request.animal_microchip;
-  const history = [{ status: state.status, notes: applied.note, by: user.id, at: new Date() }];
+  const history = [{ status: state.status, notes: applied.note, by: user.id, at: new Date(),
+    ...(input.cancelledSchedule ? { cancelledSchedule: applied.previousSchedule } : {}),
+  }];
   const { rows } = await client.query(
     `UPDATE requests SET animals = $1, status = $2, schedule_date = $3, schedule_location_name = $4, schedule_address = $5,
       schedule_address_url = $6, workflow_data = $7, history = COALESCE(history, '[]'::jsonb) || $8::jsonb,

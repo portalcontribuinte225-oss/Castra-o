@@ -5,6 +5,7 @@ import animalRoutes from "../src/routes/animals.js";
 import { pool } from "../src/db/index.js";
 import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
 import { RequestKind } from "../../shared/request-contract.js";
+import { StaffNotificationType } from "../../shared/staff-notifications-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { assertInsertShape } from "./fixtures/insert-shape.js";
 
@@ -57,8 +58,9 @@ async function fixture(t, { existingAnimal = true, globalCollision = false, chip
     }
     if (sql.includes("INSERT INTO requests")) {
       assertInsertShape(sql, values);
-      return { rows: [{ id: "new-request", tutor_id: values[0], protocol: values[1], cpf: values[4] }] };
+      return { rows: [{ id: "new-request", tutor_id: values[0], protocol: values[1], cpf: values[4], municipality_id: values.at(-1) }] };
     }
+    if (sql.includes("INSERT INTO staff_notifications")) return { rows: [] };
     if (sql.includes("INSERT INTO animal_records")) return { rows: [] };
     throw new Error("Unexpected animal-access test query");
   };
@@ -157,6 +159,10 @@ test("owner death and transfer requests are attributed to the authenticated owne
     assert.equal(values[0], OWNER_ID);
     assert.equal(values[4], CPF);
   }
+  const events = calls.filter(({ sql }) => sql.includes("INSERT INTO staff_notifications"));
+  assert.deepEqual(events.map(({ values }) => values), [death.body, transfer.body]
+    .map((request) => [MUNICIPALITY, request.id, StaffNotificationType.REQUEST_CREATED]));
+  for (const event of events) assert.equal(calls[calls.indexOf(event) + 1].sql, "COMMIT");
 });
 
 test("non-owners cannot open death or transfer requests for an animal", async (t) => {

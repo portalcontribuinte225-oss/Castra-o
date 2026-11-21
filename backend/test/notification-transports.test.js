@@ -110,6 +110,7 @@ test("every notice carries its full text, the new subject and, for the no-show, 
   const request = { protocol: "1/2026", schedule_date: "2026-11-20", schedule_location_name: "Centro", workflow_data: { scheduleTime: "09:15" } };
   const expected = {
     [NotificationEvent.SCHEDULE_CONFIRMED]: ["Agendamento confirmado", "Seu agendamento foi confirmado! Esperamos você no dia 20/11/2026, às 09:15, na Centro. Protocolo: 1/2026."],
+    [NotificationEvent.SCHEDULE_CANCELLED]: ["Agendamento cancelado", "O agendamento do dia 20/11/2026, às 09:15, na Centro foi cancelado. Protocolo 1/2026."],
     [NotificationEvent.NO_SHOW]: ["Não comparecimento", "Identificamos que você não compareceu ao atendimento agendado para o dia 20/11/2026. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
     [NotificationEvent.COMPLETED]: ["Atendimento concluído", "Seu atendimento foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: 1/2026."],
     [NotificationEvent.REQUEST_REJECTED]: ["Solicitação indeferida", "Sua solicitação foi indeferida. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],

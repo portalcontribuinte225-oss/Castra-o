@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { runMigrations } from "./db/migrations.js";
 import authRoutes from "./routes/auth.js";
 import requestRoutes from "./routes/requests.js";
+import notificationRoutes from "./routes/notifications.js";
 import animalRoutes from "./routes/animals.js";
 import adoptionRoutes from "./routes/adoptions.js";
 import accessRequestRoutes from "./routes/accessRequests.js";
@@ -35,6 +36,7 @@ app.use("/api", (_req, res, next) => { res.setHeader("Content-Type", "applicatio
 
 app.use("/api/auth", authRoutes);
 app.use("/api/requests", requestRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/animals", animalRoutes);
 app.use("/api/adoptions", adoptionRoutes);
 app.use("/api/access-requests", accessRequestRoutes);

@@ -12,7 +12,7 @@ import { TutorDataTab } from "../tutor-data/tutor-data-tab";
 import { AttachmentsTab } from "./attachments-tab";
 import { buildAttachmentRows, isBlockingAttachment, isPendingAttachment } from "./attachment-rows";
 import type { AttachmentRow } from "./attachment-rows";
-import { AssignDialog, NoteDialog, RejectDialog, UnsavedChangesDialog } from "./process-dialogs";
+import { AssignDialog, CancelScheduleDialog, NoteDialog, RejectDialog, UnsavedChangesDialog } from "./process-dialogs";
 import { requestDocumentTypes } from "./process-documents";
 import { ProcessFooter } from "./process-footer";
 import { ProcessHeader } from "./process-header";
@@ -24,7 +24,7 @@ import { RescheduleDialog } from "./reschedule-dialog";
 import { useAttachmentActions } from "./use-attachment-actions";
 import { useProcessProcedures } from "./use-process-procedures";
 
-enum Dialog { ASSIGN, REJECT, REJECT_PROCESS, RESCHEDULE, PRESCRIPTION, REJECT_DOCUMENT, COMPLAINT, UNSAVED }
+enum Dialog { ASSIGN, REJECT, REJECT_PROCESS, RESCHEDULE, CANCEL_SCHEDULE, PRESCRIPTION, REJECT_DOCUMENT, COMPLAINT, UNSAVED }
 
 const REQUEST_DOCUMENT_KINDS: Record<string, string> = {
   [RequestType.TUTOR_TRANSFER]: "tutor-transfer-request",
@@ -50,6 +50,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const attachmentTrigger = useRef<HTMLButtonElement | null>(null);
   useModalFocus(overlay, true, returnFocus);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [cancelledSchedule, setCancelledSchedule] = useState<{ date: string; occurrenceKey: string; time: string; locationName: string; updatedAt: string } | null>(null);
   const [rejectingDocument, setRejectingDocument] = useState<AttachmentRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
@@ -175,6 +176,15 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
             reject: () => setDialog(Dialog.REJECT),
             save: () => act(ProcedureAction.SAVE, {}, "Alterações salvas"),
             reschedule: () => setDialog(Dialog.RESCHEDULE),
+            cancelSchedule: () => {
+              const schedule = procedure?.schedule;
+              if (!schedule?.date) return;
+              setCancelledSchedule({
+                date: schedule.date, occurrenceKey: schedule.occurrenceKey || "", time: schedule.slotTime || "",
+                locationName: schedule.locationName || "", updatedAt: procedure.updatedAt || "",
+              });
+              setDialog(Dialog.CANCEL_SCHEDULE);
+            },
             prescription: () => setDialog(Dialog.PRESCRIPTION),
             confirmSchedule: () => act(ProcedureAction.CONFIRM_SCHEDULE, {}, "Agenda confirmada"),
             attend: () => act(ProcedureAction.ATTEND, {}, "Atendimento confirmado"),
@@ -208,7 +218,14 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
       {dialog === Dialog.RESCHEDULE && procedure && (
         <RescheduleDialog municipalityId={normalized.municipalityId} subject={subject} currentDate={procedure.schedule?.date || ""} busy={busy} onClose={closeDialog}
           reservedSlots={animal.procedures.filter(holdsSchedulePlace).map((item: AnyRecord) => item.schedule)}
-          onConfirm={({ reason, ...schedule }) => act(ProcedureAction.RESCHEDULE, { schedule, reason }, `Reagendado para ${schedule.date}`)} />
+          onConfirm={({ reason, ...schedule }) => act(ProcedureAction.RESCHEDULE, { schedule, reason }, `Horário selecionado para ${schedule.date}`)} />
+      )}
+      {dialog === Dialog.CANCEL_SCHEDULE && cancelledSchedule && (
+        <CancelScheduleDialog subject={subject} date={cancelledSchedule.date} time={cancelledSchedule.time} locationName={cancelledSchedule.locationName}
+          busy={busy} onClose={closeDialog} onConfirm={() => {
+            const { date, occurrenceKey, time, updatedAt } = cancelledSchedule;
+            return act(ProcedureAction.CANCEL_SCHEDULE, { schedule: { date, occurrenceKey, time, updatedAt } }, "Agendamento cancelado");
+          }} />
       )}
       {dialog === Dialog.PRESCRIPTION && procedure && (
         <PrescriptionDialog request={request} animal={animal} procedure={procedure} municipality={getPrescriptionMunicipality(request, municipalities)} defaultProfessionalName={currentUserName}

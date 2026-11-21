@@ -4,7 +4,6 @@ import { api } from "./api";
 import {
   Activity,
   BarChart3,
-  Bell,
   CalendarDays,
   Cat,
   CheckCircle2,
@@ -159,6 +158,9 @@ import { ProcessModal } from "./features/process-modal/process-modal";
 import { PDF_BASE_STYLES, printHtmlViaIframe } from "./features/process-report/print-html";
 import { ReportsView } from "./features/reports";
 import { ActiveFiltersBar } from "./features/request-filters/active-filters-bar";
+import { StaffNotificationBell } from "./features/staff-notifications/staff-notification-bell";
+import { SidebarMunicipalityBrand } from "./components/sidebar-municipality-brand";
+import { REQUESTS_MENU_ITEM } from "../shared/staff-notifications-contract.js";
 import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-filters/request-filters";
 import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
@@ -422,6 +424,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   }, []);
   const [accessRequests, setAccessRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
+  const [notificationRequest, setNotificationRequest] = useState<AnyRecord | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [usesMobileMenu, setUsesMobileMenu] = useState(() => window.matchMedia(mobileWorkspaceQuery).matches);
   const sidebar = useRef<HTMLElement>(null);
@@ -863,6 +866,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
       return currentPermissionGroup.allowedConfigItems?.includes(item.id);
     });
   const activeMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : currentUser?.municipalityId || "";
+  const sidebarMunicipality = municipalities.find((municipality) => municipality.id === activeMunicipalityId);
   const scopedMunicipalityId = activeMunicipalityId;
   const scopedRequests = filterByMunicipalityScope(requests, scopedMunicipalityId);
   const scopedAdoptionAnimals = filterByMunicipalityScope(adoptionAnimals, scopedMunicipalityId);
@@ -946,26 +950,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
         aria-label={mobileDialogOpen ? "Menu principal" : undefined}
       >
         <div className="brand">
-          {(() => {
-            const sideMun = !isGlobalRole(currentUser.role) ? municipalities.find((m) => m.id === currentUser.municipalityId) : null;
-            return sideMun?.brasao ? (
-              <img src={sideMun.brasao} alt={`Brasão ${sideMun.name}`} className="brand-brasao" />
-            ) : (
-              <div className="brand-mark"><PawPrint size={20} /></div>
-            );
-          })()}
-          <div className="brand-text">
-            <strong>
-              {!isGlobalRole(currentUser.role)
-                ? municipalities.find((m) => m.id === currentUser.municipalityId)?.name || "Sistema municipal"
-                : "Plataforma"}
-            </strong>
-            {!isGlobalRole(currentUser.role) && municipalities.find((m) => m.id === currentUser.municipalityId)?.department_name && (
-              <span className="sidebar-brand-department">
-                {municipalities.find((m) => m.id === currentUser.municipalityId)?.department_name}
-              </span>
-            )}
-          </div>
+          <SidebarMunicipalityBrand municipality={sidebarMunicipality} defaultLabel={isGlobalRole(currentUser.role) ? "Plataforma" : "Sistema municipal"} />
           {usesMobileMenu ? (
             <CloseButton aria-label="Fechar menu" onClick={() => setMobileOpen(false)} />
           ) : (
@@ -1142,9 +1127,16 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
                 placeholder="Protocolo, CPF, tutor, microchip..."
               />
             </label>
-            <Button variant="outline" className="tw:w-10 tw:px-0" aria-label="Notificações">
-              <Bell size={20} />
-            </Button>
+            {tenantConfigReady && canEditRequests(currentUser.role) && visibleMenu.some((item) => item.id === REQUESTS_MENU_ITEM) && (
+              <StaffNotificationBell
+                key={activeMunicipalityId}
+                municipalityId={activeMunicipalityId}
+                onOpenRequest={(request) => {
+                  setNotificationRequest(registerCreatedRequest(request));
+                  navigateWorkspace(REQUESTS_MENU_ITEM);
+                }}
+              />
+            )}
           </div>
         </header>
 
@@ -1154,6 +1146,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             selected={scopedSelected}
             selectedId={selectedId}
             setSelectedId={setSelectedId}
+            notificationRequest={notificationRequest}
+            setNotificationRequest={setNotificationRequest}
             metrics={scopedMetrics}
             patchRequest={patchRequest}
             runProcedureAction={runProcedureAction}
@@ -1161,7 +1155,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             adoptionAnimals={scopedAdoptionAnimals}
             setAdoptionAnimals={setAdoptionAnimals}
             currentUser={currentUser}
-            scheduleDays={effectiveScopedScheduleDays}
+            scheduleDays={active === "relatorios" ? scopedScheduleDays : effectiveScopedScheduleDays}
             requestTypes={scopedRequestTypes}
             documentTypes={scopedDocumentTypes}
             setRequestTypes={setRequestTypes}
@@ -3557,6 +3551,8 @@ export function ToastContainer({ toasts, onDismiss }: AnyRecord) {
 function AdminDashboard({
   requests,
   setSelectedId,
+  notificationRequest,
+  setNotificationRequest,
   currentUser,
   patchRequest,
   runProcedureAction,
@@ -3607,6 +3603,12 @@ function AdminDashboard({
     rejectRequestFromProcess,
     confirmSpecialRequest,
   } = useRequestActions({ patchRequest, runProcedureAction, currentUser, teams, showToast, setSelectedId });
+
+  useEffect(() => {
+    if (!notificationRequest) return;
+    openRequestPreview(notificationRequest);
+    setNotificationRequest(null);
+  }, [notificationRequest, openRequestPreview, setNotificationRequest]);
 
   const normalizedRequests = useMemo(
     () => (Array.isArray(requests) ? requests : []).map(normalizeRequest),

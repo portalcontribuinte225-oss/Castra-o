@@ -9,6 +9,7 @@ import type { MessageQuotaInput, MessageQuotaStatus } from "./features/message-c
 import type { SmsAccountInput } from "./features/sms/sms-types";
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
 import type { EmailAccountInput, EmailSettings } from "./features/email/email-integration-types";
+import type { OpenStaffNotification, StaffNotificationPage } from "./features/staff-notifications/staff-notification-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 let sessionMutationVersion = 0;
@@ -139,6 +140,17 @@ export const api = {
   },
 
   getRequests: () => request("GET", "/requests"),
+  listStaffNotifications(municipalityId: string, cursor = "", options?: AuthRequestOptions): Promise<StaffNotificationPage> {
+    const params = new URLSearchParams();
+    if (municipalityId) params.set("municipalityId", municipalityId);
+    if (cursor) params.set("cursor", cursor);
+    const query = params.toString();
+    return request("GET", query ? `/notifications?${query}` : "/notifications", undefined, "json", options);
+  },
+  openStaffNotification(id: string, municipalityId: string, options?: AuthRequestOptions): Promise<OpenStaffNotification> {
+    const scope = municipalityId ? `?municipalityId=${encodeURIComponent(municipalityId)}` : "";
+    return request("POST", `/notifications/${encodeURIComponent(id)}/read${scope}`, undefined, "json", options);
+  },
   async createRequest(body) {
     return readSubmittedRequest(await request("POST", "/requests", body));
   },

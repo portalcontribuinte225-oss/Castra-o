@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { userHasConfigItem } from "../src/services/config-permission.js";
+import { requestsMenuAllowed, userHasConfigItem } from "../src/services/config-permission.js";
 import { IntegrationConfigItem, CHANNEL_CONFIG_ITEMS } from "../../shared/config-permission-contract.js";
 import { NotificationChannel } from "../../shared/notification-contract.js";
+import { REQUESTS_MENU_ITEM } from "../../shared/staff-notifications-contract.js";
 import { permissionConfigs, permissionGroup } from "./fixtures/permission-groups.js";
 
 const A = "11111111-1111-4111-8111-111111111111";
@@ -87,4 +88,17 @@ test("malformed configuration is read as no group", async () => {
     assert.equal(await allowed(analyst, database(rows)), false);
     assert.equal(await allowed(manager, database(rows)), true, "the manager, not among the team users, keeps the role fallback");
   }
+});
+
+test("the Requests permission prefers the authenticated ID and accepts one unambiguous legacy team email", () => {
+  const oldAccount = { id: manager.id, email: analyst.email, permissionGroupId: "allowed" };
+  const canonical = { id: analyst.id, email: analyst.email, permissionGroupId: "denied" };
+  const groups = [{ id: "allowed", allowedMenuItems: [REQUESTS_MENU_ITEM] }, { id: "denied", allowedMenuItems: ["dashboard"] }];
+  const allows = (...users) => requestsMenuAllowed(analyst, { teams: { users }, groups });
+  assert.equal(allows(oldAccount, canonical), false);
+  assert.equal(allows(oldAccount), false);
+  const legacy = { ...oldAccount, id: "legacy-analyst" };
+  assert.equal(allows(legacy), true);
+  assert.equal(allows(legacy, { ...legacy, id: "another-legacy-entry" }), false);
+  assert.equal(allows(), true);
 });

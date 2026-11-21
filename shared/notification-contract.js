@@ -4,6 +4,7 @@ export const NotificationEvent = Object.freeze({
   REQUEST_REGISTERED: "request_registered",
   SCHEDULE_CONFIRMED: "schedule_confirmed",
   SCHEDULE_CHANGED: "schedule_changed",
+  SCHEDULE_CANCELLED: "schedule_cancelled",
   NO_SHOW: "no_show",
   DOCUMENTS_APPROVED: "documents_approved",
   DOCUMENTS_REJECTED: "documents_rejected",

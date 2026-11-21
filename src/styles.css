@@ -2901,17 +2901,6 @@ main {
 }
 
 
-.reports-filter-field span {
-  color: var(--muted, #7a8fa0);
-  font-size: 0.78rem;
-}
-
-
-.reports-filter-grid .field select {
-  min-height: 40px;
-}
-
-
 /* Toolbar de adoção — substitui o antigo hero */
 .adoption-toolbar {
   grid-column: 1 / -1;

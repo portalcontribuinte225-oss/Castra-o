@@ -15,6 +15,14 @@ export function displayScheduleDate(value) {
   const iso = scheduleDate(value);
   return iso ? iso.split("-").reverse().join("/") : "";
 }
+
+export function procedureScheduleSelection(schedule) {
+  const date = scheduleDate(schedule?.date);
+  const { occurrenceKey, slotTime: time } = schedule || {};
+  return date && occurrenceKey && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+    ? { date, occurrenceKey, time } : null;
+}
+
 export function normalizeSlots(slots, time = "08:00", vacancies = 0) {
   const source = Array.isArray(slots) && slots.length ? slots : [{ time, vacancies }];
   const seen = new Set();

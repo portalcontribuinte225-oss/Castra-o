@@ -101,12 +101,16 @@ async function tryEmail({ event, request, followUp }, dependencies) {
 // Only the fields used in the SMS text are shared with the sender.
 function smsNoticeData(event, request) {
   const field = (name) => resolveWhatsappField(name, request);
+  const workflow = request.workflow_data || request.workflowData || {};
+  const rejection = event === NotificationEvent.REQUEST_REJECTED
+    ? { reason: rejectionReasonText(workflow), ...(request.procedure_name ? { procedure: request.procedure_name } : {}) } : {};
   return {
     protocol: request.protocol,
     date: field(WhatsappTemplateField.SCHEDULE_DATE),
-    time: field(WhatsappTemplateField.SCHEDULE_TIME),
+    time: event === NotificationEvent.SCHEDULE_CANCELLED
+      ? workflow.scheduleSlotTime || workflow.scheduleTime || request.schedule_time : field(WhatsappTemplateField.SCHEDULE_TIME),
     location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
-    ...(event === NotificationEvent.REQUEST_REJECTED ? { reason: rejectionReasonText(request.workflow_data || request.workflowData) } : {}),
+    ...rejection,
     ...(event === NotificationEvent.REQUEST_REGISTERED ? { scheduled: Boolean(request.schedule_date), link: request.access_link?.url || "" } : {}),
   };
 }

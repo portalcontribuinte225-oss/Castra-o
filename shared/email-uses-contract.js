@@ -60,6 +60,7 @@ export const emailUses = Object.freeze([
   emailUse(NotificationEvent.REQUEST_REGISTERED, EmailUseKind.NOTICE, "Solicitação registrada", { variables: noticeVariables }),
   emailUse(NotificationEvent.SCHEDULE_CONFIRMED, EmailUseKind.NOTICE, "Agendamento confirmado", { variables: noticeVariables, requestFields: scheduleFields }),
   emailUse(NotificationEvent.SCHEDULE_CHANGED, EmailUseKind.NOTICE, "Agendamento reagendado", { variables: noticeVariables, requestFields: scheduleFields }),
+  emailUse(NotificationEvent.SCHEDULE_CANCELLED, EmailUseKind.NOTICE, "Agendamento cancelado", { variables: noticeVariables, requestFields: scheduleFields }),
   emailUse(NotificationEvent.NO_SHOW, EmailUseKind.NOTICE, "Não comparecimento", { variables: noticeVariables, requestFields: noShowFields }),
   emailUse(NotificationEvent.DOCUMENTS_APPROVED, EmailUseKind.NOTICE, "Documentos deferidos", { variables: documentVariables }),
   emailUse(NotificationEvent.DOCUMENTS_REJECTED, EmailUseKind.NOTICE, "Documentos indeferidos", { variables: documentVariables }),

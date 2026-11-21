@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Button } from "../../components/button";
 import { CloseButton } from "../../components/close-button";
@@ -79,6 +79,9 @@ function FilterGroup<T extends string>({
 }
 
 interface RequestFiltersDrawerProps {
+  sectionLabel?: string;
+  additionalFilters?: ReactNode;
+  hasAdditionalFilters?: boolean;
   filters: RequestListFilters;
   counts: RequestFacetCounts;
   typeOptions: RequestFilterOption[];
@@ -89,9 +92,14 @@ interface RequestFiltersDrawerProps {
   onToggleAssignee: (value: string) => void;
   onClearAll: () => void;
   onClose: () => void;
+  onApply?: () => void;
+  applyDisabled?: boolean;
 }
 
 export function RequestFiltersDrawer({
+  sectionLabel = "Solicitações",
+  additionalFilters,
+  hasAdditionalFilters = false,
   filters,
   counts,
   typeOptions,
@@ -102,6 +110,8 @@ export function RequestFiltersDrawer({
   onToggleAssignee,
   onClearAll,
   onClose,
+  onApply = onClose,
+  applyDisabled = false,
 }: RequestFiltersDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
   useModalFocus(drawerRef);
@@ -117,12 +127,13 @@ export function RequestFiltersDrawer({
       >
         <div className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:border-b tw:border-solid tw:border-card-border tw:px-5 tw:pb-4 tw:pt-5">
           <div className="tw:grid tw:gap-1">
-            <span className="tw:text-xs tw:font-semibold tw:text-ui-muted">Solicitações</span>
+            <span className="tw:text-xs tw:font-semibold tw:text-ui-muted">{sectionLabel}</span>
             <h3 className="tw:m-0 tw:text-lg tw:font-semibold tw:text-ui-ink" id="request-filters-title">Filtros</h3>
           </div>
           <CloseButton aria-label="Fechar filtros" onClick={onClose} />
         </div>
         <div className="tw:grid tw:min-h-0 tw:flex-1 tw:content-start tw:gap-5 tw:overflow-y-auto tw:px-5 tw:pb-6 tw:pt-4">
+          {additionalFilters}
           <FilterGroup
             title={requestFilterDimensionLabels[RequestFilterDimension.STAGES]}
             options={requestStageOptions}
@@ -147,13 +158,14 @@ export function RequestFiltersDrawer({
           />
         </div>
         <div className="tw:flex tw:shrink-0 tw:gap-2.5 tw:border-t tw:border-solid tw:border-card-border tw:px-5 tw:pb-[max(0.875rem,env(safe-area-inset-bottom))] tw:pt-3.5">
-          <Button variant="outline" disabled={isRequestFiltersEmpty(filters)} onClick={onClearAll}>
+          <Button variant="outline" disabled={isRequestFiltersEmpty(filters) && !hasAdditionalFilters} onClick={onClearAll}>
             Limpar
           </Button>
           <Button
             variant="custom"
             className="tw:flex-1 tw:border-transparent tw:bg-[#0f766e] tw:font-semibold tw:text-white tw:enabled:hover:bg-[#115e59]"
-            onClick={onClose}
+            onClick={onApply}
+            disabled={applyDisabled}
           >
             Ver {formatRequestCount(resultCount)}
           </Button>

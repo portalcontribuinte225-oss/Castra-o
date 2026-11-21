@@ -51,6 +51,7 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
   const [occurrenceKey, setOccurrenceKey] = useState("");
   const [time, setTime] = useState("");
   const [reason, setReason] = useState("");
+  const action = currentDate ? "Reagendar" : "Agendar";
   const availability = useScheduleAvailability(municipalityId, date);
   const days = availability.days.map((day) => {
     const times = reservedSlots
@@ -85,7 +86,7 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
         <header className="prm-header">
           <div className="prm-header-identity">
             <div className="prm-header-identity-text">
-              <span className="prm-eyebrow" id={titleId}>Reagendar {subject && <span className="tw:sr-only">{subject}</span>}</span>
+              <span className="prm-eyebrow" id={titleId}>{action} {subject && <span className="tw:sr-only">{subject}</span>}</span>
               <h2 className="prm-headline-name">{subject}</h2>
             </div>
             <div className="prm-header-actions">
@@ -98,11 +99,11 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
             <div className="prm-inline-panel-heading">
               <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Nova data</strong>
               <div className="prm-reschedule-date-group">
-                <span className="prm-reschedule-current">Atual: {currentDate || "-"}</span>
+                {currentDate && <span className="prm-reschedule-current">Atual: {currentDate}</span>}
                 <Input className="tw:max-w-[134px]" type="text" value={typedDate} onChange={(event) => typeDate(event.target.value)} placeholder="dd/mm/aaaa" inputMode="numeric" aria-label="Data específica" />
               </div>
             </div>
-            <textarea data-ui-input="" className={`${configTextareaStyle} tw:resize-y`} value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} placeholder="Motivo do reagendamento (opcional)" aria-label="Motivo do reagendamento" />
+            {currentDate && <textarea data-ui-input="" className={`${configTextareaStyle} tw:resize-y`} value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} placeholder="Motivo do reagendamento (opcional)" aria-label="Motivo do reagendamento" />}
             {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
             {availability.error && <p role="alert" className="form-error">{availability.error} <Button variant="outline" onClick={availability.refresh}>Tentar novamente</Button></p>}
             <PublicSchedulePicker scheduleDays={days} selectedDate={date} selectedOccurrenceKey={occurrenceKey} pendingReservation={{ date, count: 1 }} onSelect={chooseDate} />
@@ -122,7 +123,7 @@ export function RescheduleDialog({ municipalityId, subject, currentDate, reserve
         <footer className="prm-footer">
           <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
           <Button disabled={busy || !availability.ready || !occurrenceKey || !slot} onClick={() => onConfirm({ date, occurrenceKey, time, reason: reason.trim() })}>
-            {busy ? "Reagendando..." : "Confirmar reagendamento"}
+            {busy ? "Salvando..." : currentDate ? "Confirmar reagendamento" : "Salvar horário"}
           </Button>
         </footer>
       </div>

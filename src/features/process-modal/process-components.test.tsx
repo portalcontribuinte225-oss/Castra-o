@@ -5,13 +5,14 @@ import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js
 import { RequestOrigin } from "../../../shared/request-contract.js";
 import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
 import { ProcessFooter } from "./process-footer";
+import { CancelScheduleDialog } from "./process-dialogs";
 import { ProcessTab } from "./process-labels";
 import { ProcessModal } from "./process-modal";
 import { ProceduresTab } from "./procedures-tab";
 
 const noop = () => {};
 
-const procedure = { requestTypeId: "castration", name: "Castração", status: ProcedureStatus.WAITING, schedule: { date: "20/11/2026" } };
+const procedure = { requestTypeId: "castration", name: "Castração", status: ProcedureStatus.WAITING, schedule: { date: "20/11/2026", occurrenceKey: "day:visit", slotTime: "09:00" } };
 const microchip = { ...procedure, requestTypeId: "chip", name: "Microchipagem" };
 
 describe("ProcessModal", () => {
@@ -69,7 +70,7 @@ const footerProps: ComponentProps<typeof ProcessFooter> = {
   currentChanged: true,
   canAssume: true,
   tutorSlot: noop,
-  on: { assign: noop, assume: noop, showProcedures: noop, noShow: noop, reject: noop, save: noop, reschedule: noop, prescription: noop,
+  on: { assign: noop, assume: noop, showProcedures: noop, noShow: noop, reject: noop, save: noop, reschedule: noop, cancelSchedule: noop, prescription: noop,
     confirmSchedule: noop, attend: noop, rejectProcess: noop, confirmSpecial: noop },
 };
 
@@ -93,12 +94,28 @@ describe("ProcessFooter", () => {
     expect(waiting).toContain("Emitir receita");
     expect(waiting).toContain("Indeferir");
     expect(waiting).not.toContain("Não compareceu");
+    expect(waiting).not.toContain("Cancelar agendamento");
     expect(waiting).not.toContain("Confirmar atendimento");
 
     const scheduled = footer({ procedure: { ...procedure, status: ProcedureStatus.SCHEDULED } });
     expect(scheduled).toContain("Confirmar atendimento");
     expect(scheduled).toContain("Não compareceu");
+    expect(scheduled).toContain("Cancelar agendamento");
     expect(scheduled).not.toContain("Confirmar agenda");
+  });
+
+  it("requires a complete appointment to confirm again after cancellation", () => {
+    const html = footer({ procedure: { ...procedure, schedule: null } });
+    expect(html).toContain("Agendar este procedimento");
+    expect(html).toMatch(/<button\b(?=[^>]*title="Escolha a data, o local e o horário antes de confirmar a agenda")(?=[^>]*disabled="")[^>]*>/);
+    expect(html).not.toContain("Cancelar agendamento");
+  });
+
+  it("shows the appointment in the confirmation and prevents repeated submissions while saving", () => {
+    const html = renderToStaticMarkup(<CancelScheduleDialog subject="Castração de Bidu" date="2026-11-20" time="09:00" locationName="Unidade Municipal" busy onClose={noop} onConfirm={noop} />);
+    expect(html).toContain("20/11/2026 · 09:00 · Unidade Municipal");
+    expect(html).toContain("O procedimento voltará a aguardar um novo agendamento.");
+    expect(html).toMatch(/<button\b[^>]*disabled=""[^>]*>Cancelando/);
   });
 
   it("disables scheduling controls until required documents are cleared", () => {

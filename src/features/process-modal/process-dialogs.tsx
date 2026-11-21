@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ClipboardList } from "lucide-react";
 import { REJECTION_REASONS } from "../../../shared/notification-contract.js";
+import { displayScheduleDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
 import { configFieldStyle, configTextareaStyle } from "../../components/ui";
 import type { AnyRecord } from "../../types";
@@ -66,6 +67,22 @@ export function RejectDialog({ title, subject, busy, onConfirm, onClose }: { tit
         <span>Justificativa</span>
         <textarea data-ui-input="" className={`${configTextareaStyle} tw:resize-y`} value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} placeholder="Explique o motivo do indeferimento" />
       </label>
+    </ProcessDialog>
+  );
+}
+
+export function CancelScheduleDialog({ subject, date, time, locationName, busy, onConfirm, onClose }: {
+  subject: string; date: string; time: string; locationName: string; busy: boolean; onConfirm: () => void; onClose: () => void;
+}) {
+  const appointment = [displayScheduleDate(date), time, locationName].filter(Boolean).join(" · ");
+  return (
+    <ProcessDialog title="Cancelar agendamento" busy={busy} onClose={onClose} actions={<>
+      <Button variant="outline" data-dialog-initial-focus="" disabled={busy} onClick={onClose}>Manter agendamento</Button>
+      <Button variant="danger" disabled={busy} onClick={onConfirm}>{busy ? "Cancelando..." : "Confirmar cancelamento"}</Button>
+    </>}>
+      <p className="prm-muted-note">{subject}</p>
+      <p>{appointment}</p>
+      <p className="prm-muted-note">O procedimento voltará a aguardar um novo agendamento.</p>
     </ProcessDialog>
   );
 }

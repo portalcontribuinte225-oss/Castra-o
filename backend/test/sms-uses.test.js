@@ -30,11 +30,11 @@ async function fixture(t, { active = true } = {}) {
   return { database, save };
 }
 
-test("there are twelve uses: eight notices and four access messages, without the initial password or e-mail confirmation", () => {
-  assert.equal(smsUses.length, 12);
-  assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.NOTICE).length, 8);
+test("there are thirteen uses: nine notices and four access messages, without the initial password or e-mail confirmation", () => {
+  assert.equal(smsUses.length, 13);
+  assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.NOTICE).length, 9);
   assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.ACCESS).length, 4);
-  assert.equal(new Set(smsUses.map(({ key }) => key)).size, 12);
+  assert.equal(new Set(smsUses.map(({ key }) => key)).size, 13);
   for (const event of Object.values(NotificationEvent)) assert.equal(getSmsUse(event)?.kind, SmsUseKind.NOTICE, event);
   for (const purpose of [RESET, AuthPurpose.VERIFY_PHONE, AuthPurpose.REQUEST_TRACKING, AuthPurpose.CONTACT_CHANGED]) assert.equal(getSmsUse(purpose)?.kind, SmsUseKind.ACCESS, purpose);
   for (const purpose of ["initial_password", AuthPurpose.VERIFY_EMAIL, "unknown", undefined]) assert.equal(getSmsUse(purpose), null, String(purpose));
@@ -59,7 +59,7 @@ test("stored switches keep only known uses with real booleans", () => {
   assert.deepEqual(rows.map(({ key, active }) => [key, active]).filter(([, active]) => active !== false), [[CONFIRMED, true]]);
   assert.equal(rows.find(({ key }) => key === RESET).active, false);
   assert.equal(rows.find(({ key }) => key === COMPLETED).active, false);
-  assert.equal(rows.length, 12);
+  assert.equal(rows.length, smsUses.length);
 });
 
 test("document notices inherit an older switch and can be turned off independently", async (t) => {

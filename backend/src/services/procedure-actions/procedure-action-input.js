@@ -1,5 +1,6 @@
 import { MAX_HEALTH_TEXT, MAX_PRESCRIPTION_TEXT, MAX_PROCEDURE_NOTE, MAX_PROFESSIONAL_TEXT, ProcedureAction } from "../../../../shared/request-procedure-contract.js";
 import { REJECTION_REASONS } from "../../../../shared/notification-contract.js";
+import { scheduleDate } from "../../../../shared/schedule-contract.js";
 
 const ACTIONS = Object.values(ProcedureAction);
 
@@ -45,9 +46,16 @@ function parseRejection(data) {
 
 function parseSchedule(data) {
   const schedule = isObject(data.schedule) ? data.schedule : {};
-  if (typeof schedule.date !== "string" || typeof schedule.occurrenceKey !== "string" || !schedule.occurrenceKey || schedule.occurrenceKey.length > 300
+  if (typeof schedule.date !== "string" || !scheduleDate(schedule.date) || typeof schedule.occurrenceKey !== "string" || !schedule.occurrenceKey || schedule.occurrenceKey.length > 300
     || typeof schedule.time !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(schedule.time)) invalid("Escolha a nova data, o local e o horário.");
   return { date: schedule.date, occurrenceKey: schedule.occurrenceKey, time: schedule.time, reason: optionalText(data.reason, MAX_PROCEDURE_NOTE, "Motivo") || "" };
+}
+
+function parseCancelledSchedule(value) {
+  const date = typeof value?.date === "string" ? scheduleDate(value.date) : "";
+  if (!date || typeof value.occurrenceKey !== "string" || value.occurrenceKey.length > 300
+    || typeof value.time !== "string" || value.time.length > 40) invalid("Confirme o agendamento que deseja cancelar.");
+  return { date, occurrenceKey: value.occurrenceKey, time: value.time, updatedAt: optionalText(value.updatedAt, 80, "Versão do procedimento") || "" };
 }
 
 function parsePrescription(data) {
@@ -71,6 +79,7 @@ export function parseProcedureActionInput(body) {
     edits: parseEdits(data.edits),
     rejection: input.action === ProcedureAction.REJECT ? parseRejection(data) : null,
     schedule: input.action === ProcedureAction.RESCHEDULE ? parseSchedule(data) : null,
+    cancelledSchedule: input.action === ProcedureAction.CANCEL_SCHEDULE ? parseCancelledSchedule(data.schedule) : null,
     prescription: input.action === ProcedureAction.PRESCRIPTION ? parsePrescription(data) : null,
   };
 }

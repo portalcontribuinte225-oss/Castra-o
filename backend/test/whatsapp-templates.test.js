@@ -74,7 +74,7 @@ test("each agenda and completion notice is recognized with the number of variabl
   const cases = [
     [confirmation(), NotificationEvent.SCHEDULE_CONFIRMED],
     [entry("castracao_reagendamento"), NotificationEvent.SCHEDULE_CHANGED],
-    [cancellation(), NotificationEvent.NO_SHOW],
+    [cancellation(), NotificationEvent.SCHEDULE_CANCELLED],
     [entry("castracao_nao_comparecimento", { bodyVariables: 3 }), NotificationEvent.NO_SHOW],
     [entry("castracao_nao_compareceu", { bodyVariables: 3 }), NotificationEvent.NO_SHOW],
     [entry("castracao_documentos_deferidos", { bodyVariables: 2 }), NotificationEvent.DOCUMENTS_APPROVED],
@@ -83,7 +83,7 @@ test("each agenda and completion notice is recognized with the number of variabl
     [entry("castracao_documentos_rejeitados", { bodyVariables: 2 }), NotificationEvent.DOCUMENTS_REJECTED],
     [entry("castracao_atendimento_concluido", { bodyVariables: 2 }), NotificationEvent.COMPLETED],
     [entry("castracao_indeferimento", { bodyVariables: 2 }), NotificationEvent.REQUEST_REJECTED],
-    [cancellation({ name: "castracao_cancelamento_v2" }), NotificationEvent.NO_SHOW],
+    [cancellation({ name: "castracao_cancelamento_v2" }), NotificationEvent.SCHEDULE_CANCELLED],
   ];
   for (const [template, event] of cases) assert.deepEqual(recognizeWhatsappTemplate(template), { uses: [event], reason: "" }, template.name);
 });
@@ -100,7 +100,7 @@ test("a template outside the convention is not recognized and says why", () => {
   assert.match(recognizeWhatsappTemplate(cancellation({ header: "TEXT_VARIABLE" })).reason, /Cabeçalho/);
   assert.match(recognizeWhatsappTemplate(cancellation({ extraComponents: true })).reason, /componentes/);
   for (const button of ["URL_VARIABLE", "OTP_COPY_CODE", "OTP_OTHER", "OTHER"]) assert.match(recognizeWhatsappTemplate(cancellation({ buttons: [button] })).reason, /Botão/);
-  assert.deepEqual(recognizeWhatsappTemplate(cancellation({ buttons: ["QUICK_REPLY", "PHONE_NUMBER", "URL"] })).uses, [NotificationEvent.NO_SHOW]);
+  assert.deepEqual(recognizeWhatsappTemplate(cancellation({ buttons: ["QUICK_REPLY", "PHONE_NUMBER", "URL"] })).uses, [NotificationEvent.SCHEDULE_CANCELLED]);
   assert.deepEqual(recognizeWhatsappTemplate(null), { uses: [], reason: "O nome não indica um aviso do sistema." });
 });
 
@@ -138,17 +138,17 @@ test("only approved templates that keep their structure are usable for a use", (
 
 test("the active list keeps only known uses with a valid identity and turning on replaces the previous template", () => {
   const stored = normalizeActiveTemplates({ active: {
-    [NotificationEvent.NO_SHOW]: { name: " castracao_cancelamento ", language: "pt_BR", extra: "x" },
+    [NotificationEvent.SCHEDULE_CANCELLED]: { name: " castracao_cancelamento ", language: "pt_BR", extra: "x" },
     [NotificationEvent.COMPLETED]: { name: "", language: "pt_BR" },
     [NotificationEvent.SCHEDULE_CHANGED]: { name: "castracao_reagendamento" },
     unknown_use: { name: "a", language: "pt_BR" },
     [AuthPurpose.VERIFY_EMAIL]: { name: "a", language: "pt_BR" },
   } });
-  assert.deepEqual(stored, { [NotificationEvent.NO_SHOW]: { name: "castracao_cancelamento", language: "pt_BR" } });
+  assert.deepEqual(stored, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento", language: "pt_BR" } });
   assert.deepEqual(normalizeActiveTemplates(null), {});
   assert.deepEqual(normalizeActiveTemplates({ active: [] }), {});
   const replaced = activateTemplate(stored, cancellation({ name: "castracao_cancelamento_v2" }));
-  assert.deepEqual(replaced, { [NotificationEvent.NO_SHOW]: { name: "castracao_cancelamento_v2", language: "pt_BR" } });
+  assert.deepEqual(replaced, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento_v2", language: "pt_BR" } });
   const code = activateTemplate(replaced, authentication());
   assert.equal(Object.keys(code).length, 4);
   assert.deepEqual(deactivateTemplate(code, "castracao_codigo_verificacao", "pt_BR"), replaced);
@@ -193,7 +193,7 @@ test("the template list shows status, recognized use, order of variables and wha
 
 test("an active template that disappeared from Meta or lost its structure stays visible so it can be turned off", () => {
   const active = {
-    [NotificationEvent.NO_SHOW]: { name: "castracao_cancelamento", language: "pt_BR" },
+    [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento", language: "pt_BR" },
     [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_confirmacao_agendamento", language: "pt_BR" },
   };
   const rows = buildTemplateRows(catalogOf(confirmation({ bodyVariables: 2 })), active);
@@ -202,7 +202,7 @@ test("an active template that disappeared from Meta or lost its structure stays 
   assert.equal(changed.canActivate, false);
   assert.match(changed.reason, /esperado é 5/);
   const removed = rows.find((row) => row.name === "castracao_cancelamento");
-  assert.deepEqual({ status: removed.status, active: removed.active, canActivate: removed.canActivate, label: removed.label }, { status: "NOT_FOUND", active: true, canActivate: false, label: "Não comparecimento" });
+  assert.deepEqual({ status: removed.status, active: removed.active, canActivate: removed.canActivate, label: removed.label }, { status: "NOT_FOUND", active: true, canActivate: false, label: "Agendamento cancelado" });
 });
 
 test("turning a template on requires it in the catalog, recognized and approved, and replaces the previous version", async () => {
@@ -220,7 +220,7 @@ test("turning a template on requires it in the catalog, recognized and approved,
   assert.equal(auditCall.values[3], "WHATSAPP_TEMPLATE_UPDATE");
   const second = await turn("castracao_cancelamento_v2");
   assert.deepEqual(second.templates.filter((row) => row.active).map((row) => row.name), ["castracao_cancelamento_v2"]);
-  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`), { active: { no_show: { name: "castracao_cancelamento_v2", language: "pt_BR" } } });
+  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`), { active: { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento_v2", language: "pt_BR" } } });
   const off = await turn("castracao_cancelamento_v2", false);
   assert.equal(off.templates.some((row) => row.active), false);
   assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`), { active: {} });
@@ -329,10 +329,29 @@ test("saving a link stores it per municipality, turns the template off only when
 test("going back to the name keeps on a template whose name sends the same notice", async () => {
   const database = fakeDatabase(withCatalog("municipality-a", [cancellation()]));
   const save = (use, fields) => setWhatsappTemplateLink({ municipalityId: "municipality-a", name: "castracao_cancelamento", language: "pt_BR", use, fields, database });
-  await save(NotificationEvent.NO_SHOW, linkFields);
+  await save(NotificationEvent.SCHEDULE_CANCELLED, linkFields);
   await setWhatsappTemplateActive({ municipalityId: "municipality-a", name: "castracao_cancelamento", language: "pt_BR", active: true, database });
   await save("", []);
-  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`).active, { no_show: { name: "castracao_cancelamento", language: "pt_BR" } });
+  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`).active, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento", language: "pt_BR" } });
+});
+
+test("legacy cancellation links retain their field order but need a separate activation for cancellation", async () => {
+  const municipalityId = "municipality-a";
+  const identity = { name: "castracao_cancelamento", language: "pt_BR" };
+  const database = fakeDatabase({
+    ...withCatalog(municipalityId, [cancellation(), noShowByOwnName()]),
+    [`${LINKS_KEY}:${municipalityId}`]: { links: [{ ...identity, use: NotificationEvent.NO_SHOW, fields: linkFields }] },
+    [`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:${municipalityId}`]: { active: { [NotificationEvent.NO_SHOW]: identity } },
+  });
+  assert.deepEqual(await resolveActiveTemplate(municipalityId, NotificationEvent.NO_SHOW, database), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
+  assert.deepEqual(await resolveActiveTemplate(municipalityId, NotificationEvent.SCHEDULE_CANCELLED, database), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
+  await assert.rejects(setWhatsappTemplateLink({ municipalityId, ...identity, use: NotificationEvent.NO_SHOW, fields: linkFields, database }),
+    { status: 400, message: /outro aviso de agenda/ });
+  await setWhatsappTemplateActive({ municipalityId, ...identity, active: true, database });
+  await setWhatsappTemplateActive({ municipalityId, name: "castracao_nao_comparecimento", language: "pt_BR", active: true, database });
+  assert.deepEqual(await resolveActiveTemplate(municipalityId, NotificationEvent.SCHEDULE_CANCELLED, database),
+    { ok: true, template: { ...identity, fields: linkFields } });
+  assert.deepEqual((await resolveActiveTemplate(municipalityId, NotificationEvent.NO_SHOW, database)).template.name, "castracao_nao_comparecimento");
 });
 
 test("a configured template resolves with its own fields, and the name supplies default fields after link removal", async () => {

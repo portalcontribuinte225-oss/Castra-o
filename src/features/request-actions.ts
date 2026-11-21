@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { AnyRecord } from "../types";
 import { getItemMunicipalityId, mergeTags, normalizeRequest } from "../domain";
 import { getNotificationNotice } from "./notifications/notification-results";
@@ -34,18 +34,18 @@ export function useRequestActions({
 
   const activeUsers = teams.users?.filter((user: AnyRecord) => user.active !== false) || [];
   const activeSectors = teams.sectors?.filter((sector: AnyRecord) => sector.active !== false) || [];
-  const currentTeamUser = activeUsers.find((user: AnyRecord) => user.email && currentUser?.email && user.email.toLowerCase() === currentUser.email.toLowerCase())
-    || activeUsers.find((user: AnyRecord) => user.id === currentUser?.id);
+  const currentTeamUser = activeUsers.find((user: AnyRecord) => user.id === currentUser?.id)
+    || activeUsers.find((user: AnyRecord) => user.email && currentUser?.email && user.email.toLowerCase() === currentUser.email.toLowerCase());
 
   function showNotificationNotice(updated: AnyRecord) {
     const notice = getNotificationNotice(updated?.notificationResults);
     if (notice) showToast(notice.message, notice.type);
   }
 
-  function openRequest(request: AnyRecord) {
+  const openRequest = useCallback((request: AnyRecord) => {
     setSelectedId?.(request.id);
     setPreviewRequest(request);
-  }
+  }, [setSelectedId]);
 
   function closePreview() {
     setPreviewRequest(null);

@@ -3,15 +3,17 @@ import { Button } from "../../components/button";
 import { formatRequestCount, isRequestFiltersEmpty } from "./request-filters";
 import type { ActiveFilterPill, RequestFilterDimension, RequestListFilters } from "./request-filters";
 
-interface ActiveFiltersBarProps {
+interface ActiveFiltersBarProps<Dimension extends string> {
   filters: RequestListFilters;
   resultCount: number;
-  pills: ActiveFilterPill[];
-  onClearDimension: (dimension: RequestFilterDimension) => void;
+  pills: ActiveFilterPill<Dimension>[];
+  onClearDimension: (dimension: Dimension) => void;
   onClearAll: () => void;
 }
 
-export function ActiveFiltersBar({ filters, resultCount, pills, onClearDimension, onClearAll }: ActiveFiltersBarProps) {
+export function ActiveFiltersBar<Dimension extends string = RequestFilterDimension>({
+  filters, resultCount, pills, onClearDimension, onClearAll,
+}: ActiveFiltersBarProps<Dimension>) {
   return (
     <div className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:gap-2" role="group" aria-label="Resultado e filtros ativos">
       <span className="tw:mr-1 tw:text-sm tw:font-semibold tw:text-ui-muted" aria-live="polite">{formatRequestCount(resultCount)}</span>
@@ -27,7 +29,7 @@ export function ActiveFiltersBar({ filters, resultCount, pills, onClearDimension
           <X size={12} aria-hidden="true" className="tw:shrink-0" />
         </Button>
       ))}
-      {!isRequestFiltersEmpty(filters) && (
+      {(!isRequestFiltersEmpty(filters) || pills.length > 0) && (
         <Button variant="outline" className="tw:text-ui-muted" onClick={onClearAll}>
           Limpar filtros
         </Button>

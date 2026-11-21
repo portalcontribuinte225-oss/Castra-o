@@ -45,8 +45,8 @@ export interface RequestFacetCounts {
   assignees: Record<string, number>;
 }
 
-export interface ActiveFilterPill {
-  dimension: RequestFilterDimension;
+export interface ActiveFilterPill<Dimension extends string = RequestFilterDimension> {
+  dimension: Dimension;
   label: string;
 }
 
@@ -84,13 +84,17 @@ function isAccessRequestItem(item: AnyRecord): boolean {
   return item.__source === ACCESS_REQUEST_SOURCE;
 }
 
+export function requestAssigneeKey(item: AnyRecord): string {
+  return item.assignedUserId || UNASSIGNED_ASSIGNEE_KEY;
+}
+
 function describeItem(item: AnyRecord, today: string): ItemFacets {
   const isAccessRequest = isAccessRequestItem(item);
   return {
     isAccessRequest,
     stage: getRequestStage(item),
     typeKeys: isAccessRequest ? [] : requestTypeLabels(item),
-    assigneeKey: item.assignedUserId || UNASSIGNED_ASSIGNEE_KEY,
+    assigneeKey: requestAssigneeKey(item),
     isToday: !isAccessRequest && isRequestOnScheduleDate(item, today),
   };
 }

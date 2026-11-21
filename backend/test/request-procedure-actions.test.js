@@ -268,11 +268,65 @@ test("a procedure action keeps the contact CPF in storage and omits it from the 
 });
 
 test("a stored procedure stays discoverable when a legacy request has only a workflow type id", async (t) => {
-  const request = twoAnimalRequest({ request_type: "Castração", animals: [{ name: "Bidu" }], workflow_data: { requestTypeId: "castration" } });
+  const request = twoAnimalRequest({ request_type: "Castração", animals: [{ name: "Bidu" }] });
+  request.workflow_data.requestTypeId = "castration";
   const { call, row } = await fixture(t, request);
   assert.equal((await call({ action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 0, requestTypeId: "castration" })).status, 200);
   assert.equal((await call({ workflow_data: { requestTypeId: "microchip" } }, { method: "PATCH", path: `/requests/${REQUEST_ID}` })).status, 409);
   assert.equal(resolveRequestProcedures(row(), REQUEST_TYPES)[0].procedures[0].status, ProcedureStatus.SCHEDULED);
+});
+
+test("cancelling releases only the places no procedure uses and a new slot is required before confirming", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA", animals: [{ name: "Bidu", requestTypeIds: ["castration", "microchip"] }] }), { vacancies: 1 });
+  const schedule = { date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, time: "08:00" };
+  const cancel = (requestTypeId, selection = schedule) => call({
+    action: ProcedureAction.CANCEL_SCHEDULE, animalIndex: 0, requestTypeId, data: { schedule: selection },
+  });
+  const castration = { animalIndex: 0, requestTypeId: "castration" };
+  assert.equal((await cancel("castration", { ...schedule, time: "09:00" })).status, 409);
+  assert.equal(requestScheduleBookings(row())[0].count, 1);
+  assert.equal((await cancel("castration")).status, 200);
+  assert.equal((await cancel("castration")).status, 409);
+  assert.deepEqual(statusesOf(row()), [[ProcedureStatus.WAITING, ProcedureStatus.SCHEDULED]]);
+  assert.equal(row().animals[0].procedures[0].schedule, null);
+  assert.equal(row().history.at(-1).cancelledSchedule.slotTime, "08:00");
+  assert.match(row().history.at(-1).notes, /08:00.*Local A.*cancelado/);
+  assert.equal(requestScheduleBookings(row())[0].count, 1);
+  assert.equal(row().status, "AGENDADA");
+  assert.equal((await cancel("microchip")).status, 200);
+  assert.deepEqual(requestScheduleBookings(row()), []);
+  assert.equal(row().schedule_date, null);
+  assert.equal(row().status, "NOVA");
+  assert.equal((await call({ ...castration, action: ProcedureAction.CONFIRM_SCHEDULE })).status, 409);
+  assert.equal((await call({ ...castration, action: ProcedureAction.RESCHEDULE, data: { schedule } })).status, 200);
+  assert.equal((await call({ ...castration, action: ProcedureAction.CONFIRM_SCHEDULE })).status, 200);
+  assert.equal((await cancel("castration")).status, 409, "the former confirmation cannot cancel a new reservation of the same slot");
+  assert.equal(requestScheduleBookings(row())[0].count, 1);
+});
+
+test("an old scheduled visit without an occurrence or time can be cancelled with the matching date", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({
+    status: "AGENDADA", request_type: "Castração", animals: [{ name: "Bidu", requestTypeIds: ["castration"] }], workflow_data: { followUp: { enabled: false } },
+  }));
+  const action = { action: ProcedureAction.CANCEL_SCHEDULE, animalIndex: 0, requestTypeId: "castration" };
+  const cancel = (schedule) => call({ ...action, data: { schedule } });
+  assert.equal((await cancel({ date: FUTURE_DATE, occurrenceKey: "", time: "08:00" })).status, 409);
+  assert.equal((await cancel({ date: LATER_DATE, occurrenceKey: "", time: "" })).status, 409);
+  assert.equal((await cancel({ date: FUTURE_DATE, occurrenceKey: "", time: "" })).status, 200);
+  assert.deepEqual(requestScheduleBookings(row()), []);
+  assert.equal(row().history.at(-1).cancelledSchedule.date, FUTURE_DATE);
+  assert.equal(row().status, "NOVA");
+});
+
+test("a cancellation confirmation from before a reschedule cannot remove the new reservation", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }));
+  const target = { animalIndex: 0, requestTypeId: "castration" };
+  const schedule = { date: LATER_DATE, occurrenceKey: "day:88888888-8888-4888-8888-888888888888", time: "09:00" };
+  const cancellation = { ...target, action: ProcedureAction.CANCEL_SCHEDULE, data: { schedule: { date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, time: "08:00" } } };
+  assert.equal((await call({ ...target, action: ProcedureAction.RESCHEDULE, data: { schedule } })).status, 200);
+  assert.equal((await call(cancellation)).status, 409);
+  assert.equal(row().animals[0].procedures[0].schedule.slotTime, "09:00");
+  assert.equal(row().history.length, 1);
 });
 
 test("a process without a municipality requires a municipal link before a global procedure action", async (t) => {

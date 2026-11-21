@@ -14,6 +14,7 @@ export const smsUses = Object.freeze([
   smsUse(NotificationEvent.REQUEST_REGISTERED, SmsUseKind.NOTICE, "Solicitação registrada"),
   smsUse(NotificationEvent.SCHEDULE_CONFIRMED, SmsUseKind.NOTICE, "Agendamento confirmado"),
   smsUse(NotificationEvent.SCHEDULE_CHANGED, SmsUseKind.NOTICE, "Agendamento reagendado"),
+  smsUse(NotificationEvent.SCHEDULE_CANCELLED, SmsUseKind.NOTICE, "Agendamento cancelado"),
   smsUse(NotificationEvent.NO_SHOW, SmsUseKind.NOTICE, "Não comparecimento"),
   smsUse(NotificationEvent.DOCUMENTS_APPROVED, SmsUseKind.NOTICE, "Documentos deferidos"),
   smsUse(NotificationEvent.DOCUMENTS_REJECTED, SmsUseKind.NOTICE, "Documentos indeferidos"),
