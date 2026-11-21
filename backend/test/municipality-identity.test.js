@@ -21,7 +21,11 @@ async function fixture(t, existingAdmin) {
     calls.push({ sql, values });
     if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql)) return { rows: [] };
     if (sql.includes("INSERT INTO municipalities")) return { rows: [{ id: municipalityId, name: "Test Town", slug: "test-town", state: "SC" }] };
-    if (sql.startsWith("SELECT id, name, email, role, municipality_id, is_default_admin FROM users")) return { rows: existingAdmin ? [existingAdmin] : [] };
+    if (sql.startsWith("SELECT id, name, email, role, municipality_id, is_default_admin FROM users")) {
+      const matches = existingAdmin && (existingAdmin.email.toLowerCase() === values[0]
+        || (sql.includes("municipality_id = $2 AND is_default_admin") && existingAdmin.municipality_id === values[1] && existingAdmin.is_default_admin));
+      return { rows: matches ? [existingAdmin] : [] };
+    }
     if (sql.includes("INSERT INTO users")) return { rows: [{ id: adminId, name: values[0], email: values[1], role: values[3], municipality_id: values[4] }] };
     if (sql.includes("INSERT INTO config") || sql.includes("INSERT INTO sectors") || sql.includes("INSERT INTO user_sectors") || sql.includes("INSERT INTO audit_logs")) return { rows: [] };
     throw new Error("Unexpected test database query");
@@ -59,10 +63,11 @@ test("municipality administrator creation cannot overwrite a colliding privilege
 });
 
 test("repeated municipality setup preserves its existing default administrator credential", async (t) => {
-  const existing = { id: adminId, name: "Existing Admin", email: "test-town@adm.castragestao", role: "admin_municipal", municipality_id: municipalityId, is_default_admin: true };
+  const existing = { id: adminId, name: "Existing Admin", email: "updated-admin@example.test", role: "admin_municipal", municipality_id: municipalityId, is_default_admin: true };
   const { request, calls } = await fixture(t, existing);
   const response = await request();
   assert.equal(response.status, 201);
+  assert.equal(response.body.defaultUser.email, existing.email);
   assert.equal(response.body.defaultUser.temporaryPassword, undefined);
   assert.equal(calls.some(({ sql }) => sql.includes("INSERT INTO users")), false);
 });

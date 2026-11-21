@@ -67,6 +67,50 @@ describe("auth API boundaries", () => {
     expect(values.get("castragestao:token")).toBe("new-session-token");
   });
 
+  it("installs a replacement session only for an edit of the signed-in administrator", async () => {
+    values.set("castragestao:token", "old-token");
+    const user = { id: "admin-a", name: "Municipal admin", mustChangePassword: false };
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "staff-b" })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: user.id, session: { user, token: "new-token" } }))));
+
+    await api.upsertAuthUser({ id: "staff-b" });
+    expect(values.get("castragestao:token")).toBe("old-token");
+    const saved = await api.upsertAuthUser({ id: user.id }, true);
+    expect(saved.session.user).toEqual(user);
+    expect([...values.entries()]).toEqual([["castragestao:token", "new-token"]]);
+  });
+
+  it("does not restore a session when the administrator signs out while a save is pending", async () => {
+    values.set("castragestao:token", "old-token");
+    let finishSave: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>((resolve) => { finishSave = resolve; })));
+
+    const pendingSave = api.upsertAuthUser({ id: "admin-a" }, true);
+    const rejected = expect(pendingSave).rejects.toMatchObject({ name: "AbortError" });
+    api.logout();
+    finishSave(new Response(JSON.stringify({ session: { token: "stale-token" } })));
+    await rejected;
+    expect(values.size).toBe(0);
+  });
+
+  it("waits for the self-edit session response when a background request uses the previous token", async () => {
+    values.set("castragestao:token", "old-token");
+    const dispatchEvent = vi.fn();
+    vi.stubGlobal("window", { dispatchEvent });
+    let finishSave: (response: Response) => void;
+    vi.stubGlobal("fetch", vi.fn()
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => { finishSave = resolve; }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "Sessão expirada.", code: AuthErrorCode.SESSION_INVALID }), { status: 401 })));
+
+    const pendingSave = api.upsertAuthUser({ id: "admin-a" }, true);
+    await expect(api.getRequests()).rejects.toMatchObject({ status: 401 });
+    expect(dispatchEvent).not.toHaveBeenCalled();
+    finishSave(new Response(JSON.stringify({ session: { token: "replacement-token" } })));
+    await pendingSave;
+    expect(values.get("castragestao:token")).toBe("replacement-token");
+  });
+
   it("does not invalidate a newer session because an older request returned unauthorized", async () => {
     values.set("castragestao:token", "old-token");
     const dispatchEvent = vi.fn();

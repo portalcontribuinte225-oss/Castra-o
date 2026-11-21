@@ -116,8 +116,9 @@ router.post("/", auth, async (req, res) => {
     // Cria o admin municipal com senha segura
     const adminEmail = buildMunicipalityAdminEmail(municipality.slug);
     const { rows: existingAdmins } = await client.query(
-      "SELECT id, name, email, role, municipality_id, is_default_admin FROM users WHERE lower(email) = $1 FOR UPDATE",
-      [adminEmail.toLowerCase()],
+      `SELECT id, name, email, role, municipality_id, is_default_admin FROM users
+       WHERE lower(email) = $1 OR (municipality_id = $2 AND is_default_admin = TRUE) FOR UPDATE`,
+      [adminEmail.toLowerCase(), municipality.id],
     );
     const existingAdmin = existingAdmins[0];
     if (existingAdmins.length > 1 || (existingAdmin && (

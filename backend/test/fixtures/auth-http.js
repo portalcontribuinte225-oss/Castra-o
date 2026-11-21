@@ -49,7 +49,13 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
       calls.push({ sql, values, source });
       if (sql === "BEGIN") {
         const previous = tail; const held = new Promise((resolve) => { unlock = resolve; }); tail = previous.then(() => held);
-        await previous; snapshot = { users: structuredClone([...users]), challenges: structuredClone([...challenges]), followUps: structuredClone(followUps) };
+        await previous;
+        snapshot = {
+          users: structuredClone([...users]),
+          challenges: structuredClone([...challenges]),
+          followUps: structuredClone(followUps),
+          configs: structuredClone(storedConfigs),
+        };
         return { rows: [] };
       }
       if (sql === "COMMIT" || sql === "ROLLBACK") {
@@ -57,6 +63,8 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
           users.clear(); snapshot.users.forEach(([id, user]) => users.set(id, user));
           challenges.clear(); snapshot.challenges.forEach(([id, challenge]) => challenges.set(id, challenge));
           followUps.splice(0, followUps.length, ...snapshot.followUps);
+          for (const key of Object.keys(storedConfigs)) delete storedConfigs[key];
+          Object.assign(storedConfigs, snapshot.configs);
         }
         unlock?.(); unlock = undefined; return { rows: [] };
       }
@@ -103,8 +111,10 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
       }
       if (sql.startsWith("UPDATE users SET last_login = NOW()")) { users.get(values[0]).last_login = new Date(); return { rows: [] }; }
       if (sql.startsWith("UPDATE users SET name=$1")) {
-        const user = users.get(values[5]); Object.assign(user, { name: values[0], email: values[1], password: values[2], role: values[3], active: values[4], session_version: user.session_version + 1 });
-        const { id, name, email, role, municipality_id, active } = user; return { rows: [{ id, name, email, role, municipality_id, active }] };
+        const [name, email, password, role, active, id, versionIncrement] = values;
+        const user = users.get(id);
+        Object.assign(user, { name, email, password, role, active, session_version: user.session_version + versionIncrement });
+        return { rows: [{ id, name, email, role, active, municipality_id: user.municipality_id }] };
       }
       if (sql.startsWith("SELECT id, tutor_id, cpf, tutor_name")) {
         const row = requestRows.find((request) => request.id === values[0] && request.municipality_id === values[1]);
@@ -189,7 +199,7 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
     });
     return { status: response.status, body: await response.json(), cacheControl: response.headers.get("cache-control") };
   }
-  return { request, users, challenges, limits, calls, followUps, requestRows, animalTutorUpdates, messages, token: (user) => issueSession(users.get(user.id || user)).token,
+  return { request, users, challenges, limits, calls, followUps, requestRows, animalTutorUpdates, messages, configs: storedConfigs, token: (user) => issueSession(users.get(user.id || user)).token,
     challenge: (user, purpose, destination) => createChallenge({ query: pool.query }, { user: users.get(user.id || user), purpose, destination }) };
 }
 

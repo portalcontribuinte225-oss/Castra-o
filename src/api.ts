@@ -12,6 +12,7 @@ import type { EmailAccountInput, EmailSettings } from "./features/email/email-in
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 let sessionMutationVersion = 0;
+let renewingUserSession: { token: string } | null = null;
 
 export const SESSION_INVALID_EVENT = "castragestao:session-invalid";
 
@@ -60,6 +61,7 @@ async function request(method: string, path: string, body?: unknown, responseTyp
     const failure = new ApiError(err?.error || res.statusText, res.status, err?.code || "", Number(err?.retryAfter || res.headers.get("Retry-After")) || 0);
     if (isInvalidSession(failure) && (err?.error || err?.code === AuthErrorCode.SESSION_INVALID)
       && !options?.bearerToken && path !== "/auth/login" && requestToken && requestToken === getToken()
+      && (path === "/auth/users" || requestToken !== renewingUserSession?.token)
       && requestSessionVersion === sessionMutationVersion && !options?.signal?.aborted && options?.isCurrent?.() !== false
       && typeof window !== "undefined") {
       window.dispatchEvent(new Event(SESSION_INVALID_EVENT));
@@ -114,7 +116,23 @@ export const api = {
   confirmContactChallenge: (challengeId: string, code: string) => request("POST", `/auth/tutor/contact-challenges/${encodeURIComponent(challengeId)}/confirm`, { code }),
   getRequestTutor: (requestId: string, municipalityId = "") => request("GET", `/auth/request-tutor/${encodeURIComponent(requestId)}${municipalityId ? `?municipalityId=${encodeURIComponent(municipalityId)}` : ""}`),
   updateRequestTutor: (requestId: string, body: Record<string, string>, municipalityId = "") => request("PUT", `/auth/request-tutor/${encodeURIComponent(requestId)}`, municipalityId ? { ...body, municipalityId } : body),
-  upsertAuthUser: (body) => request("PUT", "/auth/users", body),
+  async upsertAuthUser(body, ownAccount = false) {
+    const token = getToken();
+    const version = sessionMutationVersion;
+    const renewal = ownAccount && token ? { token } : null;
+    if (renewal) renewingUserSession = renewal;
+    try {
+      const data = await request("PUT", "/auth/users", body);
+      if (token !== getToken() || version !== sessionMutationVersion) throw new DOMException("Operação encerrada.", "AbortError");
+      if (data.session?.token) {
+        sessionMutationVersion += 1;
+        localStorage.setItem("castragestao:token", data.session.token);
+      }
+      return data;
+    } finally {
+      if (renewal === renewingUserSession) renewingUserSession = null;
+    }
+  },
   logout() {
     sessionMutationVersion += 1;
     localStorage.removeItem("castragestao:token");

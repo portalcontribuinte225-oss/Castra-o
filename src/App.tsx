@@ -413,7 +413,13 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [scheduleDays, setScheduleDays] = useState([]);
   const [scheduleRules, setScheduleRules] = useState([]);
   const [permissionGroups, setPermissionGroups] = useState([]);
-  const [teams, setTeams] = useState(() => normalizeTeams(initialTeams));
+  const [{ teams, persistTeams }, setTeamState] = useState(() => ({ teams: normalizeTeams(initialTeams), persistTeams: false }));
+  const setTeams = useCallback((update: React.SetStateAction<typeof teams>, persist = true) => {
+    setTeamState((current) => ({
+      teams: typeof update === "function" ? update(current.teams) : update,
+      persistTeams: persist,
+    }));
+  }, []);
   const [accessRequests, setAccessRequests] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -571,7 +577,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           setTeams({
             sectors: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.sectors, municipality))),
             users: dedupeMunicipalityItems(configEntries.flatMap(({ municipality, values }) => scopeConfigItems(values[CONFIG_KEYS.teams]?.users, municipality))),
-          });
+          }, false);
           setScheduleRules(configEntries.flatMap(({ municipality, values }) => (
             Array.isArray(values[CONFIG_KEYS.scheduleRules])
               ? values[CONFIG_KEYS.scheduleRules].map((rule) => {
@@ -602,7 +608,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
       [CONFIG_KEYS.sizes, setSizeOptions],
       [CONFIG_KEYS.breeds, setBreeds],
       [CONFIG_KEYS.neighborhoods, setNeighborhoods],
-      [CONFIG_KEYS.teams, setTeams],
+      [CONFIG_KEYS.teams, (value) => setTeams(value, false)],
       [CONFIG_KEYS.permissionGroups, setPermissionGroups],
       [CONFIG_KEYS.scheduleRules, (rules) => setScheduleRules((Array.isArray(rules) ? rules : []).map((rule) => {
         const slots = normalizeScheduleSlots(rule.slots, rule.time, rule.vacancies);
@@ -624,7 +630,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.documentTypes]) api.setConfig(CONFIG_KEYS.documentTypes, documentTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, documentTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
-  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
+  useEffect(() => { if (persistTeams && canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [persistTeams, canPersistTenantConfig, loadedConfigKeys, teams]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
 
@@ -1182,6 +1188,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             setPermissionGroups={setPermissionGroups}
             teams={scopedTeams}
             setTeams={setTeams}
+            onUserSession={setCurrentUser}
             accessRequests={accessRequests}
             reviewAccessRequest={reviewAccessRequest}
             setActive={setActive}
@@ -1279,17 +1286,19 @@ function normalizeAccessRequest(item: AnyRecord = {}): AnyRecord {
   };
 }
 
+const userRoleLabels = {
+  master: "Master",
+  suporte: "Suporte",
+  admin_municipal: "Administrador municipal",
+  analista: "Analista",
+  tutor: "Tutor",
+  ong: "ONG",
+  protetor: "Protetor",
+  servidor_publico: "Servidor público",
+};
+
 function userRoleLabel(role = "") {
-  return {
-    master: "Master",
-    suporte: "Suporte",
-    admin_municipal: "Administrador municipal",
-    analista: "Analista",
-    tutor: "Tutor",
-    ong: "ONG",
-    protetor: "Protetor",
-    servidor_publico: "Servidor público",
-  }[role] || role || "Usuário";
+  return userRoleLabels[role] || role || "Usuário";
 }
 
 function canManageAiSettings(role = "") {
@@ -4847,6 +4856,7 @@ function ConfigView({
   setPermissionGroups,
   teams = initialTeams,
   setTeams,
+  onUserSession,
   setActive,
   currentUser = null,
   configArea = "environment",
@@ -4953,14 +4963,16 @@ function ConfigView({
       ],
     },
   ].map((section) => ({ ...section, items: section.items.filter((item) => item.label) }));
-  const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "Analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
+  const emptyTeamUser = { name: "", email: "", sectorIds: [], municipalityId: "", role: "analista", matricula: "", cargo: "", senha: "", active: true, permissionGroupId: "" };
   const [newTeamUser, setNewTeamUser] = useState(emptyTeamUser);
   const [newMunicipality, setNewMunicipality] = useState<MunicipalityForm>(emptyMunicipalityForm);
   const [editingMunicipalityId, setEditingMunicipalityId] = useState(null);
   const [municipalitySaving, setMunicipalitySaving] = useState(false);
   const [municipalitySaveStatus, setMunicipalitySaveStatus] = useState("");
   const [editingTeamUserId, setEditingTeamUserId] = useState(null);
+  const [savingTeamUser, setSavingTeamUser] = useState(false);
   const [userModal, setUserModal] = useState(false);
+  const teamRoleOptions = Object.keys(userRoleLabels).filter((role) => role !== "tutor" && (isGlobalRole(currentUser?.role) || !isGlobalRole(role)));
   const [sectorPickerOpen, setSectorPickerOpen] = useState(false);
   const [municipalityStateFilter, setMunicipalityStateFilter] = useState("");
   const [userSaveError, setUserSaveError] = useState("");
@@ -5587,15 +5599,16 @@ function ConfigView({
   }
 
   async function createTeamUser() {
-    if (!newTeamUser.name.trim() || !newTeamUser.email.trim()) return false;
+    if (savingTeamUser || !newTeamUser.name.trim() || !newTeamUser.email.trim()) return false;
     const sectorIds = Array.isArray(newTeamUser.sectorIds) ? newTeamUser.sectorIds : [];
     const municipalityId = isGlobalRole(currentUser?.role)
       ? newTeamUser.municipalityId
       : currentUser?.municipalityId || newTeamUser.municipalityId;
     if (!municipalityId) return false;
-    let authUser = null;
+    setSavingTeamUser(true);
+    setUserSaveError("");
     try {
-      authUser = await api.upsertAuthUser({
+      const saved = await api.upsertAuthUser({
         ...(editingTeamUserId ? { id: editingTeamUserId } : {}),
         active: newTeamUser.active !== false,
         name: newTeamUser.name.trim(),
@@ -5603,54 +5616,35 @@ function ConfigView({
         password: newTeamUser.senha,
         role: newTeamUser.role,
         municipalityId,
-      });
-    } catch (err) {
-      setUserSaveError(err.message || "Erro ao salvar usuário. Verifique os dados e tente novamente.");
-      return false;
-    }
-    if (editingTeamUserId) {
-      setTeams?.((current) => ({
-        ...current,
-        users: (current.users || []).map((user) => user.id === editingTeamUserId ? {
-          ...user,
-          id: authUser?.id || user.id,
-          name: newTeamUser.name.trim(),
-          email: newTeamUser.email.trim(),
+        team: {
           sectorIds,
-          sectorId: sectorIds[0] || "",
-          municipalityId,
-          role: newTeamUser.role,
-          matricula: newTeamUser.matricula.trim(),
-          cargo: newTeamUser.cargo.trim(),
+          matricula: newTeamUser.matricula,
+          cargo: newTeamUser.cargo,
           permissionGroupId: newTeamUser.permissionGroupId,
-          active: newTeamUser.active !== false,
-        } : user),
-      }));
+        },
+      }, editingTeamUserId === currentUser?.id);
+      const savedUser = saved.teamUser;
+      if (savedUser) {
+        setTeams?.((current) => {
+          const users = current.users || [];
+          return {
+            ...current,
+            users: editingTeamUserId
+              ? users.map((user) => user.id === editingTeamUserId ? savedUser : user)
+              : [...users, savedUser],
+          };
+        }, false);
+      }
+      if (saved.session) onUserSession?.(saved.session.user);
       setEditingTeamUserId(null);
       setNewTeamUser(emptyTeamUser);
       return true;
+    } catch (err) {
+      setUserSaveError(err.message || "Erro ao salvar usuário. Verifique os dados e tente novamente.");
+      return false;
+    } finally {
+      setSavingTeamUser(false);
     }
-    setTeams?.((current) => ({
-      ...current,
-      users: [
-        ...(current.users || []),
-        {
-          id: authUser?.id || `usuario_${Date.now()}`,
-          name: newTeamUser.name.trim(),
-          email: newTeamUser.email.trim(),
-          sectorIds,
-          sectorId: sectorIds[0] || "",
-          municipalityId,
-          role: newTeamUser.role,
-          matricula: newTeamUser.matricula.trim(),
-          cargo: newTeamUser.cargo.trim(),
-          permissionGroupId: newTeamUser.permissionGroupId,
-          active: newTeamUser.active !== false,
-        },
-      ],
-    }));
-    setNewTeamUser(emptyTeamUser);
-    return true;
   }
 
   function openTeamUserModal(user = null) {
@@ -5659,13 +5653,14 @@ function ConfigView({
       ? (user?.municipalityId || selectedMunicipalityId || currentUser?.municipalityId || municipalities[0]?.id || "")
       : (currentUser?.municipalityId || "");
     if (user) {
+      const ownAccount = user.id === currentUser?.id ? currentUser : null;
       setEditingTeamUserId(user.id);
       setNewTeamUser({
-        name: user.name || "",
-        email: user.email || "",
+        name: ownAccount?.name || user.name || "",
+        email: ownAccount?.email || user.email || "",
         sectorIds: getUserSectorIds(user),
         municipalityId: defaultMunId,
-        role: user.role || "Analista",
+        role: ownAccount?.role || normalizeText(user.role || "") || emptyTeamUser.role,
         matricula: user.matricula || "",
         cargo: user.cargo || "",
         senha: "",
@@ -6696,11 +6691,11 @@ function ConfigView({
       )}
       {userModal && (
         <ConfigDialogBackdrop>
-          <Card as="form" className="workflow-modal config-user-modal" role="dialog" aria-modal="true" aria-label={editingTeamUserId ? "Editar usuário" : "Criar usuário"} onSubmit={async (e) => { e.preventDefault(); setUserSaveError(""); if (await createTeamUser()) setUserModal(false); }}>
+          <Card as="form" className="workflow-modal config-user-modal" role="dialog" aria-modal="true" aria-busy={savingTeamUser} aria-label={editingTeamUserId ? "Editar usuário" : "Criar usuário"} onSubmit={async (e) => { e.preventDefault(); if (await createTeamUser()) setUserModal(false); }}>
             <ModalHeader
               appearance="config"
               title={editingTeamUserId ? "Editar usuário" : "Criar usuário"}
-              onClose={() => { setUserModal(false); setEditingTeamUserId(null); setSectorPickerOpen(false); setUserSaveError(""); }}
+              onClose={() => { if (!savingTeamUser) { setUserModal(false); setEditingTeamUserId(null); setSectorPickerOpen(false); setUserSaveError(""); } }}
               actions={
                 <ConfigActiveToggle
                   checked={newTeamUser.active !== false}
@@ -6785,7 +6780,14 @@ function ConfigView({
                 </div>
               </div>
               <ConfigField label="N° Matrícula" value={newTeamUser.matricula} placeholder="Ex: 00123" onChange={(value) => setNewTeamUser((c) => ({ ...c, matricula: value }))} />
-              <ConfigField label="Cargo" value={newTeamUser.role} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, role: value }))} />
+              <ConfigField label="Cargo" value={newTeamUser.cargo} placeholder="Ex: Veterinário, Coordenador..." onChange={(value) => setNewTeamUser((c) => ({ ...c, cargo: value }))} />
+              <label className="field">
+                <span>Perfil de acesso</span>
+                <select value={newTeamUser.role} onChange={(event) => setNewTeamUser((current) => ({ ...current, role: event.target.value }))}>
+                  {!teamRoleOptions.includes(newTeamUser.role) && <option value={newTeamUser.role}>{userRoleLabel(newTeamUser.role)}</option>}
+                  {teamRoleOptions.map((role) => <option key={role} value={role}>{userRoleLabel(role)}</option>)}
+                </select>
+              </label>
               <label className="field">
                 <span>Grupo de permissão</span>
                 <select
@@ -6804,6 +6806,7 @@ function ConfigView({
               <ConfigField
                 label="Senha de login"
                 type="password"
+                autoComplete="new-password"
                 value={newTeamUser.senha}
                 placeholder={editingTeamUserId ? "Preencha apenas se quiser alterar" : "Senha inicial"}
                 onChange={(value) => setNewTeamUser((c) => ({ ...c, senha: value }))}
@@ -6811,8 +6814,8 @@ function ConfigView({
               {userSaveError && <p className="form-error-msg" role="alert">{userSaveError}</p>}
             </div>
             <footer className="config-management-footer">
-              <Button variant="custom" className={managementSubmitStyle} type="submit" disabled={!newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
-                {editingTeamUserId ? "Salvar" : "Criar usuário"}
+              <Button variant="custom" className={managementSubmitStyle} type="submit" disabled={savingTeamUser || !newTeamUser.name.trim() || !newTeamUser.email.trim() || !newTeamUser.municipalityId || (!editingTeamUserId && !newTeamUser.senha)}>
+                {savingTeamUser ? "Salvando..." : editingTeamUserId ? "Salvar" : "Criar usuário"}
               </Button>
             </footer>
           </Card>

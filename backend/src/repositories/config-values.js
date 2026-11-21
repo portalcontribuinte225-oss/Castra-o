@@ -20,30 +20,35 @@ export async function updateConfigValue(key, municipalityId, update, { audit, da
   try {
     await client.query("BEGIN");
     transactionStarted = true;
-    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`config-values:${key}:${municipalityId ?? "platform"}`]);
-    const { rows } = await client.query(
-      `SELECT value FROM config WHERE key=$1
-         AND COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
-       FOR UPDATE`,
-      [key, municipalityId],
-    );
-    const next = update(rows[0]?.value);
-    if (next !== undefined) {
-      await client.query(
-        `INSERT INTO config (key, municipality_id, value, updated_at) VALUES ($1, $2, $3, NOW())
-         ON CONFLICT (key, (COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid)))
-         DO UPDATE SET value=$3, updated_at=NOW()`,
-        [key, municipalityId, JSON.stringify(next)],
-      );
-      if (audit) await logAudit(client, { ...audit, municipalityId });
-    }
+    const value = await updateConfigValueInTransaction(client, key, municipalityId, update, audit);
     await client.query("COMMIT");
     transactionStarted = false;
-    return next === undefined ? rows[0]?.value : next;
+    return value;
   } catch (error) {
     if (transactionStarted) await client.query("ROLLBACK").catch(() => {});
     throw error;
   } finally {
     client.release();
   }
+}
+
+export async function updateConfigValueInTransaction(client, key, municipalityId, update, audit) {
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`config-values:${key}:${municipalityId ?? "platform"}`]);
+  const { rows } = await client.query(
+    `SELECT value FROM config WHERE key=$1
+       AND COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid) = COALESCE($2::uuid, '00000000-0000-0000-0000-000000000000'::uuid)
+     FOR UPDATE`,
+    [key, municipalityId],
+  );
+  const current = rows[0]?.value;
+  const next = update(current);
+  if (next === undefined) return current;
+  await client.query(
+    `INSERT INTO config (key, municipality_id, value, updated_at) VALUES ($1, $2, $3, NOW())
+     ON CONFLICT (key, (COALESCE(municipality_id, '00000000-0000-0000-0000-000000000000'::uuid)))
+     DO UPDATE SET value=$3, updated_at=NOW()`,
+    [key, municipalityId, JSON.stringify(next)],
+  );
+  if (audit) await logAudit(client, { ...audit, municipalityId });
+  return next;
 }
