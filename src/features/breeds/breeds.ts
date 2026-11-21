@@ -34,12 +34,13 @@ function compareByName(left: { name?: string }, right: { name?: string }): numbe
   return (left.name ?? "").localeCompare(right.name ?? "", "pt-BR", { sensitivity: "base" });
 }
 
-// Active breeds of the species that the request type links to (breedIds), in alphabetical order.
+// Active breeds of the species, optionally limited to the linked IDs.
 export function getBreedOptions<T extends BreedLike>(breeds: T[] | null | undefined, filter: BreedOptionsFilter): T[] {
   const { breedIds, speciesId } = filter;
-  if (!Array.isArray(breeds) || !Array.isArray(breedIds) || breedIds.length === 0 || !speciesId) return [];
+  if (!Array.isArray(breeds) || breedIds?.length === 0 || !speciesId) return [];
+  const linkedIds = breedIds && new Set(breedIds);
   return breeds
-    .filter((breed) => isUsableBreed(breed) && breed.speciesId === speciesId && typeof breed.id === "string" && breedIds.includes(breed.id))
+    .filter((breed) => isUsableBreed(breed) && breed.speciesId === speciesId && typeof breed.id === "string" && (!linkedIds || linkedIds.has(breed.id)))
     .sort(compareByName);
 }
 

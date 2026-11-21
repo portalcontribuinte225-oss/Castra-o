@@ -16,17 +16,23 @@ export interface BreedContext {
   speciesOptions: AnyRecord[];
 }
 
-// The breeds an animal can be given: the ones linked to any of its procedures, of its species.
-export function breedOptionsFor(animal: AnyRecord, { requestTypes, breeds, speciesOptions }: BreedContext): AnyRecord[] {
+function linkedBreedFilter(animal: AnyRecord, { requestTypes, speciesOptions }: BreedContext) {
   const chosen = animalRequestTypeIds(animal);
   const breedIds = [...new Set(requestTypes.filter((type) => chosen.includes(type.id)).flatMap((type) => (Array.isArray(type.breedIds) ? type.breedIds : [])))];
-  return getBreedOptions(breeds, { breedIds, speciesId: findSpeciesIdByName(speciesOptions, animal.species) });
+  return { breedIds, speciesId: findSpeciesIdByName(speciesOptions, animal.species) };
 }
 
-// Sets the procedures of an animal. A defined breed the new procedures no longer offer is cleared; free text is left alone.
+// Use the procedure's choices when they are available for this species, otherwise use the municipality's species catalog.
+export function breedOptionsFor(animal: AnyRecord, context: BreedContext): AnyRecord[] {
+  const filter = linkedBreedFilter(animal, context);
+  const linked = getBreedOptions(context.breeds, filter);
+  return linked.length ? linked : getBreedOptions(context.breeds, { speciesId: filter.speciesId });
+}
+
+// Only an explicit list of linked breeds limits the choice when the procedures change.
 export function withProcedures(animal: AnyRecord, ids: string[], context: BreedContext): AnyRecord {
   const next: AnyRecord = { ...animal, requestTypeIds: [...ids] };
-  const options = breedOptionsFor(next, context);
+  const options = getBreedOptions(context.breeds, linkedBreedFilter(next, context));
   const stale = next.breedType === "Definida" && options.length > 0 && !options.some((breed) => breed.name === next.breedDescription);
   return stale ? { ...next, breedDescription: "" } : next;
 }

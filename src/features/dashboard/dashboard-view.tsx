@@ -29,17 +29,11 @@ const TABS: { id: DashboardTab; label: string; view: (props: { data: DashboardDa
   { id: DashboardTab.ANIMALS, label: "Animais e adoção", view: AnimalsTab },
 ];
 
-const PRESETS: { id: DashboardPeriod; label: string }[] = [
-  { id: DashboardPeriod.LAST_30_DAYS, label: "30 dias" },
-  { id: DashboardPeriod.LAST_90_DAYS, label: "90 dias" },
-  { id: DashboardPeriod.LAST_12_MONTHS, label: "12 meses" },
-];
-
 const pressedControlStyle = "tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:enabled:hover:bg-card-page tw:aria-pressed:border-[color:var(--ink-700)] tw:aria-pressed:bg-[var(--ui-action-soft)] tw:aria-pressed:font-semibold tw:aria-pressed:text-[color:var(--selected-ink)]";
 const dateRangeStyle = "tw:flex tw:min-w-0 tw:items-center tw:gap-2 tw:text-sm tw:font-medium tw:text-ui-text tw:max-[420px]:w-full";
 
 // The manager's dashboard: one row of controls (tab and period) above everything they scope, then the active tab, which
-// computes only its own numbers. The period is a preset or any two days typed in the date fields.
+// computes only its own numbers. The date fields start at the default range and can be edited.
 export function DashboardView({
   requests = [],
   adoptionAnimals = [],
@@ -50,12 +44,13 @@ export function DashboardView({
   currentUser = null,
 }: AnyRecord) {
   const [tab, setTab] = useState(DashboardTab.OVERVIEW);
-  const [period, setPeriod] = useState(DashboardPeriod.LAST_90_DAYS);
-  const [typed, setTyped] = useState<TypedRange>({ from: "", to: "" });
+  const [customRange, setCustomRange] = useState<TypedRange | null>(null);
   const normalizedRequests = useMemo(() => requests.map(normalizeRequest), [requests]);
   const data = useMemo<DashboardData>(() => {
     const now = new Date();
-    const range = periodRange(period, typed, now);
+    const range = customRange
+      ? periodRange(DashboardPeriod.CUSTOM, customRange, now)
+      : periodRange(DashboardPeriod.LAST_90_DAYS, { from: "", to: "" }, now);
     return {
       requests: normalizedRequests,
       scheduleDays,
@@ -69,13 +64,12 @@ export function DashboardView({
       grouping: seriesGrouping(range, now),
       now,
     };
-  }, [normalizedRequests, scheduleDays, adoptionAnimals, neighborhoods, requestTypes, teams, currentUser, period, typed]);
+  }, [normalizedRequests, scheduleDays, adoptionAnimals, neighborhoods, requestTypes, teams, currentUser, customRange]);
   const shown = typedRangeOf(data.range, data.now);
-  // A typed day turns the period into a custom one, keeping the other day as it was shown; a cleared field changes nothing.
+  // An edited date starts a custom range and keeps the other date as shown.
   const typeDay = (field: keyof TypedRange, value: string) => {
     if (!value) return;
-    setTyped({ ...shown, [field]: value });
-    setPeriod(DashboardPeriod.CUSTOM);
+    setCustomRange({ ...shown, [field]: value });
   };
   const ActiveTab = (TABS.find((item) => item.id === tab) || TABS[0]).view;
   return (
@@ -89,13 +83,6 @@ export function DashboardView({
           ))}
         </nav>
         <div className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:gap-2" role="group" aria-label="Período">
-          <div className="tw:flex tw:flex-wrap tw:gap-1.5 tw:max-[900px]:w-full">
-            {PRESETS.map((item) => (
-              <Button key={item.id} variant="custom" className={`${pressedControlStyle} tw:max-[480px]:flex-1`} aria-pressed={period === item.id} onClick={() => setPeriod(item.id)}>
-                {item.label}
-              </Button>
-            ))}
-          </div>
           <label className={dateRangeStyle}>
             <span>De</span>
             <Input type="date" value={shown.from} max={shown.to} onChange={(event) => typeDay("from", event.target.value)} />

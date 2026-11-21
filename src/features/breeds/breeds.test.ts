@@ -16,10 +16,16 @@ describe("getBreedOptions", () => {
 
   it("returns an empty list when the filter is incomplete", () => {
     const breeds = [breed()];
-    expect(getBreedOptions(breeds, { speciesId: "canino" })).toEqual([]);
     expect(getBreedOptions(breeds, { breedIds: [], speciesId: "canino" })).toEqual([]);
     expect(getBreedOptions(breeds, { breedIds: ["b1"] })).toEqual([]);
     expect(getBreedOptions(breeds, { breedIds: ["b1"], speciesId: "" })).toEqual([]);
+  });
+
+  it("uses the active species catalog when no list of linked IDs was supplied", () => {
+    const poodle = breed();
+    const siamese = breed({ id: "b2", name: "Siamês", speciesId: "felino" });
+    const inactive = breed({ id: "b3", name: "Beagle", active: false });
+    expect(getBreedOptions([poodle, siamese, inactive], { speciesId: "canino" })).toEqual([poodle]);
   });
 
   it("keeps only the breeds linked by the request type", () => {

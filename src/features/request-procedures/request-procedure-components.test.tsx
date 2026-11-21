@@ -185,19 +185,30 @@ describe("AnimalFields", () => {
     expect(defined).toContain('value="Indefinida"/><span>Não</span>');
     expect(defined).toMatch(/<input[^>]*type="text"[^>]*aria-label="Raça"/);
     const withOptions = renderToStaticMarkup(<AnimalFields {...props} breedOptions={[{ id: "poodle", name: "Poodle" }]} />);
-    expect(withOptions).toContain('aria-label="Raça"');
+    expect(withOptions).toMatch(/<select[^>]*aria-label="Raça"[^>]*data-ui-select=""/);
     expect(withOptions).toContain('<option value="Poodle">Poodle</option>');
+    const withoutSpecies = renderToStaticMarkup(<AnimalFields {...props} animal={{ ...props.animal, species: "" }} />);
+    expect(withoutSpecies).toMatch(/<select[^>]*aria-label="Raça"[^>]*disabled=""/);
+    expect(withoutSpecies).toContain("Selecione a espécie");
     expect(renderToStaticMarkup(<AnimalFields {...props} animal={{ ...props.animal, breedType: "Indefinida" }} />)).not.toContain('aria-label="Raça"');
   });
 
   it("asks for the neighborhood of the animal: a select of the registered ones, or text while there are none", () => {
     expect(renderToStaticMarkup(<AnimalFields {...props} />)).toContain("Ex.: Centro");
     const withNames = renderToStaticMarkup(<AnimalFields {...props} neighborhoodNames={["Centro", "Pinheirinho"]} />);
+    expect(withNames).toMatch(/<select[^>]*aria-label="Em que bairro ele vive\?"[^>]*required=""[^>]*data-ui-select=""/);
     expect(withNames).toContain("Selecione o bairro");
     expect(withNames).toContain("Pinheirinho");
     expect(withNames).not.toContain("Ex.: Centro");
     expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted />)).toMatch(/aria-label="Em que bairro ele vive\?" aria-invalid="true"/);
     expect(renderToStaticMarkup(<AnimalFields {...props} submitAttempted animal={{ ...props.animal, neighborhood: "Centro" }} />)).toMatch(/aria-label="Em que bairro ele vive\?" aria-invalid="false"/);
+  });
+
+  it("shows the registered spelling of a saved neighborhood and retains a saved breed outside the current list", () => {
+    const animal = { ...props.animal, neighborhood: "sao joao", breedDescription: "Raça cadastrada anteriormente" };
+    const html = renderToStaticMarkup(<AnimalFields {...props} animal={animal} breedOptions={[{ id: "poodle", name: "Poodle" }]} neighborhoodNames={["São João"]} />);
+    expect(html).toContain('<option value="São João" selected="">São João</option>');
+    expect(html).toContain('<option value="Raça cadastrada anteriormente" selected="">Raça cadastrada anteriormente</option>');
   });
 
   it("adds the microchip only for staff", () => {

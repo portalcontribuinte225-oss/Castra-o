@@ -71,11 +71,11 @@ describe("dashboard tabs", () => {
     expect(html).toContain("Sem dados no período.");
   });
 
-  it("opens on the overview with the period of 90 days, its days shown in the date fields", () => {
+  it("opens on the overview with only date inputs for the period", () => {
     const html = renderToStaticMarkup(<DashboardView requests={[]} />);
     expect(html).toContain("Visão geral");
     expect(html).toContain("Entradas e realizadas");
-    expect(html).toMatch(/aria-pressed="true"[^>]*>90 dias/);
+    expect(html).not.toMatch(/>(?:30 dias|90 dias|12 meses)</);
     expect(html.match(/type="date"/g)).toHaveLength(2);
     expect(html.match(/data-ui-input=""/g)).toHaveLength(2);
   });

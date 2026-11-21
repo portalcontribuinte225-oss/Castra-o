@@ -44,9 +44,12 @@ describe("breedOptionsFor", () => {
     expect(breedOptionsFor({ ...dog({ requestTypeIds: ["castration", "microchip"] }), species: "Felino" }, context).map((breed) => breed.name)).toEqual(["Siamês"]);
   });
 
-  it("offers nothing without procedures, without a linked breed or without a known species", () => {
-    expect(breedOptionsFor(dog(), context)).toEqual([]);
-    expect(breedOptionsFor(dog({ requestTypeIds: ["vaccine"] }), context)).toEqual([]);
+  it("offers the species catalog when there are no available linked breeds", () => {
+    for (const requestTypeIds of [[], ["vaccine"]]) {
+      expect(breedOptionsFor(dog({ requestTypeIds }), context).map((breed) => breed.name)).toEqual(["Poodle", "Shih Tzu"]);
+    }
+    expect(breedOptionsFor({ ...dog({ requestTypeIds: ["microchip"] }), species: "Felino" }, context).map((breed) => breed.name)).toEqual(["Siamês"]);
+    expect(breedOptionsFor(dog({ requestTypeIds: ["castration"] }), { ...context, breeds: [] })).toEqual([]);
     expect(breedOptionsFor({ ...dog({ requestTypeIds: ["castration"] }), species: "" }, context)).toEqual([]);
   });
 });

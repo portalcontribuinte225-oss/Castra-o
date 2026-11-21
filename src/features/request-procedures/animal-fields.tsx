@@ -4,6 +4,7 @@ import { OptionCardGroup } from "../../components/option-card-group";
 import type { OptionCardChoice } from "../../components/option-card-group";
 import type { AnyRecord } from "../../types";
 import { NeighborhoodField } from "../neighborhoods/neighborhood-field";
+import { RequestSelectField } from "../request-steps/request-select-field";
 import { RequestTextField } from "../request-steps/request-text-field";
 
 const SEX_OPTIONS = ["Macho", "Fêmea"];
@@ -30,6 +31,8 @@ interface AnimalFieldsProps {
 
 // The data of one animal of the request, and its health: what is the same whoever asks and whatever is asked for it.
 export function AnimalFields({ procedures, animal, speciesNames, sizeChoices, breedOptions, neighborhoodNames = [], submitAttempted, internal = false, onChange, onSelectSpecies }: AnimalFieldsProps) {
+  const selectedBreed = animal.species ? animal.breedDescription || "" : "";
+  const savedBreedOutsideCatalog = selectedBreed && !breedOptions.some((breed) => breed.name === selectedBreed);
   return (
     <div className="animal-form-sections">
       {procedures && <Card className="form-sub-card animal-procedures-card">{procedures}</Card>}
@@ -43,15 +46,12 @@ export function AnimalFields({ procedures, animal, speciesNames, sizeChoices, br
         </div>
         <div className="text-field-row">
           {animal.breedType === "Definida" && (
-            breedOptions.length > 0 ? (
-              <div className="access-field animal-breed-field" data-label="Raça">
-                <select aria-label="Raça" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)}>
-                  <option value="">Selecione</option>
-                  {breedOptions.map((breed) => (
-                    <option key={breed.id} value={breed.name}>{breed.name}</option>
-                  ))}
-                </select>
-              </div>
+            !animal.species || breedOptions.length > 0 ? (
+              <RequestSelectField className="animal-breed-field" label="Raça" value={selectedBreed} disabled={!animal.species} onChange={(event) => onChange("breedDescription", event.target.value)}>
+                <option value="">{animal.species ? "Selecione a raça" : "Selecione a espécie"}</option>
+                {breedOptions.map((breed) => <option key={breed.id} value={breed.name}>{breed.name}</option>)}
+                {savedBreedOutsideCatalog && <option value={selectedBreed}>{selectedBreed}</option>}
+              </RequestSelectField>
             ) : (
               <RequestTextField className="animal-breed-field" label="Raça" type="text" placeholder="Ex.: Poodle" value={animal.breedDescription} onChange={(event) => onChange("breedDescription", event.target.value)} />
             )

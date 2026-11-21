@@ -14081,34 +14081,6 @@ small,
   }
 }
 
-/* Select de raça do cadastro: mesmo visual dos inputs .access-field, em cada contexto (público e balcão). */
-.nr-shell .access-field select {
-  width: 100%;
-  min-height: 36px;
-  padding: 0 13px;
-  border: 1px solid var(--field-invalid-border, #dbe5f1);
-  border-radius: 10px;
-  outline: 0;
-  background: #ffffff;
-  color: #0f172a;
-  font-family: inherit;
-  font-size: 0.88rem;
-}
-
-.nr-shell .access-field select:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-}
-
-.internal-request-modal .nr-shell--internal .access-field select {
-  background: #f8fafc;
-}
-
-.internal-request-modal .nr-shell--internal .access-field select:focus {
-  border-color: #93c5fd;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-}
 .notification-template-fields {
   display: grid;
   gap: 14px;
