@@ -186,6 +186,7 @@ import { readAccessLink } from "../shared/request-access-contract.js";
 import { RequestAcceptance, requestAcceptance } from "./features/request-document/request-acceptance";
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
+import { useNeighborhoodCatalog } from "./features/neighborhoods/use-neighborhood-catalog";
 import { MunicipalityAddressFields } from "./features/municipality-form/municipality-address-fields";
 import { MunicipalityImageField } from "./features/municipality-form/municipality-image-field";
 import { emptyMunicipalityForm, formFromMunicipality, municipalityContactIssue } from "./features/municipality-form/municipality-address";
@@ -623,7 +624,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.documentTypes]) api.setConfig(CONFIG_KEYS.documentTypes, documentTypes).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, documentTypes]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.species]) api.setConfig(CONFIG_KEYS.species, speciesOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, speciesOptions]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.sizes]) api.setConfig(CONFIG_KEYS.sizes, sizeOptions).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, sizeOptions]);
-  useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.neighborhoods]) api.setConfig(CONFIG_KEYS.neighborhoods, neighborhoods).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, neighborhoods]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.teams]) api.setConfig(CONFIG_KEYS.teams, teams).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, teams]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.permissionGroups]) api.setConfig(CONFIG_KEYS.permissionGroups, permissionGroups).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, permissionGroups]);
   useEffect(() => { if (canPersistTenantConfig && loadedConfigKeys[CONFIG_KEYS.scheduleRules]) api.setConfig(CONFIG_KEYS.scheduleRules, scheduleRules).catch(() => {}); }, [canPersistTenantConfig, loadedConfigKeys, scheduleRules]);
@@ -830,7 +830,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
           speciesOptions={speciesOptions}
           sizeOptions={sizeOptions}
           breeds={breeds}
-          neighborhoods={neighborhoods}
           aiSettings={aiSettings}
           onRequestCreated={registerCreatedRequest}
         />
@@ -1866,7 +1865,7 @@ function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
   ];
   return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
 }
-function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequest, adoptionAnimals = [], sharedAdoption = null, onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], neighborhoods = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
+function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequest, adoptionAnimals = [], sharedAdoption = null, onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
   const [authEntryError, setAuthEntryError] = useState("");
   const [activePublicService, setActivePublicService] = useState<string | null>(accessLink ? REQUEST_ACCESS_SERVICE : null);
@@ -1881,7 +1880,6 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   const [publicServiceSpeciesOptions, setPublicServiceSpeciesOptions] = useState(speciesOptions);
   const [publicServiceSizeOptions, setPublicServiceSizeOptions] = useState(sizeOptions);
   const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
-  const [publicServiceNeighborhoods, setPublicServiceNeighborhoods] = useState(neighborhoods);
   const adoptionSectionRef = useRef(null);
   // A shared adoption link lands on the adoption section, where its animal or its notice is.
   const sharedAdoptionState = sharedAdoption?.state || SharedAdoptionState.NONE;
@@ -1900,8 +1898,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
     setPublicServiceSpeciesOptions(speciesOptions);
     setPublicServiceSizeOptions(sizeOptions);
     setPublicServiceBreeds(breeds);
-    setPublicServiceNeighborhoods(neighborhoods);
-  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, breeds, neighborhoods]);
+  }, [scheduleDays, requestTypes, documentTypes, speciesOptions, sizeOptions, breeds]);
 
   useEffect(() => {
     if (!selectedMunicipalityId) return;
@@ -1914,7 +1911,6 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
     api.getConfig(CONFIG_KEYS.species, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSpeciesOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.sizes, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceSizeOptions(value); }).catch(() => {});
     api.getConfig(CONFIG_KEYS.breeds, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceBreeds(value); }).catch(() => {});
-    api.getConfig(CONFIG_KEYS.neighborhoods, selectedMunicipalityId).then((value) => { if (Array.isArray(value)) setPublicServiceNeighborhoods(value); }).catch(() => {});
   }, [selectedMunicipalityId]);
 
   const activeMunicipality = selectedMunicipalityId ? municipalities.find((m) => m.id === selectedMunicipalityId) : null;
@@ -1967,6 +1963,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
     { label: "CEP", value: activeMunicipality?.cep, icon: Navigation },
   ].filter((item) => String(item.value || "").trim());
   const procedureService = activePublicService === "procedure_form";
+  const neighborhoodCatalog = useNeighborhoodCatalog(procedureService ? selectedMunicipalityId : "");
   const requestFormOpen = procedureService && selectedMunicipalityId && !publicServiceDone;
   const scrollableMenuButton = "tw:[@media(max-width:820px),(max-height:480px)]:flex-none";
   const serviceButtonLayout = requestFormOpen ? scrollableMenuButton : "tw:[@media(max-width:820px)]:flex-[1_1_calc(50%-6px)]";
@@ -2039,7 +2036,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
           </aside>
 
           <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
-            {(!procedureService || !selectedMunicipalityId) && (
+            {(!procedureService || !selectedMunicipalityId || !neighborhoodCatalog.ready) && (
               <div className="public-service-panel-header">
                 <h2>{activePublicService === REQUEST_ACCESS_SERVICE ? "Acessar minha solicitação" : activePublicServiceDetails?.label || "Serviço"}</h2>
                 {!publicServiceDone && <Button variant="outline" className="tw:shrink-0" onClick={closePublicService}>Voltar ao início</Button>}
@@ -2058,6 +2055,13 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
               />
             ) : (procedureService || activePublicService === "report") && !selectedMunicipalityId ? (
               <p role="status">Selecione o município na página para continuar.</p>
+            ) : procedureService && !neighborhoodCatalog.ready ? (
+              neighborhoodCatalog.failed ? (
+                <div className="tw:grid tw:justify-items-start tw:gap-2">
+                  <p className="form-error" role="alert">Não foi possível carregar os bairros do município.</p>
+                  <Button variant="outline" onClick={neighborhoodCatalog.retry}>Tentar novamente</Button>
+                </div>
+              ) : <p role="status">Carregando os bairros do município...</p>
             ) : procedureService ? (
               <NewRequest
                 key={`public-procedure-${selectedMunicipalityId}`}
@@ -2080,7 +2084,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 speciesOptions={publicServiceSpeciesOptions}
                 sizeOptions={publicServiceSizeOptions}
                 breeds={publicServiceBreeds}
-                neighborhoods={publicServiceNeighborhoods}
+                neighborhoods={neighborhoodCatalog.items}
                 initialType={procedurePrefill?.requestType || ""}
                 initialSchedule={procedurePrefill?.schedule || ""}
               />
@@ -2695,7 +2699,7 @@ function NewRequest({
     .filter((type, index, items) => items.findIndex((item) => item.name === type.name) === index);
   const hasConfiguredTypes = configuredRequestTypes.length > 0;
   const breedContext = { requestTypes: configuredRequestTypes, breeds, speciesOptions };
-  const neighborhoodList = neighborhoodNames(neighborhoods);
+  const neighborhoodList = followUpMunicipalityId ? neighborhoodNames(neighborhoods, followUpMunicipalityId) : [];
 
   // A procedure asked for from outside (the animal's own screen) starts as the procedure of the first animal.
   useEffect(() => {
@@ -6445,7 +6449,11 @@ function ConfigView({
       )}
 
       {configArea === "environment" && configTab === "neighborhoods" && (
-        <NeighborhoodsConfig items={neighborhoods} setItems={setNeighborhoods} municipalityScopeId={configMunicipalityScopeId} />
+        <NeighborhoodsConfig
+          items={neighborhoods}
+          onSave={(municipalityId, update) => saveScopedConfigCatalog(CONFIG_KEYS.neighborhoods, municipalityId, update, setNeighborhoods)}
+          municipalityScopeId={configMunicipalityScopeId}
+        />
       )}
 
       {configArea === "sectors" && (

@@ -18,6 +18,17 @@ describe("neighborhoodNames", () => {
     expect(neighborhoodNames(undefined)).toEqual([]);
     expect(neighborhoodNames(null)).toEqual([]);
   });
+
+  it("limits the options to the selected municipality and accepts entries without a stored owner", () => {
+    const items = [
+      { id: "1", name: "Centro", municipalityId: "m1" },
+      { id: "2", name: "Distrito", municipality_id: "m2" },
+      { id: "3", name: "Pinheirinho" },
+      { id: "4", name: "Inativo", municipalityId: "m1", active: false },
+    ];
+    expect(neighborhoodNames(items, "m1")).toEqual(["Centro", "Pinheirinho"]);
+    expect(neighborhoodNames(items, "m2")).toEqual(["Distrito", "Pinheirinho"]);
+  });
 });
 
 describe("findNeighborhoodName", () => {

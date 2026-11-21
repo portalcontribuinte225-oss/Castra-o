@@ -10,7 +10,11 @@ export const normalizeNeighborhoodName = (value) => String(value ?? "").normaliz
 
 // The active neighborhoods of a municipality (items without an owner are shared with every municipality).
 export function activeNeighborhoods(neighborhoods, municipalityId) {
-  return (Array.isArray(neighborhoods) ? neighborhoods : []).filter((item) => item && typeof item === "object" && !Array.isArray(item)
-    && item.active !== false && typeof item.name === "string" && item.name.trim() !== ""
-    && (!item.municipalityId || item.municipalityId === municipalityId));
+  if (!Array.isArray(neighborhoods)) return [];
+  return neighborhoods.filter((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const ownerId = item.municipalityId || item.municipality_id;
+    return item.active !== false && typeof item.name === "string" && item.name.trim() !== ""
+      && (!ownerId || ownerId === municipalityId);
+  });
 }

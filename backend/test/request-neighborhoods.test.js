@@ -11,11 +11,13 @@ const neighborhoods = [
   { id: "pinheirinho", name: " Pinheirinho ", active: true, municipalityId: MUNICIPALITY },
   { id: "old", name: "Bairro Antigo", active: false },
   { id: "foreign", name: "De Outra Cidade", active: true, municipalityId: OTHER },
+  { id: "legacy-foreign", name: "Distrito de Outra Cidade", active: true, municipality_id: OTHER },
 ];
 const prepare = (animals, list = neighborhoods) => prepareAnimalNeighborhoods({ animals, municipalityId: MUNICIPALITY, settings: { neighborhoods: list } });
 
 test("the neighborhoods of a municipality are the active ones that are shared or its own", () => {
   assert.deepEqual(activeNeighborhoods(neighborhoods, MUNICIPALITY).map(({ id }) => id), ["centro", "pinheirinho"]);
+  assert.deepEqual(activeNeighborhoods(neighborhoods, OTHER).map(({ id }) => id), ["centro", "foreign", "legacy-foreign"]);
   assert.deepEqual(activeNeighborhoods(undefined, MUNICIPALITY), []);
   assert.equal(normalizeNeighborhoodName("  São   João "), "sao joao");
 });
@@ -28,13 +30,14 @@ test("a new animal must name its neighborhood, and the name is the one registere
 });
 
 test("a neighborhood outside the municipality list, switched off or from another municipality is refused", () => {
-  for (const name of ["Bairro Antigo", "De Outra Cidade", "Inventado"]) {
+  for (const name of ["Bairro Antigo", "De Outra Cidade", "Distrito de Outra Cidade", "Inventado"]) {
     assert.throws(() => prepare([{ neighborhood: name }]), { status: 400, message: /Escolha um bairro da lista/ }, name);
   }
 });
 
 test("without registered neighborhoods the answer is free text, still required and limited", () => {
   assert.deepEqual(prepare([{ neighborhood: " Vila Nova " }], []), [{ neighborhood: "Vila Nova" }]);
+  assert.deepEqual(prepare([{ neighborhood: "Vila Nova" }], [{ name: "Distrito", municipality_id: OTHER }]), [{ neighborhood: "Vila Nova" }]);
   assert.throws(() => prepare([{}], []), { status: 400 });
   assert.throws(() => prepare([{ neighborhood: "x".repeat(121) }], []), { status: 400, message: /muito longo/ });
 });

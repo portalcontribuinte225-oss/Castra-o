@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { Card } from "../../components/card";
 import { ConfigRow, ConfigSectionHeader, ConfigStatusFilter, EmptyState } from "../../components/ui";
-import { filterByMunicipalityScope, getItemMunicipalityId } from "../../domain";
+import { getItemMunicipalityId } from "../../domain";
 import type { AnyRecord } from "../../types";
 import { NeighborhoodFormModal } from "./neighborhood-form-modal";
 import type { NeighborhoodFormValues } from "./neighborhood-form-modal";
@@ -10,7 +10,7 @@ import { MAX_NEIGHBORHOOD_LENGTH, hasDuplicateNeighborhoodName, newNeighborhoods
 
 interface NeighborhoodsConfigProps {
   items: AnyRecord[];
-  setItems: (updater: (current: AnyRecord[]) => AnyRecord[]) => void;
+  onSave: (municipalityId: string, update: (current: AnyRecord[]) => AnyRecord[]) => Promise<void>;
   municipalityScopeId: string;
 }
 
@@ -21,12 +21,13 @@ function matchesStatusFilter(item: AnyRecord, filter: string) {
   return filter === "active" ? item.active !== false : item.active === false;
 }
 
-export function NeighborhoodsConfig({ items, setItems, municipalityScopeId }: NeighborhoodsConfigProps) {
+export function NeighborhoodsConfig({ items, onSave, municipalityScopeId }: NeighborhoodsConfigProps) {
   const [statusFilter, setStatusFilter] = useState("active");
   const [modalOpen, setModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<AnyRecord | null>(null);
   const [form, setForm] = useState<NeighborhoodFormValues>(emptyForm);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const visibleItems = items
     .filter((item) => matchesStatusFilter(item, statusFilter))
@@ -45,24 +46,39 @@ export function NeighborhoodsConfig({ items, setItems, municipalityScopeId }: Ne
     setError("");
   }
 
-  function handleSubmit(event: FormEvent) {
+  async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    const scopeItems = filterByMunicipalityScope(items, editingItem ? getItemMunicipalityId(editingItem) : municipalityScopeId);
+    if (saving) return;
+    const municipalityId = editingItem ? getItemMunicipalityId(editingItem) || municipalityScopeId : municipalityScopeId;
+    if (!municipalityId) return setError("Selecione um município no filtro superior para salvar os bairros.");
+    const name = form.name.trim();
+    const names = parseNeighborhoodLines(form.names);
     if (editingItem) {
-      const name = form.name.trim();
       if (!name) return setError("Informe o nome do bairro.");
       if (name.length > MAX_NEIGHBORHOOD_LENGTH) return setError(`O nome deve ter até ${MAX_NEIGHBORHOOD_LENGTH} caracteres.`);
-      if (hasDuplicateNeighborhoodName(scopeItems, name, editingItem.id)) return setError("Já existe um bairro com este nome.");
-      setItems((current) => current.map((item) => (item.id === editingItem.id && getItemMunicipalityId(item) === getItemMunicipalityId(editingItem) ? { ...item, name, active: form.active } : item)));
-      return closeModal();
+    } else {
+      if (!names.length) return setError("Informe ao menos um bairro.");
+      if (names.some((value) => value.length > MAX_NEIGHBORHOOD_LENGTH)) return setError(`Cada nome deve ter até ${MAX_NEIGHBORHOOD_LENGTH} caracteres.`);
     }
-    const names = parseNeighborhoodLines(form.names);
-    if (!names.length) return setError("Informe ao menos um bairro.");
-    if (names.some((name) => name.length > MAX_NEIGHBORHOOD_LENGTH)) return setError(`Cada nome deve ter até ${MAX_NEIGHBORHOOD_LENGTH} caracteres.`);
-    const created = newNeighborhoods(scopeItems, names, municipalityScopeId);
-    if (!created.length) return setError("Todos os bairros informados já estão cadastrados.");
-    setItems((current) => [...current, ...created]);
-    closeModal();
+    setSaving(true);
+    setError("");
+    try {
+      await onSave(municipalityId, (current) => {
+        if (editingItem) {
+          if (!current.some((item) => item.id === editingItem.id)) throw new Error("Este bairro não está mais disponível.");
+          if (hasDuplicateNeighborhoodName(current, name, editingItem.id)) throw new Error("Já existe um bairro com este nome.");
+          return current.map((item) => item.id === editingItem.id ? { ...item, name, active: form.active } : item);
+        }
+        const created = newNeighborhoods(current, names, municipalityId);
+        if (!created.length) throw new Error("Todos os bairros informados já estão cadastrados.");
+        return [...current, ...created];
+      });
+      closeModal();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível salvar os bairros.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -97,7 +113,15 @@ export function NeighborhoodsConfig({ items, setItems, municipalityScopeId }: Ne
         </div>
       </Card>
       {modalOpen && (
-        <NeighborhoodFormModal isEditing={editingItem !== null} form={form} error={error} onChange={(patch) => setForm((current) => ({ ...current, ...patch }))} onSubmit={handleSubmit} onClose={closeModal} />
+        <NeighborhoodFormModal
+          isEditing={editingItem !== null}
+          form={form}
+          error={error}
+          saving={saving}
+          onChange={(patch) => setForm((current) => ({ ...current, ...patch }))}
+          onSubmit={handleSubmit}
+          onClose={() => { if (!saving) closeModal(); }}
+        />
       )}
     </>
   );

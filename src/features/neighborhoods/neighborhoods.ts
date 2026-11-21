@@ -1,3 +1,4 @@
+import { getItemMunicipalityId } from "../../domain";
 import { normalizeText } from "../../utils";
 import type { AnyRecord } from "../../types";
 
@@ -19,10 +20,14 @@ function isUsable(item: AnyRecord): boolean {
   return Boolean(item) && item.active !== false && typeof item.name === "string" && item.name.trim() !== "";
 }
 
-// The names a form offers: the active neighborhoods of the list it was given (already scoped to a municipality), alphabetical.
-export function neighborhoodNames(neighborhoods: AnyRecord[] | null | undefined): string[] {
+// A municipality's active neighborhood names, including existing records without an explicit owner.
+export function neighborhoodNames(neighborhoods: AnyRecord[] | null | undefined, municipalityId = ""): string[] {
   if (!Array.isArray(neighborhoods)) return [];
-  const names = neighborhoods.filter(isUsable).map((item) => item.name.trim());
+  const names = neighborhoods.filter((item) => {
+    if (!isUsable(item)) return false;
+    const ownerId = getItemMunicipalityId(item);
+    return !municipalityId || !ownerId || ownerId === municipalityId;
+  }).map((item) => item.name.trim());
   return [...new Set(names)].sort((left, right) => left.localeCompare(right, "pt-BR", { sensitivity: "base" }));
 }
 

@@ -14,28 +14,30 @@ interface NeighborhoodFormModalProps {
   isEditing: boolean;
   form: NeighborhoodFormValues;
   error: string;
+  saving: boolean;
   onChange: (patch: Partial<NeighborhoodFormValues>) => void;
   onSubmit: (event: FormEvent) => void;
   onClose: () => void;
 }
 
 // Editing changes one neighborhood; creating accepts several at once, one per line.
-export function NeighborhoodFormModal({ isEditing, form, error, onChange, onSubmit, onClose }: NeighborhoodFormModalProps) {
+export function NeighborhoodFormModal({ isEditing, form, error, saving, onChange, onSubmit, onClose }: NeighborhoodFormModalProps) {
   const title = isEditing ? "Editar bairro" : "Criar bairros";
   const errorId = useId();
   return (
     <ConfigDialogBackdrop>
-      <form className="config-modal compact config-environment-modal" role="dialog" aria-modal="true" aria-label={title} onSubmit={onSubmit}>
+      <form className="config-modal compact config-environment-modal" role="dialog" aria-modal="true" aria-label={title} aria-busy={saving} onSubmit={onSubmit}>
         <ModalHeader appearance="config" title={title} onClose={onClose} />
         {isEditing && (
           <div className="config-modal-options">
-            <ConfigActiveToggle checked={form.active} onChange={(checked) => onChange({ active: checked })} />
+            <ConfigActiveToggle checked={form.active} disabled={saving} onChange={(checked) => onChange({ active: checked })} />
           </div>
         )}
         {isEditing ? (
           <ConfigField
             label="Nome"
             value={form.name}
+            disabled={saving}
             placeholder="Ex: Pinheirinho"
             invalid={Boolean(error)}
             aria-describedby={error ? errorId : undefined}
@@ -49,6 +51,7 @@ export function NeighborhoodFormModal({ isEditing, form, error, onChange, onSubm
               className={`${configTextareaStyle} tw:resize-y`}
               rows={8}
               value={form.names}
+              disabled={saving}
               placeholder={"Centro\nPinheirinho\nSanta Bárbara"}
               aria-invalid={Boolean(error)}
               aria-describedby={error ? errorId : undefined}
@@ -58,7 +61,7 @@ export function NeighborhoodFormModal({ isEditing, form, error, onChange, onSubm
         )}
         {error && <small id={errorId} className="field-error-message" role="alert">{error}</small>}
         <div className="form-actions">
-          <Button type="submit">Salvar</Button>
+          <Button type="submit" disabled={saving}>{saving ? "Salvando..." : "Salvar"}</Button>
         </div>
       </form>
     </ConfigDialogBackdrop>
