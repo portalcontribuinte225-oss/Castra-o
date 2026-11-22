@@ -1,4 +1,3 @@
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { COMPLAINT_PHOTO_IDS } from "../../../shared/complaint-photo-contract.js";
@@ -105,7 +104,10 @@ describe("document reuse boundaries", () => {
     expect(body.animals).toEqual([{ id: "animal-a" }]); expect(body.reusedDocuments).toEqual([ref]); expect(body.declarationAccepted).toBe(true);
     expect(body.workflow_data).toMatchObject({ scheduleOccurrenceKey: "day:a", scheduleSlotTime: "08:00" });
     expect(JSON.stringify(body)).not.toContain("secret"); expect(JSON.stringify(body.reusedDocuments)).not.toContain("approved");
-    expect(buildRequestPayload({ signedAt: "old-signature" }, user).declarationAccepted).toBe(false);
+    const forged = buildRequestPayload({ signedAt: "old-signature", signatureDataUrl: "data:image/png;base64,AA==" }, user);
+    expect(forged.declarationAccepted).toBe(false);
+    expect(forged).not.toHaveProperty("signedAt");
+    expect(forged).not.toHaveProperty("signatureDataUrl");
   });
 
   it("sends the reporter's own name, e-mail, privacy choice, and photos", () => {

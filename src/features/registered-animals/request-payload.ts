@@ -18,7 +18,6 @@ export function buildRequestPayload(payload: Record<string, unknown>, user?: { n
     scheduleAddressUrl: payload.scheduleAddressUrl || "", scheduleMunicipality: payload.scheduleMunicipality || "",
     responsibleUnit: payload.responsibleUnit || "", veterinarian: payload.veterinarian || "",
     animals: payload.animals || [], documents: payload.documents || [], reusedDocuments: payload.reusedDocuments || [], declarationAccepted: payload.declarationAccepted === true,
-    signatureDataUrl: payload.signatureDataUrl || "", signedAt: payload.signedAt || "",
     type: payload.type || payload.requestType || payload.request_type || "", requestTypeId: payload.requestTypeId || "",
     fee: payload.fee || "", tags: payload.tags || [], workflow_data: payload.workflowData || payload.workflow_data || {},
   };

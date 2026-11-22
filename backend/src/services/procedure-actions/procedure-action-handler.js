@@ -1,11 +1,13 @@
 import { pool } from "../../db/index.js";
 import { isInternalUser } from "../../tenant.js";
 import { DeliveryStatus } from "../../../../shared/notification-contract.js";
+import { DocumentSequence } from "../../../../shared/document-number-contract.js";
 import { ProcedureAction, canApplyProcedureAction, isMicrochipProcedure, resolveRequestProcedures } from "../../../../shared/request-procedure-contract.js";
 import { RequestOrigin, RequestTag, isProcedureRequest, withoutRequestContactCpf } from "../../../../shared/request-contract.js";
 import { procedureScheduleSelection, scheduleDate } from "../../../../shared/schedule-contract.js";
 import { loadRequestSettings } from "../../repositories/request-settings.js";
 import { appendRequestHistory } from "../../repositories/request-history.js";
+import { nextDocumentNumber } from "../../repositories/document-numbers.js";
 import { isUuid } from "../../repositories/request-tracking.js";
 import { lockRequestForUpdate } from "../locked-request.js";
 import { reserveProcedureSchedule } from "../schedule/schedule-booking.js";
@@ -57,7 +59,11 @@ async function saveProcedureAction(client, { request, input, user, settings }) {
   const schedule = selection ? await reserveProcedureSchedule(client, {
     request, animals, animalIndex: input.animalIndex, requestTypeId: input.requestTypeId, selection, municipalityId: request.municipality_id,
   }) : null;
-  const applied = applyProcedureAction({ animals, procedure, input, schedule, user });
+  // Every prescription saved is a new document of the municipality, with its own number.
+  const prescriptionNumber = input.action === ProcedureAction.PRESCRIPTION
+    ? await nextDocumentNumber(client, { municipalityId: request.municipality_id, sequence: DocumentSequence.PRESCRIPTION })
+    : "";
+  const applied = applyProcedureAction({ animals, procedure, input, schedule, prescriptionNumber, user });
   const state = deriveProcedureRequestState(request, applied.resolved);
   let tags = request.tags || [];
   if (input.action === ProcedureAction.RESCHEDULE) {

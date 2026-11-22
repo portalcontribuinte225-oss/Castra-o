@@ -24,6 +24,8 @@ import { recordRequestAssignmentNotification } from "../services/staff-notificat
 import { handleProcedureAction } from "../services/procedure-actions/procedure-action-handler.js";
 import { assertProcedurePatchPreservesState, protectStoredProcedures, stripSuppliedProcedures } from "../services/procedure-actions/procedure-request-state.js";
 import { reserveRequestSchedule, bookingChanged } from "../services/schedule/schedule-booking.js";
+import { nextDocumentNumber } from "../repositories/document-numbers.js";
+import { DocumentSequence } from "../../../shared/document-number-contract.js";
 import { isProcedureRequest, RequestOrigin, RequestStatus, RequestTag, withoutRequestContactCpf } from "../../../shared/request-contract.js";
 
 const router = Router();
@@ -42,25 +44,6 @@ const ALLOWED_REQUEST_TAGS = new Set([
 
 function pick(...values) {
   return values.find((value) => value !== undefined);
-}
-
-async function nextProtocol(client) {
-  const year = new Date().getFullYear();
-  const { rows } = await client.query(
-    `INSERT INTO request_protocol_counters (year, next_seq)
-     VALUES ($1, 2)
-     ON CONFLICT (year)
-     DO UPDATE SET next_seq = request_protocol_counters.next_seq + 1
-     RETURNING next_seq - 1 AS seq`,
-    [year]
-  );
-  return `${String(rows[0].seq).padStart(6, "0")}/${year}`;
-}
-
-function parseSignedAt(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 function parseJsonObject(value, fallback = {}) {
@@ -142,7 +125,7 @@ router.post("/", optionalAuth, async (req, res) => {
     }
     // No account is made here: the tutor creates the password on the first access, with a code sent to the request's contact.
     const tutorId = await resolveRequestTutor(client, { cpf, municipalityId, user: req.user });
-    const protocol = await nextProtocol(client);
+    const protocol = await nextDocumentNumber(client, { municipalityId, sequence: DocumentSequence.PROTOCOL });
     const requestId = crypto.randomUUID();
     const animals = stripSuppliedProcedures(body.animals);
     const firstAnimal = animals[0] || {};
@@ -180,7 +163,6 @@ router.post("/", optionalAuth, async (req, res) => {
         schedule_municipality,
         responsible_unit,
         veterinarian,
-        signature_data_url,
         signed_at,
         documents,
         tags,
@@ -195,8 +177,8 @@ router.post("/", optionalAuth, async (req, res) => {
         $1, $2, $3, $4, $5, $6, $7,
         $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb,
         $18, $19, $20, $21, 'NOVA', $22, $23, $24, $25,
-        $26, $27, $28, $29, $30, $31::jsonb, $32::jsonb, $33::jsonb,
-        $34, $35, $36, $37, $38
+        $26, $27, $28, $29, $30::jsonb, $31::jsonb, $32::jsonb,
+        $33, $34, $35, $36, $37
       )
       RETURNING *`,
       [
@@ -228,8 +210,8 @@ router.post("/", optionalAuth, async (req, res) => {
         pick(body.schedule_municipality, body.scheduleMunicipality),
         pick(body.responsible_unit, body.responsibleUnit),
         body.veterinarian,
-        !internal && isProcedureRequest(requestType) ? null : pick(body.signature_data_url, body.signatureDataUrl),
-        !internal && isProcedureRequest(requestType) ? (body.declarationAccepted === true ? new Date() : null) : parseSignedAt(pick(body.signed_at, body.signedAt)),
+        // The electronic acceptance is the moment the server received the declaration accepted on the web; nothing else sets it.
+        !internal && isProcedureRequest(requestType) && body.declarationAccepted === true ? new Date() : null,
         JSON.stringify([]),
         JSON.stringify(Array.isArray(body.tags) ? body.tags : []),
         JSON.stringify(workflow),
@@ -287,8 +269,6 @@ router.patch("/:id", auth, async (req, res) => {
     responsible: "responsible_unit",
     preferredSchedule: "schedule_date",
     appointment: "schedule_date",
-    signatureDataUrl: "signature_data_url",
-    signedAt: "signed_at",
     scheduleLocationName: "schedule_location_name",
     scheduleAddress: "schedule_address",
     scheduleAddressUrl: "schedule_address_url",
@@ -313,7 +293,7 @@ router.patch("/:id", auth, async (req, res) => {
     "city", "state", "cep", "animal_name", "species", "size", "animals",
     "request_type", "municipality", "notes", "status", "schedule_date",
     "schedule_location_name", "schedule_address", "schedule_address_url", "schedule_municipality",
-    "responsible_unit", "veterinarian", "signature_data_url", "signed_at",
+    "responsible_unit", "veterinarian",
     "documents", "assigned_sector", "tags", "workflow_data",
     "latitude", "longitude", "animal_id", "animal_microchip",
     "target_tutor_name", "target_tutor_email", "target_tutor_cpf",
@@ -428,7 +408,6 @@ router.patch("/:id", auth, async (req, res) => {
       if (key === "animals" || key === "documents") return [key, JSON.stringify(Array.isArray(value) ? value : [])];
       if (key === "tags") return [key, JSON.stringify(mergeTags(existingRows[0].tags, value))];
       if (key === "workflow_data") return [key, JSON.stringify(nextWorkflow)];
-      if (key === "signed_at") return [key, parseSignedAt(value)];
       return [key, value];
     });
 

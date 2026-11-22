@@ -5,6 +5,7 @@ import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
 import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
+import { DocumentSequence, documentNumberYear } from "../../shared/document-number-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
 import { REQUEST_CONTACT_CPF_KEY, RequestKind } from "../../shared/request-contract.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
@@ -39,7 +40,7 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
   failStaffNotification = false, requiredDocument = false, registeredNotice = false, staffAccounts = [], teamUsers = [], permissionGroups = [] } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
-  const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0, staffNotifications: [] };
+  const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0, staffNotifications: [], counters: [] };
   const sessionUsers = new Map();
   let requestRow = existing ? clone(existing) : null;
   const configuration = new Map([
@@ -118,16 +119,19 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
         if (sql.startsWith("SELECT municipality_id FROM requests")) return { rows: requestRow?.id === values[0] ? [{ municipality_id: requestRow.municipality_id }] : [] };
         if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: SCHEDULE_DAY_ID, date: FUTURE_DATE, active: true, slots: [{time:"08:00",vacancies:10}] }] };
         if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) return { rows: requestRow ? [clone(requestRow)] : [] };
-        if (sql.includes("INSERT INTO request_protocol_counters")) return { rows: [{ seq: 1 }] };
+        if (sql.includes("INSERT INTO document_counters")) {
+          stats.counters.push({ municipalityId: values[0], sequence: values[1] });
+          return { rows: [{ seq: stats.counters.length }] };
+        }
         if (sql.includes("INSERT INTO requests")) {
           if (failRequestInsert) throw new Error("Simulated request write failure");
           assertInsertShape(sql, values);
           requestRow = {
-            id: values[37] || REQUEST_ID, tutor_id: values[0], protocol: values[1],
+            id: values[36] || REQUEST_ID, tutor_id: values[0], protocol: values[1],
             tutor_name: values[2], tutor_email: values[3], cpf: values[4], phone: values[5], address: values[6],
             animals: JSON.parse(values[16]), request_type: values[17], municipality_id: values[19],
-            schedule_date: values[21], documents: JSON.parse(values[30]), tags: JSON.parse(values[31]),
-            workflow_data: JSON.parse(values[32]), origin: values[35], is_confidential: values[36], status: "NOVA", history: [],
+            schedule_date: values[21], signed_at: values[28], documents: JSON.parse(values[29]), tags: JSON.parse(values[30]),
+            workflow_data: JSON.parse(values[31]), origin: values[34], is_confidential: values[35], status: "NOVA", history: [],
           };
           return { rows: [clone(requestRow)] };
         }
@@ -284,6 +288,24 @@ test("municipal POST cannot override the authenticated municipality", async (t) 
   assert.equal(row().municipality_id, MUNICIPALITY_ID);
   assert.equal(stats.calls.find(({ sql }) => sql.includes("FROM municipalities m")).values[0], MUNICIPALITY_ID);
   assert.equal(row().tutor_id, null, "An attendant is not the tutor owner");
+  assert.deepEqual(stats.counters, [{ municipalityId: MUNICIPALITY_ID, sequence: DocumentSequence.PROTOCOL }], "The protocol is counted for the request's municipality");
+  assert.equal(row().protocol, `000001/${documentNumberYear()}`);
+});
+
+test("the acceptance date is the server's, set only when a web procedure request accepts the declaration", async (t) => {
+  const forged = { signed_at: "2020-01-01T00:00:00Z", signedAt: "2020-01-01T00:00:00Z", signature_data_url: "data:image/png;base64,AA==", signatureDataUrl: "data:image/png;base64,AA==" };
+  const before = Date.now();
+  const web = await fixture(t);
+  assert.equal((await web.request({ body: procedureBody(forged) })).status, 201);
+  assert.ok(web.row().signed_at instanceof Date && web.row().signed_at.getTime() >= before, "the web acceptance is stamped by the server");
+  const counter = await fixture(t);
+  assert.equal((await counter.request({ user: ADMIN, body: procedureBody({ ...forged, cpf: VALID_CPF }) })).status, 201);
+  assert.equal(counter.row().signed_at, null, "a request made at the counter has no electronic acceptance");
+  assert.equal(counter.stats.calls.some(({ sql }) => sql.includes("signature_data_url")), false);
+  const patched = await fixture(t, { existing: { ...pendingRequest(), signed_at: null } });
+  const response = await patched.request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: forged });
+  assert.equal(response.status, 400, "the acceptance cannot be edited afterwards");
+  assert.equal(patched.row().signed_at, null);
 });
 
 test("a public request with a tutor creates no account nor password, and the answer carries only the request", async (t) => {

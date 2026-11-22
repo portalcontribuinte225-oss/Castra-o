@@ -4,6 +4,7 @@ import express from "express";
 import animalRoutes from "../src/routes/animals.js";
 import { pool } from "../src/db/index.js";
 import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
+import { DocumentSequence } from "../../shared/document-number-contract.js";
 import { RequestKind } from "../../shared/request-contract.js";
 import { StaffNotificationType } from "../../shared/staff-notifications-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
@@ -20,6 +21,8 @@ const CPF = "52998224725";
 const FORGED_CPF = "11111111111";
 const TARGET_CPF = "11144477735";
 const clientFetch = globalThis.fetch;
+// The columns that mark the query reading the animal's requests for its history.
+const REQUEST_HISTORY_COLUMNS = "signed_at, created_at, updated_at";
 
 async function fixture(t, { existingAnimal = true, globalCollision = false, chipless = false, requestHistory = [] } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
@@ -51,7 +54,10 @@ async function fixture(t, { existingAnimal = true, globalCollision = false, chip
       assert.match(sql, /r\.municipality_id = \$3/);
       return { rows: structuredClone(requestHistory) };
     }
-    if (sql.includes("INSERT INTO request_protocol_counters")) return { rows: [{ seq: 1 }] };
+    if (sql.includes("INSERT INTO document_counters")) {
+      assert.deepEqual(values.slice(0, 2), [MUNICIPALITY, DocumentSequence.PROTOCOL]);
+      return { rows: [{ seq: 1 }] };
+    }
     if (sql.includes("INSERT INTO animals")) {
       assert.match(sql, /ON CONFLICT \(microchip\) DO NOTHING/);
       return { rows: globalCollision ? [] : [structuredClone(animal)] };
@@ -98,7 +104,7 @@ test("authenticated animal owner and history are scoped by persisted municipalit
   const response = await request("/consult", { microchip: "CHIP123", municipalityId: OTHER_MUNICIPALITY }, TUTOR);
   assert.equal(response.status, 200);
   assert.equal(response.body.animal.id, ANIMAL_ID);
-  const historyQueries = calls.filter(({ sql }) => sql.includes("ORDER BY occurred_at") || sql.includes("signature_data_url"));
+  const historyQueries = calls.filter(({ sql }) => sql.includes("ORDER BY occurred_at") || sql.includes(REQUEST_HISTORY_COLUMNS));
   assert.ok(historyQueries.length >= 2);
   assert.ok(historyQueries.every(({ values }) => values.includes(MUNICIPALITY) && values.includes(OWNER_ID)));
 });
@@ -123,7 +129,7 @@ test("the owner consults an animal by id, including an animal without microchip"
   assert.equal(response.body.animal.id, ANIMAL_ID);
   assert.equal(response.body.animal.microchip, null);
   // A missing microchip is bound as NULL, so it can never match other chipless requests.
-  const requestHistory = calls.find(({ sql }) => sql.includes("signature_data_url"));
+  const requestHistory = calls.find(({ sql }) => sql.includes(REQUEST_HISTORY_COLUMNS));
   assert.deepEqual(requestHistory.values, [ANIMAL_ID, null, MUNICIPALITY, OWNER_ID]);
 });
 

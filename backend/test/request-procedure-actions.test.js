@@ -4,6 +4,7 @@ import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
 import { ProcedureAction, ProcedureStatus, deriveRequestStatus, resolveRequestProcedures } from "../../shared/request-procedure-contract.js";
+import { DocumentSequence, documentNumberYear } from "../../shared/document-number-contract.js";
 import { allocateScheduleAvailability, buildScheduleOccurrences, requestScheduleBookings } from "../../shared/schedule-contract.js";
 import { NO_SHOW_CANCEL_REASON, REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
 import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
@@ -36,6 +37,7 @@ async function fixture(t, existing, { requiredDocument = false, vacancies = 10 }
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = "procedure-route-tests-only";
   const sessions = new Map();
+  const counters = { prescription: 0 };
   let row = clone(existing);
   const types = requiredDocument ? REQUEST_TYPES.map((type) => ({ ...type, documents: [{ id: "identity", name: "Documento de identidade", required: true, active: true }] })) : REQUEST_TYPES;
   const configuration = new Map([["castragestao:request-types", types], ["castragestao:document-types", []]]);
@@ -49,6 +51,11 @@ async function fixture(t, existing, { requiredDocument = false, vacancies = 10 }
     if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: DAY_ID, date: FUTURE_DATE, active: true, slots: [{ time: "08:00", vacancies }] },
       { id: "88888888-8888-4888-8888-888888888888", date: LATER_DATE, active: true, slots: [{ time: "09:00", vacancies }] }] };
     if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) return { rows: [] };
+    if (sql.includes("INSERT INTO document_counters")) {
+      assert.deepEqual(values.slice(0, 2), [row.municipality_id, DocumentSequence.PRESCRIPTION]);
+      counters.prescription += 1;
+      return { rows: [{ seq: counters.prescription }] };
+    }
     if (sql.startsWith("SELECT * FROM requests")) {
       const match = row.id === values[0] && (!sql.includes("municipality_id = $2") || row.municipality_id === values[1]);
       return { rows: match ? [clone(row)] : [] };
@@ -341,10 +348,15 @@ test("a prescription stays on its procedure and is read-only after the attendanc
   const selection = { animalIndex: 1, requestTypeId: "castration" };
   const payload = { ...selection, action: ProcedureAction.PRESCRIPTION,
     data: { prescription: { text: "Repouso conforme orientação.", professionalName: "Veterinária", professionalRegistry: "CRMV 1234" } } };
-  assert.equal((await call(payload)).status, 200);
+  const saved = await call(payload);
+  assert.equal(saved.status, 200);
   assert.equal(row().animals[1].procedures[0].prescription.professionalRegistry, "CRMV 1234");
+  assert.equal(row().animals[1].procedures[0].prescription.number, `000001/${documentNumberYear()}`);
+  assert.equal(saved.body.animals[1].procedures[0].prescription.number, `000001/${documentNumberYear()}`, "the answer carries the number given");
   assert.equal(row().animals[1].procedures[1].prescription, null);
   assert.equal(row().status, "AGENDADA");
+  assert.equal((await call(payload)).status, 200);
+  assert.equal(row().animals[1].procedures[0].prescription.number, `000002/${documentNumberYear()}`, "saving again issues a new prescription");
   assert.equal((await call({ ...selection, action: ProcedureAction.ATTEND })).status, 200);
   assert.equal((await call(payload)).status, 409);
 });

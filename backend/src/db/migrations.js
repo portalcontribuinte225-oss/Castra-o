@@ -30,7 +30,7 @@ export async function runMigrations(pool = migrationPool) {
     CREATE TABLE IF NOT EXISTS requests (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       tutor_id UUID REFERENCES users(id),
-      protocol TEXT UNIQUE,
+      protocol TEXT,
       tutor_name TEXT,
       tutor_email TEXT,
       cpf TEXT,
@@ -57,7 +57,6 @@ export async function runMigrations(pool = migrationPool) {
       schedule_municipality TEXT,
       responsible_unit TEXT,
       veterinarian TEXT,
-      signature_data_url TEXT,
       signed_at TIMESTAMPTZ,
       documents JSONB DEFAULT '[]',
       tags JSONB DEFAULT '[]',
@@ -67,9 +66,12 @@ export async function runMigrations(pool = migrationPool) {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
 
-    CREATE TABLE IF NOT EXISTS request_protocol_counters (
-      year INT PRIMARY KEY,
-      next_seq INT NOT NULL DEFAULT 1
+    CREATE TABLE IF NOT EXISTS document_counters (
+      municipality_id UUID NOT NULL REFERENCES municipalities(id),
+      sequence TEXT NOT NULL,
+      year INT NOT NULL,
+      next_seq INT NOT NULL DEFAULT 1,
+      PRIMARY KEY (municipality_id, sequence, year)
     );
 
     CREATE TABLE IF NOT EXISTS adoptions (
@@ -187,7 +189,7 @@ export async function runMigrations(pool = migrationPool) {
   await pool.query(`
     ALTER TABLE users ADD COLUMN IF NOT EXISTS municipality_id UUID REFERENCES municipalities(id);
 
-    ALTER TABLE requests ADD COLUMN IF NOT EXISTS protocol TEXT UNIQUE;
+    ALTER TABLE requests ADD COLUMN IF NOT EXISTS protocol TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS cpf TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS phone TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS address TEXT;
@@ -203,7 +205,6 @@ export async function runMigrations(pool = migrationPool) {
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS schedule_municipality TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS responsible_unit TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS veterinarian TEXT;
-    ALTER TABLE requests ADD COLUMN IF NOT EXISTS signature_data_url TEXT;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS signed_at TIMESTAMPTZ;
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS tags JSONB DEFAULT '[]';
     ALTER TABLE requests ADD COLUMN IF NOT EXISTS workflow_data JSONB DEFAULT '{}';
@@ -281,8 +282,8 @@ export async function runMigrations(pool = migrationPool) {
   `);
 
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS requests_protocol_unique_idx
-      ON requests (protocol)
+    CREATE UNIQUE INDEX IF NOT EXISTS requests_municipality_protocol_unique_idx
+      ON requests (municipality_id, protocol)
       WHERE protocol IS NOT NULL;
     CREATE INDEX IF NOT EXISTS adoptions_interests_gin_idx
       ON adoptions USING GIN (interests);

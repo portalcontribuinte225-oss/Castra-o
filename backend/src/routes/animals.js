@@ -7,6 +7,8 @@ import { documentsVisibleToUser } from "../services/documents/document-policy.js
 import { mine, fromRequest, requestContext, documentContent, confirmMicrochip, animalEndpoint } from "../services/registered-animals/animal-handlers.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { insertRequestCreatedNotification } from "../repositories/staff-notifications.js";
+import { nextDocumentNumber } from "../repositories/document-numbers.js";
+import { DocumentSequence } from "../../../shared/document-number-contract.js";
 import { withoutRequestContactCpf } from "../../../shared/request-contract.js";
 
 const router = Router();
@@ -46,18 +48,6 @@ function publicAnimal(row) {
   };
 }
 
-async function nextProtocol(client) {
-  const year = new Date().getFullYear();
-  const { rows } = await client.query(
-    `INSERT INTO request_protocol_counters (year, next_seq)
-     VALUES ($1, 2)
-     ON CONFLICT (year)
-     DO UPDATE SET next_seq = request_protocol_counters.next_seq + 1
-     RETURNING next_seq - 1 AS seq`,
-    [year],
-  );
-  return `${String(rows[0].seq).padStart(6, "0")}/${year}`;
-}
 
 async function fetchAnimalById(client, id, municipalityId) {
   const { rows } = await client.query(
@@ -241,7 +231,7 @@ async function buildAnimalHistory(client, animal, req) {
             target_tutor_name, target_tutor_cpf, schedule_date, schedule_location_name,
             schedule_address, schedule_address_url, schedule_municipality,
             responsible_unit, veterinarian, workflow_data, history, documents,
-            signature_data_url, signed_at, created_at, updated_at
+            signed_at, created_at, updated_at
      FROM requests r
      WHERE (r.animal_id = $1
         OR regexp_replace(upper(COALESCE(r.animal_microchip, '')), '[^A-Z0-9]', '', 'g') = $2
@@ -302,7 +292,6 @@ async function buildAnimalHistory(client, animal, req) {
         veterinarian: request.veterinarian,
         notes: request.notes,
         documents: documentsVisibleToUser(request.documents || [], req.user),
-        signature_data_url: request.signature_data_url,
         signed_at: request.signed_at,
         created_at: request.created_at,
         updated_at: request.updated_at,
@@ -410,7 +399,6 @@ router.post("/:id/death", auth, requireAnimalContext, async (req, res) => {
     }
 
     const tutor = await fetchActiveTutor(client, animal.id, req);
-    const protocol = await nextProtocol(client);
     const cpf = pick(tutor?.cpf, req.user?.cpf);
     const deathDate = pick(req.body?.death_date, req.body?.deathDate);
     const deathCause = pick(req.body?.death_cause, req.body?.deathCause);
@@ -430,6 +418,7 @@ router.post("/:id/death", auth, requireAnimalContext, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
     }
+    const protocol = await nextDocumentNumber(client, { municipalityId, sequence: DocumentSequence.PROTOCOL });
 
     const { rows } = await client.query(
       `INSERT INTO requests (
@@ -520,7 +509,6 @@ router.post("/:id/transfer", auth, requireAnimalContext, async (req, res) => {
       return res.status(400).json({ error: "Nome e CPF do novo tutor sao obrigatorios." });
     }
 
-    const protocol = await nextProtocol(client);
     const cpf = pick(tutor?.cpf, req.user?.cpf);
     const notes = req.body?.notes || null;
     const target = {
@@ -540,6 +528,7 @@ router.post("/:id/transfer", auth, requireAnimalContext, async (req, res) => {
       await client.query("ROLLBACK");
       return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
     }
+    const protocol = await nextDocumentNumber(client, { municipalityId, sequence: DocumentSequence.PROTOCOL });
 
     const { rows } = await client.query(
       `INSERT INTO requests (

@@ -21,8 +21,8 @@ const ACTION_NOTES = Object.freeze({
 
 // Applies one action to one procedure of one animal. `animals` come from resolveRequestProcedures; every animal's procedures are
 // stored from then on, but only the chosen procedure and the health of its own animal change. `schedule` is the place already
-// reserved for a reschedule.
-export function applyProcedureAction({ animals, procedure: previous, input, schedule = null, user, now = new Date() }) {
+// reserved for a reschedule; `prescriptionNumber`, the number the municipality gave the prescription being saved.
+export function applyProcedureAction({ animals, procedure: previous, input, schedule = null, prescriptionNumber = "", user, now = new Date() }) {
   const animal = animals[input.animalIndex];
   const microchipProcedure = isMicrochipProcedure(previous.name);
   if (input.edits.microchip !== undefined && !microchipProcedure) fail("O código do microchip só pode ser salvo no procedimento de microchipagem.", 400);
@@ -40,7 +40,9 @@ export function applyProcedureAction({ animals, procedure: previous, input, sche
   }
   if (input.action === ProcedureAction.REJECT) next.rejection = input.rejection;
   if ([ProcedureAction.CONFIRM_SCHEDULE, ProcedureAction.RESCHEDULE, ProcedureAction.CANCEL_SCHEDULE].includes(input.action)) next.schedule = schedule;
-  if (input.action === ProcedureAction.PRESCRIPTION) next.prescription = { ...input.prescription, issuedAt: now.toISOString(), issuedBy: user.id };
+  if (input.action === ProcedureAction.PRESCRIPTION) {
+    next.prescription = { ...input.prescription, number: prescriptionNumber, issuedAt: now.toISOString(), issuedBy: user.id };
+  }
   next = { ...next, status: procedureStatusAfter(previous.status, input.action), updatedAt: now.toISOString(), updatedBy: user.id };
   const resolved = animals.map((item, index) => (index === input.animalIndex
     ? { ...nextAnimal, procedures: animal.procedures.map((procedure) => (procedure === previous ? next : procedure)) }
