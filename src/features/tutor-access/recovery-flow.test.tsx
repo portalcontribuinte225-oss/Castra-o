@@ -92,7 +92,7 @@ describe("three-step password recovery", () => {
 describe("password policy and server challenge time", () => {
   it("asks for the mobile, keeps the e-mail optional, and keeps both in the payload when operational follow-up is declined", () => {
     const html = renderToStaticMarkup(<RegistrationContactFields email="" phone="" onEmailChange={() => {}} onPhoneChange={() => {}} />);
-    expect(html).toContain("E-mail (opcional)"); expect(html).toContain("Celular *"); expect(html).toContain('type="email"'); expect(html).toContain('type="tel"');
+    expect(html).toContain("E-mail (opcional)"); expect(html).toContain('Celular<span class="required-asterisk">*</span>'); expect(html).toContain('type="email"'); expect(html).toContain('type="tel"');
     expect(html).not.toContain("WhatsApp");
     expect(registrationContactIssues("", "")).toEqual({ email: "", phone: expect.stringContaining("celular completo") });
     expect(registrationContactIssues("inválido", "123")).toMatchObject({ email: expect.any(String), phone: expect.any(String) });

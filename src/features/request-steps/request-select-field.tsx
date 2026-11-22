@@ -7,7 +7,7 @@ type RequestSelectFieldProps = ComponentPropsWithoutRef<"select"> & { label: str
 export function RequestSelectField({ label, className = "", children, "aria-label": accessibleLabel = label, ...props }: RequestSelectFieldProps) {
   return (
     <label className={`tw:grid tw:min-w-0 tw:content-start tw:gap-1 ${className}`.trim()}>
-      <span className="tw:text-[0.8125rem] tw:font-medium tw:text-ui-text">{label}</span>
+      <span className="tw:text-[0.8125rem] tw:font-medium tw:text-ui-text">{label}{props.required && <span className="required-asterisk">*</span>}</span>
       <span className="tw:relative tw:block tw:min-w-0">
         <select
           aria-label={accessibleLabel}

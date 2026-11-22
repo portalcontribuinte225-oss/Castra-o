@@ -39,7 +39,7 @@ export function RequestAccess({ municipalityId, initialProtocol = "", initialCpf
       {account.exists ? <>
         <p>Este CPF já tem acesso neste município. Entre com seu CPF e sua senha.</p>
         {access.error && <p className="form-error" role="alert">{access.error}</p>}
-        <Button className="tw:justify-self-start" onClick={onLogin}>Entrar</Button>
+        <Button className="tw:justify-self-end tw:max-sm:w-full" onClick={onLogin}>Entrar</Button>
       </> : <PasswordCreation loading={access.loading} error={access.error} onSubmit={async (password) => {
         const user = await access.createPassword(password);
         if (user) onSession(user);
@@ -52,16 +52,16 @@ export function RequestAccess({ municipalityId, initialProtocol = "", initialCpf
     {coding && <h3 className="tw:m-0 tw:text-lg tw:font-semibold">Digite o código</h3>}
     {!coding && <>
       <p>Informe o protocolo e o CPF do tutor. Enviamos o código para o contato informado na solicitação.</p>
-      <label className={fieldLabel}><span>Protocolo</span><Input autoComplete="off" maxLength={20} placeholder="000123/2026" required value={access.protocol} onChange={(event) => access.edit({ protocol: event.target.value })} disabled={access.loading} /></label>
-      <label className={fieldLabel}><span>CPF do tutor</span><Input inputMode="numeric" autoComplete="off" maxLength={14} placeholder="000.000.000-00" required value={formatCpf(access.cpf)} onChange={(event) => access.edit({ cpf: onlyDigits(event.target.value).slice(0, 11) })} disabled={access.loading} /></label>
+      <label className={fieldLabel}><span>Protocolo<span className="required-asterisk">*</span></span><Input autoComplete="off" maxLength={20} placeholder="000123/2026" required value={access.protocol} onChange={(event) => access.edit({ protocol: event.target.value })} disabled={access.loading} /></label>
+      <label className={fieldLabel}><span>CPF do tutor<span className="required-asterisk">*</span></span><Input inputMode="numeric" autoComplete="off" maxLength={14} placeholder="000.000.000-00" required value={formatCpf(access.cpf)} onChange={(event) => access.edit({ cpf: onlyDigits(event.target.value).slice(0, 11) })} disabled={access.loading} /></label>
       <CompactChoiceField label="Receber o código por" value={access.channel} options={channelOptions} onChange={(channel: AccessChannel) => access.edit({ channel })} />
-      <Button type="submit" className="tw:justify-self-start" disabled={access.loading || waiting || !access.protocol.trim() || access.cpf.length !== 11}>{access.loading ? "Enviando..." : waiting ? `Aguarde ${access.clock.retryIn}s` : "Enviar código"}</Button>
+      <Button type="submit" className="tw:justify-self-end tw:max-sm:w-full" disabled={access.loading || waiting || !access.protocol.trim() || access.cpf.length !== 11}>{access.loading ? "Enviando..." : waiting ? `Aguarde ${access.clock.retryIn}s` : "Enviar código"}</Button>
     </>}
     {coding && <>
       <p role="status">Se os dados conferirem, enviamos um código de 6 dígitos para o {channelNames[access.channel]} informado na solicitação. Ele vale por 10 minutos.</p>
       <label className={fieldLabel}><span>Código recebido</span><Input inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} required value={access.code} onChange={(event) => access.edit({ code: event.target.value.replace(/\D/g, "") })} disabled={access.loading} /></label>
       {access.clock.expiresIn === 0 && <p role="status">Código expirado. Peça um novo.</p>}
-      <div className="tw:flex tw:flex-wrap tw:gap-2">
+      <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-2">
         <Button type="submit" disabled={access.loading || access.clock.expiresIn === 0 || access.code.length !== 6}>{access.loading ? "Conferindo..." : "Abrir solicitação"}</Button>
         <Button variant="outline" disabled={access.loading || waiting} onClick={() => void access.send()}>{waiting ? `Reenviar em ${access.clock.retryIn}s` : "Reenviar código"}</Button>
         <Button variant="outline" disabled={access.loading} onClick={access.correct}>Corrigir dados</Button>
@@ -98,6 +98,6 @@ function PasswordCreation({ loading, error, onSubmit }: { loading: boolean; erro
     <small>Use pelo menos 6 caracteres.</small>
     <label className={fieldLabel}><span>Confirmar nova senha</span><Input type="password" autoComplete="new-password" value={confirm} onChange={(event) => setConfirm(event.target.value)} required disabled={loading} /></label>
     {(issue || error) && <p className="form-error" role="alert">{issue || error}</p>}
-    <Button type="submit" className="tw:justify-self-start" disabled={loading || !password || !confirm}>{loading ? "Salvando..." : "Criar minha senha"}</Button>
+    <Button type="submit" className="tw:justify-self-end tw:max-sm:w-full" disabled={loading || !password || !confirm}>{loading ? "Salvando..." : "Criar minha senha"}</Button>
   </form>;
 }

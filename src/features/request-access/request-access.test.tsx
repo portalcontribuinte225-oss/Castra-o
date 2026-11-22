@@ -18,6 +18,16 @@ function render(state: Record<string, unknown> = {}, municipalityId = "municipal
 describe("Acessar minha solicitação", () => {
   beforeEach(() => { hook.state = {}; });
 
+  it("marks the protocol and the CPF as required in their titles, and keeps every main button on the right", () => {
+    const html = render();
+    expect(html).toContain('>Protocolo<span class="required-asterisk">*</span></span>');
+    expect(html).toContain('>CPF do tutor<span class="required-asterisk">*</span></span>');
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*class="[^"]*tw:justify-self-end[^"]*"/);
+    expect(render({ step: AccessStep.CODE, challenge: { challengeId: "challenge-a", expiresIn: 600, retryAfter: 60 } })).toContain("tw:flex tw:flex-wrap tw:justify-end tw:gap-2");
+    expect(render({ step: AccessStep.VERIFIED, token: "access-token", view: view(false) })).toMatch(/<button[^>]*type="submit"[^>]*class="[^"]*tw:justify-self-end[^"]*"[^>]*>Criar minha senha/);
+    expect(render({ step: AccessStep.VERIFIED, token: "access-token", view: view(true) })).toMatch(/<button[^>]*class="[^"]*tw:justify-self-end[^"]*"[^>]*>Entrar/);
+  });
+
   it("asks for the protocol, the tutor's CPF and where to receive the code, already filled from the link or the last screen", () => {
     const html = render();
     expect(html).toContain('aria-label="Acessar minha solicitação"');

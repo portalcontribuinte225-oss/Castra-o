@@ -1,6 +1,6 @@
 import React from "react";
 import { Card } from "../../components/card";
-import { NeighborhoodField } from "../neighborhoods/neighborhood-field";
+import { AddressFields } from "../address/address-fields";
 import { RequestTextField } from "../request-steps/request-text-field";
 import { RegistrationContactFields } from "./registration-contact-fields";
 
@@ -23,6 +23,8 @@ type TutorField = keyof TutorStepData;
 
 export interface TutorStepFieldsProps {
   data: TutorStepData;
+  // The tutor is identified (name and CPF are required): always for a tutor, and when the answer about the tutor asks for one.
+  identityRequired: boolean;
   nameInvalid: boolean;
   nameIssue: string;
   cpfInvalid: boolean;
@@ -36,29 +38,20 @@ export interface TutorStepFieldsProps {
 
 // The Tutor step of the request, the same for the public form and for the one the staff fills: who is responsible, where they live and
 // how to reach them.
-export function TutorStepFields({ data, nameInvalid, nameIssue, cpfInvalid, neighborhoodNames, showErrors, onField, onMaskedField, onCepChange }: TutorStepFieldsProps) {
+export function TutorStepFields({ data, identityRequired, nameInvalid, nameIssue, cpfInvalid, neighborhoodNames, showErrors, onField, onMaskedField, onCepChange }: TutorStepFieldsProps) {
   return (
     <>
       <Card className="form-sub-card">
         <span className="form-sub-card-title">Responsável</span>
         <div className="two-column-fields">
-          <RequestTextField label="Nome completo" type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={data.tutor} onChange={(event) => onField("tutor", event.target.value)} aria-invalid={nameInvalid} error={nameInvalid ? nameIssue : undefined} />
-          <RequestTextField label="CPF" type="text" inputMode="numeric" placeholder="000.000.000-00" value={data.cpf} onChange={(event) => onMaskedField("cpf", event.target.value)} aria-invalid={cpfInvalid} error={cpfInvalid ? "Informe um CPF válido." : undefined} />
+          <RequestTextField label="Nome completo" required={identityRequired} type="text" maxLength={160} placeholder="Nome do tutor ou responsável" value={data.tutor} onChange={(event) => onField("tutor", event.target.value)} aria-invalid={nameInvalid} error={nameInvalid ? nameIssue : undefined} />
+          <RequestTextField label="CPF" required={identityRequired} type="text" inputMode="numeric" placeholder="000.000.000-00" value={data.cpf} onChange={(event) => onMaskedField("cpf", event.target.value)} aria-invalid={cpfInvalid} error={cpfInvalid ? "Informe um CPF válido." : undefined} />
         </div>
       </Card>
 
       <Card className="form-sub-card">
         <span className="form-sub-card-title">Endereço</span>
-        <div className="address-lookup-grid">
-          <RequestTextField label="CEP" type="text" inputMode="numeric" placeholder="00000-000" value={data.cep} onChange={(event) => onCepChange(event.target.value)} />
-          <RequestTextField label="Número" type="text" placeholder="Número" value={data.number} onChange={(event) => onField("number", event.target.value)} />
-          <RequestTextField label="UF" type="text" placeholder="UF" value={data.state} maxLength={2} onChange={(event) => onMaskedField("state", event.target.value)} />
-        </div>
-        <RequestTextField label="Endereço" type="text" placeholder="Rua, complemento" value={data.address} onChange={(event) => onField("address", event.target.value)} />
-        <div className="address-city-grid">
-          <NeighborhoodField value={data.neighborhood} names={neighborhoodNames} onChange={(value) => onField("neighborhood", value)} />
-          <RequestTextField label="Cidade" type="text" placeholder="Cidade" value={data.city} onChange={(event) => onField("city", event.target.value)} />
-        </div>
+        <AddressFields values={data} neighborhoodNames={neighborhoodNames} onField={onField} onCepChange={onCepChange} onStateChange={(value) => onMaskedField("state", value)} />
         {data.latitude && data.longitude && <p className="map-selected-place">Localização registrada: {data.latitude}, {data.longitude}.</p>}
       </Card>
 

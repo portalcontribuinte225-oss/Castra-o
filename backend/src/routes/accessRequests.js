@@ -6,6 +6,7 @@ import { auth, requireRole } from "../middleware/auth.js";
 import { isGlobalUser, pickMunicipalityId } from "../tenant.js";
 import { logAudit, auditCtx, AUDIT_ACTIONS } from "../services/audit.js";
 import { isValidCpfOrCnpj, isValidPhone } from "../utils.js";
+import { accessRequestAddressIssues, normalizeAccessRequestAddress } from "../../../shared/access-request-address-contract.js";
 
 const router = Router();
 
@@ -67,6 +68,9 @@ router.post("/", async (req, res) => {
   const phone = String(body.phone || "").trim();
   const document = String(body.document || "").trim();
   const isNumericDocument = /^[0-9.\-/\s]+$/.test(document);
+  const addressInput = { cep: body.cep, number: body.address_number, state: body.state, address: body.address, neighborhood: body.neighborhood, city: body.city };
+  const addressIssue = Object.values(accessRequestAddressIssues(addressInput)).find(Boolean);
+  const location = normalizeAccessRequestAddress(addressInput);
 
   if (!REQUESTER_TYPES.has(requesterType)) return res.status(400).json({ error: "Tipo de solicitante invalido." });
   if (!responsibleName) return res.status(400).json({ error: "Nome do responsavel e obrigatorio." });
@@ -74,6 +78,7 @@ router.post("/", async (req, res) => {
   if (!municipalityId) return res.status(400).json({ error: "Municipio obrigatorio para esta operacao." });
   if (phone && !isValidPhone(phone)) return res.status(400).json({ error: "Telefone invalido." });
   if (document && isNumericDocument && !isValidCpfOrCnpj(document)) return res.status(400).json({ error: "CPF ou CNPJ invalido." });
+  if (addressIssue) return res.status(400).json({ error: addressIssue });
 
   try {
     const { rows } = await pool.query(
@@ -84,6 +89,10 @@ router.post("/", async (req, res) => {
         email,
         phone,
         document,
+        cep,
+        address,
+        address_number,
+        neighborhood,
         city,
         state,
         municipality_id,
@@ -91,7 +100,7 @@ router.post("/", async (req, res) => {
         assigned_sector,
         history
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
       RETURNING *`,
       [
         requesterType,
@@ -100,8 +109,12 @@ router.post("/", async (req, res) => {
         email,
         phone,
         document,
-        String(body.city || "").trim(),
-        String(body.state || "").trim(),
+        location.cep,
+        location.address,
+        location.number,
+        location.neighborhood,
+        location.city,
+        location.state,
         municipalityId,
         String(body.intended_use || body.intendedUse || "").trim(),
         assignedSector,

@@ -38,7 +38,6 @@ import {
   UploadCloud,
   User,
   Users,
-  Building2,
   Mail,
   Phone,
   X,
@@ -49,6 +48,8 @@ import {
   BadgeCheck,
 } from "lucide-react";
 import "./styles.css";
+import { PublicAccessRequestForm } from "./features/access-request/public-access-request-form";
+import { RequestTextField } from "./features/request-steps/request-text-field";
 import { HeroCard } from "./features/public-home/hero-card";
 import { PublicMetrics } from "./features/public-home/public-metrics";
 import type { AnyRecord } from "./types";
@@ -135,7 +136,6 @@ import {
   escapeHtml,
   formatCep,
   formatCpf,
-  formatCpfOrCnpj,
   formatDateTime,
   formatPhone,
   getDataUrlMimeType,
@@ -144,6 +144,7 @@ import {
   isGlobalRole,
   isMasterRole,
   isValidCpf,
+  isValidPhone,
   maskCpf,
   normalizeSearchKey,
   normalizeText,
@@ -1270,6 +1271,7 @@ function normalizeAccessRequest(item: AnyRecord = {}): AnyRecord {
     requesterLabel: type?.label || requesterType || "Solicitante",
     organizationName: item.organizationName || item.organization_name || "",
     responsibleName: item.responsibleName || item.responsible_name || "",
+    addressNumber: item.addressNumber || item.address_number || "",
     municipalityId: item.municipalityId || item.municipality_id || "",
     intendedUse: item.intendedUse || item.intended_use || "",
     assignedSector: item.assignedSector || item.assigned_sector || type?.sector || "",
@@ -1533,6 +1535,12 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   const adoptionTitleId = useId();
   const adoptionCloseRef = useRef<HTMLButtonElement>(null);
   const interestNameRef = useRef<HTMLInputElement>(null);
+  const [interestAttempted, setInterestAttempted] = useState(false);
+  // The name and the WhatsApp are required: the field that is missing turns red once the visitor tries to send.
+  const interestIssues = {
+    name: interestForm.name.trim() ? "" : "Informe seu nome completo.",
+    phone: isValidPhone(interestForm.phone) ? "" : "Informe um WhatsApp com DDD.",
+  };
   const adoptionOpen = Boolean(selectedAnimal);
   const speciesQuickFilters = [
     { value: "", label: "Todos" },
@@ -1569,6 +1577,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
     setInterestSent(false);
     setInterestSaving(false);
     setInterestError("");
+    setInterestAttempted(false);
     setInterestForm({ name: "", phone: "", visit_date: "" });
   }
 
@@ -1579,12 +1588,15 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
     setInterestSent(false);
     setInterestSaving(false);
     setInterestError("");
+    setInterestAttempted(false);
     setInterestForm({ name: "", phone: "", visit_date: "" });
   }
 
   async function submitInterest(e) {
     e.preventDefault();
     if (!selectedAnimal || interestRequest.current) return;
+    setInterestAttempted(true);
+    if (interestIssues.name || interestIssues.phone) return;
     const request = Symbol();
     interestRequest.current = request;
     setInterestError("");
@@ -1726,23 +1738,19 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
             <ShareAdoptionButton animal={selectedAnimal} />
 
             {showInterestForm && !interestSent && (
-              <form className="adoption-interest-form" onSubmit={submitInterest}>
+              <form className="adoption-interest-form" noValidate onSubmit={submitInterest}>
                 <div className="interest-form-heading">
                   <HeartHandshake size={15} />
                   <span>Registrar interesse</span>
                 </div>
-                <label className="tw:grid tw:gap-1.5 tw:text-sm tw:font-medium">Nome completo
-                  <Input ref={interestNameRef} value={interestForm.name} onChange={(e) => setInterestForm((f) => ({ ...f, name: e.target.value }))} autoComplete="name" required />
-                </label>
-                <label className="tw:grid tw:gap-1.5 tw:text-sm tw:font-medium">WhatsApp
-                  <Input type="tel" value={interestForm.phone} onChange={(e) => setInterestForm((f) => ({ ...f, phone: formatPhone(e.target.value) }))} placeholder="(00) 00000-0000" autoComplete="tel" required />
-                </label>
+                <RequestTextField ref={interestNameRef} label="Nome completo" required value={interestForm.name} error={(interestAttempted && interestIssues.name) || undefined} onChange={(e) => setInterestForm((f) => ({ ...f, name: e.target.value }))} autoComplete="name" />
+                <RequestTextField label="WhatsApp" required type="tel" value={interestForm.phone} error={(interestAttempted && interestIssues.phone) || undefined} onChange={(e) => setInterestForm((f) => ({ ...f, phone: formatPhone(e.target.value) }))} placeholder="(00) 00000-0000" autoComplete="tel" />
                 <label className="tw:grid tw:gap-1.5 tw:text-sm tw:font-medium">Data da visita
                   <Input type="date" value={interestForm.visit_date} onChange={(e) => setInterestForm((f) => ({ ...f, visit_date: e.target.value }))} />
                 </label>
                 {interestError && <p className="form-error" role="alert">{interestError}</p>}
                 <div className="form-actions">
-                  <Button type="submit" disabled={interestSaving}>
+                  <Button type="submit" className="tw:ml-auto" disabled={interestSaving}>
                     <HeartHandshake size={15} />
                     {interestSaving ? "Enviando..." : "Enviar interesse"}
                   </Button>
@@ -2092,7 +2100,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 initialSchedule={procedurePrefill?.schedule || ""}
               />
             ) : activePublicService === "credential" ? (
-              <PublicAccessRequestInline onSubmit={onAccessRequest} municipalityId={selectedMunicipalityId} />
+              <PublicAccessRequestForm onSubmit={onAccessRequest} municipalityId={selectedMunicipalityId} neighborhoods={neighborhoodCatalog.items} />
             ) : activePublicService === "tracking" ? (
               <RequestTracking key={selectedMunicipalityId} municipalityId={selectedMunicipalityId} />
             ) : activePublicService === REQUEST_ACCESS_SERVICE ? (
@@ -2158,144 +2166,6 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
 
 {authEntry && <AuthEntry key={authEntryKey(authEntry)} audience={authEntry.audience} municipalityId={authEntry.municipalityId} onLogin={onLogin} onClose={() => { onProcedureIntent(null); setAuthEntry(null); }} />}
     </main>
-  );
-}
-
-function PublicAccessRequestInline({ onSubmit, municipalityId }: AnyRecord) {
-  const [form, setForm] = useState({
-    requesterType: "ONG",
-    organizationName: "",
-    responsibleName: "",
-    email: "",
-    phone: "",
-    document: "",
-    city: "",
-    state: "",
-  });
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [sent, setSent] = useState(false);
-  const submitting = useRef(false);
-  const selectedType = accessRequesterTypes.find((type) => type.id === form.requesterType) || accessRequesterTypes[0];
-  const fieldLabel = "tw:grid tw:gap-1.5 tw:text-sm tw:font-medium tw:text-ui-ink";
-
-  function patch(field, value) {
-    setForm((current) => ({ ...current, [field]: value }));
-  }
-
-  async function submit(event) {
-    event.preventDefault();
-    if (submitting.current) return;
-    if (!form.responsibleName.trim() || !form.email.trim()) {
-      setError("Informe o responsável e o email para contato.");
-      return;
-    }
-    submitting.current = true;
-    setSaving(true);
-    setError("");
-    try {
-      await onSubmit?.({
-        requester_type: form.requesterType,
-        organization_name: form.organizationName,
-        responsible_name: form.responsibleName,
-        email: form.email,
-        phone: form.phone,
-        document: form.document,
-        city: form.city,
-        state: form.state,
-        assigned_sector: selectedType.sector,
-        municipality_id: municipalityId,
-      });
-      setSent(true);
-    } catch (err) {
-      setError(err instanceof Error && err.message ? err.message : "Não foi possível enviar a solicitação.");
-    } finally {
-      submitting.current = false;
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Card className="tw:p-4 tw:sm:p-6">
-      <form className="tw:grid tw:gap-4" aria-label="Solicitar credenciamento" aria-busy={saving} onSubmit={submit}>
-        {sent ? (
-          <div className="tw:grid tw:min-h-48 tw:content-center tw:justify-items-center tw:gap-2 tw:text-center" role="status">
-            <CheckCircle2 size={38} strokeWidth={1.5} className="tw:text-ui-accent" aria-hidden="true" />
-            <h3 className="tw:m-0 tw:text-lg tw:font-semibold">Solicitação enviada!</h3>
-            <p className="tw:m-0 tw:text-ui-text">Um usuário interno vai analisar o pedido e liberar o acesso se estiver tudo certo.</p>
-          </div>
-        ) : (
-          <>
-            <div className="tw:flex tw:items-center tw:gap-3">
-              <span className="tw:inline-flex tw:size-10 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-[10px] tw:bg-ui-accent-soft tw:text-ui-accent"><Shield size={18} aria-hidden="true" /></span>
-              <div>
-                <h3 className="tw:m-0 tw:text-base tw:font-semibold">Solicitar credenciamento</h3>
-                <p className="tw:m-0 tw:text-sm tw:text-ui-text">Acesso ao sistema para ONGs e protetores independentes.</p>
-              </div>
-            </div>
-
-            <div className="tw:grid tw:gap-2 tw:sm:grid-cols-2" role="group" aria-label="Tipo de solicitante">
-              {accessRequesterTypes.map((type) => (
-                <Card
-                  as="button"
-                  key={type.id}
-                  aria-pressed={form.requesterType === type.id}
-                  className="tw:flex tw:enabled:cursor-pointer tw:flex-col tw:items-start tw:gap-1 tw:px-3.5 tw:py-3 tw:text-left tw:enabled:hover:border-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent"
-                  disabled={saving}
-                  onClick={() => patch("requesterType", type.id)}
-                >
-                  <span className="tw:inline-flex tw:size-8 tw:items-center tw:justify-center tw:rounded-lg tw:bg-ui-accent-soft tw:text-ui-accent">
-                    {type.id === "ONG" ? <Building2 size={17} aria-hidden="true" /> : <HeartHandshake size={17} aria-hidden="true" />}
-                  </span>
-                  <span className="tw:text-sm tw:font-semibold tw:text-ui-ink">{type.label}</span>
-                  <span className="tw:text-xs tw:text-ui-text">{type.sector}</span>
-                </Card>
-              ))}
-            </div>
-
-            <label className={fieldLabel}>
-              <span>Organização</span>
-              <Input type="text" placeholder="Nome da ONG ou grupo (opcional para protetor)" value={form.organizationName} onChange={(e) => patch("organizationName", e.target.value)} autoComplete="organization" disabled={saving} />
-            </label>
-            <label className={fieldLabel}>
-              <span>Responsável</span>
-              <Input type="text" placeholder="Nome completo do responsável *" value={form.responsibleName} onChange={(e) => patch("responsibleName", e.target.value)} autoComplete="name" required disabled={saving} />
-            </label>
-            <label className={fieldLabel}>
-              <span>Email</span>
-              <Input type="email" placeholder="Email para contato *" value={form.email} onChange={(e) => patch("email", e.target.value)} autoComplete="email" required disabled={saving} />
-            </label>
-            <div className="tw:grid tw:gap-4 tw:sm:grid-cols-2">
-              <label className={fieldLabel}>
-                <span>Telefone</span>
-                <Input type="tel" placeholder="(00) 00000-0000" value={form.phone} onChange={(e) => patch("phone", formatPhone(e.target.value))} autoComplete="tel" disabled={saving} />
-              </label>
-              <label className={fieldLabel}>
-                <span>CPF / CNPJ</span>
-                <Input type="text" placeholder="CPF, CNPJ ou matrícula" value={form.document} onChange={(e) => patch("document", /^[0-9.\-/\s]*$/.test(e.target.value) ? formatCpfOrCnpj(e.target.value) : e.target.value)} disabled={saving} />
-              </label>
-            </div>
-            <div className="tw:grid tw:gap-4 tw:sm:grid-cols-2">
-              <label className={fieldLabel}>
-                <span>Cidade</span>
-                <Input type="text" placeholder="Cidade" value={form.city} onChange={(e) => patch("city", e.target.value)} autoComplete="address-level2" disabled={saving} />
-              </label>
-              <label className={fieldLabel}>
-                <span>UF</span>
-                <Input type="text" placeholder="UF" value={form.state} maxLength={2} onChange={(e) => patch("state", e.target.value.toUpperCase().slice(0, 2))} autoComplete="address-level1" disabled={saving} />
-              </label>
-            </div>
-
-            {error && <p className="form-error" role="alert">{error}</p>}
-
-            <Button className="tw:justify-self-start" type="submit" disabled={saving}>
-              <Shield size={14} aria-hidden="true" />
-              {saving ? "Enviando solicitação..." : "Enviar solicitação"}
-            </Button>
-          </>
-        )}
-      </form>
-    </Card>
   );
 }
 
@@ -3214,6 +3084,7 @@ function NewRequest({
               }}
               tutorFields={{
                 data: requestData,
+                identityRequired: requiresTutorIdentity,
                 nameInvalid: showInvalid("tutor"),
                 nameIssue: validateTutorName(requestData.tutor),
                 cpfInvalid: showInvalid("cpf"),

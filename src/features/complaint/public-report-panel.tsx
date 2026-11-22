@@ -1,11 +1,12 @@
 import { useId, useRef, useState } from "react";
-import type { ComponentPropsWithoutRef, FormEvent } from "react";
+import type { FormEvent } from "react";
 import { COMPLAINT_PHOTO_IDS } from "../../../shared/complaint-photo-contract.js";
 import { Button } from "../../components/button";
 import { Card } from "../../components/card";
-import { Input } from "../../components/input";
+import { configTextareaStyle } from "../../components/ui";
 import { formatCep, formatCpf, formatPhone, isValidCpf, isValidPhone } from "../../utils";
 import { lookupCep } from "../animal-services/cep-lookup";
+import { RequestTextField } from "../request-steps/request-text-field";
 import { ComplaintPhotoPicker } from "./complaint-photo-picker";
 import type { ComplaintPhoto } from "./complaint-photo";
 
@@ -14,7 +15,6 @@ const EMPTY_COMPLAINT = {
   cep: "", number: "", address: "", neighborhood: "", city: "", state: "",
 };
 type ComplaintForm = typeof EMPTY_COMPLAINT;
-const fieldLabel = "tw:grid tw:gap-1.5 tw:text-sm tw:font-medium tw:text-ui-ink";
 const sectionCard = "tw:grid tw:gap-3 tw:p-4 tw:sm:p-6";
 
 interface ComplaintPayload {
@@ -37,24 +37,14 @@ interface PublicReportPanelProps {
   onSubmit: (payload: ComplaintPayload) => Promise<unknown>;
 }
 
-function complaintError(form: ComplaintForm) {
-  if (!form.name.trim()) return "Informe o nome do denunciante.";
-  if (!isValidCpf(form.cpf)) return "Informe um CPF válido do denunciante.";
-  if (!isValidPhone(form.contact)) return "Informe um telefone válido.";
-  if (!form.description.trim()) return "Descreva a situação observada.";
-  return "";
-}
-
-type ReportFieldProps = Omit<ComponentPropsWithoutRef<"input">, "onChange"> & {
-  label: string;
-  onChange: (value: string) => void;
-};
-
-function ReportField({ label, onChange, type = "text", ...props }: ReportFieldProps) {
-  return <label className={fieldLabel}>
-    <span>{label}</span>
-    <Input {...props} type={type} onChange={(event) => onChange(event.target.value)} />
-  </label>;
+// The name, the CPF, the phone and the description are required; each field that is missing turns red once the visitor tries to send.
+export function complaintIssues(form: ComplaintForm) {
+  return {
+    name: form.name.trim() ? "" : "Informe o nome do denunciante.",
+    cpf: isValidCpf(form.cpf) ? "" : "Informe um CPF válido do denunciante.",
+    contact: isValidPhone(form.contact) ? "" : "Informe um telefone válido.",
+    description: form.description.trim() ? "" : "Descreva a situação observada.",
+  };
 }
 
 export function PublicReportPanel({ municipalityName = "Sistema municipal", onSubmit }: PublicReportPanelProps) {
@@ -64,7 +54,11 @@ export function PublicReportPanel({ municipalityName = "Sistema municipal", onSu
   const [photos, setPhotos] = useState<ComplaintPhoto[]>([]);
   const [preparing, setPreparing] = useState(false);
   const [error, setError] = useState("");
+  const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
+  const descriptionError = useId();
+  const issues = complaintIssues(form);
+  const shown = (field: keyof typeof issues) => (showErrors && issues[field]) || undefined;
   const submitting = useRef(false);
 
   function patch<K extends keyof ComplaintForm>(field: K, value: ComplaintForm[K]) {
@@ -88,9 +82,9 @@ export function PublicReportPanel({ municipalityName = "Sistema municipal", onSu
   async function submitReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current || preparing) return;
-    const validationError = complaintError(form);
-    setError(validationError);
-    if (validationError) return;
+    setShowErrors(true);
+    setError("");
+    if (Object.values(issues).some(Boolean)) return;
     submitting.current = true;
     setSaving(true);
     try {
@@ -117,14 +111,14 @@ export function PublicReportPanel({ municipalityName = "Sistema municipal", onSu
   }
 
   return (
-    <form className="public-report-inline tw:grid tw:gap-4" aria-label="Denunciar" aria-busy={saving || preparing} onSubmit={submitReport}>
+    <form className="public-report-inline tw:grid tw:gap-4" aria-label="Denunciar" aria-busy={saving || preparing} noValidate onSubmit={submitReport}>
       <Card as="section" className={sectionCard} aria-labelledby={reporterHeading}>
         <h3 id={reporterHeading} className="tw:m-0 tw:text-base tw:font-semibold">Denunciante</h3>
         <div className="two-column-fields">
-          <ReportField label="Nome" value={form.name} onChange={(value) => patch("name", value)} placeholder="Nome completo" autoComplete="name" />
-          <ReportField label="CPF" value={form.cpf} onChange={(value) => patch("cpf", formatCpf(value))} placeholder="000.000.000-00" inputMode="numeric" />
-          <ReportField label="Telefone" type="tel" value={form.contact} onChange={(value) => patch("contact", formatPhone(value))} placeholder="(00) 00000-0000" autoComplete="tel" />
-          <ReportField label="E-mail (opcional)" type="email" value={form.email} onChange={(value) => patch("email", value)} autoComplete="email" />
+          <RequestTextField label="Nome" required value={form.name} error={shown("name")} onChange={(event) => patch("name", event.target.value)} placeholder="Nome completo" autoComplete="name" />
+          <RequestTextField label="CPF" required value={form.cpf} error={shown("cpf")} onChange={(event) => patch("cpf", formatCpf(event.target.value))} placeholder="000.000.000-00" inputMode="numeric" />
+          <RequestTextField label="Telefone" required type="tel" value={form.contact} error={shown("contact")} onChange={(event) => patch("contact", formatPhone(event.target.value))} placeholder="(00) 00000-0000" autoComplete="tel" />
+          <RequestTextField label="E-mail (opcional)" type="email" value={form.email} onChange={(event) => patch("email", event.target.value)} autoComplete="email" />
         </div>
         <label className="tw:inline-flex tw:min-h-11 tw:w-fit tw:cursor-pointer tw:items-center tw:gap-2 tw:text-sm tw:font-medium">
           <input data-ui-input="" className="tw:accent-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent" type="checkbox" checked={form.confidential} onChange={(event) => patch("confidential", event.target.checked)} />
@@ -134,30 +128,34 @@ export function PublicReportPanel({ municipalityName = "Sistema municipal", onSu
       <Card as="section" className={sectionCard} aria-labelledby={locationHeading}>
         <h3 id={locationHeading} className="tw:m-0 tw:text-base tw:font-semibold">Local da ocorrência</h3>
         <div className="address-lookup-grid">
-          <ReportField label="CEP" value={form.cep} onChange={fillLocation} placeholder={`00000-000 (${municipalityName})`} inputMode="numeric" />
-          <ReportField label="Número" value={form.number} onChange={(value) => patch("number", value)} />
-          <ReportField label="UF" value={form.state} maxLength={2} onChange={(value) => patch("state", value.replace(/[^a-z]/gi, "").slice(0, 2).toUpperCase())} />
+          <RequestTextField label="CEP" value={form.cep} onChange={(event) => void fillLocation(event.target.value)} placeholder={`00000-000 (${municipalityName})`} inputMode="numeric" />
+          <RequestTextField label="Número" value={form.number} onChange={(event) => patch("number", event.target.value)} />
+          <RequestTextField label="UF" value={form.state} maxLength={2} onChange={(event) => patch("state", event.target.value.replace(/[^a-z]/gi, "").slice(0, 2).toUpperCase())} />
         </div>
-        <ReportField label="Endereço" value={form.address} onChange={(value) => patch("address", value)} placeholder="Rua, complemento ou referência" />
+        <RequestTextField label="Endereço" value={form.address} onChange={(event) => patch("address", event.target.value)} placeholder="Rua, complemento ou referência" />
         <div className="address-city-grid">
-          <ReportField label="Bairro" value={form.neighborhood} onChange={(value) => patch("neighborhood", value)} />
-          <ReportField label="Cidade" value={form.city} onChange={(value) => patch("city", value)} />
+          <RequestTextField label="Bairro" value={form.neighborhood} onChange={(event) => patch("neighborhood", event.target.value)} />
+          <RequestTextField label="Cidade" value={form.city} onChange={(event) => patch("city", event.target.value)} />
         </div>
       </Card>
-      <label className={fieldLabel}>
-        <span>Descrição</span>
+      <label className="tw:grid tw:min-w-0 tw:content-start tw:gap-1">
+        <span className="tw:text-[0.8125rem] tw:font-medium tw:text-ui-text">Descrição<span className="required-asterisk">*</span></span>
         <textarea
           data-ui-input=""
-          className="tw:w-full tw:resize-y tw:rounded-[var(--ui-radius-md)] tw:border tw:border-solid tw:border-card-border tw:bg-card-surface tw:px-[13px] tw:py-2.5 tw:text-sm tw:focus:border-ui-accent tw:focus:outline-hidden"
+          className={`${configTextareaStyle} tw:resize-y`}
           value={form.description}
           onChange={(event) => patch("description", event.target.value)}
           placeholder="Descreva a situação observada"
           rows={6}
+          required
+          aria-invalid={Boolean(shown("description"))}
+          aria-describedby={shown("description") ? descriptionError : undefined}
         />
+        {shown("description") && <small id={descriptionError} className="tw:text-xs tw:text-ui-danger">{shown("description")}</small>}
       </label>
       <ComplaintPhotoPicker photos={photos} onChange={setPhotos} preparing={preparing} onPreparingChange={setPreparing} disabled={saving} />
       {error && <p className="form-error" role="alert">{error}</p>}
-      <Button className="tw:min-w-[190px] tw:justify-self-start tw:max-sm:w-full" type="submit" disabled={saving || preparing}>{saving ? "Enviando..." : "Enviar denúncia"}</Button>
+      <Button className="tw:min-w-[190px] tw:justify-self-end tw:max-sm:w-full" type="submit" disabled={saving || preparing}>{saving ? "Enviando..." : "Enviar denúncia"}</Button>
     </form>
   );
 }

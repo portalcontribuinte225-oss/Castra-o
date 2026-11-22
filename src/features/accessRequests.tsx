@@ -21,6 +21,13 @@ export function accessStatusLabel(status = "") {
   );
 }
 
+// The address in one line: street and number, neighborhood, city / UF and CEP, leaving out what was not given.
+function addressLine(item: AnyRecord) {
+  const street = [item.address, item.addressNumber].filter(Boolean).join(", ");
+  const place = [item.city, item.state].filter(Boolean).join(" / ");
+  return [street, item.neighborhood, place, item.cep && `CEP ${item.cep}`].filter(Boolean).join(" · ") || "-";
+}
+
 function statusTone(status: string) {
   if (status === "APROVADO") return "success";
   if (status === "RECUSADO") return "canceled";
@@ -153,7 +160,7 @@ export function AccessRequestsView({
             ["Tipo", item.requesterLabel || "-"],
             ["E-mail", item.email || "-"],
             ["Telefone", item.phone || "-"],
-            ["Cidade / UF", [item.city, item.state].filter(Boolean).join(" / ") || "-"],
+            ["Endereço", addressLine(item)],
             ["Setor", sectorName],
           ];
           return (
@@ -244,8 +251,8 @@ function CrReviewModal({ item, note, onNoteChange, deciding, error, returnFocus,
                 <div className="ccm-readonly-value">{item.phone || "-"}</div>
               </div>
               <div className="field ccm-readonly-field">
-                <span>Cidade / UF</span>
-                <div className="ccm-readonly-value">{[item.city, item.state].filter(Boolean).join(" / ") || "-"}</div>
+                <span>Endereço</span>
+                <div className="ccm-readonly-value">{addressLine(item)}</div>
               </div>
               <div className="field ccm-readonly-field">
                 <span>Setor</span>

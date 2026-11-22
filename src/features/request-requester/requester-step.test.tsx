@@ -9,7 +9,7 @@ const noop = vi.fn();
 const data: TutorStepData = { tutor: "", cpf: "", cep: "", number: "", state: "", address: "", neighborhood: "", city: "", latitude: "", longitude: "", email: "", phone: "" };
 const props: RequesterStepProps = {
   tutorship: "", tutorshipFixed: false, tutorKnown: false, showErrors: false, onTutorshipChange: noop,
-  tutorFields: { data, nameInvalid: false, nameIssue: "", cpfInvalid: false, neighborhoodNames: [], showErrors: false, onField: noop, onMaskedField: noop, onCepChange: noop },
+  tutorFields: { data, identityRequired: false, nameInvalid: false, nameIssue: "", cpfInvalid: false, neighborhoodNames: [], showErrors: false, onField: noop, onMaskedField: noop, onCepChange: noop },
   contacts: { email: "", phone: "" }, followUp: { enabled: null }, onFollowUpChange: noop,
   policy: { loading: false, error: "", phoneEnabled: true, retry: noop },
 };

@@ -25,6 +25,16 @@ const render = (municipalityId = "town-a") => renderToStaticMarkup(<RequestTrack
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe("request tracking screens", () => {
+  it("marks both fields as required in their titles and places the send button on the right, also beside the code", () => {
+    mockTracking();
+    const html = render();
+    expect(html).toContain('>Protocolo<span class="required-asterisk">*</span></span>');
+    expect(html).toContain('>E-mail ou telefone do acompanhamento<span class="required-asterisk">*</span></span>');
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*class="[^"]*tw:justify-self-end[^"]*"/);
+    mockTracking({ step: TrackingStep.CODE });
+    expect(render()).toContain("tw:flex tw:flex-wrap tw:justify-end tw:gap-2");
+  });
+
   it("asks for the municipality before anything else", () => {
     mockTracking();
     const html = render("");

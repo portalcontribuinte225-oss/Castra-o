@@ -11,7 +11,7 @@ const data: TutorStepData = {
   neighborhood: "Centro", city: "Criciuma", latitude: "", longitude: "", email: "", phone: "",
 };
 const noop = vi.fn();
-const props = { data, nameInvalid: false, nameIssue: "", cpfInvalid: false, neighborhoodNames: ["Centro", "Liri"], showErrors: false, onField: noop, onMaskedField: noop, onCepChange: noop };
+const props = { data, identityRequired: false, nameInvalid: false, nameIssue: "", cpfInvalid: false, neighborhoodNames: ["Centro", "Liri"], showErrors: false, onField: noop, onMaskedField: noop, onCepChange: noop };
 const html = (overrides: Partial<React.ComponentProps<typeof TutorStepFields>> = {}) => renderToStaticMarkup(<TutorStepFields {...props} {...overrides} />);
 
 describe("the mobile in the registration contact", () => {
@@ -37,10 +37,19 @@ describe("the Tutor step", () => {
 
   it("asks for the mobile as required and the e-mail as optional, and no longer calls the whole contact optional", () => {
     const markup = html();
-    expect(markup).toContain(">Celular *</span>"); expect(markup).toContain(">E-mail (opcional)</span>");
+    expect(markup).toContain('>Celular<span class="required-asterisk">*</span></span>'); expect(markup).toContain(">E-mail (opcional)</span>");
     expect(markup).toContain("Contato de cadastro"); expect(markup).not.toContain("Contato de cadastro (opcional)");
     expect(markup).toMatch(/<input[^>]*required=""[^>]*aria-label="Celular de cadastro"/);
     expect(markup).not.toMatch(/<input[^>]*required=""[^>]*aria-label="E-mail de cadastro"/);
+  });
+
+  it("marks the name and the CPF as required in their titles only when the tutor is identified, never in the hints", () => {
+    const required = html({ identityRequired: true });
+    expect(required).toContain('>Nome completo<span class="required-asterisk">*</span></span>');
+    expect(required).toContain('>CPF<span class="required-asterisk">*</span></span>');
+    expect(required).toMatch(/<input[^>]*required=""[^>]*aria-label="Nome completo"/);
+    expect(html()).toContain(">Nome completo</span>"); expect(html()).toContain(">CPF</span>");
+    for (const markup of [required, html()]) expect(markup).not.toMatch(/placeholder="[^"]*\*/);
   });
 
   it("shows the contact errors only after an attempt, and the name and CPF errors when they are invalid", () => {

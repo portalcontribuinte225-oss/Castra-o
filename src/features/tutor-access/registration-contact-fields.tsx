@@ -41,7 +41,7 @@ export function RegistrationContactFields({ email, phone, onEmailChange, onPhone
           onChange={(event) => onEmailChange(event.target.value)}
         />
         <RequestTextField
-          label={notices ? "Celular" : "Celular *"}
+          label="Celular"
           error={issues.phone}
           aria-label={`Celular ${purpose}`}
           type="tel"
