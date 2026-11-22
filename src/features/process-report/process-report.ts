@@ -1,7 +1,8 @@
 import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
+import type { PrintablePrescription } from "../process-modal/prescription-pdf";
 
-// The process history and prescriptions come as text blocks for the PDF renderer.
-export interface ReportBlock {
+// The process history comes as text blocks for the PDF.
+interface ReportBlock {
   heading: string;
   text: string;
 }
@@ -22,43 +23,40 @@ export function historyBlocks(history: unknown, statusLabel: (status: string) =>
   }));
 }
 
-// One block per line of the prescription, so a long one flows over the pages; an empty line stays as a space between paragraphs.
-export function prescriptionBlocks(prescription: unknown): ReportBlock[] {
-  const text = typeof prescription === "string" ? prescription.trim() : "";
-  return text ? text.split(/\r?\n/).map((line) => ({ heading: "", text: line.trim() })) : [];
-}
-
-export interface ReportPrescription {
+interface IssuedPrescription {
   id: string;
   subtitle: string;
-  blocks: ReportBlock[];
+  animal: Record<string, unknown>;
+  prescription: PrintablePrescription;
 }
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {});
+const textValue = (value: unknown) => typeof value === "string" ? value : "";
 
-// Keep the original process-level prescription alongside prescriptions recorded per procedure.
-export function reportPrescriptions(animals: unknown, legacyText: unknown, { completedOnly = false } = {}): ReportPrescription[] {
-  const list = (Array.isArray(animals) ? animals : []).map(record);
-  const legacy = prescriptionBlocks(legacyText);
-  const found: ReportPrescription[] = legacy.length
-    ? [{ id: "legacy", subtitle: list[0]?.name ? `Animal: ${list[0].name}` : "", blocks: legacy }]
-    : [];
-  for (const [animalIndex, animal] of list.entries()) {
+// The prescriptions saved on the procedures of each animal, with what identifies each one.
+export function issuedPrescriptions(animals: unknown, { completedOnly = false } = {}): IssuedPrescription[] {
+  const found: IssuedPrescription[] = [];
+  for (const [animalIndex, animal] of (Array.isArray(animals) ? animals : []).map(record).entries()) {
     const procedures = Array.isArray(animal.procedures) ? animal.procedures.map(record) : [];
     for (const [procedureIndex, procedure] of procedures.entries()) {
       if (completedOnly && procedure.status !== ProcedureStatus.DONE) continue;
       const prescription = record(procedure.prescription);
-      const blocks = prescriptionBlocks(prescription.text);
-      if (!blocks.length) continue;
-      const professional = [prescription.professionalName, prescription.professionalRegistry].filter(Boolean).join(", ");
+      const text = textValue(prescription.text);
+      if (!text.trim()) continue;
+      const number = textValue(prescription.number);
+      const professionalName = textValue(prescription.professionalName);
+      const professionalRegistry = textValue(prescription.professionalRegistry);
+      const professional = [professionalName, professionalRegistry].filter(Boolean).join(", ");
       found.push({
         id: `${animalIndex}:${procedureIndex}`,
         subtitle: [
+          number && `Nº ${number}`,
           animal.name && `Animal: ${animal.name}`,
           procedure.name && `Procedimento: ${procedure.name}`,
           professional && `Profissional: ${professional}`,
         ].filter(Boolean).join("  ·  "),
-        blocks,
+        animal,
+        prescription: { text, number, professionalName, professionalRegistry, issuedAt: textValue(prescription.issuedAt) },
       });
     }
   }

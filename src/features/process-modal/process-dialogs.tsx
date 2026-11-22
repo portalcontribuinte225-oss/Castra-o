@@ -5,7 +5,7 @@ import { displayScheduleDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
 import { configFieldStyle, configTextareaStyle } from "../../components/ui";
 import type { AnyRecord } from "../../types";
-import { userBelongsToSector } from "../../App";
+import { userBelongsToSector } from "../teams/user-sectors";
 import { ProcessDialog } from "./process-dialog";
 
 export function AssignDialog({ sectors, users, initial, busy, onConfirm, onClose }: { sectors: AnyRecord[]; users: AnyRecord[]; initial: { sectorId: string; userId: string }; busy: boolean; onConfirm: (assignment: { sectorId: string; userId: string }) => void; onClose: () => void }) {

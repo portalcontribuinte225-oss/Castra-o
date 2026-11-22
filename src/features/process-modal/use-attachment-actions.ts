@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
-import { prepareProcessDocumentPreview } from "../../App";
+import { prepareProcessDocumentPreview } from "./process-document-preview";
 import type { AnyRecord } from "../../types";
 import { readFileAsDataUrl } from "../../utils";
 import { buildDocumentReviewDecision } from "../registered-animals/document-review-decisions";

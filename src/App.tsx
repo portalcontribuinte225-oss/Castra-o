@@ -1,5 +1,4 @@
 import React, { Suspense, lazy, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { api } from "./api";
 import {
   Activity,
@@ -17,7 +16,6 @@ import {
   Edit3,
   Eye,
   FileText,
-  Filter,
   HeartHandshake,
   KeyRound,
   LayoutDashboard,
@@ -59,8 +57,6 @@ import {
   GLOBAL_MUNICIPALITY_FILTER_KEY,
   accessRequesterTypes,
   aiProviderOptions,
-  countRequestAnimals,
-  countUsedVacancies,
   DEFAULT_DOCUMENT_MINIMUM_CONFIDENCE,
   filterByMunicipalityScope,
   generateScheduleDaysFromRule,
@@ -69,45 +65,30 @@ import {
   formatSizeRange,
   getItemMunicipalityId,
   getNextUpcomingMutirao,
-  hiddenWorkflowTags,
   initialAiSettings,
   initialBreeds,
   initialNeighborhoods,
   initialDocumentTypes,
   initialMunicipalities,
   initialRequestTypes,
-  initialScheduleDays,
-  initialScheduleRules,
   initialSizes,
   initialSpecies,
   initialTeams,
   isPastScheduleDay,
-  mergeTags,
   normalizeDocumentType,
   normalizeRequest,
-  normalizeRequestStatus,
   normalizeScheduleDateText,
   normalizeScheduleDay,
   normalizeScheduleSlots,
   parseScheduleDate,
-  requestHasTag,
-  requestResultLabel,
-  requestResultTag,
-  animalProcedureLabels,
-  requestTypeDomainLabels,
   requestTypeLabel,
   RequestType,
-  statusLabels,
-  statuses,
   sumScheduleSlotsVacancies,
   textToCriteriaList,
   triageStatusTone,
-  visibleWorkflowTags,
-  workflowTagLabels,
 } from "./domain";
 import {
   buildMetrics,
-  getRequestTypeName,
 } from "./analytics";
 import {
   ConfigActiveToggle,
@@ -118,7 +99,6 @@ import {
   configFieldStyle,
   configTextareaStyle,
   EmptyState,
-  Field,
   InfoTile,
   ModalHeader,
   PanelHeader,
@@ -131,16 +111,20 @@ import { ConfigDialogBackdrop } from "./components/config-dialog";
 import { Input } from "./components/input";
 import { useModalFocus } from "./components/modal-focus";
 import { WorkspaceMobileNavigation } from "./components/workspace-mobile-navigation";
+import { DocumentPreviewModal } from "./components/document-preview-modal";
+import { ToastContainer } from "./components/toast-container";
+import { PublicSchedulePicker } from "./features/schedule-picker/public-schedule-picker";
+import { getUserSectorIds, userBelongsToSector } from "./features/teams/user-sectors";
+import { createRequestDocumentDataUrl } from "./features/municipal-documents/request-document-pdf";
+import { downloadAnimalRecordPdf } from "./features/municipal-documents/animal-record-pdf";
+import { loadMunicipalityRecord } from "./features/municipal-documents/document-municipality";
+import { DeclarationDialog } from "./features/request-document/declaration-dialog";
 import {
-  dataUrlToUint8Array,
-  escapeHtml,
   formatCep,
   formatCpf,
   formatDateTime,
   formatPhone,
   getDataUrlMimeType,
-  getDocumentPreviewSource,
-  getUserUploadedProcessDocuments,
   isGlobalRole,
   isMasterRole,
   isValidCpf,
@@ -150,13 +134,11 @@ import {
   normalizeText,
   onlyDigits,
   readFileAsDataUrl,
-  uint8ArrayToDataUrl,
 } from "./utils";
-import { AccessRequestsView, accessStatusLabel } from "./features/accessRequests";
+import { AccessRequestsView } from "./features/accessRequests";
 import { AgendaView } from "./features/agenda";
 import { canEditRequests, useRequestActions } from "./features/request-actions";
 import { ProcessModal } from "./features/process-modal/process-modal";
-import { PDF_BASE_STYLES, printHtmlViaIframe } from "./features/process-report/print-html";
 import { ReportsView } from "./features/reports";
 import { ActiveFiltersBar } from "./features/request-filters/active-filters-bar";
 import { StaffNotificationBell } from "./features/staff-notifications/staff-notification-bell";
@@ -178,15 +160,12 @@ import {
   duplicateAnimal,
   mergeProcedureDocuments,
   needsProcedure,
-  procedureNames,
   procedureSignature,
   withProceduresAt,
 } from "./features/request-procedures/request-procedures";
-import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, isRequestFeeCharged, isRequestTypeCharged, resolveRequestTypes } from "../shared/request-types-contract.js";
-import { renderDeclaration } from "../shared/request-declaration-contract.js";
+import { animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, resolveRequestTypes } from "../shared/request-types-contract.js";
 import { isProcedureRequest, RequestOrigin } from "../shared/request-contract.js";
 import { readAccessLink } from "../shared/request-access-contract.js";
-import { RequestAcceptance, requestAcceptance } from "./features/request-document/request-acceptance";
 import { BreedsConfig } from "./features/breeds/breeds-config";
 import { NeighborhoodsConfig } from "./features/neighborhoods/neighborhoods-config";
 import { useNeighborhoodCatalog } from "./features/neighborhoods/use-neighborhood-catalog";
@@ -206,8 +185,7 @@ import { MUNICIPALITY_OPTION } from "./features/registered-animals/use-request-o
 import { WhatsappIntegrationTab } from "./features/whatsapp-integration/whatsapp-integration-tab";
 import { AnimalTutorship, tutorshipRequiresTutor } from "../shared/request-tutorship-contract.js";
 import { resolveRequestProcedures } from "../shared/request-procedure-contract.js";
-import { historyBlocks, reportPrescriptions } from "./features/process-report/process-report";
-import type { ReportBlock } from "./features/process-report/process-report";
+import { issuedPrescriptions } from "./features/process-report/process-report";
 import { useSession } from "./features/tutor-access/use-session";
 import { AuthEntry } from "./features/tutor-access/auth-entry";
 import { AuthEntryOrigin, authEntryKey, createAuthEntryContext } from "./features/tutor-access/auth-entry-context";
@@ -216,15 +194,12 @@ import { SmsSettings } from "./features/sms/sms-settings";
 import { EmailIntegrationTab } from "./features/email/email-integration-tab";
 import { IntegrationConfigItem } from "../shared/config-permission-contract.js";
 import { canUseIntegration, integrationTabItems } from "./features/integrations/integration-access";
-import { animalHistoryTone, getAnimalHistoryMunicipality, getAnimalHistorySchedule } from "./features/animal-services/animal-history";
-import type { AnimalRecord } from "./features/animal-services/animal-service-types";
 import { RequestTracking } from "./features/request-tracking/request-tracking";
 import { RequestAccess } from "./features/request-access/request-access";
 import { PublicReportPanel } from "./features/complaint/public-report-panel";
 import { registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
 import { PasswordChangeForm } from "./features/tutor-access/password-change-form";
 import { TutorArea } from "./features/tutor-access/tutor-area";
-import { TutorDataTab } from "./features/tutor-data/tutor-data-tab";
 
 import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./features/tutor-access/submission-envelope";
 import { validateTutorName } from "./features/tutor-access/tutor-identity";
@@ -391,7 +366,7 @@ export default function App() {
   const logout = useCallback(() => { setProcedureIntent(null); session.logout(); }, [session.logout]);
   useEffect(() => { if (session.ready && !session.user) setProcedureIntent((current) => current?.ownerId ? null : current); }, [session.ready, session.user]);
   return <SessionBoundary session={{ ...session, accept, logout }}
-    renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={downloadAnimalRecordPdf} createRequirement={createRequestPdfDataUrl} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} />}
+    renderTutor={(user) => <TutorArea key={user.id} user={user} intent={procedureIntent} onIntentConsumed={() => setProcedureIntent(null)} onSession={accept} onLogout={logout} downloadRecordPdf={async (record) => downloadAnimalRecordPdf({ history: record, municipality: await loadMunicipalityRecord(user.municipalityId || "") })} createRequirement={createRequestDocumentDataUrl} renderRequests={(rows) => <TutorDashboard requests={rows} currentUser={user} />}
       renderForm={(input) => <NewRequest key={input.context?.animal.id || "new-animal"} createRequest={(payload) => api.createRequest(buildRequestPayload(payload, user))} currentUser={user} selectedMunicipalityId={user.municipalityId || ""} initialMunicipalityId={user.municipalityId || ""} municipality={input.options[MUNICIPALITY_OPTION]} initialSchedule={input.intent?.schedule || ""} initialType={input.context?.requestTypes.find((type) => type.id === input.requestTypeId)?.name || input.intent?.requestTypeId || ""} onBack={input.onBack} onDone={input.onDone}
         requestTypes={input.context?.requestTypes || input.options[CONFIG_KEYS.requestTypes] || []} documentTypes={input.context?.documentTypes || input.options[CONFIG_KEYS.documentTypes] || []} speciesOptions={input.options[CONFIG_KEYS.species] || []} sizeOptions={input.options[CONFIG_KEYS.sizes] || []} breeds={input.options[CONFIG_KEYS.breeds] || []} neighborhoods={input.options[CONFIG_KEYS.neighborhoods] || []} aiSettings={input.options.ai || initialAiSettings} registeredContext={input.context} contextLoading={input.contextLoading} onRequestTypeChange={input.onRequestTypeChange} />}
     />}
@@ -464,8 +439,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   // A shared adoption link opens the public page on the animal; whoever is signed in sees the app as usual.
   const sharedAdoption = useSharedAdoption(!currentUser, handleMunicipalitySelect);
 
-  const selected = requests.find((request) => request.id === selectedId) || requests[0] || null;
-  const metrics = useMemo(() => buildMetrics(requests), [requests]);
 
   useEffect(() => {
     if (accessLink) window.history.replaceState(window.history.state, "", window.location.pathname);
@@ -1195,7 +1168,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             globalSearch={globalSearch}
             selectedMunicipalityId={activeMunicipalityId}
             onConsultAnimal={(query: AnyRecord) => api.consultAnimalByMicrochip(query)}
-            onGenerateProntuario={generateAndDownloadProntuario}
+            onGenerateProntuario={(history: AnyRecord) => downloadAnimalRecordPdf({ history, municipality: municipalities.find((item) => item.id === (history?.animal?.municipality_id || activeMunicipalityId)) || null })}
           />
         </Suspense>
       </main>
@@ -1218,15 +1191,6 @@ function normalizeTeams(value = initialTeams) {
     return { ...user, sectorIds, sectorId: user.sectorId || sectorIds[0] || "", municipalityId: user.municipalityId || user.municipality_id || "" };
   }) : [];
   return { sectors, users };
-}
-
-function getUserSectorIds(user: AnyRecord = {}) {
-  const ids = Array.isArray(user.sectorIds) ? user.sectorIds : [];
-  return [...new Set([...ids, user.sectorId].filter(Boolean))];
-}
-
-export function userBelongsToSector(user: AnyRecord = {}, sectorId = "") {
-  return Boolean(sectorId && getUserSectorIds(user).includes(sectorId));
 }
 
 function getUserSectorNames(user: AnyRecord = {}, sectors = []) {
@@ -1338,190 +1302,6 @@ function resolveConfiguredDocument(document: AnyRecord = {}, documentTypes: AnyR
   ));
   return configured ? { ...document, ...configured } : document;
 }
-function ScheduleDayButton({
-  hasVacancy,
-  selected,
-  mutirao = false,
-  disabled,
-  onClick,
-  children,
-}: AnyRecord) {
-  return (
-    <button
-      className={[
-        "calendar-day-button",
-        hasVacancy ? "has-vacancy" : "",
-        selected ? "selected" : "",
-        mutirao ? "mutirao-day" : "",
-      ].filter(Boolean).join(" ")}
-      type="button"
-      disabled={disabled}
-      aria-pressed={selected}
-      onClick={onClick}
-    >
-      {children}
-    </button>
-  );
-}
-export function PublicSchedulePicker({
-  scheduleDays = [],
-  selectedDate = "",
-  selectedOccurrenceKey = "",
-  onSelect,
-  pendingReservation = null,
-  title = "",
-  hint = "",
-  external = false,
-  internal = false,
-}) {
-  const [scheduleMonthIndex, setScheduleMonthIndex] = useState(0);
-  const [monthDropdownOpen, setMonthDropdownOpen] = useState(false);
-  const monthSelector = useRef<HTMLDivElement>(null);
-  const requiredVacancies = Math.max(Number(pendingReservation?.count) || 1, 1);
-  const scheduleWithUsage = scheduleDays.filter((day) => day.active !== false).map((day) => {
-    const confirmed = Math.max(day.vacancies - day.remaining, 0);
-    const pending = pendingReservation?.date === day.date && (!selectedOccurrenceKey || selectedOccurrenceKey === day.occurrenceKey) ? (pendingReservation.count || 0) : 0;
-    const used = confirmed + pending;
-    const offeredSlot = getAvailableScheduleSlot(day, requiredVacancies);
-    const confirmedRemaining = Math.max(day.vacancies - confirmed, 0);
-    return {
-      ...day,
-      used,
-      remaining: Math.max(day.vacancies - used, 0),
-      hasEnoughVacancies: confirmedRemaining >= requiredVacancies && Boolean(offeredSlot),
-      offeredSlot,
-      isPast: isPastScheduleDay(day.date),
-    };
-  });
-  const scheduleMonths = buildScheduleMonths(scheduleWithUsage);
-  const activeScheduleMonth = scheduleMonths[scheduleMonthIndex] || "";
-  const chosenDay = scheduleWithUsage.find((day) => day.date === selectedDate && (!selectedOccurrenceKey || day.occurrenceKey === selectedOccurrenceKey));
-  const chosenTime = chosenDay ? chosenDay.offeredSlot?.time || chosenDay.startTime || "" : "";
-  const scheduleByDate = new Map();
-  scheduleWithUsage.forEach((day) => {
-    const previous = scheduleByDate.get(day.date);
-    if (!previous || day.occurrenceKey === selectedOccurrenceKey || (!previous.hasEnoughVacancies && day.hasEnoughVacancies)) scheduleByDate.set(day.date, day);
-  });
-  const visibleScheduleDays = buildMonthCalendarDays(activeScheduleMonth).map((calendarDay) => {
-    if (calendarDay.offset) return calendarDay;
-    const configuredDay = scheduleByDate.get(calendarDay.date);
-    return configuredDay
-      ? { ...configuredDay, calendarDay: calendarDay.day, available: true }
-      : {
-          ...calendarDay,
-          weekday: calendarDay.weekday,
-          vacancies: 0,
-          remaining: 0,
-          used: 0,
-          isPast: isPastScheduleDay(calendarDay.date),
-          available: false,
-        };
-  });
-
-  useEffect(() => {
-    setScheduleMonthIndex(Math.max(scheduleMonths.indexOf(getCurrentScheduleMonthKey()), 0));
-  }, [scheduleMonths.join("|")]);
-
-  const MonthButton = internal ? Button : "button";
-  const hasMonthChoice = scheduleMonths.length > 1;
-
-  function closeMonthDropdown() {
-    setMonthDropdownOpen(false);
-    monthSelector.current?.querySelector<HTMLButtonElement>("button")?.focus();
-  }
-
-  return (
-    <section className="panel public-schedule-picker">
-      <div className="schedule-picker-controls">
-        {title && <span className="form-sub-card-title">{title}</span>}
-        {hint && <p className="form-hint">{hint}</p>}
-        <div className="sched-month-selector" ref={internal ? monthSelector : undefined} onBlur={internal ? (event) => {
-          if (!event.currentTarget.contains(event.relatedTarget)) setMonthDropdownOpen(false);
-        } : undefined} onKeyDown={(event) => {
-          if (!internal || !hasMonthChoice || !monthDropdownOpen || event.key !== "Escape") return;
-          event.preventDefault();
-          event.stopPropagation();
-          closeMonthDropdown();
-        }}>
-          <MonthButton
-            type="button"
-            variant={internal ? "custom" : undefined}
-            className={internal ? "tw:border-card-border tw:bg-card-page tw:font-semibold tw:text-ui-ink tw:hover:bg-[var(--accent-blue-soft)] tw:[&>svg:first-child]:text-[color:var(--blue)]" : "sched-month-trigger"}
-            aria-expanded={internal && hasMonthChoice ? monthDropdownOpen : undefined}
-            onClick={() => setMonthDropdownOpen((open) => !open)}
-          >
-            <CalendarDays size={14} />
-            <span>{formatMonthYear(activeScheduleMonth)}</span>
-            {hasMonthChoice && <ChevronDown size={14} className={monthDropdownOpen ? "sched-chevron-open" : ""} />}
-          </MonthButton>
-          {hasMonthChoice && monthDropdownOpen && (
-            <div className="sched-month-dropdown">
-              {scheduleMonths.map((month, i) => (
-                <MonthButton
-                  key={month}
-                  type="button"
-                  variant={internal ? "custom" : undefined}
-                  className={internal
-                    ? "tw:w-full tw:whitespace-normal tw:border-card-border tw:bg-card-surface tw:px-2 tw:font-medium tw:text-ui-text tw:hover:bg-[var(--accent-blue-soft)] tw:aria-pressed:border-[color:var(--blue)] tw:aria-pressed:bg-[var(--accent-blue-soft)] tw:aria-pressed:text-[color:var(--blue)]"
-                    : `sched-month-tab${i === scheduleMonthIndex ? " is-active" : ""}`}
-                  aria-pressed={internal ? i === scheduleMonthIndex : undefined}
-                  onClick={() => { setScheduleMonthIndex(i); closeMonthDropdown(); }}
-                >
-                  {formatMonthYear(month)}
-                </MonthButton>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="schedule-picker-calendar">
-        <div className="calendar-weekdays" aria-hidden="true">
-          {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((weekday) => <span key={weekday}>{weekday}</span>)}
-        </div>
-        <div className="calendar-availability">
-          {visibleScheduleDays.length === 0 && (
-            <div className="calendar-empty-month">Nenhuma data configurada para {formatMonthYear(activeScheduleMonth)}.</div>
-          )}
-          {visibleScheduleDays.map((day, index) =>
-            day.offset
-              ? <div key={`offset-${index}`} className="calendar-day-button calendar-day-offset" aria-hidden="true" />
-              : (
-                <ScheduleDayButton
-                  key={day.date}
-                  selected={selectedDate === day.date}
-                  mutirao={day.kind === "Mutirao"}
-                  hasVacancy={day.available && !day.isPast && day.hasEnoughVacancies}
-                  disabled={!day.available || !day.hasEnoughVacancies || day.isPast}
-                  onClick={() => onSelect(day.date, day.occurrenceKey || "")}
-                >
-                  <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
-                  <small>{!day.available ? "Sem atendimento" : day.isPast ? "Já passou" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} · ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
-                  {day.kind === "Mutirao" && <em>Mutirão</em>}
-                </ScheduleDayButton>
-              )
-          )}
-        </div>
-      </div>
-      {chosenDay && <p className="schedule-chosen" role="status">Você escolheu {new Intl.DateTimeFormat("pt-BR", { weekday: "long", day: "numeric", month: "long" }).format(new Date(parseScheduleDate(chosenDay.date)))}{chosenTime ? `, às ${chosenTime}` : ""}.</p>}
-      {selectedDate && scheduleWithUsage.filter((day) => day.date === selectedDate).length > 1 && (
-        <div className="schedule-occurrence-options" role="group" aria-label="Local e horário">
-          <p>Escolha o local desta data:</p>
-          {scheduleWithUsage.filter((day) => day.date === selectedDate).map((day) => {
-            const selected = selectedOccurrenceKey === day.occurrenceKey;
-            const remaining = Math.max(day.vacancies - (day.used - (selected ? requiredVacancies : 0)), 0);
-            const label = `${day.locationName || "Local de atendimento"} · ${day.offeredSlot?.time || day.startTime} · ${remaining} vagas`;
-            const disabled = !day.hasEnoughVacancies || day.isPast;
-            const onClick = () => onSelect(day.date, day.occurrenceKey || "");
-            return external
-              ? <Button key={day.occurrenceKey || day.id} variant={selected ? "primary" : "outline"} aria-pressed={selected} className="tw:whitespace-normal tw:text-center" disabled={disabled} onClick={onClick}>{label}</Button>
-              : <button type="button" key={day.occurrenceKey || day.id} className={selected ? "primary-action" : "ghost-button"} disabled={disabled} onClick={onClick}>{label}</button>;
-          })}
-        </div>
-      )}
-    </section>
-  );
-}
-
 function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedAdoption = null }: AnyRecord) {
   const availableAnimals = sortAdoptionsForHighlight(adoptionAnimals.filter((animal) => animal.status !== ADOPTION_STATUS_ADOPTED));
   const [speciesFilter, setSpeciesFilter] = useState("");
@@ -1860,22 +1640,6 @@ function formatAdoptionDate(value = "") {
   return parsed.toLocaleDateString("pt-BR");
 }
 
-function matchesAdoptionSearch(animal: AnyRecord = {}, query = "") {
-  const normalizedQuery = normalizeText(query.trim());
-  if (!normalizedQuery) return true;
-  const searchable = [
-    animal.name,
-    animal.animal_name,
-    animal.species,
-    animal.sex,
-    animal.age,
-    animal.tone,
-    animal.description,
-    animal.animal_microchip,
-    animal.microchip,
-  ];
-  return normalizeText(searchable.filter(Boolean).join(" ")).includes(normalizedQuery);
-}
 function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequest, adoptionAnimals = [], sharedAdoption = null, onInterestSent, municipalities = [], selectedMunicipalityId = "", onMunicipalitySelect, createRequest, scheduleDays = [], requestTypes = [], documentTypes = [], speciesOptions = [], sizeOptions = [], breeds = [], aiSettings = initialAiSettings, onRequestCreated }: AnyRecord) {
   const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
   const [authEntryError, setAuthEntryError] = useState("");
@@ -2058,7 +1822,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
               <RequestDoneCard
                 protocol={publicServiceDone.protocol}
                 followUp={(publicServiceDone.workflow_data || publicServiceDone.workflowData)?.followUp}
-                createRequirement={() => createRequestPdfDataUrl(publicServiceDone, activeMunicipality)}
+                createRequirement={() => createRequestDocumentDataUrl(publicServiceDone, activeMunicipality)}
                 closeLabel="Voltar ao início"
                 onClose={closePublicService}
                 onCreatePassword={publicServiceDone.cpf && isProcedureRequest(publicServiceDone.request_type)
@@ -2109,7 +1873,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 municipalityId={selectedMunicipalityId}
                 initialProtocol={accessPrefill?.protocol}
                 initialCpf={accessPrefill?.cpf}
-                createRequirement={(request) => createRequestPdfDataUrl(request, activeMunicipality)}
+                createRequirement={(request) => createRequestDocumentDataUrl(request, activeMunicipality)}
                 onSession={onLogin}
                 onLogin={() => openAuthEntry(AuthEntryOrigin.REQUEST_ACCESS)}
               />
@@ -2295,15 +2059,6 @@ function MunicipalitySelectorChip({ municipalities, selectedMunicipalityId, onSe
 
 const GUEST_USER = { role: "guest", name: "", email: "", neighborhood: "", address: "", cpf: "", cep: "", number: "", city: "", state: "", phone: "" };
 
-async function downloadAnimalRecordPdf(record: AnimalRecord) {
-  const bundle = await generateProntuarioPdf({}, record);
-  if (!bundle?.dataUrl) return;
-  const anchor = window.document.createElement("a");
-  anchor.href = bundle.dataUrl;
-  anchor.download = bundle.fileName || `prontuario-${record.animal?.name || "animal"}.pdf`;
-  anchor.click();
-}
-
 function TutorDashboard({ requests, currentUser }: AnyRecord) {
   const safeRequests = useMemo(() => (Array.isArray(requests) ? requests : []).map(normalizeRequest), [requests]);
   const [detailsRequest, setDetailsRequest] = useState(null);
@@ -2339,8 +2094,8 @@ function TutorDashboard({ requests, currentUser }: AnyRecord) {
         const wf: AnyRecord = req.workflowData || req.workflow_data || {};
         const animalBreed = animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "—");
         const microchip = animal.microchip || req.animalMicrochip || "—";
-        const performed = wf.attendanceProcedure || wf.performedProcedures || req.performedProcedures || "";
-        const prescriptions = reportPrescriptions(resolveRequestProcedures(req), wf.attendancePrescription, { completedOnly: true });
+        const performed = wf.performedProcedures || req.performedProcedures || "";
+        const prescriptions = issuedPrescriptions(resolveRequestProcedures(req), { completedOnly: true });
         const cancelReason = wf.cancelReason || req.rejectionReason || "";
         return (
           <div className="modal-backdrop">
@@ -2365,13 +2120,7 @@ function TutorDashboard({ requests, currentUser }: AnyRecord) {
                         const history = animal.id
                           ? await api.consultAnimalById(animal.id).catch(() => null)
                           : chip ? await api.consultAnimalByMicrochip({ microchip: chip, municipalityId }).catch(() => null) : null;
-                        const bundle = await generateProntuarioPdf(req, history);
-                        if (bundle?.dataUrl) {
-                          const a = document.createElement("a");
-                          a.href = bundle.dataUrl;
-                          a.download = bundle.fileName || `prontuario-${animal.name || req.protocol}.pdf`;
-                          a.click();
-                        }
+                        await downloadAnimalRecordPdf({ request: req, history, municipality: await loadMunicipalityRecord(municipalityId) });
                       } finally { setDownloadingId(null); }
                     }}
                   >
@@ -2425,8 +2174,8 @@ function TutorDashboard({ requests, currentUser }: AnyRecord) {
                     <div className="prontuario-grid">
                       {performed && <InfoTile label="Procedimento realizado" value={performed} />}
                       {wf.attendanceMicrochip && <InfoTile label="Microchip aplicado" value={wf.attendanceMicrochip} />}
-                      {prescriptions.map(({ id, subtitle, blocks }) => (
-                        <InfoTile key={id} label={id === "legacy" ? "Receita / Prescrição" : `Receita · ${subtitle}`} value={blocks.map(({ text }) => text).join("\n")} />
+                      {prescriptions.map(({ id, subtitle, prescription }) => (
+                        <InfoTile key={id} label={`Receita · ${subtitle}`} value={prescription.text} />
                       ))}
                       {cancelReason && <InfoTile label="Motivo cancelamento" value={cancelReason} />}
                     </div>
@@ -2523,6 +2272,7 @@ function NewRequest({
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<AnyRecord | null>(null);
+  const [declarationOpen, setDeclarationOpen] = useState(false);
   const [submissionError, setSubmissionError] = useState("");
   const [followUp, setFollowUp] = useState<FollowUpValue>(emptyFollowUp);
   // The public form asks first how the person wants to request: the rest of the step opens for a first request.
@@ -2583,8 +2333,6 @@ function NewRequest({
   // The request types the animals ask for, together: they decide the steps, the tutor and the documents of the request.
   const selectedRequestTypes = resolveRequestTypes({ animals }, configuredRequestTypes);
   const procedureFields = deriveRequestTypeFields(selectedRequestTypes);
-  // The declaration the tutor accepts: the words of the municipality, and the fee clause only when a chosen procedure is charged.
-  const declaration = renderDeclaration({ municipalityName: municipality?.name, departmentName: municipality?.department_name, charged: selectedRequestTypes.some(isRequestTypeCharged) });
   // Without request types configured there is nothing to choose, so the animals go without procedures, as before.
   const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
   // Whoever is a tutor already (the account, or a registered animal) is not asked whether the animal has one: the answer is "with tutor".
@@ -2956,23 +2704,25 @@ function NewRequest({
     try {
       // The staff and the public send the same request; each adds only what is its own: the notes and the origin, or the term.
       const own = internalSimple
-        ? { notes: sent.notes || "", signedAt: "", tags: [], origin: RequestOrigin.INTERNAL }
-        : { declarationAccepted: accepted, signedAt: new Date().toISOString() };
+        ? { notes: sent.notes || "", tags: [], origin: RequestOrigin.INTERNAL }
+        : { declarationAccepted: accepted };
       await sendRequest({ ...(await buildRequestSubmission()), ...own });
     } finally {
       setSubmitting(false);
     }
   }
 
-  function openDeclarationPdf() {
-    const html = buildDeclarationPdfHtml(requestData, animals.map((animal) => ({ ...animal, procedures: procedureNames(animal, configuredRequestTypes).join(", ") })), declaration);
-    printHtmlViaIframe(html);
+  function selectedRequestSchedule() {
+    const count = Math.max(animals.length, 1);
+    const day = selectScheduleOccurrence(scheduleDays, sent.schedule, sent.scheduleOccurrenceKey, count);
+    const slot = getAvailableScheduleSlot(day, count);
+    const time = slot?.time || day?.startTime || "";
+    return { day, time };
   }
 
   // What the staff and the public send in common: the tutor, the animals, the date chosen, the notices and the documents.
   async function buildRequestSubmission() {
-    const selectedScheduleDay = selectScheduleOccurrence(scheduleDays, sent.schedule, sent.scheduleOccurrenceKey, Math.max(animals.length, 1));
-    const selectedScheduleSlot = getAvailableScheduleSlot(selectedScheduleDay, Math.max(animals.length, 1));
+    const { day: selectedScheduleDay, time: selectedScheduleTime } = selectedRequestSchedule();
     const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "";
     const addressString = [sent.address, sent.number, sent.neighborhood, sent.city, sent.state, sent.cep].filter(Boolean).join(", ");
     const hasGpsCoords = sent.latitude && sent.longitude;
@@ -2994,10 +2744,12 @@ function NewRequest({
       cpf: sent.cpf || "",
       email: sent.email || "",
       cep: sent.cep || "",
+      city: sent.city || "",
+      state: sent.state || "",
       preferredSchedule: sent.schedule || "",
       municipalityId: followUpMunicipalityId || selectedScheduleDay?.municipalityId || "",
-      scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
-      scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+      scheduleTime: selectedScheduleTime,
+      scheduleSlotTime: selectedScheduleTime,
       scheduleLocationName: selectedScheduleDay?.locationName || "",
       scheduleAddress: selectedScheduleDay?.locationAddress || "",
       scheduleAddressUrl: selectedScheduleDay?.addressUrl || "",
@@ -3008,8 +2760,8 @@ function NewRequest({
       longitude,
       workflowData: {
         isFarmer: sent.isFarmer,
-        scheduleTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
-        scheduleSlotTime: selectedScheduleSlot?.time || selectedScheduleDay?.startTime || "",
+        scheduleTime: selectedScheduleTime,
+        scheduleSlotTime: selectedScheduleTime,
         scheduleOccurrenceKey: selectedScheduleDay?.occurrenceKey || "",
         ...tutorshipAnswer,
         followUp: buildFollowUpPayload({ enabled: noticesEnabled }, tutorContacts, followUpPolicy.phoneEnabled),
@@ -3033,7 +2785,7 @@ function NewRequest({
         setSubmissionError("Não foi possível obter o protocolo. Confira o envio antes de tentar novamente.");
         return;
       }
-      onDone?.(normalizeRequest({ ...payload, ...created, protocol }));
+      onDone?.(normalizeRequest({ ...payload, ...created, workflowData: created.workflow_data || created.workflowData || payload.workflowData, protocol }));
     } catch (err) {
       if (err?.status === 409) availability.refresh();
       setSubmissionError(err?.message || "Falha ao enviar solicitação. Tente novamente.");
@@ -3237,7 +2989,7 @@ function NewRequest({
                   {!internalSimple && <div className="doc-declaration">
                     <p>
                       <span>Declaração de responsabilidade</span>{" · "}
-                      <Button variant="outline" onClick={openDeclarationPdf}>Ler</Button>
+                      <Button variant="outline" onClick={() => setDeclarationOpen(true)}>Ler</Button>
                     </p>
                     <label className={`tw:flex tw:min-h-10 tw:cursor-pointer tw:items-center tw:gap-2 tw:text-sm ${showInvalid("accepted") ? "tw:text-ui-danger" : "tw:text-ui-text"}`}>
                       <input type="checkbox" className="tw:size-5 tw:shrink-0 tw:accent-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent" aria-invalid={showInvalid("accepted") || undefined} checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
@@ -3250,172 +3002,9 @@ function NewRequest({
           </div>}
       </RequestFormLayout>
       {previewDocument && <DocumentPreviewModal document={previewDocument} onClose={() => setPreviewDocument(null)} external={!internalSimple} />}
+      {declarationOpen && <DeclarationDialog municipalityName={municipality?.name || ""} tutorName={sent.tutor || (currentUser.role === "tutor" ? currentUser.name : "")} onClose={() => setDeclarationOpen(false)} />}
       {reusedPreview && registeredContext && <ReusableDocumentPreview key={`${reusedPreview.attachmentId}:${reusedPreview.reuseRef.hash}`} animalId={registeredContext.animal.id} candidate={reusedPreview} onClose={() => setReusedPreview(null)} />}
     </>
-  );
-}
-
-function buildDeclarationPdfHtml(requestData, animals = [], declaration) {
-  const value = (input) => escapeHtml(String(input ?? "-"));
-  const yesNo = (input) => input === true ? "Sim" : input === false ? "Não" : String(input || "-");
-  const renderDataItem = (label, input) => `<div class="data-item"><span>${escapeHtml(label)}</span><strong>${value(input || "-")}</strong></div>`;
-  const tutorFields = [
-    ["Nome completo", requestData.tutor],
-    ["CPF", requestData.cpf],
-    ["Celular", requestData.phone],
-    ["Email", requestData.email],
-    ["CEP", requestData.cep],
-    ["Endereço", requestData.address],
-    ["Número", requestData.number],
-    ["Bairro", requestData.neighborhood],
-    ["Cidade", requestData.city],
-    ["UF", requestData.state],
-    ["Agricultor", yesNo(requestData.isFarmer)],
-    ["Data da agenda", requestData.schedule],
-  ];
-  const animalFieldLabels = [
-    ["Procedimentos", "procedures"],
-    ["Nome", "name"],
-    ["Espécie", "species"],
-    ["Sexo", "sex"],
-    ["Raça", "breedType"],
-    ["Descrição da raça", "breedDescription"],
-    ["Porte", "size"],
-    ["Peso", "weight"],
-    ["Idade", "age"],
-    ["Data de nascimento", "birthDate"],
-    ["Pelagem", "coat"],
-    ["Possui microchip", "hasChip"],
-    ["Microchip", "microchip"],
-    ["Vermifugado", "dewormed"],
-    ["Vacinas em dia", "vaccinated"],
-    ["Histórico de doenças", "illnessHistory"],
-    ["Alimentação", "food"],
-  ];
-  const animalRows = (animals.length ? animals : [{}]).map((animal, index) => `
-    <div class="animal-card">
-      <div class="animal-card-title">Animal ${index + 1}</div>
-      <div class="data-grid compact-four">
-        ${animalFieldLabels.map(([label, key]) => renderDataItem(label, animal?.[key])).join("")}
-      </div>
-    </div>
-  `).join("");
-  const declarationItems = declaration.items;
-  const recommendationItems = declaration.recommendations;
-
-  return `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Declaração da solicitação</title>
-    <style>${PDF_BASE_STYLES}</style>
-  </head>
-  <body>
-    <main class="pdf-page pdf-page--compact">
-      <header class="pdf-header compact-header">
-        <div>
-          <h1>Dados informados para castração animal</h1>
-        </div>
-        <div class="header-box"><span>Data</span><strong>${new Date().toLocaleDateString("pt-BR")}</strong></div>
-      </header>
-      <section class="section compact-section">
-        <div class="section-title">Dados do tutor</div>
-        <div class="data-grid compact-four">
-          ${tutorFields.map(([label, input]) => renderDataItem(label, input)).join("")}
-        </div>
-      </section>
-      <section class="section compact-section">
-        <div class="section-title">Dados do animal</div>
-        ${animalRows}
-      </section>
-      <footer class="footer"><span>Sistema municipal de castração animal</span><span>Página 1 de 2</span></footer>
-    </main>
-
-    <main class="pdf-page declaration-page">
-      <section class="declaration-document">
-        <h1>DECLARAÇÃO DE RESPONSABILIDADES</h1>
-        <h2>CASTRAÇÃO ANIMAL</h2>
-        <p class="declaration-lead">Declaro para fins civis, penais e administrativos:</p>
-        <ul class="responsibility-list">
-          ${declarationItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-          <li>
-            Recomendações:
-            <ul class="recommendation-list">
-              ${recommendationItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-            </ul>
-          </li>
-        </ul>
-      </section>
-      <footer class="footer"><span>Sistema municipal de castração animal</span><span>Página 2 de 2</span></footer>
-    </main>
-  </body>
-</html>`;
-}
-export function DocumentPreviewModal({ document, onClose, external = false, returnFocus }: AnyRecord) {
-  const previewLayer = useRef<HTMLDivElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
-  useModalFocus(previewLayer, !external, returnFocus);
-  const dataUrl = getDocumentPreviewSource(document);
-  const mimeType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
-  const isImage = mimeType?.startsWith("image/");
-  const isPdf = mimeType === "application/pdf";
-  const canPreview = Boolean(dataUrl) && (isImage || isPdf);
-  const title = document.documentName || document.fileName;
-
-  useEffect(() => {
-    if (!external) return;
-    const trigger = window.document.activeElement;
-    dialogRef.current?.querySelector("button")?.focus();
-    return () => { if (trigger instanceof HTMLElement) trigger.focus(); };
-  }, [external]);
-
-  const preview = (
-    <div className="modal-backdrop" ref={previewLayer} data-managed-dialog={external ? undefined : ""}>
-      <div
-        ref={dialogRef}
-        className="document-preview-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title || "Prévia do documento"}
-        onKeyDown={external ? (event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } } : undefined}
-      >
-        {external ? (
-          <header className="tw:flex tw:items-start tw:justify-between tw:gap-3 tw:p-2">
-            <div className="tw:min-w-0 tw:break-words">
-              <h2 className="tw:m-0 tw:text-lg tw:font-semibold tw:text-ui-ink">{title}</h2>
-              {document.fileName !== title && <p className="tw:m-0 tw:text-sm tw:text-ui-muted">{document.fileName}</p>}
-            </div>
-            <CloseButton onClick={onClose} />
-          </header>
-        ) : <ModalHeader appearance="config" title={title} subtitle={document.fileName !== title ? document.fileName : undefined} onClose={onClose} />}
-        <div className="document-preview-frame">
-          {isImage && <img src={dataUrl} alt={document.documentName || document.fileName} />}
-          {isPdf && (
-            <object title={document.fileName} data={dataUrl} type="application/pdf" tabIndex={external ? undefined : 0}>
-              <embed src={dataUrl} type="application/pdf" />
-            </object>
-          )}
-          {!canPreview && (
-            <EmptyState title="Prévia indisponível" text="Este anexo não possui arquivo de prévia salvo em formato compatível." />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-  return external || typeof window === "undefined" ? preview : createPortal(preview, window.document.body);
-}
-
-export function ToastContainer({ toasts, onDismiss }: AnyRecord) {
-  if (!toasts.length) return null;
-  return (
-    <div className="toast-container" role="region" aria-live="polite">
-      {toasts.map((toast: AnyRecord) => (
-        <div key={toast.id} className={`toast toast--${toast.type}`} onClick={() => onDismiss(toast.id)}>
-          <span className="toast-msg">{toast.message}</span>
-          <button className="toast-close" type="button" aria-label="Fechar" onClick={(e) => { e.stopPropagation(); onDismiss(toast.id); }}>×</button>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -3453,6 +3042,8 @@ function AdminDashboard({
     setCreatedRequest(null);
   }
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
+  // A global user without a municipality chosen sees the requests of every municipality together.
+  const mixedMunicipalities = isGlobalRole(currentUser?.role) && !selectedMunicipalityId;
 
   function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
     const id = Date.now() + Math.random();
@@ -3570,8 +3161,10 @@ function AdminDashboard({
             if (isAccessRequest) setActive?.("credenciamento");
             else openRequestPreview(request);
           }
+          // Each municipality counts its own protocols: when the list mixes municipalities, the protocol says which one it is.
+          const protocol = mixedMunicipalities && !isAccessRequest ? `#${request.protocol} · ${getMunicipalityLabel(request.municipalityId, municipalities)}` : `#${request.protocol}`;
           const fields = [
-            { label: "Protocolo", value: `#${request.protocol}` },
+            { label: "Protocolo", value: protocol },
             { label: "Tutor", value: displayText(request.tutor) },
             { label: "Animal", value: request.animals.map((animal) => displayText(animal.name)).join(", ") || "-" },
             { label: "Tipo", value: isAccessRequest ? "Credenciamento" : requestTypeLabel(request) },
@@ -3666,7 +3259,7 @@ function AdminDashboard({
                 <RequestDoneCard
                   protocol={createdRequest.protocol}
                   followUp={(createdRequest.workflow_data || createdRequest.workflowData)?.followUp}
-                  createRequirement={() => createRequestPdfDataUrl(createdRequest, municipalities.find((item) => item.id === createdRequest.municipalityId))}
+                  createRequirement={() => createRequestDocumentDataUrl(createdRequest, municipalities.find((item) => item.id === createdRequest.municipalityId))}
                   closeLabel="Fechar"
                   onClose={closeCreateRequest}
                 />
@@ -4772,7 +4365,6 @@ function ConfigView({
   const [agendaSaveStatus, setAgendaSaveStatus] = useState("");
   const [editingSpeciesId, setEditingSpeciesId] = useState(null);
   const [editingDocumentId, setEditingDocumentId] = useState(null);
-  const [agendaLocationStatus, setAgendaLocationStatus] = useState("");
   const [newRequestType, setNewRequestType] = useState<AnyRecord>(emptyRequestType);
   const [editingRequestTypeId, setEditingRequestTypeId] = useState(null);
   const [requestTypeSaving, setRequestTypeSaving] = useState(false);
@@ -4851,12 +4443,6 @@ function ConfigView({
   const [userSaveError, setUserSaveError] = useState("");
   const [agendaForm, setAgendaForm] = useState(emptyAgendaForm);
   const [aiSaveStatus, setAiSaveStatus] = useState("");
-  const [singleDate, setSingleDate] = useState("");
-  const [singleVacancies, setSingleVacancies] = useState("20");
-  const [recurringStart, setRecurringStart] = useState("");
-  const [recurringEnd, setRecurringEnd] = useState("");
-  const [recurringVacancies, setRecurringVacancies] = useState("20");
-  const [recurringWeekdays, setRecurringWeekdays] = useState([]);
   const configCurrentTeamUser = (teams.users || []).find((user) => (
     String(user.id || "") === String(currentUser?.id || "")
     || String(user.email || "").toLowerCase() === String(currentUser?.email || "").toLowerCase()
@@ -5007,19 +4593,6 @@ function ConfigView({
     }
   }
 
-  function toggleRequestDocument(typeId, document) {
-    setRequestTypes?.((current) =>
-      current.map((type) => {
-        if (!matchesScopedConfigItem(type, typeId)) return type;
-        const documents = type.documents || [];
-        const exists = documents.some((item) => item.id === document.id);
-        return {
-          ...type,
-          documents: exists ? documents.filter((item) => item.id !== document.id) : [...documents, document],
-        };
-      }),
-    );
-  }
 
   function buildDocumentPayload(payload: AnyRecord = {}, existing: AnyRecord = {}) {
     const minimumConfidencePercent = Number.isFinite(Number(payload.minimumConfidence))
@@ -5072,25 +4645,7 @@ function ConfigView({
     }
     setDocumentTypes?.((current) => [...current, normalizeDocumentType(buildDocumentPayload({ ...payload, createdAt: new Date().toISOString() }))]);
   }
-  function patchDocumentType(documentId, patch) {
-    setDocumentTypes?.((current) => current.map((document) => (matchesScopedConfigItem(document, documentId) ? normalizeDocumentType({ ...document, ...patch }) : document)));
-    setRequestTypes?.((current) =>
-      current.map((type) => ({
-        ...type,
-        documents: (type.documents || []).map((document) => (matchesScopedConfigItem(document, documentId) ? normalizeDocumentType({ ...document, ...patch }) : document)),
-      })),
-    );
-  }
 
-  function deleteDocumentType(documentId) {
-    setDocumentTypes?.((current) => current.filter((document) => !matchesScopedConfigItem(document, documentId)));
-    setRequestTypes?.((current) =>
-      current.map((type) => ({
-        ...type,
-        documents: (type.documents || []).filter((document) => !matchesScopedConfigItem(document, documentId)),
-      })),
-    );
-  }
 
   function createSpecies(payload: AnyRecord = {}) {
     const nextSpecies = {
@@ -5193,9 +4748,6 @@ function ConfigView({
     setConfigModal("size");
   }
 
-  function deleteListItem(setter, itemId) {
-    setter?.((current) => current.filter((item) => !matchesScopedConfigItem(item, itemId)));
-  }
 
   function openMunicipalityModal(municipality = null) {
     if (municipality) {
@@ -5398,24 +4950,7 @@ function ConfigView({
     setSectorModal(true);
   }
 
-  function patchSector(sectorId, patch) {
-    setTeams?.((current) => ({
-      ...current,
-      sectors: (current.sectors || []).map((sector) => (matchesScopedConfigItem(sector, sectorId) ? { ...sector, ...patch } : sector)),
-    }));
-  }
 
-  function deleteSector(sectorId) {
-    setTeams?.((current) => ({
-      ...current,
-      sectors: (current.sectors || []).filter((sector) => !matchesScopedConfigItem(sector, sectorId)),
-      users: (current.users || []).map((user) => {
-        if (configMunicipalityScopeId && getItemMunicipalityId(user) !== configMunicipalityScopeId) return user;
-        const nextSectorIds = getUserSectorIds(user).filter((id) => id !== sectorId);
-        return { ...user, sectorIds: nextSectorIds, sectorId: nextSectorIds[0] || "" };
-      }),
-    }));
-  }
 
   function createPermissionGroup() {
     const name = newPermissionGroup.name?.trim();
@@ -5457,9 +4992,6 @@ function ConfigView({
     setPermissionModal(true);
   }
 
-  function patchPermissionGroup(groupId, patch) {
-    setPermissionGroups?.((current) => current.map((group) => (matchesScopedConfigItem(group, groupId) ? { ...group, ...patch } : group)));
-  }
 
   function togglePermissionList(key, value) {
     setNewPermissionGroup((current) => {
@@ -5549,19 +5081,7 @@ function ConfigView({
     setUserModal(true);
   }
 
-  function patchTeamUser(userId, patch) {
-    setTeams?.((current) => ({
-      ...current,
-      users: (current.users || []).map((user) => (user.id === userId ? { ...user, ...patch } : user)),
-    }));
-  }
 
-  function deleteTeamUser(userId) {
-    setTeams?.((current) => ({
-      ...current,
-      users: (current.users || []).filter((user) => user.id !== userId),
-    }));
-  }
 
   function toInputDate(dateText) {
     if (!dateText) return "";
@@ -5586,68 +5106,7 @@ function ConfigView({
     return ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"][date.getDay()];
   }
 
-  async function upsertScheduleDay(dateValue, vacanciesValue) {
-    if (!dateValue) return;
-    const date = toScheduleDate(dateValue);
-    const weekday = getWeekdayLabel(dateValue);
-    const vacancies = Math.max(Number(vacanciesValue) || 0, 0);
-    try {
-      const existing = scheduleDays.find((day) => day.date === date);
-      if (existing?.id) {
-        const updated = await api.updateScheduleDay(existing.id, { vacancies });
-        setScheduleDays?.((current) => current.map((day) => day.date === date ? normalizeScheduleDay(updated) : day));
-      } else {
-        const created = await api.createScheduleDay({ date, weekday, vacancies });
-        setScheduleDays?.((current) =>
-          [...current.filter((d) => d.date !== date), normalizeScheduleDay(created)]
-            .sort((l, r) => parseScheduleDate(l.date) - parseScheduleDate(r.date))
-        );
-      }
-    } catch (err) {
-      console.error("Erro ao salvar dia de agenda:", err);
-    }
-  }
 
-  async function createRecurringSchedule() {
-    if (!recurringStart || !recurringEnd || recurringWeekdays.length === 0) return;
-    const start = new Date(`${recurringStart}T12:00:00`);
-    const end = new Date(`${recurringEnd}T12:00:00`);
-    const newDays = [];
-
-    for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
-      if (recurringWeekdays.includes(date.getDay())) {
-        const value = date.toISOString().slice(0, 10);
-        newDays.push({
-          date: toScheduleDate(value),
-          weekday: getWeekdayLabel(value),
-          vacancies: Math.max(Number(recurringVacancies) || 0, 0),
-          active: true,
-        });
-      }
-    }
-
-    const saved = [];
-    for (const day of newDays) {
-      try {
-        const existing = scheduleDays.find((d) => d.date === day.date);
-        if (existing?.id) {
-          const updated = await api.updateScheduleDay(existing.id, { vacancies: day.vacancies });
-          saved.push(normalizeScheduleDay(updated));
-        } else {
-          const created = await api.createScheduleDay(day);
-          saved.push(normalizeScheduleDay(created));
-        }
-      } catch (err) {
-        console.error("Erro ao salvar dia recorrente:", err);
-      }
-    }
-
-    setScheduleDays?.((current) => {
-      const byDate = new Map(current.map((d) => [d.date, d]));
-      saved.forEach((d) => byDate.set(d.date, d));
-      return (Array.from(byDate.values()) as AnyRecord[]).sort((l, r) => parseScheduleDate(l.date) - parseScheduleDate(r.date));
-    });
-  }
 
   function normalizeAgendaOccurrenceForForm(occurrence: AnyRecord = {}, fallback: AnyRecord = agendaForm) {
     const rawDate = occurrence.date || occurrence.start || fallback.start || "";
@@ -5773,27 +5232,6 @@ function ConfigView({
       const nextOccurrences = getAgendaOccurrenceList(current).filter((_, occurrenceIndex) => occurrenceIndex !== index);
       return { ...current, occurrences: nextOccurrences.length ? nextOccurrences : [normalizeAgendaOccurrenceForForm({}, current)] };
     });
-  }
-  function useAgendaCurrentLocation() {
-    if (!navigator.geolocation) {
-      setAgendaLocationStatus("Localização atual indisponível neste navegador.");
-      return;
-    }
-
-    setAgendaLocationStatus("Solicitando localização atual...");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setAgendaForm((current) => ({
-          ...current,
-          latitude: position.coords.latitude.toFixed(6),
-          longitude: position.coords.longitude.toFixed(6),
-          locationName: current.locationName || "Localização atual",
-        }));
-        setAgendaLocationStatus("Localização atual registrada.");
-      },
-      () => setAgendaLocationStatus("Não foi possível obter a localização atual."),
-      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
-    );
   }
 
   function openAgendaModal(rule = null) {
@@ -6019,10 +5457,6 @@ function ConfigView({
     setAgendaSaving(false);
     setAgendaSaveStatus("");
   }
-  function formatScheduleWeekdays(weekdays) {
-    const names = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
-    return weekdays.map((weekday) => names[weekday]).join(", ");
-  }
 
   function formatAgendaRuleSummary(rule: AnyRecord = {}) {
     const isMutirao = normalizeText(rule.kind || "") === "mutirao";
@@ -6047,19 +5481,7 @@ function ConfigView({
   const filteredSectors = filterByConfigStatus(dedupeMunicipalityItems(teams.sectors || []));
   const filteredTeamUsers = filterByConfigStatus(dedupeMunicipalityItems(teams.users || []));
   const filteredPermissionGroups = filterByConfigStatus(permissionGroups);
-  const currentConfigItems = {
-    requests: requestTypes,
-    municipalities,
-    agenda: scheduleRules,
-    sizes: sizeOptions,
-    species: speciesOptions,
-    users: teams.users || [],
-    sectors: teams.sectors || [],
-    permissions: permissionGroups,
-    documents: documentTypes,
-  }[currentConfigKey] || [];
   const activeMunicipalities = municipalities.filter((municipality) => municipality.active !== false);
-  const selectedMunicipality = activeMunicipalities.find((municipality) => municipality.id === newTeamUser.municipalityId);
   const activeTeamSectors = dedupeMunicipalityItems(teams.sectors || []).filter((sector) =>
     sector.active !== false
     && (!newTeamUser.municipalityId || getItemMunicipalityId(sector) === newTeamUser.municipalityId)
@@ -7407,33 +6829,6 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove,
   );
 }
 
-export function AiAnalysisDetails({ show, provider, model, confidence, criteriaResults, metaClassName = "doc-row-meta", criteriaClassName = "doc-criteria-results", showMeta = true }: AnyRecord) {
-  if (!show) return null;
-  const numericConfidence = Number(confidence);
-  const hasConfidence = Number.isFinite(numericConfidence);
-  const providerLabel = [provider, model].filter(Boolean).join(" / ");
-  const results = Array.isArray(criteriaResults) ? criteriaResults : [];
-
-  return (
-    <>
-      {showMeta && (providerLabel || hasConfidence) && (
-        <small className={metaClassName}>
-          {[providerLabel, hasConfidence ? `${Math.round(numericConfidence * 100)}% de confiança` : ""].filter(Boolean).join(" · ")}
-        </small>
-      )}
-      {results.length > 0 && (
-        <div className={criteriaClassName}>
-          {results.map((item: AnyRecord, index: number) => (
-            <span key={`${item.criterion}-${index}`} className={item.met ? "is-met" : "is-missing"} title={item.reason || ""}>
-              {item.criterion}
-            </span>
-          ))}
-        </div>
-      )}
-    </>
-  );
-}
-
 function DocumentScanningPreview({ dataUrl, fileType }: AnyRecord) {
   const isImage = String(fileType || "").startsWith("image/");
   return (
@@ -7522,27 +6917,6 @@ function validateDocumentLocally(document: AnyRecord, file: File): Promise<AnyRe
 }
 
 
-function formatMonthYear(monthYear) {
-  const [month, year] = monthYear.split("/");
-  const names = {
-    "01": "Janeiro",
-    "02": "Fevereiro",
-    "03": "Março",
-    "04": "Abril",
-    "05": "Maio",
-    "06": "Junho",
-    "07": "Julho",
-    "08": "Agosto",
-    "09": "Setembro",
-    "10": "Outubro",
-    "11": "Novembro",
-    "12": "Dezembro",
-  };
-  return `${names[month] || month} ${year || ""}`;
-}
-
-
-
 function matchesRequestSearch(request, query) {
   const normalizedQuery = normalizeText(query);
   if (!normalizedQuery) return true;
@@ -7583,1549 +6957,6 @@ function getRequestMicrochips(request: AnyRecord = {}) {
 }
 
 
-
-
-
-
-
-
-
-
-
-
-function printAnimalRecordPdf(animal: AnyRecord = {}, tutor: AnyRecord = {}, history = []) {
-  const typeLabels = {
-    ANIMAL_OBITO: "Registro de óbito",
-    TROCA_TUTOR: "Troca de tutor",
-    SOLICITACAO_OBITO: "Solicitação de óbito",
-    SOLICITACAO_TROCA_TUTOR: "Solicitação de troca de tutor",
-    SOLICITACAO_PROCEDIMENTO: "Solicitação de procedimento",
-    IMPORTACAO_SOLICITACAO: "Cadastro importado",
-    CIRURGIA_REALIZADA: "Cirurgia realizada",
-    SOLICITACAO: "Solicitação",
-  };
-  const statusLabels = {
-    NOVA: "Nova",
-    AGENDADA: "Agendada",
-    REALIZADA: "Realizada",
-    CANCELADA: "Cancelada",
-    // Legacy
-    EM_ANALISE: "Em análise",
-    AGUARDANDO_CIRURGIA: "Agendada",
-    ARQUIVADA: "Arquivada",
-  };
-
-  const historyRows = history.length
-    ? history.map((item) => {
-        const label = typeLabels[item.type] || item.title || item.type || "Evento";
-        const detail = [
-          item.protocol ? `#${item.protocol}` : "",
-          item.status ? (statusLabels[item.status] || item.status) : "",
-          item.notes || "",
-        ].filter(Boolean).join(" · ");
-        const date = item.occurred_at
-          ? new Date(item.occurred_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })
-          : "-";
-        return `
-          <tr>
-            <td>${escapeHtml(date)}</td>
-            <td><strong>${escapeHtml(label)}</strong>${detail ? `<br><span class="detail">${escapeHtml(detail)}</span>` : ""}</td>
-          </tr>`;
-      }).join("")
-    : `<tr><td colspan="2" class="empty-row">Nenhum evento registrado.</td></tr>`;
-
-  const address = [tutor.address, tutor.neighborhood, tutor.city, tutor.state, tutor.cep].filter(Boolean).join(", ");
-  const html = `<!doctype html>
-<html>
-  <head>
-    <meta charset="utf-8" />
-    <title>Prontuário - ${escapeHtml(animal.name || animal.microchip || "Animal")}</title>
-    <style>
-      ${PDF_BASE_STYLES}
-      body { display: flex; flex-direction: column; gap: 12px; }
-      table { width: 100%; border-collapse: collapse; font-size: 11px; }
-      th { background: #f0f7ff; color: #10364f; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; padding: 6px 10px; text-align: left; border-bottom: 1px solid #dbeaf3; }
-      td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
-      td:first-child { white-space: nowrap; color: #64748b; font-size: 10px; width: 90px; }
-      .detail { color: #64748b; font-size: 10px; }
-      .empty-row { color: #94a3b8; font-style: italic; text-align: center; }
-    </style>
-  </head>
-  <body>
-    <header class="pdf-header">
-      <div>
-        <h1>${escapeHtml(animal.name || "Animal não identificado")}</h1>
-        <span style="font-size:11px;opacity:.8">${[animal.species, animal.sex, animal.size].filter(Boolean).join(" · ")}</span>
-      </div>
-      <div class="header-box">
-        <span>Microchip</span>
-        <strong style="font-size:13px">${escapeHtml(animal.microchip || "-")}</strong>
-      </div>
-    </header>
-
-    <section class="section">
-      <div class="section-title">Dados do animal</div>
-      <div class="data-grid four">
-        <div class="data-item"><span>Espécie</span><strong>${escapeHtml(animal.species || "-")}</strong></div>
-        <div class="data-item"><span>Sexo</span><strong>${escapeHtml(animal.sex || "-")}</strong></div>
-        <div class="data-item"><span>Porte</span><strong>${escapeHtml(animal.size || "-")}</strong></div>
-        <div class="data-item"><span>Raça</span><strong>${escapeHtml(animal.breed || "-")}</strong></div>
-        ${animal.color ? `<div class="data-item"><span>Cor / pelagem</span><strong>${escapeHtml(animal.color)}</strong></div>` : ""}
-        ${animal.status ? `<div class="data-item"><span>Status</span><strong>${escapeHtml(animal.status)}</strong></div>` : ""}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Dados do tutor</div>
-      <div class="data-grid three">
-        <div class="data-item"><span>Nome</span><strong>${escapeHtml(tutor.tutor_name || tutor.name || "-")}</strong></div>
-        <div class="data-item"><span>CPF</span><strong>${escapeHtml(maskCpf(tutor.cpf || ""))}</strong></div>
-        <div class="data-item"><span>Telefone</span><strong>${escapeHtml(tutor.phone || "-")}</strong></div>
-        ${tutor.tutor_email || tutor.email ? `<div class="data-item"><span>Email</span><strong>${escapeHtml(tutor.tutor_email || tutor.email)}</strong></div>` : ""}
-        ${address ? `<div class="data-item" style="grid-column:1/-1"><span>Endereço</span><strong>${escapeHtml(address)}</strong></div>` : ""}
-      </div>
-    </section>
-
-    <section class="section">
-      <div class="section-title">Histórico / Prontuário</div>
-      <table>
-        <thead><tr><th>Data</th><th>Evento</th></tr></thead>
-        <tbody>${historyRows}</tbody>
-      </table>
-    </section>
-
-    <footer class="footer">
-      <span>Sistema municipal de castração animal</span>
-      <span>Gerado em ${new Date().toLocaleString("pt-BR")}</span>
-    </footer>
-  </body>
-</html>`;
-  printHtmlViaIframe(html);
-}
-
-const PROCESS_REPORT_FOOTER = "Relatório do processo emitido pelo sistema municipal";
-
-// Pages of text for the process report (the tramitação, the prescription): a header, a section and the blocks wrapped and placed one after
-// another, with a new page when one does not fit.
-async function appendProcessTextPages(output: AnyRecord, request: AnyRecord, { docTitle, subtitle, section, blocks, emptyText }: { docTitle: string; subtitle: string; section: string; blocks: ReportBlock[]; emptyText: string }) {
-  const { rgb } = await importPdfLib();
-  const ctx = await createPdfDocContext(output, rgb);
-  const { font, bold, colors, margin, pageSize } = ctx;
-  const req = normalizeRequest(request);
-  const statusColors: Record<string, unknown> = { NOVA: rgb(0.45, 0.52, 0.57), AGENDADA: rgb(0.08, 0.48, 0.72), REALIZADA: rgb(0.07, 0.44, 0.22), CANCELADA: rgb(0.75, 0.18, 0.18) };
-  const startPage = () => {
-    const created = output.addPage(pageSize);
-    const top = drawProntuarioHeader(created, req.protocol, statusLabels[req.status] || req.status || "Sem status", statusColors[req.status] || statusColors.NOVA, ctx, "", docTitle, pdfText(subtitle));
-    return { created, top: drawProntuarioSectionTitle(created, section, top - 4, ctx) - 10 };
-  };
-  let pageNumber = 1;
-  let { created: page, top: y } = startPage();
-  if (!blocks.length) page.drawText(pdfText(emptyText), { x: margin, y, size: 9, font, color: colors.muted });
-  for (const block of blocks) {
-    const lines = wrapPdfText(pdfText(block.text), 100);
-    const height = (block.heading ? 13 : 0) + lines.length * 11 + 8;
-    if (y - height < margin + 40) {
-      drawRequestPdfFooter(page, PROCESS_REPORT_FOOTER, `Página ${pageNumber}`, ctx);
-      pageNumber += 1;
-      ({ created: page, top: y } = startPage());
-    }
-    if (block.heading) {
-      page.drawText(pdfText(block.heading), { x: margin, y, size: 9, font: bold, color: colors.ink });
-      y -= 13;
-    }
-    lines.forEach((line) => {
-      page.drawText(line, { x: margin + 10, y, size: 8.5, font, color: colors.muted });
-      y -= 11;
-    });
-    y -= 8;
-  }
-  drawRequestPdfFooter(page, PROCESS_REPORT_FOOTER, `Página ${pageNumber}`, ctx);
-}
-
-// The whole process in one PDF, with its request document, history, attachments and issued prescriptions.
-export async function generateProcessReportPdf(request: AnyRecord = {}, requestDocumentKind = "request", municipality: AnyRecord | null = null, requestTypes: AnyRecord[] = []) {
-  const { PDFDocument, StandardFonts, rgb } = await importPdfLib();
-  const output = await PDFDocument.create();
-  const req = normalizeRequest(request);
-  const workflow: AnyRecord = req.workflowData || req.workflow_data || {};
-  try {
-    const requestDocument = await prepareProcessDocumentPreview({ kind: requestDocumentKind }, request, municipality);
-    await appendPdfDataUrl(output, requestDocument.dataUrl);
-  } catch (error) {
-    console.warn("Aviso: documento do processo ignorado no relatório:", error);
-    await appendUnsupportedAttachmentPage(output, { title: "Documento do processo", fileName: `Não foi possível gerar o documento do processo ${request.protocol || ""}`.trim(), StandardFonts, rgb });
-  }
-
-  await appendProcessTextPages(output, request, {
-    docTitle: "TRAMITAÇÃO DO PROCESSO",
-    subtitle: `Protocolo: #${req.protocol || "-"}`,
-    section: "REGISTROS",
-    blocks: historyBlocks(req.rawHistory, (status) => statusLabels[status] || status, formatDateTime),
-    emptyText: "Nenhuma tramitação registrada para este processo.",
-  });
-
-  for (const attachment of getUserUploadedProcessDocuments(request.documents)) {
-    const dataUrl = getDocumentPreviewSource(attachment);
-    const mimeType = attachment.fileType || attachment.type || attachment.mimeType || getDataUrlMimeType(dataUrl);
-    try {
-      if (dataUrl && mimeType === "application/pdf") {
-        await appendPdfDataUrl(output, dataUrl);
-        continue;
-      }
-      if (dataUrl && mimeType?.startsWith("image/")) {
-        await appendImageDataUrl(output, dataUrl, mimeType);
-        continue;
-      }
-    } catch (error) {
-      console.warn("Aviso: anexo sem prévia no relatório do processo:", error);
-    }
-    await appendUnsupportedAttachmentPage(output, { title: attachment.documentName || "Documento anexado", fileName: attachment.fileName || "Arquivo sem prévia", StandardFonts, rgb });
-  }
-
-  const animals = resolveRequestProcedures(request, requestTypes);
-  for (const prescription of reportPrescriptions(animals.length ? animals : req.animals, workflow.attendancePrescription)) {
-    await appendProcessTextPages(output, request, {
-      docTitle: "RECEITA VETERINÁRIA",
-      subtitle: [`Protocolo: #${req.protocol || "-"}`, prescription.subtitle].filter(Boolean).join("  ·  "),
-      section: "PRESCRIÇÃO",
-      blocks: prescription.blocks,
-      emptyText: "",
-    });
-  }
-
-  return {
-    fileName: `Relatório ${request.protocol || ""}.pdf`.trim(),
-    dataUrl: uint8ArrayToDataUrl(await output.save(), "application/pdf"),
-  };
-}
-
-export async function prepareProcessDocumentPreview(item: AnyRecord, request: AnyRecord, municipality: AnyRecord | null = null) {
-  if (item.kind === "request") {
-    return {
-      documentName: "Requerimento municipal",
-      fileName: `Requerimento ${request.protocol || ""}.pdf`.trim(),
-      fileType: "application/pdf",
-      eyebrow: "Requerimento",
-      dataUrl: await createRequestPdfDataUrl(request, municipality),
-    };
-  }
-  if (item.kind === "tutor-transfer-request") {
-    return {
-      documentName: "Troca de tutor",
-      fileName: `Troca de tutor ${request.protocol || ""}.pdf`.trim(),
-      fileType: "application/pdf",
-      eyebrow: "Troca de tutor",
-      dataUrl: await createTutorTransferPdfDataUrl(request),
-    };
-  }
-  if (item.kind === "death-registration-request") {
-    return {
-      documentName: "Registro de óbito",
-      fileName: `Registro de obito ${request.protocol || ""}.pdf`.trim(),
-      fileType: "application/pdf",
-      eyebrow: "Óbito",
-      dataUrl: await createDeathRegistrationPdfDataUrl(request),
-    };
-  }
-  if (item.kind === "complaint-request") {
-    return {
-      documentName: "Denúncia",
-      fileName: `Denuncia ${request.protocol || ""}.pdf`.trim(),
-      fileType: "application/pdf",
-      eyebrow: "Denúncia",
-      dataUrl: await createComplaintPdfDataUrl(request),
-    };
-  }
-
-  const document = item.document || {};
-  const dataUrl = getDocumentPreviewSource(document);
-  const fileType = document.fileType || document.type || document.mimeType || getDataUrlMimeType(dataUrl);
-  return {
-    ...document,
-    documentName: document.documentName || document.name || "Documento anexado",
-    fileName: document.fileName || document.name || "Arquivo anexado",
-    fileType,
-    eyebrow: item.eyebrow || "Anexo",
-    dataUrl,
-  };
-}
-
-// Paleta neutra da tela "Consultar prontuário" — fonte única, reaproveitada por
-// todas as funções de desenho do PDF do Prontuário (que não usam a paleta
-// azul genérica dos demais documentos).
-const ANIMAL_RECORD_COLORS = {
-  ink: "#0f172a",
-  muted: "#64748b",
-  line: "#dbe5f1",
-  bg: "#f8fafc",
-  cardBorder: "#e5e7eb",
-};
-
-function drawProntuarioHeader(page, protocol, statusLabel, statusColor, ctx, microchip = "", docTitle = "PRONTUÁRIO DO ANIMAL", idOverride = "") {
-  const { font, bold, colors, margin } = ctx;
-  const pageW = page.getWidth();
-  const pageH = page.getHeight();
-  const topY = pageH - margin;
-
-  page.drawRectangle({ x: margin, y: topY - 58, width: 4, height: 58, color: colors.blue });
-
-  page.drawText("PROGRAMA MUNICIPAL DE CASTRAÇÃO ANIMAL", {
-    x: margin + 12, y: topY - 12, size: 7, font: bold, color: colors.muted,
-  });
-  page.drawText(pdfText(docTitle), {
-    x: margin + 12, y: topY - 29, size: 16, font: bold, color: colors.ink,
-  });
-  const idLabel = idOverride
-    ? pdfText(idOverride)
-    : microchip
-      ? pdfText(`Microchip: ${microchip}`)
-      : pdfText(`Ref. protocolo: #${protocol || "-"}  (animal sem microchip)`);
-  page.drawText(idLabel, {
-    x: margin + 12, y: topY - 48, size: 8, font, color: colors.ink,
-  });
-
-  // issue date (right)
-  const rightX = pageW - margin - 140;
-  page.drawText("EMITIDO EM", { x: rightX, y: topY - 12, size: 7, font: bold, color: colors.muted });
-  page.drawText(pdfText(new Date().toLocaleDateString("pt-BR")), {
-    x: rightX, y: topY - 26, size: 11, font: bold, color: colors.ink,
-  });
-
-  // status pill
-  const pillText = pdfText(statusLabel);
-  const pillW = Math.max(58, pillText.length * 6 + 20);
-  const pillH = 16;
-  const pillX = pageW - margin - pillW;
-  const pillY = topY - 56;
-  page.drawRectangle({ x: pillX, y: pillY, width: pillW, height: pillH, color: statusColor });
-  page.drawText(pillText, {
-    x: pillX + Math.round((pillW - pillText.length * 5.5) / 2),
-    y: pillY + 5, size: 8, font: bold, color: colors.white,
-  });
-
-  // divider
-  const divY = topY - 66;
-  page.drawLine({ start: { x: margin, y: divY }, end: { x: pageW - margin, y: divY }, thickness: 0.5, color: colors.line });
-
-  return divY - 14;
-}
-
-function drawProntuarioSectionTitle(page, title, y, ctx, colorOverride: unknown = null) {
-  const { bold, colors, margin } = ctx;
-  const barColor = colorOverride ?? colors.blue;
-  const textColor = colorOverride ?? colors.ink;
-  page.drawRectangle({ x: margin, y: y - 13, width: 3, height: 13, color: barColor });
-  page.drawText(pdfText(title), { x: margin + 9, y: y - 11, size: 8, font: bold, color: textColor });
-  return y - 22;
-}
-
-// Mirrors the neutral header card of the animal record.
-// (#f8fafc / borda #dbe5f1) com avatar circular escuro, nome, resumo,
-// microchip/município e o chip de status verde no canto direito.
-function drawAnimalRecordHeader(page, animalName, animalSummary, microchipLine, statusLabel, ctx) {
-  const { font, bold, margin, rgb } = ctx;
-  const beige = {
-    bg: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.bg)),
-    border: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.line)),
-    ink: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink)),
-    muted: rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted)),
-  };
-  const hex = (h: string) => rgb(...hexToRgbTuple(h));
-  const pageW = page.getWidth();
-  const contentW = pageW - margin * 2;
-  const cardH = 76;
-  const topY = page.getHeight() - margin;
-  const cardTop = topY;
-  const cardBottom = cardTop - cardH;
-
-  page.drawRectangle({ x: margin, y: cardBottom, width: contentW, height: cardH, color: beige.bg, borderColor: beige.border, borderWidth: 1 });
-
-  const avatarSize = 46;
-  const avatarX = margin + 16;
-  const avatarY = cardTop - 16 - avatarSize;
-  page.drawRectangle({ x: avatarX, y: avatarY, width: avatarSize, height: avatarSize, color: beige.ink });
-  page.drawText("*", { x: avatarX + avatarSize / 2 - 3, y: avatarY + avatarSize / 2 - 6, size: 18, font: bold, color: hex("#ffffff") });
-
-  const textX = avatarX + avatarSize + 14;
-  const textW = margin + contentW - 130 - textX;
-  page.drawText(pdfText(wrapPdfText(pdfText(animalName || "Animal sem nome"), Math.floor(textW / 7.5))[0] || "-"), { x: textX, y: cardTop - 28, size: 14, font: bold, color: beige.ink });
-  page.drawText(pdfText(wrapPdfText(pdfText(animalSummary), Math.floor(textW / 5.2))[0] || "-"), { x: textX, y: cardTop - 44, size: 9, font, color: beige.muted });
-  page.drawText(pdfText(wrapPdfText(pdfText(microchipLine), Math.floor(textW / 5))[0] || "-"), { x: textX, y: cardTop - 58, size: 8, font, color: beige.muted });
-
-  const pillText = pdfText(statusLabel || "ATIVO");
-  const pillW = Math.max(52, pillText.length * 5.5 + 20);
-  const pillH = 18;
-  const pillX = margin + contentW - 16 - pillW;
-  const pillY = cardTop - 16 - pillH;
-  const statusOk = String(statusLabel || "").toUpperCase() === "ATIVO";
-  const pillColors = statusOk ? { bg: hex("#dcfce7"), ink: hex("#166534") } : { bg: hex("#fee2e2"), ink: hex("#b91c1c") };
-  page.drawRectangle({ x: pillX, y: pillY, width: pillW, height: pillH, color: pillColors.bg });
-  page.drawText(pillText, { x: pillX + Math.round((pillW - pillText.length * 5) / 2), y: pillY + 6, size: 8, font: bold, color: pillColors.ink });
-
-  return cardBottom - 16;
-}
-
-function drawProntuarioFields(page, rows, y, ctx, contentWidthOverride = 0, colorOverride: { label: unknown; value: unknown } | null = null) {
-  // rows: array of { label, value }[] — each inner array is one row of columns
-  const { font, bold, colors, margin } = ctx;
-  const labelColor = colorOverride?.label ?? colors.muted;
-  const valueColor = colorOverride?.value ?? colors.ink;
-  const contentW = contentWidthOverride || (page.getWidth() - margin * 2);
-  const baseRowH = 30;
-  const valueLineH = 11;
-
-  // Cada linha do grid reserva 30px por padrão, mas o valor pode quebrar em
-  // até 2 linhas (wrapped.slice(0, 2)) — altura fixa deixava a 2ª linha do
-  // valor colada no label da próxima linha do grid.
-  const rowHeights = rows.map((cols) => {
-    const colW = contentW / cols.length;
-    const maxLines = Math.max(1, ...cols.map(({ value }) =>
-      Math.min(2, wrapPdfText(pdfText(String(value || "-")), Math.floor(colW / 5.5)).length)
-    ));
-    return Math.max(baseRowH, 12 + maxLines * valueLineH + 6);
-  });
-
-  let rowY = y;
-  rows.forEach((cols, ri) => {
-    const colW = contentW / cols.length;
-    const fy = rowY;
-    cols.forEach(({ label, value }, ci) => {
-      const x = margin + ci * colW;
-      page.drawText(pdfText(String(label || "")), { x, y: fy, size: 7, font: bold, color: labelColor });
-      const val = pdfText(String(value || "-"));
-      const wrapped = wrapPdfText(val, Math.floor(colW / 5.5));
-      wrapped.slice(0, 2).forEach((line, li) => {
-        page.drawText(line, { x, y: fy - 12 - li * valueLineH, size: 9, font: bold, color: valueColor });
-      });
-    });
-    rowY -= rowHeights[ri];
-  });
-  return y - rowHeights.reduce((sum, h) => sum + h, 0);
-}
-
-function drawProntuarioSummaryCards(page, cards, y, ctx) {
-  // cards: { label, primary, secondary }[] mirrors the summaries shown in the animal record.
-  const { font, bold, margin, rgb } = ctx;
-  const cardBorder = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.cardBorder));
-  const cardInk = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink));
-  const cardMuted = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted));
-  const cardWhite = rgb(1, 1, 1);
-  const contentW = page.getWidth() - margin * 2;
-  const gap = 10;
-  const colW = (contentW - gap * (cards.length - 1)) / cards.length;
-  const baseCardH = 48;
-  const secondaryLineH = 9;
-
-  // `secondary` (ex.: endereço) pode precisar de 2 linhas — altura fixa
-  // cortava a segunda linha silenciosamente quando o texto não cabia.
-  const cardsWithLines = cards.map(({ label, primary, secondary }) => ({
-    label, primary, secondary,
-    primaryLines: wrapPdfText(pdfText(String(primary || "-")), Math.floor(colW / 5.5)),
-    secondaryLines: wrapPdfText(pdfText(String(secondary || "-")), Math.floor(colW / 5)).slice(0, 2),
-  }));
-  const maxSecondaryLines = Math.max(1, ...cardsWithLines.map((c) => c.secondaryLines.length));
-  const cardH = baseCardH + (maxSecondaryLines - 1) * secondaryLineH;
-
-  cardsWithLines.forEach(({ label, primaryLines, secondaryLines }, ci) => {
-    const x = margin + ci * (colW + gap);
-    page.drawRectangle({ x, y: y - cardH, width: colW, height: cardH, borderColor: cardBorder, borderWidth: 0.8, color: cardWhite });
-    page.drawText(pdfText(String(label || "")), { x: x + 8, y: y - 14, size: 6.5, font: bold, color: cardMuted });
-    page.drawText(primaryLines[0] || "-", { x: x + 8, y: y - 27, size: 9, font: bold, color: cardInk });
-    secondaryLines.forEach((line, li) => {
-      page.drawText(line, { x: x + 8, y: y - 39 - li * secondaryLineH, size: 7.5, font, color: cardMuted });
-    });
-  });
-
-  return y - cardH;
-}
-
-// Desenha a timeline em fluxo contínuo: quando o evento não cabe mais na
-// página atual, abre uma página de continuação (sem repetir o cabeçalho
-// grande do documento) e segue desenhando a partir do topo.
-// Cores dos marcadores por tone, espelhando .animal-history-item.<tone> .animal-history-marker
-const PRONTUARIO_TIMELINE_TONE_COLORS: Record<string, { bg: string; ink: string }> = {
-  danger: { bg: "#fee2e2", ink: "#b91c1c" },
-  transfer: { bg: "#f1f5f9", ink: "#475569" },
-  success: { bg: "#dcfce7", ink: "#166534" },
-  scheduled: { bg: "#dbeafe", ink: "#1d4ed8" },
-  neutral: { bg: ANIMAL_RECORD_COLORS.bg, ink: ANIMAL_RECORD_COLORS.muted },
-};
-
-function drawProntuarioTimeline(output, page, events, y, ctx, pageSize) {
-  const { font, bold, margin, rgb } = ctx;
-  const hex = (h: string) => rgb(...hexToRgbTuple(h));
-  const ink = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink));
-  const muted = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted));
-  const dividerColor = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.line));
-  const markerRadius = 12;
-  const lineX = margin + markerRadius;
-  const contentX = lineX + markerRadius + 12;
-  const baseEventH = 36;
-  const detailLineH = 11;
-  const bottomLimit = margin + 40;
-  const topStart = pageSize[1] - margin - 20;
-
-  // Altura do bloco de um evento: distância do nó (topo) até a última linha
-  // de texto desenhada (título em nodeY+markerRadius-21, detalhes a partir de
-  // nodeY+markerRadius-33, cada um 11px abaixo do anterior), mais uma folga
-  // fixa para a divisória não colidir com a última linha. A fórmula anterior
-  // não acompanhava essa posição real e a divisória cortava o texto.
-  const eventHeightOf = (ev) => {
-    const detailsCount = ev.details?.length || 0;
-    const lastTextOffsetFromNode = detailsCount > 0
-      ? markerRadius - 33 - (detailsCount - 1) * detailLineH // relativo a nodeY
-      : markerRadius - 21; // só o título
-    const neededHeight = markerRadius - lastTextOffsetFromNode + 14; // + folga até a divisória
-    return Math.max(baseEventH, neededHeight);
-  };
-
-  let currentPage = page;
-
-  events.forEach((ev, i) => {
-    const eventH = eventHeightOf(ev);
-    if (y - eventH < bottomLimit) {
-      currentPage = output.addPage(pageSize);
-      y = topStart;
-    }
-    const nodeY = y - markerRadius;
-    const tone = PRONTUARIO_TIMELINE_TONE_COLORS[ev.tone] || PRONTUARIO_TIMELINE_TONE_COLORS.neutral;
-    const markerBg = hex(tone.bg);
-    const markerInk = hex(tone.ink);
-
-    if (i < events.length - 1) {
-      currentPage.drawLine({
-        start: { x: lineX, y: nodeY - markerRadius },
-        end: { x: lineX, y: nodeY - eventH + markerRadius },
-        thickness: 1,
-        color: dividerColor,
-      });
-    }
-    currentPage.drawCircle({ x: lineX, y: nodeY, size: markerRadius, color: markerBg, borderColor: dividerColor, borderWidth: 0.6 });
-    const iconText = pdfText(ev.iconLabel || "•");
-    const iconWidth = bold.widthOfTextAtSize(iconText, 8);
-    currentPage.drawText(iconText, {
-      x: lineX - iconWidth / 2,
-      y: nodeY - 3,
-      size: 8,
-      font: bold,
-      color: markerInk,
-    });
-
-    if (ev.date) {
-      currentPage.drawText(pdfText(ev.date), { x: contentX, y: nodeY + markerRadius - 9, size: 7.5, font, color: muted });
-    }
-    currentPage.drawText(pdfText(ev.title), { x: contentX, y: nodeY + markerRadius - 21, size: 9.5, font: bold, color: ink });
-    (ev.details || []).forEach((detail, di) => {
-      currentPage.drawText(pdfText(String(detail)), { x: contentX, y: nodeY + markerRadius - 33 - di * detailLineH, size: 8, font, color: muted });
-    });
-
-    if (i < events.length - 1) {
-      currentPage.drawLine({
-        start: { x: contentX - 6, y: y - eventH + 6 },
-        end: { x: page.getWidth() - margin, y: y - eventH + 6 },
-        thickness: 0.4,
-        color: dividerColor,
-      });
-    }
-
-    y -= eventH;
-  });
-
-  return { page: currentPage, y };
-}
-
-const prmHistoryEventLabel = (type: string) => ({
-  SOLICITACAO: "Solicitação de procedimento",
-  IMPORTACAO_SOLICITACAO: "Cadastro importado",
-  CIRURGIA_REALIZADA: "Cirurgia realizada",
-  SOLICITACAO_OBITO: "Solicitação de óbito",
-  ANIMAL_OBITO: "Óbito registrado",
-  SOLICITACAO_TROCA_TUTOR: "Solicitação de troca de tutor",
-  TROCA_TUTOR: "Troca de tutor",
-  SOLICITACAO_PROCEDIMENTO: "Procedimento solicitado",
-  ADOCAO: "Adoção confirmada",
-} as AnyRecord)[type] || type || "Evento";
-
-// Marcador textual do evento na timeline do PDF (equivalente ao ícone lucide
-// usado por AnimalHistoryIcon na tela — pdf-lib não desenha ícones vetoriais
-// de biblioteca, então usamos uma letra curta com a mesma semântica).
-function prmHistoryIconLabel(item: AnyRecord = {}) {
-  if (["ANIMAL_OBITO", "SOLICITACAO_OBITO"].includes(item.type)) return "!";
-  if (["TROCA_TUTOR", "SOLICITACAO_TROCA_TUTOR"].includes(item.type)) return "T";
-  if (item.type === "CIRURGIA_REALIZADA") return "OK";
-  if (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA") return "AG";
-  return "•";
-}
-
-// Resolve animal/tutor/status/histórico numa fonte única, sem passar por
-// normalizeRequest (que sintetiza um animal "Não informado" quando não há
-// request.animals — isso mascarava os dados reais vindos de fullHistory).
-// Prioriza a request quando ela tem dados reais de uma solicitação específica;
-// senão usa fullHistory (fluxo de consulta por microchip).
-function resolveProntuarioData(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
-  const hasRealRequest = Boolean(request?.id || request?.protocol || (Array.isArray(request?.animals) && request.animals.length));
-  const req = hasRealRequest ? normalizeRequest(request) : {};
-  const wf: AnyRecord = request.workflowData || request.workflow_data || {};
-
-  const histAnimal: AnyRecord = fullHistory?.animal || {};
-  const histTutor: AnyRecord = fullHistory?.tutor || {};
-  const historyList: AnyRecord[] = Array.isArray(fullHistory?.history) ? fullHistory.history : [];
-
-  const animal: AnyRecord = (Array.isArray(req.animals) && req.animals[0]) || histAnimal;
-
-  const tutorName = hasRealRequest
-    ? (req.tutor || "Não informado")
-    : (histTutor.tutor_name || histTutor.name || "Não informado");
-  const tutorCpf = hasRealRequest ? req.cpf : histTutor.cpf;
-  const tutorPhone = hasRealRequest ? req.phone : (histTutor.phone || histTutor.celular);
-  const tutorEmail = hasRealRequest ? req.email : (histTutor.tutor_email || histTutor.email);
-  const tutorAddressLine = hasRealRequest
-    ? [
-        [req.address, req.number].filter(Boolean).join(", "),
-        req.neighborhood,
-        req.city && req.state ? `${req.city}/${req.state}` : (req.city || req.state || ""),
-        req.cep ? `CEP ${req.cep}` : "",
-      ].filter(Boolean).join(" - ")
-    : [histTutor.address, histTutor.neighborhood, histTutor.city, histTutor.state].filter(Boolean).join(", ");
-
-  const statusLabel = String(animal.status || "ativo").toUpperCase();
-
-  const latestHistoryItem = historyList[0] || null;
-  const nextScheduledHistoryItem = historyList.find((item) => (
-    (item.status === "AGENDADA" || item.status === "AGUARDANDO_CIRURGIA") && getAnimalHistorySchedule(item)
-  )) || null;
-  const latestProcedureItem = historyList.find((item) => (
-    ["CIRURGIA_REALIZADA", "SOLICITACAO_PROCEDIMENTO"].includes(item.type)
-  )) || null;
-  const historyMunicipalitiesList = [...new Set(historyList.map(getAnimalHistoryMunicipality).filter(Boolean))];
-
-  return {
-    req, wf, animal, historyList, hasRealRequest,
-    tutorName,
-    tutorCpfMasked: maskCpf(tutorCpf || "") || "-",
-    tutorContact: [tutorPhone, tutorEmail].filter(Boolean).join(" · ") || "Não informado",
-    tutorAddressLine: tutorAddressLine || "Endereço não informado",
-    statusLabel,
-    animalSummary: [animal.species, animal.sex, animal.size].filter(Boolean).join(" · ") || "Dados do animal em atualização",
-    latestHistoryItem,
-    nextScheduledHistoryItem,
-    latestProcedureItem,
-    historyMunicipalitiesList,
-  };
-}
-
-async function generateProntuarioPdf(request: AnyRecord = {}, fullHistory: AnyRecord | null = null) {
-  const { PDFDocument, rgb } = await importPdfLib();
-  const output = await PDFDocument.create();
-  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(output, rgb);
-  const ctx = { font, bold, colors, rgb, margin };
-
-  const data = resolveProntuarioData(request, fullHistory);
-  const {
-    req, wf, animal, historyList, hasRealRequest,
-    tutorName, tutorCpfMasked, tutorContact, tutorAddressLine,
-    statusLabel, animalSummary,
-    latestHistoryItem, nextScheduledHistoryItem, latestProcedureItem,
-    historyMunicipalitiesList,
-  } = data;
-
-  const isRealizada = req.status === "REALIZADA";
-  const isCancelada = req.status === "CANCELADA";
-
-  const contentW = 595.28 - margin * 2;
-
-  const scheduleAddress = [req.scheduleLocationName, req.scheduleAddress, req.scheduleMunicipality]
-    .filter(Boolean).join(" - ");
-  const microchipApplied = String(wf.attendanceMicrochip || "").trim();
-  const prescription = String(wf.attendancePrescription || "").trim();
-  const attendanceNote = String(req.attendanceNote || "").trim();
-  const cancelReason = String(wf.cancelReason || req.rejectionReason || "").trim();
-  const cancelNote = String(wf.cancelNote || req.rejectionNote || "").trim();
-
-  // Paleta neutra da tela "Consultar prontuário" — usada em todo este
-  // documento em vez da paleta azul genérica dos demais PDFs.
-  const beigeLine = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.line));
-  const beigeMuted = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.muted));
-  const beigeInk = rgb(...hexToRgbTuple(ANIMAL_RECORD_COLORS.ink));
-
-  const page = output.addPage(pageSize);
-  const microchipLine = `Microchip: ${animal.microchip || req.animalMicrochip || "não informado"}${historyMunicipalitiesList.length ? "   ·   " + historyMunicipalitiesList.join(", ") : ""}`;
-  let y = drawAnimalRecordHeader(page, animal.name, animalSummary, microchipLine, statusLabel, ctx);
-  y -= 4;
-
-  // ── 3 CARDS DE RESUMO (espelha .animal-record-summary da tela) ──
-  y = drawProntuarioSummaryCards(page, [
-    { label: "TUTOR ATUAL", primary: tutorName, secondary: tutorCpfMasked },
-    { label: "CONTATO", primary: tutorContact, secondary: tutorAddressLine },
-    {
-      label: "SITUAÇÃO",
-      primary: latestHistoryItem ? prmHistoryEventLabel(latestHistoryItem.type) : "Sem eventos",
-      secondary: latestHistoryItem?.occurred_at ? formatDateTime(latestHistoryItem.occurred_at) : "Sem data registrada",
-    },
-  ], y, ctx);
-  y -= 10;
-
-  // ── GRID DE 6 INFO-TILES (espelha .animal-record-grid da tela) ──
-  y = drawProntuarioFields(page, [
-    [
-      { label: "MICROCHIP", value: animal.microchip || "Não informado" },
-      { label: "ESPÉCIE / SEXO / PORTE", value: animalSummary },
-      { label: "PRÓXIMA AGENDA", value: nextScheduledHistoryItem ? getAnimalHistorySchedule(nextScheduledHistoryItem) : "Sem agenda" },
-    ],
-    [
-      { label: "ÚLTIMO PROCEDIMENTO", value: latestProcedureItem ? prmHistoryEventLabel(latestProcedureItem.type) : "Não informado" },
-      { label: "MUNICÍPIOS", value: historyMunicipalitiesList.join(", ") || "Não informado" },
-      { label: "EVENTOS", value: `${historyList.length} registro(s)` },
-    ],
-  ], y, ctx, 0, { label: beigeMuted, value: beigeInk });
-  y -= 4;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: beigeLine });
-  y -= 16;
-
-  // ── HISTÓRICO DO ANIMAL (espelha .animal-history da tela, mesma continuidade) ──
-  const historyTitle = historyList.length
-    ? "HISTÓRICO DO ANIMAL"
-    : "HISTÓRICO DO PROCESSO";
-  const historyTitleTopY = y;
-  y = drawProntuarioSectionTitle(page, historyTitle, y, ctx, beigeInk);
-  page.drawText(pdfText(`${historyList.length} evento(s) registrado(s) para este microchip`), { x: margin, y: historyTitleTopY - 24, size: 7.5, font, color: beigeMuted });
-  y -= 10;
-
-  const tlEvents: { date: string; title: string; details: string[]; done: boolean; tone: string; iconLabel: string }[] = [];
-
-  if (historyList.length) {
-    // histórico completo via /animals/consult — todos os eventos do animal
-    const sortedHistory = [...historyList].sort((a, b) => {
-      const da = new Date(a.occurred_at || a.created_at || 0).getTime();
-      const db = new Date(b.occurred_at || b.created_at || 0).getTime();
-      return da - db;
-    });
-    for (const item of sortedHistory) {
-      const eventDate = item.occurred_at || item.created_at
-        ? new Date(item.occurred_at || item.created_at).toLocaleDateString("pt-BR")
-        : "-";
-      const details: string[] = [];
-      if (item.protocol) details.push(`Protocolo: ${item.protocol}`);
-      if (item.status) details.push(`Status: ${statusLabels[item.status] || item.status}`);
-      if (item.notes) details.push(pdfText(String(item.notes)).slice(0, 80));
-      tlEvents.push({
-        date: eventDate,
-        title: prmHistoryEventLabel(item.type),
-        details,
-        done: true,
-        tone: animalHistoryTone(item),
-        iconLabel: prmHistoryIconLabel(item),
-      });
-    }
-  } else if (hasRealRequest) {
-    // fallback: apenas o processo atual (sem histórico agregado do animal)
-    const openDate = req.createdAt ? new Date(req.createdAt).toLocaleDateString("pt-BR") : "-";
-    const openTime = req.createdAt ? new Date(req.createdAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
-    const scheduleDate = req.preferredSchedule || req.appointment || "-";
-
-    tlEvents.push({
-      date: openDate,
-      title: "Abertura da solicitação",
-      details: [[requestTypeLabel(req), openTime].filter(Boolean).join("  ·  "), `Protocolo: ${req.protocol || "-"}`],
-      done: true,
-      tone: "neutral",
-      iconLabel: "•",
-    });
-    tlEvents.push({
-      date: scheduleDate,
-      title: "Agendamento",
-      details: [scheduleAddress || "Local não informado", req.responsible ? `Responsável: ${req.responsible}` : ""].filter(Boolean),
-      done: req.status === "AGENDADA" || isRealizada,
-      tone: "scheduled",
-      iconLabel: "AG",
-    });
-    if (isRealizada) {
-      const realizadaDate = wf.attendedAt ? new Date(wf.attendedAt).toLocaleDateString("pt-BR") : scheduleDate;
-      tlEvents.push({
-        date: realizadaDate,
-        title: "Procedimento realizado",
-        details: [
-          microchipApplied ? `Microchip aplicado: ${microchipApplied}` : "Microchip: não registrado",
-          attendanceNote ? `Obs.: ${attendanceNote}` : "",
-        ].filter(Boolean),
-        done: true,
-        tone: "success",
-        iconLabel: "OK",
-      });
-      if (prescription) {
-        tlEvents.push({ date: "", title: "Receita prescrita", details: wrapPdfText(pdfText(prescription), 72).slice(0, 4), done: true, tone: "neutral", iconLabel: "•" });
-      }
-    }
-    if (isCancelada) {
-      tlEvents.push({
-        date: "",
-        title: "Processo cancelado / indeferido",
-        details: [cancelReason || "Motivo não informado", cancelNote].filter(Boolean),
-        done: true,
-        tone: "danger",
-        iconLabel: "!",
-      });
-    }
-    if (!isRealizada && !isCancelada) {
-      tlEvents.push({ date: "-", title: "Realização · aguardando", details: ["Procedimento ainda não realizado"], done: false, tone: "neutral", iconLabel: "•" });
-    }
-  }
-
-  if (hasRealRequest) {
-    for (const { subtitle, blocks } of reportPrescriptions(resolveRequestProcedures(req), "", { completedOnly: true })) {
-      const text = blocks.map((block) => block.text).join("\n");
-      tlEvents.push({ date: "", title: "Receita prescrita", details: [subtitle, ...wrapPdfText(pdfText(text), 72).slice(0, 4)].filter(Boolean), done: true, tone: "neutral", iconLabel: "•" });
-    }
-  }
-  const timelineResult = drawProntuarioTimeline(output, page, tlEvents, y, ctx, pageSize);
-  const finalPage = timelineResult.page;
-
-  // nota de rodapé quando sem microchip
-  if (!animal.microchip && !req.animalMicrochip) {
-    finalPage.drawText("* Histórico parcial — animal sem microchip registrado. Dados referentes ao protocolo acima.", {
-      x: margin, y: margin + 40, size: 7, font, color: beigeMuted,
-    });
-  }
-
-  const allPages = output.getPages();
-  allPages.forEach((pg, index) => {
-    drawRequestPdfFooter(pg, "Prontuário emitido pelo sistema municipal", `Página ${index + 1} de ${allPages.length}`, ctx);
-  });
-
-  const bytes = await output.save();
-  const animalName = animal.name || "";
-  const fileName = ["Prontuário", animalName, animal.microchip || req.animalMicrochip || req.protocol || ""]
-    .filter(Boolean).join(" ").trim() + ".pdf";
-  return {
-    documentName: "Prontuário do animal",
-    fileName,
-    fileType: "application/pdf",
-    eyebrow: "Prontuário",
-    dataUrl: uint8ArrayToDataUrl(bytes, "application/pdf"),
-  };
-}
-
-async function generateAndDownloadProntuario(fullHistory: AnyRecord) {
-  const bundle = await generateProntuarioPdf({}, fullHistory);
-  if (bundle?.dataUrl) {
-    const anchor = window.document.createElement("a");
-    anchor.href = bundle.dataUrl;
-    anchor.download = bundle.fileName || "Prontuário.pdf";
-    anchor.click();
-  }
-}
-
-async function createTutorTransferPdfDataUrl(request: AnyRecord = {}) {
-  const { PDFDocument, rgb } = await importPdfLib();
-  const pdf = await PDFDocument.create();
-  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
-  const ctx = { font, bold, colors, rgb, margin };
-  const contentW = 595.28 - margin * 2;
-
-  const req = normalizeRequest(request);
-  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
-  const docLabel = requestTypeDomainLabels[RequestType.TUTOR_TRANSFER];
-
-  const page = pdf.addPage(pageSize);
-  let y = drawProntuarioHeader(
-    page, req.protocol, docLabel, rgb(0.05, 0.45, 0.69), ctx, "",
-    "TROCA DE TUTOR",
-    pdfText(`Protocolo: #${req.protocol || "-"}`)
-  );
-  y -= 10;
-
-  y = drawProntuarioSectionTitle(page, "DADOS DA SOLICITAÇÃO", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "TIPO DE SOLICITAÇÃO", value: docLabel },
-      { label: "DATA DA SOLICITAÇÃO", value: req.createdAt ? formatDateTime(req.createdAt) : "-" },
-    ],
-    [
-      { label: "MOTIVO", value: req.notes || "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "TUTOR ATUAL", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "NOME COMPLETO", value: req.tutor || "-" },
-      { label: "CPF", value: req.cpf || "-" },
-      { label: "CELULAR", value: req.phone || "-" },
-      { label: "EMAIL", value: req.email || "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "NOVO TUTOR", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "NOME COMPLETO", value: req.targetTutorName || "-" },
-      { label: "CPF", value: req.targetTutorCpf || "-" },
-      { label: "CELULAR", value: req.targetTutorPhone || "-" },
-      { label: "EMAIL", value: req.targetTutorEmail || "-" },
-    ],
-    [
-      { label: "CEP", value: req.targetTutorCep || "-" },
-      { label: "ENDEREÇO", value: req.targetTutorAddress || "-" },
-      { label: "BAIRRO", value: req.targetTutorNeighborhood || "-" },
-    ],
-    [
-      { label: "CIDADE", value: req.targetTutorCity || "-" },
-      { label: "UF", value: req.targetTutorState || "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "DADOS DO ANIMAL", y, ctx);
-  y -= 6;
-  drawProntuarioFields(page, [
-    [
-      { label: "NOME", value: animal.name || "-" },
-      { label: "ESPÉCIE", value: animal.species || "-" },
-      { label: "MICROCHIP", value: animal.microchip || req.animalMicrochip || "-" },
-    ],
-  ], y, ctx);
-
-  drawRequestPdfFooter(page, "Troca de tutor", "Página 1 de 1", ctx);
-  return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
-}
-
-async function createDeathRegistrationPdfDataUrl(request: AnyRecord = {}) {
-  const { PDFDocument, rgb } = await importPdfLib();
-  const pdf = await PDFDocument.create();
-  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
-  const ctx = { font, bold, colors, rgb, margin };
-  const contentW = 595.28 - margin * 2;
-
-  const req = normalizeRequest(request);
-  const animal: AnyRecord = (Array.isArray(req.animals) ? req.animals : [])[0] || {};
-  const docLabel = requestTypeDomainLabels[RequestType.ANIMAL_DEATH];
-
-  const page = pdf.addPage(pageSize);
-  let y = drawProntuarioHeader(
-    page, req.protocol, docLabel, rgb(0.05, 0.45, 0.69), ctx, "",
-    "REGISTRO DE ÓBITO",
-    pdfText(`Protocolo: #${req.protocol || "-"}`)
-  );
-  y -= 10;
-
-  y = drawProntuarioSectionTitle(page, "DADOS DA SOLICITAÇÃO", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "TIPO DE SOLICITAÇÃO", value: docLabel },
-      { label: "DATA DA SOLICITAÇÃO", value: req.createdAt ? formatDateTime(req.createdAt) : "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "TUTOR", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "NOME COMPLETO", value: req.tutor || "-" },
-      { label: "CPF", value: req.cpf || "-" },
-      { label: "CELULAR", value: req.phone || "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "DADOS DO ANIMAL", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "NOME", value: animal.name || "-" },
-      { label: "ESPÉCIE", value: animal.species || "-" },
-      { label: "MICROCHIP", value: animal.microchip || req.animalMicrochip || "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "REGISTRO DE ÓBITO", y, ctx);
-  y -= 6;
-  drawProntuarioFields(page, [
-    [
-      { label: "DATA DO ÓBITO", value: req.deathDate || "-" },
-      { label: "CAUSA MORTIS", value: req.deathCause || "-" },
-    ],
-    [
-      { label: "OBSERVAÇÕES", value: req.notes || "-" },
-    ],
-  ], y, ctx);
-
-  drawRequestPdfFooter(page, "Registro de óbito", "Página 1 de 1", ctx);
-  return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
-}
-
-async function createComplaintPdfDataUrl(request: AnyRecord = {}) {
-  const { PDFDocument, rgb } = await importPdfLib();
-  const pdf = await PDFDocument.create();
-  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
-  const ctx = { font, bold, colors, rgb, margin };
-  const contentW = 595.28 - margin * 2;
-
-  const req = normalizeRequest(request);
-  const docLabel = requestTypeDomainLabels[RequestType.COMPLAINT];
-  const occurrenceAddress = [req.address, req.neighborhood, req.city, req.state].filter(Boolean).join(" - ");
-
-  const page = pdf.addPage(pageSize);
-  let y = drawProntuarioHeader(
-    page, req.protocol, docLabel, rgb(0.05, 0.45, 0.69), ctx, "",
-    "DENÚNCIA",
-    pdfText(`Protocolo: #${req.protocol || "-"}`)
-  );
-  y -= 10;
-
-  y = drawProntuarioSectionTitle(page, "DADOS DA SOLICITAÇÃO", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "TIPO DE SOLICITAÇÃO", value: docLabel },
-      { label: "DATA DA SOLICITAÇÃO", value: req.createdAt ? formatDateTime(req.createdAt) : "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "DADOS DO DENUNCIANTE", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page, [
-    [
-      { label: "NOME COMPLETO", value: req.tutor || "-" },
-      { label: "CPF", value: req.cpf || "-" },
-      { label: "CELULAR", value: req.phone || "-" },
-      { label: "EMAIL", value: req.email || "-" },
-    ],
-    [
-      { label: "ENDEREÇO DA OCORRÊNCIA", value: occurrenceAddress || "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page, "RELATO", y, ctx);
-  y -= 6;
-  drawProntuarioFields(page, [
-    [
-      { label: "DESCRIÇÃO", value: req.complaintDescription || "-" },
-    ],
-  ], y, ctx);
-
-  drawRequestPdfFooter(page, "Denúncia", "Página 1 de 1", ctx);
-  return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
-}
-
-async function createRequestPdfDataUrl(request: AnyRecord = {}, municipality: AnyRecord | null = null) {
-  const { PDFDocument, rgb } = await importPdfLib();
-  const pdf = await PDFDocument.create();
-  const { font, bold, colors, margin, pageSize } = await createPdfDocContext(pdf, rgb);
-  const ctx = { font, bold, colors, rgb, margin };
-  const contentW = 595.28 - margin * 2;
-
-  const req = normalizeRequest(request);
-  const workflowData = req.workflowData || req.workflow_data || {};
-  const animals = Array.isArray(req.animals) ? req.animals : [];
-  // The public form records an electronic acceptance; a request made at the counter is registered by the staff and signed on paper.
-  const acceptance = requestAcceptance(req);
-  const acceptedAt = acceptance.at || new Date().toISOString();
-  const electronic = acceptance.kind === RequestAcceptance.ELECTRONIC;
-  const scheduleAddress = [
-    req.scheduleLocationName || req.locationName,
-    req.scheduleAddress || req.schedule_address,
-    req.scheduleMunicipality || req.municipalityName || req.city,
-  ].filter(Boolean).join(" - ");
-  const scheduleMapUrl = req.scheduleAddressUrl || req.schedule_address_url || "";
-  const fullAddr = [
-    [req.address, req.number || workflowData.number].filter(Boolean).join(", "),
-    req.neighborhood,
-    req.city && req.state ? `${req.city}/${req.state}` : (req.city || req.state || ""),
-    req.cep ? `CEP ${req.cep}` : "",
-  ].filter(Boolean).join(" - ");
-
-  // ── PÁGINA 1: dados ──────────────────────────────────────────────
-  const page1 = pdf.addPage(pageSize);
-  let y = drawProntuarioHeader(
-    page1, req.protocol, "Requerimento", rgb(0.05, 0.45, 0.69), ctx, "",
-    "REQUERIMENTO DE SERVIÇO",
-    pdfText(`Protocolo: #${req.protocol || "-"}`)
-  );
-  y -= 10;
-
-  y = drawProntuarioSectionTitle(page1, "DADOS DA SOLICITAÇÃO", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page1, [
-    [
-      { label: "TIPO DE SOLICITAÇÃO", value: requestTypeLabel(req) || req.type || "-" },
-      { label: "DATA DA AGENDA", value: req.preferredSchedule || req.appointment || "-" },
-      { label: "HORÁRIO", value: workflowData.scheduleSlotTime || workflowData.scheduleTime || req.scheduleSlotTime || req.scheduleTime || "-" },
-      { label: "MUNICÍPIO", value: req.scheduleMunicipality || req.municipalityName || req.city || "-" },
-    ],
-    [
-      { label: "LOCAL / POSTO", value: scheduleAddress || "A confirmar" },
-      { label: "UNIDADE RESPONSÁVEL", value: req.responsibleUnit || "-" },
-      { label: "VETERINÁRIO", value: req.veterinarian || "-" },
-    ],
-    [
-      { label: "LINK DO MAPA", value: scheduleMapUrl || "-" },
-      { label: "OBSERVAÇÕES", value: req.notes || "-" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page1, "DADOS DO TUTOR", y, ctx);
-  y -= 6;
-  y = drawProntuarioFields(page1, [
-    [
-      { label: "NOME COMPLETO", value: req.tutor || "-" },
-      { label: "CPF", value: req.cpf || "-" },
-      { label: "CELULAR", value: req.phone || "-" },
-      { label: "EMAIL", value: req.email || "-" },
-    ],
-    [
-      { label: "CEP", value: req.cep || "-" },
-      { label: "ENDEREÇO", value: req.address || "-" },
-      { label: "NÚMERO", value: req.number || workflowData.number || "-" },
-      { label: "BAIRRO", value: req.neighborhood || "-" },
-    ],
-    [
-      { label: "CIDADE", value: req.city || "-" },
-      { label: "UF", value: req.state || "-" },
-      { label: "AGRICULTOR", value: workflowData.isFarmer || req.isFarmer ? "Sim" : "Não" },
-    ],
-  ], y, ctx);
-  y -= 10;
-  page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page1, `DADOS DO ANIMAL (${Math.max(animals.length, 1)})`, y, ctx);
-  y -= 6;
-  for (const animal of (animals.length ? animals : [{}]).slice(0, 2)) {
-    const animalBreed = animal.breedType === "Definida"
-      ? (animal.breedDescription || "Definida") : (animal.breedType || "-");
-    y = drawProntuarioFields(page1, [
-      [
-        { label: "NOME", value: animal.name || "-" },
-        { label: "ESPÉCIE", value: animal.species || "-" },
-        { label: "PROCEDIMENTO", value: animal.procedureType || animal.procedure || animalProcedureLabels(animal, req).join(", ") || requestTypeLabel(req) || "-" },
-        { label: "SEXO", value: animal.sex || "-" },
-      ],
-      [
-        { label: "RAÇA", value: animalBreed },
-        { label: "PORTE", value: animal.size || "-" },
-        { label: "PESO", value: animal.weight || "-" },
-        { label: "IDADE", value: animal.age || "-" },
-      ],
-      [
-        { label: "DATA DE NASCIMENTO", value: animal.birthDate || "-" },
-        { label: "PELAGEM", value: animal.coat || animal.color || "-" },
-        { label: "POSSUI MICROCHIP", value: animal.hasChip || (animal.microchip ? "Sim" : "-") },
-        { label: "MICROCHIP", value: animal.microchip || "-" },
-      ],
-      [
-        { label: "VERMIFUGADO", value: animal.dewormed || "-" },
-        { label: "VACINAS EM DIA", value: animal.vaccinated || animal.vaccines || animal.vacinas || "-" },
-        { label: "ALIMENTAÇÃO", value: animal.food || "-" },
-      ],
-      [
-        { label: "HISTÓRICO DE DOENÇAS", value: animal.illnessHistory || "-" },
-      ],
-    ], y, ctx);
-    y -= 8;
-  }
-
-  if (animals.length > 2) {
-    page1.drawText(pdfText(`+ ${animals.length - 2} animal(is) adicional(is) vinculado(s) ao processo.`), { x: margin, y, size: 8, font, color: colors.muted });
-    y -= 14;
-  }
-
-  y -= 2;
-  page1.drawLine({ start: { x: margin, y }, end: { x: margin + contentW, y }, thickness: 0.4, color: colors.line });
-  y -= 14;
-
-  y = drawProntuarioSectionTitle(page1, electronic ? "PROTOCOLO E ACEITE" : "PROTOCOLO E REGISTRO", y, ctx);
-  y -= 8;
-  page1.drawText("PROTOCOLO", { x: margin + 9, y, size: 7, font: bold, color: colors.muted });
-  y -= 18;
-  page1.drawText(pdfText(`#${req.protocol || "-"}`), { x: margin + 9, y, size: 18, font: bold, color: colors.blue });
-  y -= 14;
-  page1.drawText(
-    pdfText(`${electronic ? "Aceite eletrônico registrado em" : "Registrado no atendimento em"} ${formatDateTime(acceptedAt)}`),
-    { x: margin + 9, y, size: 8, font, color: colors.muted }
-  );
-  drawRequestPdfFooter(page1, "Requerimento municipal", "Página 1 de 2", ctx);
-
-  // ── PÁGINA 2: declaração ─────────────────────────────────────────
-  const page2 = pdf.addPage(pageSize);
-  let y2 = drawProntuarioHeader(
-    page2, req.protocol, "Declaração", rgb(0.05, 0.45, 0.69), ctx, "",
-    "DECLARAÇÃO DE RESPONSABILIDADES",
-    pdfText(`Protocolo: #${req.protocol || "-"}`)
-  );
-  y2 -= 14;
-
-  y2 = drawProntuarioSectionTitle(page2, "DECLARAÇÃO DE RESPONSABILIDADES - CASTRAÇÃO ANIMAL", y2, ctx);
-  y2 -= 8;
-  page2.drawText("Declaro para fins civis, penais e administrativos:", { x: margin + 9, y: y2, size: 9, font: bold, color: colors.ink });
-  y2 -= 18;
-
-  // The text of the declaration is the municipality's: its name and department, and the fee clause only for a charged request.
-  const declaration = renderDeclaration({ municipalityName: municipality?.name || request.municipalityName || request.municipality_name, departmentName: municipality?.department_name, charged: isRequestFeeCharged(request.fee) });
-  const declarationItems = declaration.items;
-  const recommendationItems = declaration.recommendations;
-
-  for (const paragraph of declarationItems) {
-    const lines = wrapPdfText(pdfText(paragraph), 110);
-    page2.drawText("-", { x: margin + 9, y: y2, size: 8, font: bold, color: colors.ink });
-    for (const line of lines) {
-      page2.drawText(line, { x: margin + 20, y: y2, size: 8, font, color: colors.ink });
-      y2 -= 10;
-    }
-    y2 -= 4;
-  }
-
-  page2.drawText("- Recomendações:", { x: margin + 9, y: y2, size: 8, font: bold, color: colors.ink });
-  y2 -= 12;
-  for (const item of recommendationItems) {
-    page2.drawText(`  - ${pdfText(item)}`, { x: margin + 20, y: y2, size: 8, font, color: colors.ink });
-    y2 -= 10;
-  }
-
-  y2 -= 8;
-  page2.drawLine({ start: { x: margin, y: y2 }, end: { x: margin + contentW, y: y2 }, thickness: 0.4, color: colors.line });
-  y2 -= 16;
-
-  if (electronic) {
-    y2 = drawProntuarioSectionTitle(page2, "ACEITE ELETRÔNICO DO TUTOR", y2, ctx);
-    y2 -= 6;
-    drawProntuarioFields(page2, [
-      [
-        { label: "ACEITE REGISTRADO POR", value: req.tutor || "-" },
-        { label: "CPF", value: req.cpf || "-" },
-        { label: "DATA / HORA", value: formatDateTime(acceptedAt) },
-        { label: "MÉTODO", value: "Li e aceito" },
-      ],
-    ], y2, ctx);
-  } else {
-    // No term is accepted on the screen at the counter: the tutor signs the printed declaration.
-    y2 = drawProntuarioSectionTitle(page2, "ASSINATURA DO TUTOR", y2, ctx);
-    y2 -= 6;
-    y2 = drawProntuarioFields(page2, [
-      [
-        { label: "NOME", value: req.tutor || "-" },
-        { label: "CPF", value: req.cpf || "-" },
-        { label: "REGISTRADO NO ATENDIMENTO EM", value: formatDateTime(acceptedAt) },
-      ],
-    ], y2, ctx);
-    y2 -= 36;
-    page2.drawLine({ start: { x: margin + 9, y: y2 }, end: { x: margin + 289, y: y2 }, thickness: 0.6, color: colors.ink });
-    y2 -= 12;
-    page2.drawText(pdfText("Assinatura do tutor ou responsável"), { x: margin + 9, y: y2, size: 8, font, color: colors.muted });
-  }
-  drawRequestPdfFooter(page2, "Requerimento municipal", "Página 2 de 2", ctx);
-
-  return uint8ArrayToDataUrl(await pdf.save(), "application/pdf");
-}
-
-function drawRequestPdfHeader(page, kicker, title, protocol, ctx) {
-  const { bold, colors, rgb, margin } = ctx;
-  const width = page.getWidth() - margin * 2;
-  const y = page.getHeight() - margin - 70;
-  const protocolText = pdfText(protocol);
-  const protocolBoxWidth = Math.max(96, Math.min(126, 28 + protocolText.length * 7.2));
-  const protocolX = margin + width - protocolBoxWidth - 16;
-  const protocolFontSize = protocolText.length > 11 ? 11 : 13;
-  page.drawRectangle({ x: margin, y, width, height: 70, color: colors.blueDark });
-  page.drawRectangle({ x: margin + width * 0.56, y, width: width * 0.44, height: 70, color: colors.blue });
-  page.drawText(pdfText(kicker), { x: margin + 14, y: y + 46, size: 8, font: bold, color: rgb(0.75, 0.95, 1) });
-  page.drawText(pdfText(title), { x: margin + 14, y: y + 25, size: 18, font: bold, color: colors.white });
-  page.drawRectangle({ x: protocolX, y: y + 14, width: protocolBoxWidth, height: 42, color: colors.blue, borderColor: rgb(0.5, 0.75, 0.9), borderWidth: 1 });
-  page.drawText("PROTOCOLO", { x: protocolX + 16, y: y + 38, size: 7, font: bold, color: rgb(0.82, 0.96, 1) });
-  page.drawText(protocolText, { x: protocolX + 12, y: y + 20, size: protocolFontSize, font: bold, color: colors.white });
-  return y - 16;
-}
-
-function drawRequestPdfSectionTitle(page, title, y, ctx) {
-  const { bold, colors, margin } = ctx;
-  page.drawRectangle({ x: margin, y: y - 3, width: 5, height: 16, color: colors.blue });
-  page.drawText(pdfText(title), { x: margin + 10, y, size: 12, font: bold, color: colors.blueDark });
-  return y - 30;
-}
-
-function drawRequestPdfInfoGrid(page, items, y, ctx) {
-  const {
-    font,
-    bold,
-    colors,
-    rgb,
-    margin,
-    columns = 4,
-    wideLast = false,
-    wideIndexes = [],
-    rowHeight = 46,
-    boxHeight = 36,
-    labelSize = 7,
-    valueSize = 9,
-    valueMaxChars = 58,
-  } = ctx;
-  const gap = 6;
-  const width = page.getWidth() - margin * 2;
-  const colWidth = (width - gap * (columns - 1)) / columns;
-  let x = margin;
-  let rowY = y;
-  items.forEach((item, index) => {
-    const [label, value, explicitSpan] = item;
-    const span = explicitSpan
-      ? Math.min(explicitSpan, columns)
-      : wideLast && index === items.length - 1
-      ? Math.min(3, columns)
-      : wideIndexes.includes(index) ? Math.min(2, columns) : 1;
-    const boxWidth = colWidth * span + gap * (span - 1);
-    if (x + boxWidth > margin + width + 1) {
-      x = margin;
-      rowY -= rowHeight;
-    }
-    page.drawRectangle({ x, y: rowY - boxHeight + 3, width: boxWidth, height: boxHeight, color: rgb(0.97, 0.99, 1), borderColor: colors.line, borderWidth: 1 });
-    page.drawText(pdfText(label), { x: x + 8, y: rowY - 10, size: labelSize, font: bold, color: colors.muted });
-    page.drawText(pdfText(String(value || "-")).slice(0, valueMaxChars), { x: x + 8, y: rowY - 24, size: valueSize, font, color: colors.ink });
-    x += boxWidth + gap;
-  });
-  return rowY - rowHeight - 2;
-}
-
-function drawRequestPdfAnimalCard(page, animal: AnyRecord = {}, index, y, ctx) {
-  const { font, bold, colors, rgb, margin } = ctx;
-  const width = page.getWidth() - margin * 2;
-  const animalFields = [
-    ["ESPÉCIE", animal.species || "-"],
-    ["SEXO", animal.sex || "-"],
-    ["PORTE", animal.size || "-"],
-    ["NASCIMENTO / IDADE", animal.birthDate || animal.age || "-"],
-    ["RAÇA", animal.breedType === "Definida" ? (animal.breedDescription || "Definida") : (animal.breedType || "-")],
-    ["PELAGEM", animal.coat || "-"],
-    ["PROCEDIMENTO", animal.procedure || "-"],
-    ["MICROCHIP", animal.microchip || "-"],
-    ["VERMIFUGADO", animal.dewormed || "-"],
-    ["VACINAS", animal.vaccinated || "-"],
-    ["ALIMENTAÇÃO", animal.food || "-"],
-  ];
-  const columns = 3;
-  const rowHeight = 36;
-  const boxHeight = 29;
-  const fieldRows = Math.ceil(animalFields.length / columns);
-  const height = 34 + fieldRows * rowHeight + 8;
-  page.drawRectangle({ x: margin, y: y - height, width, height, color: colors.orangeSoft, borderColor: rgb(0.98, 0.45, 0.14), borderWidth: 1 });
-  page.drawText(pdfText(`Animal ${index + 1} - ${animal.name || "Sem nome"}`), { x: margin + 10, y: y - 17, size: 11, font: bold, color: colors.orange });
-  drawRequestPdfInfoGrid(page, animalFields, y - 30, {
-    font,
-    bold,
-    colors,
-    rgb,
-    margin: margin + 10,
-    columns,
-    rowHeight,
-    boxHeight,
-    valueMaxChars: 42,
-  });
-  return y - height - 6;
-}
-
-function drawRequestPdfDeclaration(page, request, y, ctx) {
-  const { font, colors, rgb, margin } = ctx;
-  const width = page.getWidth() - margin * 2;
-  const paragraphs = [
-    `Eu, ${request.tutor || "-"}, inscrito(a) no CPF ${request.cpf || "-"}, declaro que as informações prestadas neste requerimento são verdadeiras e autorizo o registro dos dados para triagem, agendamento e acompanhamento do procedimento solicitado.`,
-    "Declaro ciência dos cuidados pré e pós-cirúrgicos, das responsabilidades de acompanhamento do animal, da necessidade de cumprir as orientações fornecidas pela equipe responsável e de manter os contatos informados disponíveis para comunicações sobre a solicitação.",
-    "Estou ciente de que a solicitação poderá passar por análise documental, validação das informações, confirmação de agenda e eventuais solicitações de complementação antes da realização do atendimento.",
-  ];
-  page.drawRectangle({ x: margin, y: y - 160, width, height: 160, color: rgb(0.97, 0.99, 1), borderColor: colors.line, borderWidth: 1 });
-  let textY = y - 24;
-  paragraphs.forEach((paragraph) => {
-    wrapPdfText(pdfText(paragraph), 95).forEach((line) => {
-      page.drawText(line, { x: margin + 14, y: textY, size: 10, font, color: colors.ink });
-      textY -= 14;
-    });
-    textY -= 8;
-  });
-  return y - 170;
-}
-
-async function drawRequestPdfSignatureImage(pdf, page, dataUrl, y, ctx) {
-  if (!dataUrl) return;
-  const { colors, rgb, margin } = ctx;
-  try {
-    const mimeType = getDataUrlMimeType(dataUrl);
-    const bytes = dataUrlToUint8Array(dataUrl);
-    const image = mimeType.includes("png") ? await pdf.embedPng(bytes) : await pdf.embedJpg(bytes);
-    const width = page.getWidth() - margin * 2;
-    page.drawRectangle({ x: margin, y, width, height: 90, color: rgb(1, 1, 1), borderColor: colors.line, borderWidth: 1 });
-    const scale = Math.min((width - 20) / image.width, 74 / image.height);
-    page.drawImage(image, { x: margin + 10, y: y + 8, width: image.width * scale, height: image.height * scale });
-  } catch {}
-}
-
-function drawRequestPdfFooter(page, left, right, ctx) {
-  const { font, colors, rgb, margin } = ctx;
-  page.drawLine({ start: { x: margin, y: 32 }, end: { x: page.getWidth() - margin, y: 32 }, thickness: 1, color: rgb(0.89, 0.93, 0.95) });
-  page.drawText(pdfText(left), { x: margin, y: 18, size: 8, font, color: colors.muted });
-  page.drawText(pdfText(right), { x: page.getWidth() - margin - 60, y: 18, size: 8, font, color: colors.muted });
-}
-
-function wrapPdfText(text, maxChars) {
-  const words = String(text).split(/\s+/);
-  const lines = [];
-  let current = "";
-  words.forEach((word) => {
-    if (`${current} ${word}`.trim().length > maxChars) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = `${current} ${word}`.trim();
-    }
-  });
-  if (current) lines.push(current);
-  return lines;
-}
-
-function pdfText(value = "") {
-  return String(value).replace(/[^\x20-\x7E\u00A0-\u00FF]/g, "-");
-}
-
-// Lazy chunk for pdf-lib can 404 if a new deploy replaced dist/assets after this
-// page was loaded (stale index.html referencing an old chunk hash). Reload once
-// to pick up the fresh build instead of leaving download buttons silently broken.
-function importPdfLib(): Promise<typeof import("pdf-lib")> {
-  return import("pdf-lib").catch((err) => {
-    const message = String(err?.message || "");
-    if (/failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed/i.test(message)) {
-      window.location.reload();
-    }
-    throw err;
-  });
-}
-
-const A4_PAGE_SIZE: [number, number] = [595.28, 841.89];
-
-type PdfRgbFn = Awaited<ReturnType<typeof importPdfLib>>["rgb"];
-
-// Converte uma cor hex (#rrggbb, mesmo formato usado em styles.css) para a
-// tupla 0-1 esperada por pdf-lib, para reaproveitar as cores exatas da tela
-// ao invés de reaproximá-las visualmente.
-function hexToRgbTuple(hex: string): [number, number, number] {
-  const clean = hex.replace("#", "");
-  const r = parseInt(clean.slice(0, 2), 16) / 255;
-  const g = parseInt(clean.slice(2, 4), 16) / 255;
-  const b = parseInt(clean.slice(4, 6), 16) / 255;
-  return [r, g, b];
-}
-
-function getPdfColors(rgb: PdfRgbFn) {
-  return {
-    ink: rgb(0.07, 0.12, 0.18),
-    muted: rgb(0.38, 0.47, 0.55),
-    blue: rgb(0.05, 0.45, 0.69),
-    line: rgb(0.88, 0.92, 0.95),
-    white: rgb(1, 1, 1),
-  };
-}
-
-async function createPdfDocContext(pdf: AnyRecord, rgb: PdfRgbFn) {
-  const { StandardFonts } = await importPdfLib();
-  const font = await pdf.embedFont(StandardFonts.Helvetica);
-  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
-  const margin = 40;
-  const colors = getPdfColors(rgb);
-  return { font, bold, colors, rgb, margin, pageSize: A4_PAGE_SIZE };
-}
-
-async function appendPdfDataUrl(targetPdf, dataUrl) {
-  const { PDFDocument } = await importPdfLib();
-  const sourcePdf = await PDFDocument.load(dataUrlToUint8Array(dataUrl));
-  const pages = await targetPdf.copyPages(sourcePdf, sourcePdf.getPageIndices());
-  pages.forEach((page) => targetPdf.addPage(page));
-}
-
-async function appendImageDataUrl(targetPdf, dataUrl, mimeType = "") {
-  const bytes = dataUrlToUint8Array(dataUrl);
-  const image = mimeType.includes("png")
-    ? await targetPdf.embedPng(bytes)
-    : await targetPdf.embedJpg(bytes);
-  const page = targetPdf.addPage(A4_PAGE_SIZE);
-  const margin = 36;
-  const availableWidth = page.getWidth() - margin * 2;
-  const availableHeight = page.getHeight() - margin * 2;
-  const scale = Math.min(availableWidth / image.width, availableHeight / image.height);
-  const width = image.width * scale;
-  const height = image.height * scale;
-  page.drawImage(image, {
-    x: (page.getWidth() - width) / 2,
-    y: (page.getHeight() - height) / 2,
-    width,
-    height,
-  });
-}
-
-async function appendUnsupportedAttachmentPage(targetPdf, { title, fileName, StandardFonts, rgb }) {
-  const page = targetPdf.addPage(A4_PAGE_SIZE);
-  const font = await targetPdf.embedFont(StandardFonts.Helvetica);
-  page.drawText(pdfText(title).slice(0, 70), { x: 48, y: 780, size: 16, font, color: rgb(0.06, 0.21, 0.31) });
-  page.drawText(pdfText(fileName).slice(0, 90), { x: 48, y: 752, size: 11, font, color: rgb(0.25, 0.32, 0.38) });
-  page.drawText(pdfText("Arquivo anexado sem prévia compatível para inclusão automática na juntada."), {
-    x: 48,
-    y: 704,
-    size: 11,
-    font,
-    color: rgb(0.25, 0.32, 0.38),
-  });
-}
-
-
-
-function getCurrentScheduleMonthKey() {
-  const today = new Date();
-  return `${String(today.getMonth() + 1).padStart(2, "0")}/${today.getFullYear()}`;
-}
-
-function getScheduleMonthKey(dateText) {
-  const [, month, year] = normalizeScheduleDateText(dateText).split("/");
-  if (!month || !year) return "";
-  return `${month}/${year}`;
-}
-
-function buildScheduleMonths(days) {
-  const monthSet = new Set([getCurrentScheduleMonthKey()]);
-
-  days.forEach((day) => {
-    const monthKey = getScheduleMonthKey(day.date);
-    if (monthKey) monthSet.add(monthKey);
-  });
-
-  return Array.from(monthSet).sort((left, right) => {
-    const [leftMonth, leftYear] = left.split("/").map(Number);
-    const [rightMonth, rightYear] = right.split("/").map(Number);
-    return leftYear === rightYear ? leftMonth - rightMonth : leftYear - rightYear;
-  });
-}
-
 function mergeScheduleDaysWithRules(days = [], rules = []) {
   const byDate = new Map(
     (Array.isArray(days) ? days : [])
@@ -9152,29 +6983,3 @@ function mergeScheduleDaysWithRules(days = [], rules = []) {
   return Array.from(byDate.values()).sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date));
 }
 
-function buildMonthCalendarDays(monthKey = getCurrentScheduleMonthKey()): AnyRecord[] {
-  const [month, year] = monthKey.split("/").map(Number);
-  if (!month || !year) return [];
-  const totalDays = new Date(year, month, 0).getDate();
-  const weekdayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"];
-  const firstWeekday = new Date(year, month - 1, 1).getDay();
-
-  const offsets = Array.from({ length: firstWeekday }, (_, i) => ({
-    day: null,
-    date: null,
-    weekday: weekdayNames[i],
-    offset: true,
-  }));
-
-  const days = Array.from({ length: totalDays }, (_, index) => {
-    const day = index + 1;
-    const date = new Date(year, month - 1, day);
-    return {
-      day,
-      date: `${String(day).padStart(2, "0")}/${String(month).padStart(2, "0")}/${year}`,
-      weekday: weekdayNames[date.getDay()],
-    };
-  });
-
-  return [...offsets, ...days];
-}

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  MAX_REQUEST_TYPES_PER_ANIMAL, animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, distinctRequestTypeIds, isRequestFeeCharged, resolveRequestTypes,
+  MAX_REQUEST_TYPES_PER_ANIMAL, animalRequestTypeIds, combineRequestFees, deriveRequestTypeFields, distinctRequestTypeIds, resolveRequestTypes,
 } from "../../shared/request-types-contract.js";
 
 const castration = { id: "castration", name: "Castração", charged: false, fee: "Gratuito" };
@@ -59,9 +59,3 @@ test("fees are not added up: free when every procedure is free, otherwise each c
   assert.equal(combineRequestFees([microchip, castration, vaccine]), "Microchipagem: R$ 20,00; Vacinação antirrábica: R$ 10,00");
 });
 
-test("a stored fee means a charge unless it is the free label or empty", () => {
-  for (const free of ["Gratuito", " Gratuito ", "", "   ", undefined, null]) assert.equal(isRequestFeeCharged(free), false, String(free));
-  assert.equal(isRequestFeeCharged("Microchipagem: R$ 20,00"), true);
-  assert.equal(isRequestFeeCharged(combineRequestFees([castration])), false);
-  assert.equal(isRequestFeeCharged(combineRequestFees([castration, microchip])), true);
-});

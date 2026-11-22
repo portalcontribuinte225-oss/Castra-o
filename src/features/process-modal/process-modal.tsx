@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { ProcedureAction, canApplyProcedureAction, holdsSchedulePlace } from "../../../shared/request-procedure-contract.js";
 import { RequestOrigin, RequestStatus } from "../../../shared/request-contract.js";
-import { DocumentPreviewModal, generateProcessReportPdf } from "../../App";
+import { DocumentPreviewModal } from "../../components/document-preview-modal";
 import { useModalFocus } from "../../components/modal-focus";
 import { RequestType, displayText, getItemMunicipalityId, normalizeRequest, normalizeRequestType, requestTypeDomainLabels, requestTypeLabel } from "../../domain";
 import type { AnyRecord } from "../../types";
@@ -9,6 +9,7 @@ import { getUserUploadedProcessDocuments } from "../../utils";
 import { neighborhoodNames } from "../neighborhoods/neighborhoods";
 import { getSpecialRequestSection, specialRequestConfirmLabel } from "../request-analysis-sections";
 import { TutorDataTab } from "../tutor-data/tutor-data-tab";
+import { generateProcessReportPdf } from "../process-report/process-report-pdf";
 import { AttachmentsTab } from "./attachments-tab";
 import { buildAttachmentRows, isBlockingAttachment, isPendingAttachment } from "./attachment-rows";
 import type { AttachmentRow } from "./attachment-rows";
@@ -18,7 +19,7 @@ import { ProcessFooter } from "./process-footer";
 import { ProcessHeader } from "./process-header";
 import { ProcessTab, plural } from "./process-labels";
 import { PrescriptionDialog } from "./prescription-dialog";
-import { getPrescriptionMunicipality } from "./prescription-print";
+import type { PrintablePrescription } from "./prescription-pdf";
 import { ProceduresTab } from "./procedures-tab";
 import { RescheduleDialog } from "./reschedule-dialog";
 import { useAttachmentActions } from "./use-attachment-actions";
@@ -26,11 +27,11 @@ import { useProcessProcedures } from "./use-process-procedures";
 
 enum Dialog { ASSIGN, REJECT, REJECT_PROCESS, RESCHEDULE, CANCEL_SCHEDULE, PRESCRIPTION, REJECT_DOCUMENT, COMPLAINT, UNSAVED }
 
-const REQUEST_DOCUMENT_KINDS: Record<string, string> = {
-  [RequestType.TUTOR_TRANSFER]: "tutor-transfer-request",
-  [RequestType.ANIMAL_DEATH]: "death-registration-request",
-  [RequestType.COMPLAINT]: "complaint-request",
-};
+// The prescription of one procedure as the server answered it after saving.
+function savedPrescription(request: AnyRecord, animalIndex: number, requestTypeId: string): PrintablePrescription | null {
+  const procedures: AnyRecord[] = request.animals?.[animalIndex]?.procedures || [];
+  return procedures.find((item) => item.requestTypeId === requestTypeId)?.prescription || null;
+}
 
 // The work area of one process: its documents, the procedures of each of its animals and the tutor's data.
 export function ProcessModal({ request, readOnly = true, neighborhoods = [], requestTypes = [], documentTypes = [], sectors = [], users = [], municipalities = [], currentUserName = "",
@@ -60,7 +61,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const attachments = useAttachmentActions(request, municipality, onUpdateDocuments);
   const pending = busy || Boolean(attachments.busyId) || attachments.uploadingEvidence;
 
-  const requestDocument = { kind: REQUEST_DOCUMENT_KINDS[kind] || "request", label: requestTypeDomainLabels[kind] || "Requerimento municipal", protocol: normalized.protocol };
+  const requestDocument = { label: requestTypeDomainLabels[kind] || "Requerimento municipal", protocol: normalized.protocol };
   const rows = buildAttachmentRows({
     uploads: getUserUploadedProcessDocuments(request.documents),
     documentTypes: requestDocumentTypes(request, localTypes, documentTypes.filter(matchesMunicipality)),
@@ -76,15 +77,16 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const { animal, procedure, animalIndex } = procedures;
   const subject = procedure ? `${procedure.name} de ${displayText(animal?.name) || `animal ${animalIndex + 1}`}` : "";
 
-  async function act(action: string, data: AnyRecord, message: string) {
-    if (!procedure || readOnly || pending) return false;
+  // The request the server answers, or null. The dialog that asked for the action closes, unless it still has something to do.
+  async function act(action: string, data: AnyRecord, message: string, closeDialogOnDone = true): Promise<AnyRecord | null> {
+    if (!procedure || readOnly || pending) return null;
     const draft = { animalIndex, requestTypeId: procedure.requestTypeId, edits: procedures.currentEdits };
     setBusy(true);
     try {
       const done = await onProcedureAction(request, { action, animalIndex, requestTypeId: draft.requestTypeId, data: { ...data, edits: draft.edits } }, message);
       if (done) {
         procedures.clearDraft(draft);
-        setDialog(null);
+        if (closeDialogOnDone) setDialog(null);
       }
       return done;
     } finally {
@@ -114,7 +116,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
     setReportLoading(true);
     setReportError("");
     try {
-      const report = await generateProcessReportPdf(request, requestDocument.kind, municipality, localTypes);
+      const report = await generateProcessReportPdf(request, municipality, localTypes);
       const anchor = window.document.createElement("a");
       anchor.href = report.dataUrl;
       anchor.download = report.fileName;
@@ -228,9 +230,12 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
           }} />
       )}
       {dialog === Dialog.PRESCRIPTION && procedure && (
-        <PrescriptionDialog request={request} animal={animal} procedure={procedure} municipality={getPrescriptionMunicipality(request, municipalities)} defaultProfessionalName={currentUserName}
+        <PrescriptionDialog request={request} animal={animal} procedure={procedure} municipality={municipality} defaultProfessionalName={currentUserName}
           canSave={!readOnly && canApplyProcedureAction(procedure.status, ProcedureAction.PRESCRIPTION)} busy={busy}
-          onClose={closeDialog} onSave={(prescription) => act(ProcedureAction.PRESCRIPTION, { prescription }, "Receita registrada")} />
+          onClose={closeDialog} onSave={async (prescription) => {
+            const updated = await act(ProcedureAction.PRESCRIPTION, { prescription }, "Receita registrada", false);
+            return updated ? savedPrescription(updated, animalIndex, procedure.requestTypeId) : null;
+          }} />
       )}
       {dialog === Dialog.UNSAVED && <UnsavedChangesDialog busy={busy} onClose={closeDialog} onDiscard={onClose} onSave={saveDraftsAndClose} />}
     </div>

@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from "react";
 import { CalendarDays } from "lucide-react";
 import { scheduleDate } from "../../../shared/schedule-contract.js";
-import { PublicSchedulePicker } from "../../App";
+import { PublicSchedulePicker } from "../schedule-picker/public-schedule-picker";
 import { Button } from "../../components/button";
 import { CloseButton } from "../../components/close-button";
 import { Input } from "../../components/input";

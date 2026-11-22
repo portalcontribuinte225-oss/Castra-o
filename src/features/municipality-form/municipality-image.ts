@@ -1,4 +1,4 @@
-import { dataUrlBytes, fittedSize, loadImage, readAsDataUrl } from "../adoption-share/compress-adoption-photo";
+import { dataUrlBytes, fittedSize, loadImage, readAsDataUrl } from "../images/image-data";
 
 export const MUNICIPALITY_IMAGE_MAX_SIDE = 512;
 // Its public link serves nothing bigger, so a larger image would never reach the e-mails.

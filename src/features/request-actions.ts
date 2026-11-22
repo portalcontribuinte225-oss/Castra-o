@@ -57,16 +57,17 @@ export function useRequestActions({
       phone: tutor.phone, address: tutor.address, neighborhood: tutor.neighborhood, city: tutor.city, state: tutor.state, cep: tutor.cep }) : current);
   }
 
-  // One action on one procedure of the request; the request the server answers replaces the one on screen.
-  async function applyProcedureAction(request: AnyRecord, action: AnyRecord, successMessage: string) {
+  // One action on one procedure of the request; the request the server answers replaces the one on screen and is returned (or null).
+  async function applyProcedureAction(request: AnyRecord, action: AnyRecord, successMessage: string): Promise<AnyRecord | null> {
     try {
       const updated = await runProcedureAction?.(request.id, action);
-      if (!updated) return false;
+      if (!updated) return null;
       if (successMessage) showToast(successMessage, "success");
       showNotificationNotice(updated);
-      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
-      return true;
-    } catch (failure) { showToast(failure?.message || "Não foi possível atualizar o procedimento.", "error"); return false; }
+      const normalized = normalizeRequest(updated);
+      setPreviewRequest((current) => current?.id === request.id ? normalized : current);
+      return normalized;
+    } catch (failure) { showToast(failure?.message || "Não foi possível atualizar o procedimento.", "error"); return null; }
   }
 
   // The attachments tab saves each document decision and each evidence as soon as it is made.

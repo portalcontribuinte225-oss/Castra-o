@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { COMPLAINT_PHOTO_IDS } from "../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
-import { AttachmentState, attachmentDescription, buildAttachmentRows, canReviewAttachment, isBlockingAttachment, isPendingAttachment } from "./attachment-rows";
+import { AttachmentKind, AttachmentState, attachmentDescription, buildAttachmentRows, canReviewAttachment, isBlockingAttachment, isPendingAttachment } from "./attachment-rows";
 
-const requestDocument = { kind: "request", label: "Requerimento municipal", protocol: "123/2026" };
+const requestDocument = { label: "Requerimento municipal", protocol: "123/2026" };
 
 describe("buildAttachmentRows", () => {
   it("lists the generated request, identification photo, configured documents and extra files in review order", () => {
@@ -24,7 +24,7 @@ describe("buildAttachmentRows", () => {
       ["Comprovante", AttachmentState.MISSING, false],
       ["Evidência", AttachmentState.INFO, true],
     ]);
-    expect(rows[0].fileName).toBe("Requerimento municipal 123/2026.pdf");
+    expect(rows[0]).toMatchObject({ kind: AttachmentKind.REQUEST_DOCUMENT, fileName: "Requerimento municipal 123-2026.pdf" });
     expect(rows.filter(isBlockingAttachment).map(({ id }) => id)).toEqual(["identity-upload"]);
     expect(rows.filter(canReviewAttachment).map(({ id }) => id)).toEqual(["identity-upload"]);
   });
@@ -76,7 +76,7 @@ describe("buildAttachmentRows", () => {
       status: DocumentReviewStatus.ATTACHED,
     };
     const [, row] = buildAttachmentRows({
-      requestDocument: { ...requestDocument, kind: "complaint-request", label: "Denúncia" },
+      requestDocument: { ...requestDocument, label: "Denúncia" },
       documentTypes: [],
       uploads: [photo],
     });

@@ -1,6 +1,7 @@
 import { isComplaintPhotoId } from "../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
 import type { AnyRecord } from "../../types";
+import { documentFileName } from "../municipal-documents/municipal-pdf";
 
 // Where a row of the documents list stands in the review.
 export enum AttachmentState {
@@ -12,10 +13,17 @@ export enum AttachmentState {
   MISSING = "missing",
 }
 
+// What a row of the documents list is: the document the system generates for the request, or something attached to it.
+export enum AttachmentKind {
+  REQUEST_DOCUMENT = "request-document",
+  PHOTO = "photo",
+  ATTACHMENT = "attachment",
+  MISSING = "missing",
+}
+
 export interface AttachmentRow {
   id: string;
-  // The request document uses the kind its preview is built from ("request", "complaint-request"...); the others are files.
-  kind: string;
+  kind: AttachmentKind;
   title: string;
   fileName: string;
   state: AttachmentState;
@@ -40,16 +48,16 @@ function stateOf(document: AnyRecord): AttachmentState {
 }
 
 function fileRow(document: AnyRecord, id: string, title: string, required: boolean): AttachmentRow {
-  return { id, kind: "attachment", title, fileName: document.fileName || document.documentName || title, state: stateOf(document), required, available: true, document };
+  return { id, kind: AttachmentKind.ATTACHMENT, title, fileName: document.fileName || document.documentName || title, state: stateOf(document), required, available: true, document };
 }
 
 // The documents of a request in the order the staff reviews them: the request document, the animal photo, the documents its procedures
 // ask for (sent or not) and anything else attached.
-export function buildAttachmentRows({ uploads, documentTypes, requestDocument }: { uploads: AnyRecord[]; documentTypes: AnyRecord[]; requestDocument: { kind: string; label: string; protocol: string } }): AttachmentRow[] {
-  const system: AttachmentRow = { id: `requerimento-${requestDocument.protocol || "processo"}`, kind: requestDocument.kind, title: requestDocument.label,
-    fileName: `${requestDocument.label} ${requestDocument.protocol}.pdf`.trim(), state: AttachmentState.SYSTEM, required: false, available: true };
+export function buildAttachmentRows({ uploads, documentTypes, requestDocument }: { uploads: AnyRecord[]; documentTypes: AnyRecord[]; requestDocument: { label: string; protocol: string } }): AttachmentRow[] {
+  const system: AttachmentRow = { id: `requerimento-${requestDocument.protocol || "processo"}`, kind: AttachmentKind.REQUEST_DOCUMENT, title: requestDocument.label,
+    fileName: documentFileName(requestDocument.label, requestDocument.protocol), state: AttachmentState.SYSTEM, required: false, available: true };
   const photos: AttachmentRow[] = uploads.filter(isAnimalPhoto).map((photo, index) => ({
-    id: photo.attachmentId || `${PHOTO_DOCUMENT_ID}-${index}`, kind: "photo", title: photo.documentName || PHOTO_DOCUMENT_NAME,
+    id: photo.attachmentId || `${PHOTO_DOCUMENT_ID}-${index}`, kind: AttachmentKind.PHOTO, title: photo.documentName || PHOTO_DOCUMENT_NAME,
     fileName: photo.fileName || PHOTO_DOCUMENT_NAME, state: AttachmentState.INFO, required: false, available: true, document: photo,
   }));
   const matched = new Set<AnyRecord>();
@@ -62,7 +70,7 @@ export function buildAttachmentRows({ uploads, documentTypes, requestDocument }:
       matched.add(uploaded);
       return fileRow(uploaded, uploaded.attachmentId || uploaded.documentId || type.id, type.name, required);
     }
-    return { id: `missing-${type.id}`, kind: "missing", title: type.name, fileName: type.name, state: AttachmentState.MISSING, required, available: false };
+    return { id: `missing-${type.id}`, kind: AttachmentKind.MISSING, title: type.name, fileName: type.name, state: AttachmentState.MISSING, required, available: false };
   });
   const extras = uploads
     .filter((document) => !isAnimalPhoto(document) && !matched.has(document))
@@ -106,7 +114,7 @@ export function attachmentDescription(row: AttachmentRow): string {
   if (row.state === AttachmentState.SYSTEM) return "Gerado automaticamente pelo sistema";
   if (row.state === AttachmentState.INFO) {
     if (isComplaintPhotoId(row.document?.documentId)) return "Foto enviada com a denúncia";
-    return row.kind === "photo" ? "Foto de identificação do animal" : "Evidência anexada pela equipe";
+    return row.kind === AttachmentKind.PHOTO ? "Foto de identificação do animal" : "Evidência anexada pela equipe";
   }
   if (row.state === AttachmentState.MISSING) return row.required ? "Documento obrigatório não enviado" : "Documento não enviado";
   if (row.state === AttachmentState.REJECTED) return row.document?.review?.note || "Indeferido na conferência";

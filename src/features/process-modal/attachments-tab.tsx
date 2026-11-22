@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { CheckCircle2, Download, Eye, FileText, Plus, X } from "lucide-react";
-import { AiAnalysisDetails } from "../../App";
+import { AiAnalysisDetails } from "../document-analysis/ai-analysis-details";
 import { Button } from "../../components/button";
 import { Card } from "../../components/card";
 import type { AttachmentRow } from "./attachment-rows";

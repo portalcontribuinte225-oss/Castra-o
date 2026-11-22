@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ProcedureStatus, resolveRequestProcedures } from "../../../shared/request-procedure-contract.js";
-import { historyBlocks, prescriptionBlocks, reportPrescriptions } from "./process-report";
+import { historyBlocks, issuedPrescriptions } from "./process-report";
 
 const label = (status: string) => ({ NOVA: "Nova", CANCELADA: "Cancelada" }[status] || status);
 const date = (value: string) => `em ${value}`;
@@ -30,35 +30,23 @@ describe("the tramitação of the process report", () => {
   });
 });
 
-describe("the prescription of the process report", () => {
-  it("is one block per line, keeping the empty lines as the space between paragraphs", () => {
-    expect(prescriptionBlocks("1. Amoxicilina\r\n\r\n  Orientações: repouso  ")).toEqual([
-      { heading: "", text: "1. Amoxicilina" },
-      { heading: "", text: "" },
-      { heading: "", text: "Orientações: repouso" },
-    ]);
-  });
-
-  it("is empty when no prescription was issued", () => {
-    for (const prescription of [undefined, null, "", "   \n ", 5]) expect(prescriptionBlocks(prescription)).toEqual([]);
-  });
-
-  it("keeps the legacy prescription and identifies each animal, procedure and professional in the process report", () => {
-    const prescription = { text: "Orientações de teste", professionalName: "Veterinária", professionalRegistry: "CRMV 1234" };
+describe("the prescriptions of the process", () => {
+  it("identifies each prescription by its number, animal, procedure and professional", () => {
+    const prescription = { text: "Orientações de teste", number: "000001/2026", professionalName: "Veterinária", professionalRegistry: "CRMV 1234", issuedAt: "2026-11-16T14:30:00Z" };
     const animals = resolveRequestProcedures({
       request_type: "Castração, Microchipagem",
       animals: [
         { name: "Bidu", requestTypeIds: ["castration"], requestTypeNames: ["Castração"],
           procedures: [{ requestTypeId: "castration", status: ProcedureStatus.DONE, prescription }] },
         { name: "Mel", requestTypeIds: ["chip"], requestTypeNames: ["Microchipagem"],
-          procedures: [{ requestTypeId: "chip", status: ProcedureStatus.SCHEDULED, prescription }] },
+          procedures: [{ requestTypeId: "chip", status: ProcedureStatus.SCHEDULED, prescription }, { requestTypeId: "other", status: ProcedureStatus.DONE, prescription: { text: "  " } }] },
       ],
     });
-    expect(reportPrescriptions(animals, "Receita antiga")).toEqual([
-      { id: "legacy", subtitle: "Animal: Bidu", blocks: prescriptionBlocks("Receita antiga") },
-      { id: "0:0", subtitle: "Animal: Bidu  ·  Procedimento: Castração  ·  Profissional: Veterinária, CRMV 1234", blocks: prescriptionBlocks(prescription.text) },
-      { id: "1:0", subtitle: "Animal: Mel  ·  Procedimento: Microchipagem  ·  Profissional: Veterinária, CRMV 1234", blocks: prescriptionBlocks(prescription.text) },
+    expect(issuedPrescriptions(animals).map(({ id, subtitle, animal, prescription: data }) => ({ id, subtitle, name: animal.name, data }))).toEqual([
+      { id: "0:0", subtitle: "Nº 000001/2026  ·  Animal: Bidu  ·  Procedimento: Castração  ·  Profissional: Veterinária, CRMV 1234", name: "Bidu", data: prescription },
+      { id: "1:0", subtitle: "Nº 000001/2026  ·  Animal: Mel  ·  Procedimento: Microchipagem  ·  Profissional: Veterinária, CRMV 1234", name: "Mel", data: prescription },
     ]);
-    expect(reportPrescriptions(animals, "Receita antiga", { completedOnly: true }).map(({ id }) => id)).toEqual(["legacy", "0:0"]);
+    expect(issuedPrescriptions(animals, { completedOnly: true }).map(({ id }) => id)).toEqual(["0:0"]);
+    expect(issuedPrescriptions(undefined)).toEqual([]);
   });
 });

@@ -3,7 +3,7 @@ import {
   COMPLAINT_PHOTO_MIME_TYPES,
 } from "../../../shared/complaint-photo-contract.js";
 import { readFileAsDataUrl } from "../../utils";
-import { fittedSize, loadImage } from "../adoption-share/compress-adoption-photo";
+import { fittedSize, loadImage } from "../images/image-data";
 
 const MAX_BYTES = COMPLAINT_PHOTO_MAX_MB * 1024 * 1024;
 const MAX_SIDE = 2560;

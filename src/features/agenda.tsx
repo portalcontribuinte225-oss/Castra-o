@@ -16,7 +16,7 @@ import {
   requestTypeLabel,
   requestTypeLabels,
 } from "../domain";
-import { ToastContainer } from "../App";
+import { ToastContainer } from "../components/toast-container";
 import { ProcessModal } from "./process-modal/process-modal";
 import { canEditRequests, useRequestActions } from "./request-actions";
 

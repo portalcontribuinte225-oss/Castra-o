@@ -6,7 +6,7 @@ import { EmptyState } from "../components/ui";
 import { formatScheduleDate, initialTeams, normalizeRequest } from "../domain";
 import type { AnyRecord } from "../types";
 import { animalNeighborhoodsOf, neighborhoodFilterOptions, tutorNeighborhoodOf } from "./neighborhoods/neighborhood-report";
-import { printHtmlViaIframe } from "./process-report/print-html";
+import { printHtmlViaIframe } from "./reports/print-html";
 import { ActiveFiltersBar } from "./request-filters/active-filters-bar";
 import { RequestFiltersDrawer } from "./request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./request-filters/request-filters-toolbar";
