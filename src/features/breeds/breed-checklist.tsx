@@ -1,4 +1,3 @@
-import React from "react";
 import { ScrollChecklist } from "../../components/scroll-checklist";
 import { filterByMunicipalityScope } from "../../domain";
 import type { AnyRecord } from "../../types";

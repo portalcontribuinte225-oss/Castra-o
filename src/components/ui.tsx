@@ -148,24 +148,6 @@ export function StatusBadge({ status, className = "" }: AnyRecord) {
   return <span className={`status-badge status-${status} ${className}`}>{statusLabels[status] || status}</span>;
 }
 
-export function Field({ label, value, onChange, placeholder, readOnly = false, invalid = false, type = "text", autoComplete, inputMode, maxLength }: AnyRecord) {
-  return (
-    <label className={`field ${invalid ? "invalid" : ""}`}>
-      <span>{label}</span>
-      <input
-        type={type}
-        value={value || ""}
-        readOnly={readOnly}
-        placeholder={placeholder || ""}
-        autoComplete={autoComplete}
-        inputMode={inputMode}
-        maxLength={maxLength}
-        onChange={(event) => onChange?.(event.target.value)}
-      />
-    </label>
-  );
-}
-
 export const configFieldStyle = "tw:grid tw:min-w-0 tw:content-start tw:gap-1.5 tw:text-sm tw:font-medium tw:text-ui-text";
 export const configTextareaStyle = "tw:block tw:w-full tw:min-w-0 tw:rounded-[var(--ui-radius-md)] tw:border tw:border-solid tw:border-card-border tw:bg-card-surface tw:px-[13px] tw:py-2.5 tw:text-sm tw:text-ui-ink tw:focus:border-ui-accent tw:focus:outline-hidden tw:aria-invalid:border-ui-danger tw:aria-invalid:focus:border-ui-danger";
 
@@ -184,17 +166,6 @@ export function ConfigField({ label, className = "", value, type = "text", inval
   );
 }
 
-export function YesNoField({ label, value, onChange }: AnyRecord) {
-  return (
-    <SegmentedButtons
-      label={label}
-      value={value}
-      options={["Sim", "Não"]}
-      onChange={onChange}
-    />
-  );
-}
-
 export function CompactChoiceField({ label, value, options, onChange, invalid = false, required = false }: AnyRecord) {
   return (
     <div className={`compact-choice-field ${invalid ? "invalid" : ""}`}>
@@ -210,21 +181,6 @@ export function CompactChoiceField({ label, value, options, onChange, invalid = 
             </button>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-function SegmentedButtons({ label, value, options, onChange }: AnyRecord) {
-  return (
-    <div className="compact-choice-field">
-      <span>{label}</span>
-      <div>
-        {(options || []).map((option) => (
-          <button key={option} type="button" className={value === option ? "selected" : ""} onClick={() => onChange(option)}>
-            {option}
-          </button>
-        ))}
       </div>
     </div>
   );

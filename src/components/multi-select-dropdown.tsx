@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { topModalLayer } from "./modal-focus";
 import { CHECKLIST_SEARCH_THRESHOLD, filterChecklistGroups, toggleSelection } from "./scroll-checklist";

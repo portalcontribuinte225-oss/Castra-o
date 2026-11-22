@@ -1,10 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BREEDS_CONFIG_KEY, buildDefaultBreeds, planBreedSeed } from "../src/services/breed-defaults.js";
+import { BREEDS_CONFIG_KEY, buildDefaultBreeds } from "../src/services/breed-defaults.js";
 import { buildMunicipalityDefaultConfigs, upsertMunicipalityDefaultConfigs } from "../src/municipalityDefaults.js";
 
 const municipality = { id: "11111111-1111-4111-8111-111111111111", name: "Test Town", state: "SC" };
-const species = [{ id: "canino", name: "Canino", active: true }, { id: "felino", name: "Felino", active: true }];
 
 test("the default breeds are the five most common dogs and cats, active, with stable ids", () => {
   const breeds = buildDefaultBreeds();
@@ -39,27 +38,4 @@ test("creating a municipality writes the breeds only when it has none, while the
   assert.match(breeds.sql, /DO NOTHING/);
   assert.doesNotMatch(breeds.sql, /DO UPDATE/);
   for (const other of queries.filter(({ key }) => key !== BREEDS_CONFIG_KEY)) assert.match(other.sql, /DO UPDATE/, other.key);
-});
-
-test("the load for an existing municipality leaves alone one that has breeds or lacks the default species", () => {
-  const breeds = [{ id: "mine", name: "Minha raça", speciesId: "canino", active: true }];
-  assert.match(planBreedSeed({ species, breeds, requestTypes: [] }).skip, /já tem raças/);
-  assert.match(planBreedSeed({ species: [{ id: "canino" }], breeds: [], requestTypes: [] }).skip, /espécies padrão/);
-  assert.match(planBreedSeed({ species: [{ id: "cao" }, { id: "gato" }], breeds: undefined, requestTypes: [] }).skip, /espécies padrão/);
-  assert.match(planBreedSeed({ species: undefined, breeds: undefined, requestTypes: undefined }).skip, /espécies padrão/);
-});
-
-test("the load adds the breeds when there are none, and links only the request types that link none", () => {
-  const everyId = buildDefaultBreeds().map(({ id }) => id);
-  const requestTypes = [{ id: "a", name: "A" }, { id: "b", name: "B", breedIds: [] }, { id: "c", name: "C", breedIds: ["canino_poodle"] }, null];
-  const before = JSON.stringify(requestTypes);
-  for (const breeds of [undefined, null, []]) {
-    const plan = planBreedSeed({ species, breeds, requestTypes });
-    assert.deepEqual(plan.breeds, buildDefaultBreeds());
-    assert.deepEqual(plan.requestTypes.map((type) => type?.breedIds), [everyId, everyId, ["canino_poodle"], undefined]);
-    assert.equal(plan.requestTypes[2], requestTypes[2], "a request type that already links breeds is not rewritten");
-    assert.deepEqual(plan.requestTypes.slice(0, 2).map(({ id, name }) => [id, name]), [["a", "A"], ["b", "B"]]);
-  }
-  assert.equal(JSON.stringify(requestTypes), before, "the stored values are not changed in place");
-  assert.equal(planBreedSeed({ species, breeds: [], requestTypes: undefined }).requestTypes, undefined);
 });

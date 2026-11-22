@@ -10,7 +10,6 @@ export const WHATSAPP_APPROVED_STATUS = "APPROVED";
 // Reason for a template whose name is simply not one of the system's notices (not a defect of the template).
 export const WHATSAPP_NOT_A_NOTICE_REASON = "O nome não indica um aviso do sistema.";
 export const WHATSAPP_LEGACY_DOCUMENTS_LABEL = "Documentos deferidos e indeferidos";
-export const WHATSAPP_DEFAULT_LANGUAGE = "pt_BR";
 export const WHATSAPP_MAX_VARIABLES = 20;
 // The longest body text kept from Meta; a longer body is treated as missing.
 export const WHATSAPP_MAX_BODY_LENGTH = 1100;

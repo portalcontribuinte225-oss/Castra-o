@@ -1,7 +1,5 @@
 # Animal já cadastrado — fase 6
 
-Plano: `.plans/animal-cadastrado-fase-6.md`.
-
 ## Schema antes de executar
 
 O código depende de `backend/src/db/sql/20261113-registered-animals.sql`. A migration permite microchip nulo e acrescenta índices de propriedade, município e agenda; não contém backfill, seed ou exclusão de dados.

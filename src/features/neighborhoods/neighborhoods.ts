@@ -4,13 +4,6 @@ import type { AnyRecord } from "../../types";
 
 export const MAX_NEIGHBORHOOD_LENGTH = 120;
 
-export interface Neighborhood {
-  id: string;
-  name: string;
-  active?: boolean;
-  municipalityId?: string;
-}
-
 // The comparison key of a neighborhood name: "São  João" and "sao joao" are the same neighborhood.
 export function neighborhoodKey(name: unknown): string {
   return normalizeText(String(name ?? "")).replace(/\s+/g, " ");

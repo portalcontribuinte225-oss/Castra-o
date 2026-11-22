@@ -1,5 +1,5 @@
 import type { AnyRecord } from "./types";
-import { initialTeams, normalizeRequest, requestHasTag, requestTypeLabel, storedRequestTypeNames } from "./domain";
+import { initialTeams, normalizeRequest, requestTypeLabel, storedRequestTypeNames } from "./domain";
 
 export function sumValues(items: AnyRecord[] = []) {
   return items.reduce((total, item) => total + Number(item.value || 0), 0);

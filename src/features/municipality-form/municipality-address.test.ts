@@ -1,19 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyMunicipalityForm, formFromMunicipality, formatMunicipalityAddress, municipalityContactIssue, withCepAddress } from "./municipality-address";
-
-describe("formatMunicipalityAddress", () => {
-  it("joins the street, the number, the complement and the neighborhood", () => {
-    expect(formatMunicipalityAddress({ address: "Rua das Flores", address_number: "100", address_complement: "Sala 2", neighborhood: "Centro" })).toBe("Rua das Flores, 100, Sala 2 - Centro");
-    expect(formatMunicipalityAddress({ address: "Rua das Flores", addressNumber: "100", neighborhood: "Centro" })).toBe("Rua das Flores, 100 - Centro");
-    expect(formatMunicipalityAddress({ address: " Rua das Flores ", neighborhood: "" })).toBe("Rua das Flores");
-  });
-
-  it("shows a municipality saved before the split as it was written", () => {
-    expect(formatMunicipalityAddress({ address: "Rua das Flores, 100, Centro" })).toBe("Rua das Flores, 100, Centro");
-    expect(formatMunicipalityAddress({})).toBe("");
-    expect(formatMunicipalityAddress({ neighborhood: "Centro" })).toBe("Centro");
-  });
-});
+import { emptyMunicipalityForm, formFromMunicipality, municipalityContactIssue, withCepAddress } from "./municipality-address";
 
 describe("formFromMunicipality", () => {
   it("masks the contact and the CEP and reads the columns of the server", () => {

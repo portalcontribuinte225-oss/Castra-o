@@ -1,4 +1,3 @@
-import React from "react";
 import { AnimalDeathForm } from "./animal-death-form";
 import { AnimalRecordView } from "./animal-record-view";
 import { AnimalService } from "./animal-service-types";

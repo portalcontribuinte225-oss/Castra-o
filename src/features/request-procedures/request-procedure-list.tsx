@@ -1,4 +1,3 @@
-import React from "react";
 import { MultiSelectDropdown } from "../../components/multi-select-dropdown";
 import type { AnyRecord } from "../../types";
 import { requestTypeFeeLabel } from "./request-procedures";

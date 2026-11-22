@@ -41,19 +41,6 @@ export function normalizeRequestType(type = "") {
   return RequestType.PROCEDURE;
 }
 
-export const workflowTagLabels: AnyRecord = {
-  REAGENDADA: "Reagendada",
-  ATRIBUIDA: "Atribuída",
-  PRIORIDADE: "Prioridade",
-  RETORNO_TUTOR: "Retorno tutor",
-  MUTIRAO: "Mutirão",
-  MICROCHIP: "Microchip",
-  OBITO: "Óbito",
-  TROCA_TUTOR: "Troca de tutor",
-};
-
-export const hiddenWorkflowTags = new Set(["PRESENCIAL", "MICROCHIP"]);
-
 export const initialDocumentTypes: AnyRecord[] = [];
 export const initialRequestTypes: AnyRecord[] = [];
 export const initialBreeds: AnyRecord[] = [];
@@ -118,7 +105,6 @@ export const CONFIG_KEYS_LIST = Object.values(CONFIG_KEYS);
 // Where the global administration's municipality filter is kept in the browser; it is cleared when the session ends.
 export const GLOBAL_MUNICIPALITY_FILTER_KEY = "castragestao:globalMunicipalityFilterId";
 export const initialTeams = { sectors: [], users: [] };
-export const initialScheduleRules: AnyRecord[] = [];
 
 const DEFAULT_DOCUMENT_ACCEPT = ["image/jpeg", "image/png", "application/pdf"];
 const DEFAULT_DOCUMENT_MAX_SIZE_MB = 5;
@@ -278,7 +264,6 @@ export function generateScheduleDaysFromRule(rule: AnyRecord) {
 
   return days;
 }
-export const initialScheduleDays = initialScheduleRules.flatMap(generateScheduleDaysFromRule);
 
 export function formatSizeRange(size: AnyRecord = {}) {
   const start = String(size.weightStart ?? "").trim();
@@ -307,14 +292,6 @@ export function tagsFromLegacyStatus(status = "") {
 
 export function requestHasTag(request: AnyRecord, tag: string) {
   return Array.isArray(request?.tags) && request.tags.includes(tag);
-}
-
-export function requestResultTag(request: AnyRecord = {}) {
-  return "";
-}
-
-export function visibleWorkflowTags(tags: string[] = [], _request: AnyRecord = {}) {
-  return tags.filter((tag) => !hiddenWorkflowTags.has(tag));
 }
 
 export function requestResultLabel(request: AnyRecord = {}) {
@@ -434,7 +411,6 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     origin: request.origin || RequestOrigin.PUBLIC,
     rescheduleCount,
     protocol: request.protocol || String(request.id || "").slice(0, 8).toUpperCase() || "SEM-ID",
-    signatureDataUrl: request.signatureDataUrl || request.signature_data_url || "",
     signedAt: request.signedAt || request.signed_at || "",
     isConfidential: Boolean(request.isConfidential || request.is_confidential),
     tutor: (request.isConfidential || request.is_confidential)
@@ -547,17 +523,6 @@ export function getNextUpcomingMutirao(scheduleDays: AnyRecord[] = []) {
   return scheduleDays
     .filter((day) => day.active !== false && day.kind === "Mutirao" && !isPastScheduleDay(day.date))
     .sort((left, right) => parseScheduleDate(left.date) - parseScheduleDate(right.date))[0] || null;
-}
-
-export function countRequestAnimals(request: AnyRecord = {}) {
-  return Array.isArray(request.animals) && request.animals.length > 0 ? request.animals.length : 1;
-}
-
-export function countUsedVacancies(requests: AnyRecord[] = [], date: string) {
-  return requests
-    .map(normalizeRequest)
-    .filter((request) => (request.preferredSchedule || request.appointment || request.schedule_date) === date)
-    .reduce((sum, request) => sum + countRequestAnimals(request), 0);
 }
 
 export function mergeTags(current: any[] = [], next: any[] = []) {

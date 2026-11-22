@@ -1,4 +1,3 @@
-import React from "react";
 import { CredentialIssue } from "../../shared/server-credential-contract.js";
 import { ConfigField } from "./ui";
 

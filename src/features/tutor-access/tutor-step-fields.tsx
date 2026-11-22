@@ -1,4 +1,3 @@
-import React from "react";
 import { Card } from "../../components/card";
 import { AddressFields } from "../address/address-fields";
 import { RequestTextField } from "../request-steps/request-text-field";

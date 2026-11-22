@@ -1,4 +1,3 @@
-import React from "react";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { Button } from "../../components/button";
 import { IntegrationCard } from "../../components/integration-card";

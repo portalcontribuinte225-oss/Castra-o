@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Cat, Clock, Dog, Download, MapPin, Phone, ScanLine, User } from "lucide-react";
 import { Button } from "../../components/button";
 import { Card } from "../../components/card";

@@ -1,4 +1,3 @@
-import React from "react";
 import { maskFollowUpEmail, maskFollowUpPhone } from "./follow-up";
 
 export function FollowUpSummary({ value }: { value?: { enabled: boolean; email?: string; phone?: string } }) {

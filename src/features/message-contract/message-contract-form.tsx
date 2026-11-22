@@ -1,4 +1,3 @@
-import React from "react";
 import { Button } from "../../components/button";
 import { IntegrationCard, integrationFieldsStyle } from "../../components/integration-card";
 import { ConfigField } from "../../components/ui";

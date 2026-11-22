@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { AuthAudience } from "../../../shared/auth-contract.js";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { Button } from "../../components/button";

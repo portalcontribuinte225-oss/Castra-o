@@ -1,4 +1,4 @@
-import { GLOBAL_ROLES, normalizeRole, isGlobalUser, isInternalUser, isMasterUser } from "../tenant.js";
+import { GLOBAL_ROLES, normalizeRole, isInternalUser, isMasterUser } from "../tenant.js";
 import { verifySession, publicAuthUser } from "../services/auth/auth-session.js";
 import { userHasConfigItem } from "../services/config-permission.js";
 
@@ -30,18 +30,6 @@ export function requireInternalUser(req, res, next) {
 export async function optionalAuth(req, res, next) {
   const token = req.headers.authorization?.split(" ")[1];
   if (token) return auth(req, res, next);
-  next();
-}
-
-/**
- * Middleware que restringe acesso a roles globais (master / suporte).
- * Use em rotas de administração da plataforma SaaS.
- */
-export function requireGlobal(req, res, next) {
-  if (!req.user) return res.status(401).json({ error: "Autenticação necessária." });
-  if (!isGlobalUser(req.user)) {
-    return res.status(403).json({ error: "Acesso restrito à administração global da plataforma." });
-  }
   next();
 }
 

@@ -84,11 +84,6 @@ export function isInternalUser(user = {}) {
   return isGlobalUser(user) || INTERNAL_ROLES.has(normalizeRole(user.role));
 }
 
-/** Retorna o nível numérico de um role (0 se desconhecido) */
-export function getRoleLevel(role = "") {
-  return ROLE_LEVELS[normalizeRole(role)] ?? 0;
-}
-
 /**
  * Verifica se o `actor` pode atribuir `targetRole` a outro usuário.
  * Regras:

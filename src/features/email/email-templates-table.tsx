@@ -1,4 +1,3 @@
-import React from "react";
 import { Lock } from "lucide-react";
 import { Input } from "../../components/input";
 import type { EmailUseRow } from "./email-integration-types";

@@ -8,7 +8,6 @@ import {
   duplicateAnimal,
   mergeProcedureDocuments,
   needsProcedure,
-  procedureNames,
   procedureSignature,
   requestTypeFeeLabel,
   withProcedures,
@@ -157,12 +156,5 @@ describe("mergeProcedureDocuments", () => {
     expect(merged.find(({ id }) => id === "residence")).toMatchObject({ name: "Residência", required: true });
     expect(merged.find(({ id }) => id === "vaccine-card").required).toBe(false);
     expect(mergeProcedureDocuments([])).toEqual([]);
-  });
-});
-
-describe("procedureNames", () => {
-  it("lists the names of the animal's procedures in the order chosen, skipping unknown ids", () => {
-    expect(procedureNames(dog({ requestTypeIds: ["microchip", "gone", "castration"] }), context.requestTypes)).toEqual(["Microchipagem", "Castração"]);
-    expect(procedureNames(dog(), context.requestTypes)).toEqual([]);
   });
 });

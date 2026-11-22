@@ -1,4 +1,3 @@
-import React from "react";
 import { WHATSAPP_TOKEN_VARIABLE_PREFIX } from "../../../shared/server-credential-contract.js";
 import { Button } from "../../components/button";
 import { IntegrationCard, integrationActionFieldStyle, integrationFieldsStyle } from "../../components/integration-card";

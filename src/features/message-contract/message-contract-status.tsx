@@ -1,4 +1,3 @@
-import React from "react";
 import { Card } from "../../components/card";
 import type { MessageQuotaStatus } from "./message-contract-types";
 

@@ -1,4 +1,3 @@
-import React from "react";
 import { Lock } from "lucide-react";
 import { smsTextPreview } from "../../../shared/sms-messages-contract.js";
 import type { SmsUseRow } from "./sms-types";

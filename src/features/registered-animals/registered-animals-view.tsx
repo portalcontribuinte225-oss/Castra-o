@@ -1,4 +1,3 @@
-import React from "react";
 import { Button } from "../../components/button";
 import { Card } from "../../components/card";
 import { Input } from "../../components/input";

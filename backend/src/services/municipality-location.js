@@ -3,7 +3,6 @@ import { isValidPhone } from "../utils.js";
 // The columns of a municipality that say how to reach it and where it is; the street is the existing `address` column.
 const TEXT_LIMITS = { address: 200, address_number: 20, address_complement: 80, neighborhood: 120 };
 const CAMEL_NAMES = { address_number: "addressNumber", address_complement: "addressComplement" };
-export const MUNICIPALITY_LOCATION_FIELDS = ["contact", "cep", ...Object.keys(TEXT_LIMITS)];
 
 function invalid(message) {
   throw Object.assign(new Error(message), { status: 400 });

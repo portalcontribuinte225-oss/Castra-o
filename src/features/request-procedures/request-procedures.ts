@@ -85,8 +85,3 @@ export function mergeProcedureDocuments(lists: AnyRecord[][]): AnyRecord[] {
   }
   return [...merged.values()];
 }
-
-// The names of an animal's procedures, in the order chosen.
-export function procedureNames(animal: AnyRecord, requestTypes: AnyRecord[]): string[] {
-  return animalRequestTypeIds(animal).map((id) => requestTypes.find((type) => type.id === id)?.name).filter(Boolean);
-}

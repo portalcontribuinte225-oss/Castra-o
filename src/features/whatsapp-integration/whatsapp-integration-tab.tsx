@@ -1,4 +1,3 @@
-import React from "react";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { PanelHeader } from "../../components/ui";
 import { MessageContractForm } from "../message-contract/message-contract-form";

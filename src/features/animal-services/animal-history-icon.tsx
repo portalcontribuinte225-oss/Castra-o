@@ -1,4 +1,3 @@
-import React from "react";
 import { AlertCircle, CalendarDays, CheckCircle2, ClipboardList, RefreshCw } from "lucide-react";
 import { AnimalHistoryTone, animalHistoryTone } from "./animal-history";
 import type { AnimalHistoryItem } from "./animal-service-types";

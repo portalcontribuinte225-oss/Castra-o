@@ -43,15 +43,6 @@ export function formFromMunicipality(municipality: AnyRecord = {}): Municipality
   };
 }
 
-// "Rua das Flores, 100, Sala 2 - Centro". A municipality saved before the address was split has only the street column, which
-// holds the whole text, and shows it as it is.
-export function formatMunicipalityAddress(municipality: AnyRecord = {}): string {
-  const street = [municipality.address, municipality.address_number || municipality.addressNumber, municipality.address_complement || municipality.addressComplement]
-    .map((part) => String(part || "").trim()).filter(Boolean).join(", ");
-  const neighborhood = String(municipality.neighborhood || "").trim();
-  return [street, neighborhood].filter(Boolean).join(" - ");
-}
-
 // The problem that stops the form from being saved, or "" when there is none. Both fields may stay empty.
 export function municipalityContactIssue(form: Pick<MunicipalityForm, "contact" | "cep">): string {
   if (onlyDigits(form.contact) && !isValidPhone(form.contact)) return "Informe um telefone de contato válido, com DDD.";

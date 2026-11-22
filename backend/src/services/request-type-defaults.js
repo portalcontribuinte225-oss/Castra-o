@@ -37,18 +37,3 @@ function buildRequestType({ id, name }, breedIds) {
 export function buildDefaultRequestTypes(breedIds = []) {
   return DEFAULT_REQUEST_TYPES.map((type) => buildRequestType(type, breedIds));
 }
-
-const sameName = (left, right) => String(left ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase()
-  === String(right ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
-
-// What to write for a municipality that already exists: the default procedures it does not have yet, added at the end. A type
-// the municipality already has (same id, or same name) is never changed, and nothing is removed. The new types are linked to the
-// default breeds the municipality has. Returns `{ skip: reason }` or `{ types, added }`.
-export function planDefaultRequestTypes({ requestTypes, breedIds = [] }) {
-  const current = Array.isArray(requestTypes) ? requestTypes : [];
-  const present = (type) => current.some((item) => item?.id === type.id || sameName(item?.name, type.name));
-  const missing = DEFAULT_REQUEST_TYPES.filter((type) => !present(type));
-  if (!missing.length) return { skip: "já tem todos os tipos padrão" };
-  const added = missing.map((type) => buildRequestType(type, breedIds));
-  return { types: [...current, ...added], added: added.map(({ name }) => name) };
-}

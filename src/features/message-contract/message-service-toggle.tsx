@@ -1,4 +1,3 @@
-import React from "react";
 import { ConfigActiveToggle } from "../../components/ui";
 import type { MessageContract } from "./use-message-contract";
 

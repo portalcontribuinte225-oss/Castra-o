@@ -1,4 +1,3 @@
-import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RequestKind } from "../../../shared/request-contract.js";

@@ -1,4 +1,3 @@
-import React from "react";
 import { Lock, Settings } from "lucide-react";
 import { Button } from "../../components/button";
 import { isNotUsedBySystem, lockReason, NOT_USED_BY_SYSTEM_TEXT, templateRowKey, templateStatusLabel, templateStatusTone, variableOrderHint } from "./whatsapp-template-display";

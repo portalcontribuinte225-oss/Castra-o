@@ -90,10 +90,6 @@ export function getSpecialRequestSection(request: AnyRecord) {
   return SPECIAL_REQUEST_SECTIONS[normalizeRequestType(request.request_type || request.type)] || null;
 }
 
-export function isSpecialRequestType(request: AnyRecord) {
-  return Boolean(getSpecialRequestSection(request));
-}
-
 export function specialRequestConfirmLabel(request: AnyRecord) {
   const type = normalizeRequestType(request.request_type || request.type);
   if (type === RequestType.ANIMAL_DEATH) return "Confirmar óbito";
