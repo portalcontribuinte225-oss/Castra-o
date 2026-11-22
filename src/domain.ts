@@ -97,7 +97,7 @@ export const initialWhatsappSettings: AnyRecord = {
   active: false,
   phoneNumberId: "",
   wabaId: "",
-  accessToken: "",
+  tokenVariable: "",
 };
 
 export const CONFIG_KEYS = {

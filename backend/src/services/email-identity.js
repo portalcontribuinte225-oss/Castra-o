@@ -1,8 +1,8 @@
 import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { EMAIL_IDENTITY_VARIABLES, EmailVariable } from "../../../shared/email-uses-contract.js";
 import { loadMunicipalityIdentity } from "../repositories/municipality-identity.js";
-import { loadEmailAccount } from "./email-account.js";
 import { MunicipalityImage, hasMunicipalityImage, municipalityImageUrl } from "./municipality-images.js";
+import { readPublicUrl } from "./public-url.js";
 
 const MAX_NAME_LENGTH = 200;
 const MAX_ADDRESS_LENGTH = 300;
@@ -16,16 +16,17 @@ function imageStatus(identity, image, publicUrl) {
 }
 
 // The identity is cosmetic: when it cannot be read the message still goes, just without it.
-export async function loadEmailIdentityParams(municipalityId, { database } = {}) {
+export async function loadEmailIdentityParams(municipalityId, { database, env = process.env } = {}) {
   if (!municipalityId) return { ...emptyIdentity };
   try {
-    const [identity, account] = await Promise.all([loadMunicipalityIdentity(municipalityId, database), loadEmailAccount(database)]);
+    const identity = await loadMunicipalityIdentity(municipalityId, database);
     if (!identity) return { ...emptyIdentity };
+    const publicUrl = readPublicUrl(env).url;
     return {
       [EmailVariable.MUNICIPALITY_NAME]: text(identity.name, MAX_NAME_LENGTH),
-      [EmailVariable.MUNICIPALITY_BRASAO_URL]: municipalityImageUrl(identity, MunicipalityImage.BRASAO, account.publicUrl),
+      [EmailVariable.MUNICIPALITY_BRASAO_URL]: municipalityImageUrl(identity, MunicipalityImage.BRASAO, publicUrl),
       [EmailVariable.DEPARTMENT_NAME]: text(identity.department_name, MAX_NAME_LENGTH),
-      [EmailVariable.DEPARTMENT_LOGO_URL]: municipalityImageUrl(identity, MunicipalityImage.DEPARTMENT_LOGO, account.publicUrl),
+      [EmailVariable.DEPARTMENT_LOGO_URL]: municipalityImageUrl(identity, MunicipalityImage.DEPARTMENT_LOGO, publicUrl),
       [EmailVariable.MUNICIPALITY_CONTACT]: text(identity.contact, MAX_NAME_LENGTH),
       [EmailVariable.MUNICIPALITY_EMAIL]: text(identity.email, MAX_NAME_LENGTH),
       [EmailVariable.MUNICIPALITY_ADDRESS]: text(identity.address, MAX_ADDRESS_LENGTH),

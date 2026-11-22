@@ -24,7 +24,7 @@ router.post("/test", auth, requireMaster, async (req, res) => {
       return res.json({ status: "skipped", reason: "WhatsApp desativado para o município" });
     }
     if (!config.accessToken || !config.phoneNumberId) {
-      return res.json({ status: "skipped", reason: "Credenciais do WhatsApp incompletas" });
+      return res.json({ status: "skipped", reason: "Escolha a variável do token e informe o ID do número antes de testar." });
     }
     const resolved = await resolveActiveTemplate(mId, NotificationEvent.SCHEDULE_CONFIRMED);
     if (!resolved.ok) {

@@ -2,19 +2,16 @@ import { DeliveryStatus, NotificationChannel, NotificationEvent } from "../../..
 import { buildAccessUrl } from "../../../shared/request-access-contract.js";
 import { pool } from "../db/index.js";
 import { tutorAccountExists } from "../repositories/request-access.js";
-import { loadEmailAccount } from "./email-account.js";
 import { dispatchNotification } from "./notifications/dispatch-notification.js";
+import { readPublicUrl } from "./public-url.js";
 import { recordNotificationResults } from "./request-change-notifications.js";
 
 // The link to "Acessar minha solicitação" exists only when the request has a tutor (a CPF) and the system has its public
 // address. It also says whether that tutor still has to create the password.
-export async function loadAccessLink(request, database = pool) {
+export async function loadAccessLink(request, database = pool, env = process.env) {
   if (!request.cpf) return null;
-  const [account, municipality] = await Promise.all([
-    loadEmailAccount(database),
-    database.query("SELECT slug FROM municipalities WHERE id = $1", [request.municipality_id]),
-  ]);
-  const url = buildAccessUrl({ publicUrl: account.publicUrl, slug: municipality.rows[0]?.slug, protocol: request.protocol });
+  const municipality = await database.query("SELECT slug FROM municipalities WHERE id = $1", [request.municipality_id]);
+  const url = buildAccessUrl({ publicUrl: readPublicUrl(env).url, slug: municipality.rows[0]?.slug, protocol: request.protocol });
   if (!url) return null;
   return { url, accountExists: Boolean(request.tutor_id) || await tutorAccountExists(request.municipality_id, request.cpf, database) };
 }

@@ -1,8 +1,9 @@
 import React from "react";
 import { SmsEnvironment } from "../../../shared/sms-contract.js";
+import { ServerCredential } from "../../../shared/server-credential-contract.js";
 import { Button } from "../../components/button";
 import { IntegrationCard, integrationActionFieldStyle } from "../../components/integration-card";
-import { SavedSecretField } from "../../components/saved-secret-field";
+import { ServerSecretField } from "../../components/server-secret-field";
 import { ConfigField } from "../../components/ui";
 import { formatPhone } from "../../utils";
 import type { SmsTestOutcome } from "./sms-types";
@@ -23,38 +24,16 @@ function testText({ sent, reason, detail, providerMessageId }: SmsTestOutcome) {
   return `Teste enviado ao provedor${providerMessageId ? ` (código ${providerMessageId})` : ""}. Confira se chegou ao celular: a entrega depende da operadora.`;
 }
 
-// The platform's SMSMais account, which only the master sees, with the saved token masked.
+// The platform's SMSMais account, which only the master sees. The token lives in the server's variables, so here it is only read.
 export function SmsCredentials({ state, actions }: { state: SmsState; actions?: React.ReactNode }) {
-  const { config, token, connection, confirmingRemoval } = state;
+  const { config, connection } = state;
   const busy = state.loading || state.saving || state.testing || state.sendingTest;
-  const secureStorageUnavailable = config.secureStorageAvailable === false;
-  // A saved token stays inside its field (start visible, rest masked); saving and removing never show together.
-  const tokenSaved = config.hasToken && !token;
   return (
     <IntegrationCard title="Credenciais" actions={actions}>
-      <SavedSecretField
-        label="Token de API SMSMais"
-        placeholder="Cole o token da SMSMais"
-        saved={tokenSaved}
-        preview={config.tokenPreview}
-        value={token}
-        onChange={state.setToken}
-        showSave={!tokenSaved}
-        saveLabel="Salvar credenciais"
-        onSave={state.saveToken}
-        saveDisabled={busy || !token || secureStorageUnavailable}
-        removeLabel="Remover token"
-        removeNote="Remover o token? O SMS será desativado para todos os municípios."
-        confirming={confirmingRemoval}
-        onConfirmingChange={state.setConfirmingRemoval}
-        onRemove={state.removeToken}
-        removeDisabled={busy}
-      />
-      <p className="whatsapp-note">Informe o token sem o prefixo Bearer. Ativar o SMS exige um token de produção, validado pelo servidor.</p>
-      {config.hasToken && <p className="whatsapp-note">Ambiente salvo: {environmentLabel(config.environment)}. Última validação: {displayDate(config.lastValidatedAt)}.</p>}
+      <ServerSecretField label="Token de API SMSMais" variable={ServerCredential.SMS_TOKEN} preview={config.tokenPreview} issue={config.tokenIssue} />
+      <p className="whatsapp-note">Ativar o SMS exige um token de produção, validado pelo servidor.{config.hasToken ? ` Ambiente: ${environmentLabel(config.environment)}.` : ""}</p>
       {config.environment === SmsEnvironment.SANDBOX && <p role="status">Token de homologação: não envia SMS nem ativa o canal.</p>}
-      {secureStorageUnavailable && <p role="alert">A configuração segura do servidor está indisponível. Procure o responsável técnico para salvar um token ou ativar o SMS.</p>}
-      <Button variant="outline" className="tw:justify-self-start" disabled={busy || (!token && !config.hasToken)} onClick={state.testConnection}>
+      <Button variant="outline" className="tw:justify-self-start" disabled={busy || !config.hasToken} onClick={state.testConnection}>
         {state.testing ? "Consultando..." : "Testar conexão / Consultar saldo"}
       </Button>
       {connection && (
@@ -62,7 +41,7 @@ export function SmsCredentials({ state, actions }: { state: SmsState; actions?: 
           <p>Conexão validada. Ambiente: {environmentLabel(connection.environment)}.</p>
           {connection.environment === SmsEnvironment.SANDBOX && <p>Homologação: esta credencial não habilita o SMS.</p>}
           <p>Créditos: {connection.balance?.credits.toLocaleString("pt-BR")}. Equivalente em SMS: {connection.balance?.sms.toLocaleString("pt-BR")}.</p>
-          <small>Consulta em {displayDate(connection.checkedAt)}. O teste não salva a credencial nem ativa o SMS.</small>
+          <small>Consulta em {displayDate(connection.checkedAt)}. O teste não ativa o SMS.</small>
         </div>
       )}
 

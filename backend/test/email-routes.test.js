@@ -4,12 +4,14 @@ import { readFileSync } from "node:fs";
 import express from "express";
 import emailRoutes from "../src/routes/email.js";
 import { pool } from "../src/db/index.js";
-import { EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_SETTINGS_PERMISSION, EMAIL_TEMPLATES_CONFIG_KEY } from "../../shared/email-contract.js";
+import { EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_SETTINGS_PERMISSION, EMAIL_TEMPLATES_CONFIG_KEY } from "../../shared/email-contract.js";
+import { CredentialIssue, ServerCredential } from "../../shared/server-credential-contract.js";
 import { emailUses } from "../../shared/email-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
-import { fakeEmailDatabase, useTestEncryptionKey } from "./fixtures/email-config-db.js";
+import { fakeEmailDatabase } from "./fixtures/email-config-db.js";
+import { replaceServerCredentials, TEST_EMAIL_CREDENTIALS } from "./fixtures/server-credentials.js";
 import { isPermissionRead, permissionConfigs, permissionGroup } from "./fixtures/permission-groups.js";
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
@@ -22,14 +24,15 @@ const MASTER = { id: "aaaaaaaa-0000-4000-8000-000000000004", role: "master" };
 const ANALYST = { id: "aaaaaaaa-0000-4000-8000-000000000005", role: "analista", municipalityId: MUNICIPALITY };
 const TUTOR = { id: "aaaaaaaa-0000-4000-8000-000000000006", role: "tutor", municipalityId: MUNICIPALITY };
 const PRIVATE_KEY = "private-key-for-route-tests";
-const ACCOUNT = { serviceId: "service_test", publicKey: "public-key-test", privateKey: PRIVATE_KEY, publicUrl: "https://system.example.test" };
+// The platform account as the server's variables hold it in these tests.
+const CREDENTIALS = { ...TEST_EMAIL_CREDENTIALS, [ServerCredential.EMAILJS_PRIVATE_KEY]: PRIVATE_KEY, [ServerCredential.APP_PUBLIC_URL]: "https://system.example.test" };
 const CONFIRMED = NotificationEvent.SCHEDULE_CONFIRMED;
 const RESET = AuthPurpose.PASSWORD_RESET;
 const clientFetch = globalThis.fetch;
 const municipalities = { [MUNICIPALITY]: { name: "Test Town", brasao: "" }, [OTHER]: { name: "Other Town", brasao: "" } };
 
-async function fixture(t, configs = {}) {
-  useTestEncryptionKey(t);
+async function fixture(t, configs = {}, credentials = CREDENTIALS) {
+  t.after(replaceServerCredentials(credentials));
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
   process.env.JWT_SECRET = "email-routes-tests-only";
   const database = fakeEmailDatabase({ configs, municipalities });
@@ -62,13 +65,12 @@ async function fixture(t, configs = {}) {
 }
 
 const ready = () => ({
-  [`${EMAIL_ACCOUNT_CONFIG_KEY}:null`]: { serviceId: "service_test", publicKey: "public-key-test", privateKey: "", privateKeyPreview: "", publicUrl: "" },
   [`${EMAIL_TEMPLATES_CONFIG_KEY}:null`]: { templates: { [RESET]: "tpl_reset", [CONFIRMED]: "tpl_confirmed" } },
 });
 
 test("every route needs a session and rejects tutors and operational users", async (t) => {
   const { request, database } = await fixture(t);
-  const routes = [["GET", "/email/settings"], ["PUT", "/email/account"], ["PUT", "/email/templates"], ["PUT", "/email/templates/active"]];
+  const routes = [["GET", "/email/settings"], ["PUT", "/email/templates"], ["PUT", "/email/templates/active"]];
   for (const [method, path] of routes) {
     const body = method === "GET" ? undefined : {};
     assert.equal((await request(path, { method, body })).status, 401, `${method} ${path}`);
@@ -98,7 +100,7 @@ test("the master reads the account and the ids; the support reads only the munic
   assert.equal(master.status, 200);
   assert.equal(master.body.municipal, false);
   assert.equal(master.body.identity, null);
-  assert.equal(master.body.account.serviceId, "service_test");
+  assert.equal(master.body.account.serviceId, "test-service");
   assert.equal(master.body.uses.find(({ key }) => key === RESET).templateId, "tpl_reset");
   assert.equal(master.body.uses.some(({ active }) => active), false);
   const withMunicipality = await request(`/email/settings?municipalityId=${MUNICIPALITY}`, { user: MASTER });
@@ -112,34 +114,33 @@ test("the master reads the account and the ids; the support reads only the munic
   assert.equal((await request("/email/settings?municipalityId=not-a-uuid", { user: MASTER })).status, 400);
 });
 
-test("only the master saves the account; the support and the municipal administrator are refused before anything is written", async (t) => {
+test("the master reads the account of the server's variables, with only the start of the private key, and can no longer save one", async (t) => {
   const { request, database } = await fixture(t);
-  for (const user of [ADMIN, SUPPORT]) assert.equal((await request("/email/account", { user, method: "PUT", body: ACCOUNT })).status, 403, user.role);
+  const master = await request("/email/settings", { user: MASTER });
+  assert.deepEqual(master.body.account, {
+    serviceId: "test-service", publicKey: "test-public", publicUrl: "https://system.example.test", privateKeyPreview: PRIVATE_KEY.slice(0, 8), issues: [],
+  });
+  assert.equal(master.body.configured, true);
+  assert.equal(emailRoutes.stack.some((layer) => layer.route?.path === "/account"), false, "there is no route to save the account");
   assert.equal(database.store.size, 0);
-  const saved = await request("/email/account", { user: MASTER, method: "PUT", body: ACCOUNT });
-  assert.equal(saved.status, 200);
-  assert.deepEqual([saved.body.account.serviceId, saved.body.account.hasPrivateKey, saved.body.account.privateKeyPreview, saved.body.account.publicUrl],
-    ["service_test", true, PRIVATE_KEY.slice(0, 8), "https://system.example.test"]);
-  assert.match(database.store.get(`${EMAIL_ACCOUNT_CONFIG_KEY}:null`).privateKey, /^enc:v1:/);
-  assert.equal(database.audits.length, 1);
-  assert.deepEqual([database.audits[0].action, database.audits[0].municipalityId], ["EMAIL_ACCOUNT_UPDATE", null]);
+  assert.equal(database.audits.length, 0);
 });
 
-test("account input is validated and the private key can be removed", async (t) => {
-  const { request, database } = await fixture(t);
-  for (const body of [{ serviceId: "service id" }, { publicKey: "has space" }, { publicUrl: "http://system.example.test" }, { publicUrl: "not a url" }]) {
-    assert.equal((await request("/email/account", { user: MASTER, method: "PUT", body })).status, 400, JSON.stringify(body));
-  }
-  assert.equal((await request("/email/account?municipalityId=bad", { user: MASTER, method: "PUT", body: ACCOUNT })).status, 400);
-  assert.equal(database.store.size, 0);
-  await request("/email/account", { user: MASTER, method: "PUT", body: ACCOUNT });
-  const cleared = await request("/email/account", { user: MASTER, method: "PUT", body: { clearPrivateKey: true } });
-  assert.deepEqual([cleared.body.account.hasPrivateKey, cleared.body.account.privateKeyPreview], [false, ""]);
+test("the master learns which variables of the account are missing or malformed, and nothing is configured", async (t) => {
+  const { request } = await fixture(t, ready(), { [ServerCredential.EMAILJS_SERVICE_ID]: "service id", [ServerCredential.EMAILJS_PUBLIC_KEY]: "test-public" });
+  const master = await request("/email/settings", { user: MASTER });
+  assert.equal(master.body.configured, false);
+  assert.deepEqual(master.body.account.issues, [
+    { variable: ServerCredential.EMAILJS_SERVICE_ID, problem: CredentialIssue.INVALID },
+    { variable: ServerCredential.EMAILJS_PRIVATE_KEY, problem: CredentialIssue.MISSING },
+    { variable: ServerCredential.APP_PUBLIC_URL, problem: CredentialIssue.MISSING },
+  ]);
+  assert.equal(master.body.uses.some(({ configured }) => configured), false);
+  assert.equal(JSON.stringify(master.body).includes("service id"), false);
 });
 
 test("the private key never appears in any response or audit entry", async (t) => {
-  const { request, database, seen } = await fixture(t);
-  await request("/email/account", { user: MASTER, method: "PUT", body: ACCOUNT });
+  const { request, database, seen } = await fixture(t, ready());
   await request("/email/settings", { user: MASTER });
   await request(`/email/settings?municipalityId=${MUNICIPALITY}`, { user: ADMIN });
   await request(`/email/settings?municipalityId=${MUNICIPALITY}`, { user: SUPPORT });
@@ -149,7 +150,7 @@ test("the private key never appears in any response or audit entry", async (t) =
 });
 
 test("only the master sets the template ids, which are global and visible only to the master", async (t) => {
-  const { request, database } = await fixture(t, { [`${EMAIL_ACCOUNT_CONFIG_KEY}:null`]: { serviceId: "service_test", publicKey: "public-key-test" } });
+  const { request, database } = await fixture(t);
   const url = "/email/templates";
   for (const user of [ADMIN, SUPPORT]) assert.equal((await request(url, { user, method: "PUT", body: { templates: { [RESET]: "tpl_reset" } } })).status, 403, user.role);
   assert.equal(database.store.has(`${EMAIL_TEMPLATES_CONFIG_KEY}:null`), false);
@@ -170,7 +171,6 @@ test("a municipality turns a use on only when it is configured, and the switch b
   const { request, database } = await fixture(t);
   const url = "/email/templates/active";
   assert.equal((await request(url, { user: ADMIN, method: "PUT", body: { use: CONFIRMED, active: true } })).status, 400);
-  database.store.set(`${EMAIL_ACCOUNT_CONFIG_KEY}:null`, ready()[`${EMAIL_ACCOUNT_CONFIG_KEY}:null`]);
   database.store.set(`${EMAIL_TEMPLATES_CONFIG_KEY}:null`, ready()[`${EMAIL_TEMPLATES_CONFIG_KEY}:null`]);
   const on = await request(url, { user: ADMIN, method: "PUT", body: { use: CONFIRMED, active: true, municipalityId: OTHER } });
   assert.equal(on.status, 200);
@@ -209,7 +209,7 @@ test("a database failure answers a generic message, never its detail", async (t)
 
 test("the e-mail keys stay off the generic configuration route", () => {
   const source = readFileSync(new URL("../src/routes/config.js", import.meta.url), "utf8");
-  for (const key of [EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY, EMAIL_ACTIVE_USES_CONFIG_KEY]) assert.equal(source.includes(`"${key}"`), false, key);
+  for (const key of [EMAIL_TEMPLATES_CONFIG_KEY, EMAIL_ACTIVE_USES_CONFIG_KEY]) assert.equal(source.includes(`"${key}"`), false, key);
 });
 
 // A group of the municipality that gives its items to one team user.
@@ -224,7 +224,7 @@ test("a staff user with the e-mail permission reads the municipal view and switc
   const on = await request("/email/templates/active", { method: "PUT", user: ANALYST, body: { use: CONFIRMED, active: true } });
   assert.equal(on.status, 200);
   assert.equal(database.store.get(`${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`).active[CONFIRMED], true);
-  for (const [method, path] of [["PUT", "/email/account"], ["PUT", "/email/templates"]]) assert.equal((await request(path, { method, user: ANALYST, body: {} })).status, 403, path);
+  assert.equal((await request("/email/templates", { method: "PUT", user: ANALYST, body: {} })).status, 403);
 });
 
 test("the group decides: the item must be in it, the group must be active and of the user's municipality, and the manager with no group still passes", async (t) => {

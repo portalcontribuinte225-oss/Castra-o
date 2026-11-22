@@ -46,7 +46,7 @@ function assertSyncAllowed(municipalityId, now) {
 
 export async function syncWhatsappCatalog({ municipalityId, runtime, audit, fetchImpl, now = Date.now(), database }) {
   if (!runtime.accessToken || !runtime.wabaId) {
-    throw Object.assign(new Error("Informe o token e o ID da conta do WhatsApp Business antes de sincronizar."), { status: 400 });
+    throw Object.assign(new Error("Escolha a variável do token e informe o ID da conta do WhatsApp Business antes de sincronizar."), { status: 400 });
   }
   assertSyncAllowed(municipalityId, now);
   const raw = await fetchGraphTemplates(runtime, { fetchImpl });

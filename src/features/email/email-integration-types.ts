@@ -1,10 +1,16 @@
-// What the master sees of the account: the private key itself never arrives, only whether it exists and how it starts.
+// A server variable of the account that is missing or malformed, by name.
+export interface EmailCredentialIssue {
+  variable: string;
+  problem: string;
+}
+
+// What the master sees of the account, read from the server's variables: the private key itself never arrives, only how it starts.
 export interface EmailAccountView {
   serviceId: string;
   publicKey: string;
   publicUrl: string;
-  hasPrivateKey: boolean;
   privateKeyPreview: string;
+  issues: EmailCredentialIssue[];
 }
 
 // One message the system can send by e-mail. Ids and variables come only for the master.
@@ -33,10 +39,3 @@ export interface EmailSettings {
   identity: EmailIdentitySummary | null;
 }
 
-export interface EmailAccountInput {
-  serviceId?: string;
-  publicKey?: string;
-  privateKey?: string;
-  clearPrivateKey?: boolean;
-  publicUrl?: string;
-}

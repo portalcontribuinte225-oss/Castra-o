@@ -28,10 +28,3 @@ export function fakeEmailDatabase({ configs = {}, municipalities = {} } = {}) {
   };
   return { store, calls, audits, query, connect: async () => ({ query, release() {} }) };
 }
-
-// A valid 32-byte key, so secrets can be encrypted in tests without touching the real environment.
-export function useTestEncryptionKey(t) {
-  const previous = process.env.CONFIG_ENCRYPTION_KEY;
-  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 7).toString("base64");
-  t.after(() => { if (previous === undefined) delete process.env.CONFIG_ENCRYPTION_KEY; else process.env.CONFIG_ENCRYPTION_KEY = previous; });
-}

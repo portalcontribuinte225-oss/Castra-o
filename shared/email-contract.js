@@ -2,8 +2,7 @@ import { emailUses, getEmailUse } from "./email-uses-contract.js";
 import { inheritDocumentNoticeValues, isUseOn, normalizeUseSwitches } from "./use-switches-contract.js";
 
 export const EMAIL_SETTINGS_PERMISSION = "email_settings";
-// The account and the template ids belong to the platform (no municipality); the switches belong to each municipality.
-export const EMAIL_ACCOUNT_CONFIG_KEY = "email_account";
+// The template ids belong to the platform (no municipality); the switches belong to each municipality. The account lives in the environment.
 export const EMAIL_TEMPLATES_CONFIG_KEY = "email_templates";
 export const EMAIL_ACTIVE_USES_CONFIG_KEY = "email_active_uses";
 export const EMAIL_ID_PATTERN = /^[A-Za-z0-9_-]{1,200}$/;

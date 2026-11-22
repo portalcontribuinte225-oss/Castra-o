@@ -1,22 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { listEmailUses, resolveEmailTemplate, saveEmailTemplateIds, setEmailUseActive } from "../src/services/email-templates.js";
-import { EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_ACCOUNT_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY, isEmailUseActive, normalizeEmailActiveUses, normalizeEmailTemplateIds } from "../../shared/email-contract.js";
+import { EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY, isEmailUseActive, normalizeEmailActiveUses, normalizeEmailTemplateIds } from "../../shared/email-contract.js";
 import { EmailUseKind, emailUses, getEmailUse } from "../../shared/email-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DeliveryCode, LEGACY_DOCUMENTS_REVIEWED, NotificationEvent } from "../../shared/notification-contract.js";
 import { fakeEmailDatabase } from "./fixtures/email-config-db.js";
+import { clearServerCredentials, replaceServerCredentials, TEST_EMAIL_CREDENTIALS } from "./fixtures/server-credentials.js";
+
+// The platform account comes from the server's variables; these tests use a fake one.
+clearServerCredentials();
+Object.assign(process.env, TEST_EMAIL_CREDENTIALS);
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
 const municipalities = { [MUNICIPALITY]: { name: "Test Town" }, [OTHER]: { name: "Other Town" } };
-const account = { serviceId: "service_test", publicKey: "public-key-test", privateKey: "", privateKeyPreview: "", publicUrl: "" };
+const account = { serviceId: "service_test", publicKey: "public-key-test", privateKey: "private-key-test", publicUrl: "", issues: [] };
 const RESET = AuthPurpose.PASSWORD_RESET;
 const CONFIRMED = NotificationEvent.SCHEDULE_CONFIRMED;
 
 function configured(extra = {}) {
   return fakeEmailDatabase({ municipalities, configs: {
-    [`${EMAIL_ACCOUNT_CONFIG_KEY}:null`]: account,
     [`${EMAIL_TEMPLATES_CONFIG_KEY}:null`]: { templates: { [RESET]: "tpl_reset", [CONFIRMED]: "tpl_confirmed" } },
     ...extra,
   } });
@@ -128,7 +132,7 @@ test("a use can only be turned on once the master has set the account and its te
   const noTemplate = configured();
   await assert.rejects(setEmailUseActive({ municipalityId: MUNICIPALITY, use: NotificationEvent.COMPLETED, active: true, database: noTemplate }), { status: 400 });
   const noAccount = fakeEmailDatabase({ municipalities, configs: { [`${EMAIL_TEMPLATES_CONFIG_KEY}:null`]: { templates: { [CONFIRMED]: "tpl_confirmed" } } } });
-  await assert.rejects(setEmailUseActive({ municipalityId: MUNICIPALITY, use: CONFIRMED, active: true, database: noAccount }), { status: 400 });
+  await assert.rejects(setEmailUseActive({ municipalityId: MUNICIPALITY, use: CONFIRMED, active: true, database: noAccount, env: {} }), { status: 400 });
 });
 
 test("turning a use on is stored and audited for that municipality only", async () => {
@@ -179,8 +183,9 @@ test("clearing an id stops the use without losing the municipal switch, which ap
   assert.deepEqual(await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: CONFIRMED, database }), { ok: true, templateId: "tpl_confirmed_v2" });
 });
 
-test("an incomplete account makes every use unavailable, even the platform recovery", async () => {
-  const database = configured({ [`${EMAIL_ACCOUNT_CONFIG_KEY}:null`]: { serviceId: "service_test" } });
+test("an incomplete account makes every use unavailable, even the platform recovery", async (t) => {
+  t.after(replaceServerCredentials({ EMAILJS_SERVICE_ID: "service_test" }));
+  const database = configured();
   assert.equal((await resolveEmailTemplate({ municipalityId: null, use: RESET, database })).code, DeliveryCode.NOT_CONFIGURED);
   assert.equal((await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: RESET, database })).code, DeliveryCode.NOT_CONFIGURED);
 });

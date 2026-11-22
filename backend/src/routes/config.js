@@ -18,10 +18,12 @@ const RESERVATION_CONFIG_KEYS = new Set([
 ]);
 
 
-// Keys that fall back to factory defaults when the municipality has no row yet.
+// Keys that fall back to factory defaults when the municipality has no row yet. WhatsApp starts empty, so the master can still
+// see which token variables the server holds before saving anything.
 const DEFAULT_CONFIG_VALUE_BUILDERS = {
   [BREEDS_CONFIG_KEY]: () => [],
   [NEIGHBORHOODS_CONFIG_KEY]: buildDefaultNeighborhoods,
+  whatsapp: () => ({}),
 };
 
 // Keys de configuração que expõem dados sensíveis (usuários, permissões)
@@ -185,7 +187,7 @@ router.get("/:key", optionalAuth, async (req, res) => {
     const { rows } = await pool.query(query.text, query.values);
     if (!rows[0]) {
       const buildDefault = DEFAULT_CONFIG_VALUE_BUILDERS[key];
-      return res.json(buildDefault ? buildDefault() : null);
+      return res.json(buildDefault ? publicConfigValue(key, buildDefault(), req.user) : null);
     }
     res.json(publicConfigValue(key, rows[0].value, req.user));
   } catch (err) {
@@ -286,9 +288,7 @@ router.put("/:key", auth, async (req, res) => {
         action: AUDIT_ACTIONS.CONFIG_UPDATE,
         entityType: "config",
         entityId: key,
-        changes: key === "ai"
-          ? { key, municipalityId, provider: value.provider, model: value.model, active: Boolean(value.active) }
-          : { key, municipalityId },
+        changes: configAuditChanges(key, municipalityId, value),
       });
     }
 
@@ -307,9 +307,21 @@ router.put("/:key", auth, async (req, res) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 
+// What the audit keeps of a change, never the value of a secret. For WhatsApp, the name of the token variable when it changes.
+function configAuditChanges(key, municipalityId, value) {
+  if (key === "ai") return { key, municipalityId, provider: value.provider, model: value.model, active: Boolean(value.active) };
+  const previousVariable = String(value?.__previous?.tokenVariable || "");
+  if (key === "whatsapp" && value.tokenVariable !== previousVariable) {
+    return { key, municipalityId, tokenVariable: { from: previousVariable, to: value.tokenVariable } };
+  }
+  return { key, municipalityId };
+}
+
 function publicConfigValue(key, value = {}, viewer = null) {
   if (["castragestao:document-types", "castragestao:request-types"].includes(key)) return normalizeDocumentPolicies(key, value);
-  if (key === "whatsapp") return publicWhatsappConfig(value, Boolean(viewer) && isInternalUser(viewer));
+  if (key === "whatsapp") {
+    return publicWhatsappConfig(value, { internal: Boolean(viewer) && isInternalUser(viewer), master: Boolean(viewer) && isMasterUser(viewer) });
+  }
   if (key !== "ai" || !value || typeof value !== "object") return value;
   const apiKey = String(value.apiKey || "").trim();
   return { ...value, apiKey: "", hasApiKey: Boolean(apiKey) };
@@ -324,7 +336,11 @@ async function prepareConfigValue(key, value = {}, municipalityId = null, client
   const db = client || pool;
   const { rows } = await db.query(query.text, query.values);
   const current = rows[0]?.value && typeof rows[0].value === "object" ? rows[0].value : {};
-  if (key === "whatsapp") return prepareWhatsappCredentials(current, value);
+  if (key === "whatsapp") {
+    const prepared = prepareWhatsappCredentials(current, value);
+    Object.defineProperty(prepared, "__previous", { value: current, enumerable: false });
+    return prepared;
+  }
   const nextApiKey = String(value.apiKey || "").trim();
   const { clearApiKey, ...rest } = value;
   let apiKey = current.apiKey || "";

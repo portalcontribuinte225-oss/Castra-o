@@ -11,6 +11,9 @@ import { NotificationEvent } from "../../shared/notification-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
 import { isPermissionRead, permissionConfigs, permissionGroup } from "./fixtures/permission-groups.js";
+import { clearServerCredentials, replaceServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
 
 const clientFetch = globalThis.fetch;
 const ADMIN = { id: "33333333-3333-4333-8333-333333333333", role: "admin_municipal", municipalityId: MUNICIPALITY };
@@ -18,8 +21,10 @@ const MASTER = { ...ADMIN, role: "master", municipalityId: null };
 const SUPPORT = { ...ADMIN, role: "suporte", municipalityId: null };
 const TOKEN = "private-production-test-token";
 async function fixture(t) {
-  const previous = { query: pool.query, connect: pool.connect, cipher: process.env.CONFIG_ENCRYPTION_KEY, jwt: process.env.JWT_SECRET, fetch: globalThis.fetch };
-  process.env.JWT_SECRET = "sms-route-test-key"; process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 17).toString("base64");
+  const previous = { query: pool.query, connect: pool.connect, jwt: process.env.JWT_SECRET, fetch: globalThis.fetch };
+  process.env.JWT_SECRET = "sms-route-test-key";
+  // The token lives in the server's variables (SMS_TOKEN).
+  const restoreCredentials = replaceServerCredentials({ SMS_TOKEN: TOKEN });
   const db = smsSettingsDatabase(); const sessions = new Map(); const remoteCalls = [];
   pool.query = async (sql, values) => resolveTestSession(sql, values, sessions) || db.query(sql, values);
   pool.connect = db.connect;
@@ -38,8 +43,8 @@ async function fixture(t) {
   t.after(async () => {
     server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
     pool.query = previous.query; pool.connect = previous.connect; globalThis.fetch = previous.fetch;
-    if (previous.cipher === undefined) delete process.env.CONFIG_ENCRYPTION_KEY; else process.env.CONFIG_ENCRYPTION_KEY = previous.cipher;
     if (previous.jwt === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous.jwt;
+    restoreCredentials();
   });
   const request = async (path, { method = "GET", body, user = ADMIN } = {}) => {
     const response = await clientFetch(`http://127.0.0.1:${server.address().port}${path}`, { method,
@@ -47,8 +52,8 @@ async function fixture(t) {
       ...(body ? { body: JSON.stringify(body) } : {}) });
     return { status: response.status, cache: response.headers.get("cache-control"), body: await response.json() };
   };
-  // The master saves the platform's account, the way the screen does.
-  const saveAccount = (body = { active: true, token: TOKEN }, query = "") => request(`/sms/account${query}`, { method: "PUT", body, user: MASTER });
+  // The master turns the platform's channel on or off, the way the screen does.
+  const saveAccount = (body = { active: true }, query = "") => request(`/sms/account${query}`, { method: "PUT", body, user: MASTER });
   return { request, saveAccount, db, remoteCalls };
 }
 
@@ -95,15 +100,15 @@ test("anyone can read whether SMS can reach a municipality, and nothing else abo
 
 test("the master saves and reads the platform account, the municipal administration never reads it, and a forged municipality cannot cross tenant", async (t) => {
   const { request, saveAccount, db, remoteCalls } = await fixture(t);
-  const saved = await saveAccount({ active: true, token: TOKEN }, `?municipalityId=${OTHER}`);
+  const saved = await saveAccount({ active: true }, `?municipalityId=${OTHER}`);
   assert.equal(saved.status, 200); assert.equal(saved.cache, "no-store");
-  assert.deepEqual([saved.body.active, saved.body.tokenValid, saved.body.environment, saved.body.hasToken, saved.body.tokenPreview], [true, true, "production", true, TOKEN.slice(0, 8)]);
+  assert.deepEqual([saved.body.active, saved.body.tokenIssue, saved.body.environment, saved.body.hasToken, saved.body.tokenPreview], [true, null, "production", true, TOKEN.slice(0, 8)]);
   assert.equal(saved.body.municipalityName, "Other Town");
   assert.deepEqual(saved.body.uses.map(({ key }) => key), smsUses.map(({ key }) => key));
   assert.equal(db.state.account.active, true); assert.equal(remoteCalls.length, 1);
   const own = await request(`/sms/settings?municipalityId=${OTHER}`);
   assert.equal(own.status, 200); assert.equal(own.cache, "no-store");
-  assert.deepEqual([own.body.active, own.body.hasToken, own.body.tokenPreview, own.body.environment, own.body.tokenValid], [true, false, "", null, false]);
+  assert.deepEqual([own.body.active, own.body.hasToken, own.body.tokenPreview, own.body.environment, own.body.tokenIssue], [true, false, "", null, null]);
   assert.equal(own.body.municipalityName, "Test Town");
   assert.deepEqual(own.body.uses.map(({ key }) => key), smsUses.map(({ key }) => key));
   const master = await request("/sms/settings", { user: MASTER });
@@ -111,26 +116,28 @@ test("the master saves and reads the platform account, the municipal administrat
   const support = await request(`/sms/settings?municipalityId=${OTHER}`, { user: SUPPORT });
   assert.equal(support.status, 200); assert.deepEqual([support.body.hasToken, support.body.municipalityName], [false, "Other Town"], "support is global but is not the master");
   assert.equal((await request("/sms/settings", { user: SUPPORT })).status, 400, "support must choose a municipality");
-  for (const dto of [saved.body, own.body, master.body, support.body]) { assert.equal(JSON.stringify(dto).includes(TOKEN), false); assert.equal(JSON.stringify(dto).includes("enc:v1:"), false); }
+  for (const dto of [saved.body, own.body, master.body, support.body]) assert.equal(JSON.stringify(dto).includes(TOKEN), false);
 });
 
-test("test-connection only queries balance without saving or activating", async (t) => {
+test("test-connection queries the balance with the server's token only, without saving or activating", async (t) => {
   const { request, db, remoteCalls } = await fixture(t);
-  const result = await request("/sms/test-connection", { method: "POST", body: { token: TOKEN }, user: MASTER });
+  const result = await request("/sms/test-connection", { method: "POST", body: { token: "typed-token-is-ignored" }, user: MASTER });
   assert.equal(result.status, 200); assert.equal(result.body.valid, true); assert.deepEqual(result.body.balance, { credits: 0, sms: 0 });
   assert.equal(result.body.total_recargas, undefined); assert.equal(result.body.token, undefined); assert.equal(db.state.account, undefined);
+  assert.equal(remoteCalls[0].options.headers.Authorization, `Bearer ${TOKEN}`);
+  delete process.env.SMS_TOKEN;
   assert.equal((await request("/sms/test-connection", { method: "POST", body: {}, user: MASTER })).status, 400);
   assert.equal(remoteCalls.length, 1);
 });
 
-test("secure-storage absence blocks secrets and activation while permitting safe removal, and errors contain no raw database details", async (t) => {
+test("the account route takes only the switch, needs SMS_TOKEN to turn on, and errors contain no raw database details", async (t) => {
   const { request, saveAccount, db } = await fixture(t);
-  await saveAccount({ token: TOKEN, active: false });
-  delete process.env.CONFIG_ENCRYPTION_KEY;
-  assert.equal((await request("/sms/settings", { user: MASTER })).body.secureStorageAvailable, false);
-  assert.equal((await saveAccount({ token: "replacement-token", active: false })).status, 503);
-  assert.equal((await saveAccount({ active: true })).status, 503);
-  assert.equal((await saveAccount({ clearToken: true })).body.hasToken, false);
+  for (const body of [{ token: TOKEN, active: true }, { clearToken: true }, { active: "true" }, {}]) assert.equal((await saveAccount(body)).status, 400, JSON.stringify(body));
+  assert.equal(db.state.account, undefined);
+  delete process.env.SMS_TOKEN;
+  const missing = await saveAccount({ active: true });
+  assert.equal(missing.status, 400); assert.match(missing.body.error, /SMS_TOKEN/);
+  assert.equal((await request("/sms/settings", { user: MASTER })).body.tokenIssue, "missing");
   db.state.failAudit = true;
   const failed = await saveAccount({ active: false });
   assert.equal(failed.status, 503); assert.equal(JSON.stringify(failed.body).includes("private database"), false);

@@ -16,7 +16,7 @@ function stableValue(value) {
   return value;
 }
 
-// Provider validation is already finished. The platform lock also serializes creation of an absent row.
+// Stores the channel switch (the token lives in the environment). The platform lock also serializes creation of an absent row.
 export async function storeSmsAccount({ snapshot, value, actor, changes }, database = pool) {
   const client = await database.connect();
   try {

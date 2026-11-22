@@ -2,7 +2,6 @@ import { Router } from "express";
 import { auth, requireConfigItem, requireMaster } from "../middleware/auth.js";
 import { isUuid } from "../repositories/request-tracking.js";
 import { auditCtx } from "../services/audit.js";
-import { saveEmailAccount } from "../services/email-account.js";
 import { getEmailSettings } from "../services/email-settings.js";
 import { saveEmailTemplateIds, setEmailUseActive } from "../services/email-templates.js";
 import { isMasterUser, pickMunicipalityId } from "../tenant.js";
@@ -39,16 +38,6 @@ router.get("/settings", requireEmailItem, async (req, res) => {
     await respondWithSettings(req, res, municipalityOf(req, { required: !isMasterUser(req.user) }));
   } catch (error) {
     sendFailure(res, error, "Não foi possível consultar a integração de e-mail.");
-  }
-});
-
-router.put("/account", requireMaster, async (req, res) => {
-  try {
-    const municipalityId = municipalityOf(req, { required: false });
-    await saveEmailAccount({ input: req.body, audit: auditCtx(req) });
-    await respondWithSettings(req, res, municipalityId);
-  } catch (error) {
-    sendFailure(res, error, "Não foi possível salvar a conta de e-mail.");
   }
 });
 

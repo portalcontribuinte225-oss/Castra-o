@@ -3,21 +3,16 @@ import { EmailVariable, getEmailUse } from "../../../shared/email-uses-contract.
 import { buildEmailNotice } from "./notifications/email-notice-text.js";
 import { resolveWhatsappField } from "./notifications/whatsapp-template-parameters.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
-import { getEmailRuntimeConfig, isEmailAccountConfigured } from "./email-account.js";
+import { isEmailAccountConfigured, readEmailAccount } from "./email-account.js";
 
 // A bounded admission gate covers both reset and notification messages using the same EmailJS account.
-export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(...args), loadAccount = () => getEmailRuntimeConfig(), now = Date.now, timeoutMs = 5000,
+export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(...args), loadAccount = () => readEmailAccount(), now = Date.now, timeoutMs = 5000,
   wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
 } = {}) {
   let lastStartedAt = -Infinity;
   let nextSlotReserved = false;
   return async function sendEmailTemplate({ toEmail, templateId, templateParams, expiresAt }) {
-    let account;
-    try {
-      account = await loadAccount();
-    } catch {
-      return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED);
-    }
+    const account = await loadAccount();
     if (!isEmailAccountConfigured(account) || !templateId) {
       return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED);
     }
@@ -47,8 +42,8 @@ export function createEmailSender({ fetchImpl = (...args) => globalThis.fetch(..
       template_id: templateId,
       user_id: account.publicKey,
       template_params: { ...templateParams, [EmailVariable.TO_EMAIL]: toEmail },
+      accessToken: account.privateKey,
     };
-    if (account.privateKey) body.accessToken = account.privateKey;
     try {
       const response = await fetchImpl("https://api.emailjs.com/api/v1.0/email/send", {
         method: "POST",

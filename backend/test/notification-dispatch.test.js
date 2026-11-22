@@ -8,6 +8,11 @@ import { getWhatsappUse, WhatsappTemplateField, templateFields } from "../../sha
 import { buildSmsText } from "../../shared/sms-messages-contract.js";
 import { getSmsUse } from "../../shared/sms-uses-contract.js";
 import { getEmailUse } from "../../shared/email-uses-contract.js";
+import { clearServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
+// The WhatsApp token comes from the server variable the municipality chose.
+process.env.WHATSAPP_TOKEN_TEST = "fake-whatsapp-token";
 
 // Every channel starts in use: e-mail on with its template, WhatsApp active with a template per notice, SMS on for every notice.
 function fixture() {
@@ -23,7 +28,7 @@ function fixture() {
     [NotificationEvent.NO_SHOW]: "castracao_nao_comparecimento",
   };
   const dependencies = {
-    loadWhatsappConfig: async (municipalityId) => { calls.push(["config", municipalityId]); return { active: true, accessToken: "token", phoneNumberId: "number" }; },
+    loadWhatsappConfig: async (municipalityId) => { calls.push(["config", municipalityId]); return { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "number" }; },
     resolveTemplate: async (municipalityId, event) => {
       calls.push(["template", municipalityId, event]);
       return active[event] ? { ok: true, template: { name: active[event], language: "pt_BR", fields: templateFields(event) } } : { ok: false, code: DeliveryCode.NOT_CONFIGURED };

@@ -7,7 +7,7 @@ import { emailUses, getEmailUse } from "../../../shared/email-uses-contract.js";
 import { readConfigValue, updateConfigValue } from "../repositories/config-values.js";
 import { loadMunicipalityIdentity } from "../repositories/municipality-identity.js";
 import { AUDIT_ACTIONS } from "./audit.js";
-import { isEmailAccountConfigured, loadEmailAccount } from "./email-account.js";
+import { isEmailAccountConfigured, readEmailAccount } from "./email-account.js";
 import { isServiceEnabled } from "./message-quota.js";
 
 function badRequest(message, status = 400) {
@@ -55,13 +55,13 @@ export async function saveEmailTemplateIds({ patch, audit, database } = {}) {
 
 // Turning a use on needs the master to have set the account and the template, and the service to be on for the municipality;
 // turning it off is always allowed.
-export async function setEmailUseActive({ municipalityId, use, active, audit, database } = {}) {
+export async function setEmailUseActive({ municipalityId, use, active, audit, database, env = process.env } = {}) {
   if (!municipalityId) throw badRequest("Município não identificado.");
   if (!getEmailUse(use) || typeof active !== "boolean") throw badRequest("Informe a mensagem e se ela deve ficar ativa.");
   if (!await loadMunicipalityIdentity(municipalityId, database)) throw badRequest("Município não encontrado.", 404);
   if (active) {
-    const [account, ids] = await Promise.all([loadEmailAccount(database), loadEmailTemplateIds(database)]);
-    if (!isEmailAccountConfigured(account) || !ids[use]) throw badRequest("Só é possível ligar mensagens com a conta de envio e o template configurados.");
+    const ids = await loadEmailTemplateIds(database);
+    if (!isEmailAccountConfigured(readEmailAccount(env)) || !ids[use]) throw badRequest("Só é possível ligar mensagens com a conta de envio e o template configurados.");
     if (!await isServiceEnabled(NotificationChannel.EMAIL, municipalityId, { database })) throw badRequest("O serviço de e-mail está desativado para este município.");
   }
   await updateConfigValue(EMAIL_ACTIVE_USES_CONFIG_KEY, municipalityId, (current) => ({ active: { ...normalizeEmailActiveUses(current), [use]: active } }), {
@@ -73,9 +73,9 @@ export async function setEmailUseActive({ municipalityId, use, active, audit, da
 // The single answer to "may this use be sent?". The municipal switch comes first: a use the municipality did not turn on is
 // simply not in use (channel disabled), while one it turned on without a configured template is a real gap (not configured).
 // A null municipality is the platform itself (staff recovery), which has no switch.
-export async function resolveEmailTemplate({ municipalityId = null, use, database } = {}) {
+export async function resolveEmailTemplate({ municipalityId = null, use, database, env = process.env } = {}) {
   if (municipalityId && !isEmailUseActive(await loadActiveEmailUses(municipalityId, database), use)) return { ok: false, code: DeliveryCode.CHANNEL_DISABLED };
-  const [account, ids] = await Promise.all([loadEmailAccount(database), loadEmailTemplateIds(database)]);
-  if (!isEmailAccountConfigured(account) || !ids[use]) return { ok: false, code: DeliveryCode.NOT_CONFIGURED };
+  const ids = await loadEmailTemplateIds(database);
+  if (!isEmailAccountConfigured(readEmailAccount(env)) || !ids[use]) return { ok: false, code: DeliveryCode.NOT_CONFIGURED };
   return { ok: true, templateId: ids[use] };
 }

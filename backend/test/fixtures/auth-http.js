@@ -7,6 +7,7 @@ import { pool } from "../../src/db/index.js";
 import { issueSession } from "../../src/services/auth/auth-session.js";
 import { AuthPurpose } from "../../../shared/auth-contract.js";
 import { createChallenge } from "../../src/repositories/auth-challenges.js";
+import { replaceServerCredentials, TEST_EMAIL_CREDENTIALS } from "./server-credentials.js";
 
 export const AUTH_TEST_MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
 export const AUTH_TEST_OTHER_MUNICIPALITY = "22222222-2222-4222-8222-222222222222";
@@ -14,11 +15,11 @@ export const AUTH_TEST_PASSWORD = "current password for tests";
 const hash = await bcrypt.hash(AUTH_TEST_PASSWORD, 4);
 const clientFetch = globalThis.fetch;
 
-// A configured platform e-mail account, one template per use and an e-mail contract for the test municipality, so the e-mail path of the auth routes can run end to end.
+// One template per use and an e-mail contract for the test municipality (the fake account goes in the environment), so the e-mail path
+// of the auth routes can run end to end.
 function emailConfigs() {
   const templates = Object.fromEntries(Object.values(AuthPurpose).map((purpose) => [purpose, `test-${purpose}`]));
   return {
-    "email_account:null": { serviceId: "test-service", publicKey: "test-public", privateKey: "", privateKeyPreview: "", publicUrl: "" },
     "email_templates:null": { templates },
     [`email_quota:${AUTH_TEST_MUNICIPALITY}`]: { plan: 1000 },
   };
@@ -37,6 +38,7 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
   const originalEnvironment = Object.fromEntries(environment.map((key) => [key, process.env[key]]));
   process.env.JWT_SECRET = "auth-http-tests-only";
   process.env.ADMIN_EMAIL = "staff@example.test";
+  const restoreCredentials = replaceServerCredentials(emailEnabled ? TEST_EMAIL_CREDENTIALS : {});
   const storedConfigs = { ...(emailEnabled ? emailConfigs() : {}), ...configs };
   const users = new Map(initialUsers.map((user) => [user.id, structuredClone(user)]));
   const challenges = new Map(); const limits = new Map(); const calls = []; const followUps = []; const requestRows = []; const animalTutorUpdates = [];
@@ -190,6 +192,7 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
     server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
     pool.query = original.query; pool.connect = original.connect; globalThis.fetch = original.fetch;
     for (const key of environment) { if (originalEnvironment[key] === undefined) delete process.env[key]; else process.env[key] = originalEnvironment[key]; }
+    restoreCredentials();
     if (externalCalls) throw new Error("Auth test attempted external transport");
   });
   async function request(path, { method = "GET", body, token } = {}) {

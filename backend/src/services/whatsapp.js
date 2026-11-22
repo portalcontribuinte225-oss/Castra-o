@@ -1,7 +1,7 @@
 import { pool } from "../db/index.js";
 import { DeliveryStatus, DeliveryCode } from "../../../shared/notification-contract.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
-import { decryptSecret } from "./config-secret-cipher.js";
+import { readWhatsappToken } from "./whatsapp-credentials.js";
 
 const WHATSAPP_CONFIG_KEY = "whatsapp";
 export const GRAPH_API_BASE = "https://graph.facebook.com/v21.0";
@@ -25,12 +25,12 @@ export async function getMunicipalityWhatsappConfig(municipalityId, database = p
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-// Credentials belong to the municipality: there is no environment fallback shared between municipalities.
-export function getRuntimeConfig(config = {}) {
+// The only place that hands out a token: the one in the variable the municipality chose, read from the environment.
+export function getRuntimeConfig(config = {}, env = process.env) {
   return {
     active: config.active === true,
     provider: config.provider || "cloud_api",
-    accessToken: decryptSecret(config.accessToken || ""),
+    accessToken: readWhatsappToken(config.tokenVariable, env).token,
     phoneNumberId: String(config.phoneNumberId || ""),
     wabaId: String(config.wabaId || ""),
   };

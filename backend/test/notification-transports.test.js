@@ -4,6 +4,9 @@ import { createEmailSender, sendNotificationEmail } from "../src/services/email.
 import { sendWhatsappTemplateComponents } from "../src/services/whatsapp.js";
 import { buildBodyComponents } from "../src/services/notifications/whatsapp-template-parameters.js";
 import { DeliveryStatus, DeliveryCode, DocumentsOutcome, NotificationEvent } from "../../shared/notification-contract.js";
+import { clearServerCredentials, TEST_EMAIL_CREDENTIALS, useServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
 
 const emailAccount = { serviceId: "test-service", publicKey: "test-public", privateKey: "test-private" };
 const loadAccount = async () => emailAccount;
@@ -168,25 +171,24 @@ test("WhatsApp maps provider template errors to a safe code and reports the temp
   assert.equal(other.templateStatus, undefined);
 });
 
-test("EmailJS sends with the stored account and adds the private key only when there is one", async () => {
+test("EmailJS sends with the account of the server's variables, always with the private key", async (t) => {
   const bodies = [];
   const fetchImpl = async (_url, options) => { bodies.push(JSON.parse(options.body)); return { ok: true }; };
   await createEmailSender({ loadAccount, fetchImpl })(emailInput);
-  await createEmailSender({ loadAccount: async () => ({ ...emailAccount, privateKey: "" }), fetchImpl })(emailInput);
+  useServerCredentials(t, { ...TEST_EMAIL_CREDENTIALS, EMAILJS_SERVICE_ID: "env-service" });
+  await createEmailSender({ fetchImpl })(emailInput);
   assert.deepEqual([bodies[0].service_id, bodies[0].user_id, bodies[0].accessToken], ["test-service", "test-public", "test-private"]);
-  assert.equal(Object.hasOwn(bodies[1], "accessToken"), false);
+  assert.deepEqual([bodies[1].service_id, bodies[1].user_id, bodies[1].accessToken], ["env-service", "test-public", "test-private"]);
 });
 
-test("an account that cannot be read or is incomplete never reaches the provider", async () => {
+test("an incomplete account, the private key included, never reaches the provider", async () => {
   const fetchImpl = async () => assert.fail("provider must not be contacted");
-  const unreadable = createEmailSender({ loadAccount: async () => { throw new Error("secret storage detail"); }, fetchImpl });
-  const result = await unreadable(emailInput);
-  assert.equal(result.status, DeliveryStatus.SKIPPED);
-  assert.equal(result.code, DeliveryCode.NOT_CONFIGURED);
-  assert.equal(JSON.stringify(result).includes("secret"), false);
-  for (const incomplete of [{ publicKey: "test-public" }, { serviceId: "test-service" }]) {
-    assert.equal((await createEmailSender({ loadAccount: async () => incomplete, fetchImpl })(emailInput)).code, DeliveryCode.NOT_CONFIGURED);
+  for (const name of Object.keys(emailAccount)) {
+    const result = await createEmailSender({ loadAccount: async () => ({ ...emailAccount, [name]: "" }), fetchImpl })(emailInput);
+    assert.equal(result.status, DeliveryStatus.SKIPPED);
+    assert.equal(result.code, DeliveryCode.NOT_CONFIGURED);
   }
+  assert.equal((await createEmailSender({ fetchImpl })(emailInput)).code, DeliveryCode.NOT_CONFIGURED, "no account in the server's variables");
 });
 
 test("agenda notices carry date, time and place as separate variables next to the municipality identity", async () => {

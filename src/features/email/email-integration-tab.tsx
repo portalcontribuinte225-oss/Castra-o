@@ -10,7 +10,6 @@ import { MessageServiceToggle } from "../message-contract/message-service-toggle
 import { useMessageContract } from "../message-contract/use-message-contract";
 import { EmailCredentials } from "./email-credentials";
 import { EmailTemplatesTable } from "./email-templates-table";
-import { useEmailAccount } from "./use-email-account";
 import { useEmailSettings } from "./use-email-settings";
 
 // How the identity line names the state of each image; a missing public address is said once, below the line.
@@ -20,11 +19,10 @@ const imageText: Record<string, string> = {
   [EmailImageStatus.NO_PUBLIC_URL]: "cadastrado",
 };
 
-// E-mail tab: the master sets the platform account, the template ids, the municipality's contract and whether its service is on; whoever has the
+// E-mail tab: the master reads the platform account (it lives in the server's variables), sets the template ids, the municipality's contract and whether its service is on; whoever has the
 // e-mail permission turns the municipality's messages on or off.
 export function EmailIntegrationTab({ municipalityId, master, canManage, canEditContract }: { municipalityId: string; master: boolean; canManage: boolean; canEditContract: boolean }) {
   const email = useEmailSettings(municipalityId, master, canManage);
-  const account = useEmailAccount(email.settings?.account ?? null, municipalityId, email.apply);
   const contract = useMessageContract(NotificationChannel.EMAIL, canManage ? municipalityId : "");
   if (!canManage) return <p role="status">Configuração de e-mail restrita à administração.</p>;
   if (!municipalityId && !master) return <p>Selecione um município para configurar o e-mail.</p>;
@@ -36,10 +34,9 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
       <PanelHeader title="E-mail" />
       {municipalityId && settings && <MessageContractStatus active={contract.ready ? settings.configured && serviceOn : null} live={contract.live} />}
       <div className="tw:grid tw:gap-3">
-        {master && settings && (
+        {master && settings?.account && (
           <EmailCredentials
             account={settings.account}
-            state={account}
             actions={canEditContract && municipalityId ? <MessageServiceToggle contract={contract} /> : null}
           />
         )}
@@ -59,7 +56,7 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
             </p>
           )}
           {identity && [identity.brasao, identity.departmentLogo].includes(EmailImageStatus.NO_PUBLIC_URL) && (
-            <p className="whatsapp-note">As imagens ficam fora dos e-mails até o master configurar o endereço público do sistema ⚠</p>
+            <p className="whatsapp-note">As imagens ficam fora dos e-mails até o endereço público (APP_PUBLIC_URL) ser cadastrado nas variáveis do servidor ⚠</p>
           )}
           {settings && !municipalityId && <p className="whatsapp-note">Selecione um município para ligar ou desligar as mensagens.</p>}
           {settings && (

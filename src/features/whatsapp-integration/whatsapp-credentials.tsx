@@ -1,16 +1,20 @@
 import React from "react";
+import { WHATSAPP_TOKEN_VARIABLE_PREFIX } from "../../../shared/server-credential-contract.js";
 import { Button } from "../../components/button";
 import { IntegrationCard, integrationActionFieldStyle, integrationFieldsStyle } from "../../components/integration-card";
-import { SavedSecretField } from "../../components/saved-secret-field";
-import { ConfigActiveToggle, ConfigField } from "../../components/ui";
+import { ServerSecretField } from "../../components/server-secret-field";
+import { CompactChoiceField, ConfigActiveToggle, ConfigField } from "../../components/ui";
 import type { useWhatsappCredentials } from "./use-whatsapp-credentials";
 
 type Credentials = ReturnType<typeof useWhatsappCredentials>;
 
+// A variable can never be named like this (they all start with the prefix), so the chip is safe to tell apart.
+const NO_TOKEN_VARIABLE = "Nenhuma";
+
 export function WhatsappCredentials({ municipalityId, credentials }: { municipalityId: string; credentials: Credentials }) {
   const {
-    settings, setSettings, ready, loadFailed, retry, saving, saveStatus, testPhone, setTestPhone, testStatus, testing, hasCredentials, idsChanged,
-    confirmingRemoval, setConfirmingRemoval, save, toggleActive, removeToken, sendTest,
+    settings, setSettings, ready, loadFailed, retry, saving, saveStatus, testPhone, setTestPhone, testStatus, testing, hasCredentials, changed,
+    savedTokenVariable, save, toggleActive, sendTest,
   } = credentials;
   if (municipalityId && !ready) {
     return (
@@ -28,9 +32,7 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
   const patch = (changes: Record<string, unknown>) => {
     if (!locked) setSettings((current) => ({ ...current, ...changes }));
   };
-  // A saved token stays inside its field (start visible, rest masked); saving and removing never show together.
-  const tokenSaved = Boolean(settings.hasAccessToken) && !settings.accessToken;
-  const showSave = !tokenSaved || idsChanged;
+  const variables: string[] = Array.isArray(settings.tokenVariables) ? settings.tokenVariables : [];
   return (
     <IntegrationCard title="Credenciais" actions={<ConfigActiveToggle checked={Boolean(settings.active)} onChange={toggleActive} disabled={locked} />}>
       <div className={integrationFieldsStyle}>
@@ -51,24 +53,19 @@ export function WhatsappCredentials({ municipalityId, credentials }: { municipal
           onChange={(value) => patch({ phoneNumberId: value })}
         />
       </div>
-      <SavedSecretField
-        label="Token de acesso"
-        placeholder="Cole o token da Cloud API"
-        saved={tokenSaved}
-        preview={settings.tokenPreview || ""}
-        value={settings.accessToken || ""}
-        onChange={(value) => patch({ accessToken: value })}
-        showSave={showSave}
-        saveLabel="Salvar credenciais"
-        onSave={save}
-        saveDisabled={locked}
-        removeLabel="Remover token"
-        removeNote="Remover o token? O WhatsApp será desativado."
-        confirming={confirmingRemoval}
-        onConfirmingChange={setConfirmingRemoval}
-        onRemove={removeToken}
-        removeDisabled={locked}
+      <CompactChoiceField
+        label="Variável do token"
+        value={settings.tokenVariable || NO_TOKEN_VARIABLE}
+        options={[NO_TOKEN_VARIABLE, ...variables]}
+        onChange={(choice: string) => patch({ tokenVariable: choice === NO_TOKEN_VARIABLE ? "" : choice })}
       />
+      {!variables.length && (
+        <p className="whatsapp-note">Nenhuma variável <code>{WHATSAPP_TOKEN_VARIABLE_PREFIX}…</code> no servidor. Crie uma no Render para escolher aqui.</p>
+      )}
+      {savedTokenVariable && (
+        <ServerSecretField label="Token de acesso" variable={savedTokenVariable} preview={settings.tokenPreview || ""} issue={settings.tokenIssue || null} />
+      )}
+      <Button className="tw:justify-self-start" onClick={save} disabled={locked || !changed}>Salvar credenciais</Button>
       {saveStatus && <span className={saveStatus.includes("sucesso") ? "whatsapp-inline-status ok" : "whatsapp-inline-status"}>{saveStatus}</span>}
 
       <div className="whatsapp-section-heading"><span>Teste de envio</span></div>

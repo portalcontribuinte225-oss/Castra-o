@@ -33,10 +33,13 @@ const noop = vi.fn();
 const tableProps = { syncing: false, busy: false, readOnly: false, canSync: true, master: false, onSync: noop, onToggle: vi.fn(), onConfigure: vi.fn() };
 const templatesState = { list: listOf(), loading: false, ready: true, syncing: false, saving: false, error: "", notice: "", retry: noop, sync: noop, toggle: vi.fn(), saveLink: vi.fn() };
 const credentialsState = {
-  settings: { active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true, tokenPreview: "EAAFAKE0" }, setSettings: noop, saveStatus: "",
-  ready: true, loadFailed: false, retry: noop, saving: false,
-  testPhone: "", setTestPhone: noop, testStatus: "", testing: false, hasCredentials: true, isActive: true, canSync: true, idsChanged: false,
-  confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, toggleActive: noop, removeToken: noop, sendTest: noop,
+  settings: {
+    active: true, provider: "cloud_api", phoneNumberId: "123456", wabaId: "654321", hasAccessToken: true, tokenVariable: "WHATSAPP_TOKEN_TEST",
+    tokenVariables: ["WHATSAPP_TOKEN_OTHER", "WHATSAPP_TOKEN_TEST"], tokenPreview: "EAAFAKE0", tokenIssue: null,
+  },
+  setSettings: noop, saveStatus: "", ready: true, loadFailed: false, retry: noop, saving: false,
+  testPhone: "", setTestPhone: noop, testStatus: "", testing: false, hasCredentials: true, isActive: true, canSync: true, changed: false,
+  savedTokenVariable: "WHATSAPP_TOKEN_TEST", save: noop, toggleActive: noop, sendTest: noop,
 };
 const contractState = {
   settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
@@ -240,7 +243,7 @@ describe("templates panel", () => {
   });
 });
 
-describe("access token", () => {
+describe("token variable", () => {
   const credentials = (settings = {}, extra = {}) => renderToStaticMarkup(
     <WhatsappCredentials municipalityId="municipality-a" credentials={{ ...credentialsState, settings: { ...credentialsState.settings, ...settings }, ...extra }} />,
   );
@@ -258,36 +261,36 @@ describe("access token", () => {
     }
   });
 
-  it("keeps the saved token inside its own field, start visible and the rest masked, with only the removal beside it", () => {
+  it("shows the token of the chosen variable by its start only, read-only, with nothing to type or remove", () => {
     const html = credentials();
     expect(html).toContain(`value="EAAFAKE0${"•".repeat(24)}"`);
     expect(html).toMatch(/<input(?=[^>]*type="text")(?=[^>]*readonly="")(?=[^>]*data-ui-input="")[^>]*value="EAAFAKE0/);
-    expect(html).not.toContain("Token salvo");
-    expect(html).toContain("Remover token");
-    expect(html).not.toContain("Salvar credenciais");
-    expect(html).not.toContain("Começa com");
+    expect(html).toContain("Vem da variável <code>WHATSAPP_TOKEN_TEST</code> do servidor.");
+    for (const hidden of ["Remover token", 'type="password"', "Cole o token", "Começa com"]) expect(html).not.toContain(hidden);
   });
 
-  it("masks everything when only the existence of the token is known, and offers saving instead of removing without a token", () => {
-    expect(credentials({ tokenPreview: "" })).toContain(`value="${"•".repeat(32)}"`);
-    const none = credentials({ hasAccessToken: false, tokenPreview: "" });
-    expect(none).toContain("Salvar credenciais");
-    expect(none).not.toContain("Remover token");
-    expect(none).not.toContain("•");
+  it("offers one chip per variable of the server and one for none, with the chosen one selected", () => {
+    const html = credentials();
+    expect(html).toContain("Variável do token");
+    for (const name of ["Nenhuma", "WHATSAPP_TOKEN_OTHER", "WHATSAPP_TOKEN_TEST"]) expect(html).toContain(`<span>${name}</span>`);
+    expect(html).toContain('class="selected" title="WHATSAPP_TOKEN_TEST"');
+    const none = credentials({ tokenVariable: "", hasAccessToken: false, tokenPreview: "", tokenIssue: "unset" }, { savedTokenVariable: "" });
+    expect(none).toContain('class="selected" title="Nenhuma"');
+    expect(none).not.toContain("Token de acesso");
   });
 
-  it("offers saving instead of removing while the ids hold something not saved yet", () => {
-    const html = credentials({}, { idsChanged: true });
-    expect(html).toContain("Salvar credenciais");
-    expect(html).not.toContain("Remover token");
+  it("tells which variable is missing on the server, and when there is none to choose", () => {
+    const missing = credentials({ tokenPreview: "", tokenIssue: "missing", hasAccessToken: false });
+    expect(missing).toContain("Falta WHATSAPP_TOKEN_TEST nas variáveis do servidor.");
+    expect(missing).not.toContain("•");
+    expect(credentials({ tokenVariables: [] })).toContain("Nenhuma variável <code>WHATSAPP_TOKEN_…</code> no servidor. Crie uma no Render para escolher aqui.");
+    expect(credentials()).not.toContain("Crie uma no Render");
   });
 
-  it("uses the standard buttons of the app, the removal marked as dangerous", () => {
-    expect(credentials()).toMatch(/<button[^>]*data-ui-button[^>]*tw:border-ui-danger[^>]*>Remover token<\/button>/);
-    expect(credentials({ hasAccessToken: false })).toMatch(/<button[^>]*data-ui-button[^>]*>Salvar credenciais<\/button>/);
-    const confirming = credentials({}, { confirmingRemoval: true });
-    expect(confirming).toMatch(/<button[^>]*data-ui-button[^>]*tw:border-ui-danger[^>]*>Confirmar<\/button>/);
-    expect(confirming).toMatch(/<button[^>]*data-ui-button[^>]*>Cancelar<\/button>/);
+  it("saves the ids and the variable only when something changed, with the standard button", () => {
+    expect(credentials()).toMatch(/<button[^>]*disabled=""[^>]*data-ui-button[^>]*>Salvar credenciais<\/button>/);
+    expect(credentials({}, { changed: true })).toMatch(/<button[^>]*data-ui-button[^>]*>Salvar credenciais<\/button>/);
+    expect(credentials({}, { changed: true })).not.toMatch(/<button[^>]*disabled=""[^>]*>Salvar credenciais/);
   });
 
   it("uses standard fields for credentials and the test number", () => {
@@ -297,23 +300,8 @@ describe("access token", () => {
     expect(html).not.toContain("Variáveis");
   });
 
-  it("shows the start of a token being typed so it can be checked before saving", () => {
-    const html = credentials({ accessToken: "EAAFAKE0TOKEN1234567SECRETPART" });
-    expect(html).toContain("Começa com <code>EAAFAKE0</code>");
-    expect(html).not.toContain("<code>EAAFAKE0T");
-  });
-
-  it("asks for confirmation before removing and warns that the channel is turned off", () => {
-    const confirming = credentials({}, { confirmingRemoval: true });
-    expect(confirming).toContain("Remover o token? O WhatsApp será desativado.");
-    expect(confirming).toContain("Confirmar");
-    expect(confirming).not.toContain(">Remover token<");
-  });
-
-  it("stops the browser from filling the credentials with saved logins", () => {
-    const html = credentials({ hasAccessToken: false });
-    expect(html).toMatch(/type="password"[^>]*autoComplete="new-password"|autoComplete="new-password"[^>]*type="password"/);
-    expect(html.match(/autoComplete="off"/g)).toHaveLength(2);
+  it("stops the browser from filling the ids with saved logins", () => {
+    expect(credentials().match(/autoComplete="off"/g)).toHaveLength(2);
   });
 });
 
@@ -327,7 +315,7 @@ describe("integration tab", () => {
 
   it("shows the editable credentials and quota summary without the fixed provider field", () => {
     const html = tab();
-    for (const label of ["ID da conta do WhatsApp Business (WABA)", "ID do número remetente", "Token de acesso", "Remover token", "Enviar teste", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).toContain(label);
+    for (const label of ["ID da conta do WhatsApp Business (WABA)", "ID do número remetente", "Variável do token", "Token de acesso", "Enviar teste", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).toContain(label);
     for (const retired of ["WhatsApp Cloud API", "Template de confirmação", "Idioma", "Variáveis do template", "var-chip", "Vincular", "Mensagens de acesso e segurança por WhatsApp"]) expect(html).not.toContain(retired);
     expect(html).toContain("12/500");
     expect(html).toContain("Contrato vigente");

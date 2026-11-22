@@ -1,8 +1,9 @@
 import { secretPreview } from "./secret-preview-contract.js";
+import { CredentialIssue } from "./server-credential-contract.js";
 import { getSmsUse, smsUses } from "./sms-uses-contract.js";
 import { isUseOn, normalizeUseSwitches } from "./use-switches-contract.js";
 
-// The platform's SMS account: one row with no municipality, which only the master changes.
+// The platform's SMS channel switch: one row with no municipality, which only the master changes. The token lives in the environment.
 export const SMS_CONFIG_KEY = "castragestao:sms";
 // Per municipality: which SMS messages the municipality turned on.
 export const SMS_ACTIVE_USES_CONFIG_KEY = "sms_active_uses";
@@ -22,19 +23,18 @@ export function normalizeSmsUseRows(rows) {
 }
 
 export function buildDefaultSmsConfig() {
-  return { provider: SmsProvider.SMSMAIS, active: false, hasToken: false, tokenPreview: "", environment: null,
-    tokenValid: false, lastValidatedAt: null, secureStorageAvailable: false, municipalityName: "", uses: normalizeSmsUseRows() };
+  return { provider: SmsProvider.SMSMAIS, active: false, hasToken: false, tokenPreview: "", environment: null, tokenIssue: null,
+    municipalityName: "", uses: normalizeSmsUseRows() };
 }
 
-// This contract only projects public metadata: of the token, only its start (the preview) is readable; neither the full
-// plaintext nor the ciphertext belongs in a DTO.
+// This contract only projects public metadata: of the token, only its start (the preview) is readable; the token itself never
+// belongs in a DTO. The issue says why the server holds no usable token.
 export function normalizeSmsConfig(value = {}) {
   const hasToken = value?.hasToken === true;
   return { provider: SmsProvider.SMSMAIS, active: value?.active === true, hasToken,
     tokenPreview: hasToken && typeof value?.tokenPreview === "string" ? secretPreview(value.tokenPreview) : "",
     environment: Object.values(SmsEnvironment).includes(value?.environment) ? value.environment : null,
-    tokenValid: value?.tokenValid === true, lastValidatedAt: typeof value?.lastValidatedAt === "string" ? value.lastValidatedAt : null,
-    secureStorageAvailable: value?.secureStorageAvailable === true,
+    tokenIssue: Object.values(CredentialIssue).includes(value?.tokenIssue) ? value.tokenIssue : null,
     municipalityName: typeof value?.municipalityName === "string" ? value.municipalityName.slice(0, 200) : "",
     uses: normalizeSmsUseRows(value?.uses) };
 }

@@ -7,6 +7,9 @@ import { LEGACY_DOCUMENTS_REVIEWED, NotificationEvent } from "../../shared/notif
 import { isSmsUseOn, listSmsUses, loadActiveSmsUses, setSmsUseActive } from "../src/services/sms-uses.js";
 import { saveSmsAccount } from "../src/services/sms-integration-settings.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
+import { clearServerCredentials, useServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
 
 const RESET = AuthPurpose.PASSWORD_RESET;
 const CONFIRMED = NotificationEvent.SCHEDULE_CONFIRMED;
@@ -15,18 +18,15 @@ const ACTOR = { id: "33333333-3333-4333-8333-333333333333", role: "master", muni
 const TOKEN = "production-test-token";
 const keyOf = (municipalityId) => `${SMS_ACTIVE_USES_CONFIG_KEY}:${municipalityId}`;
 
-// A database with the platform's SMS channel already active, unless told otherwise.
+// A database with the platform's SMS channel already active, unless told otherwise. The token lives in the server's variables.
 async function fixture(t, { active = true } = {}) {
-  const previous = { cipher: process.env.CONFIG_ENCRYPTION_KEY, jwt: process.env.JWT_SECRET };
-  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 19).toString("base64"); process.env.JWT_SECRET = "sms-uses-test-secret";
-  t.after(() => {
-    if (previous.cipher === undefined) delete process.env.CONFIG_ENCRYPTION_KEY; else process.env.CONFIG_ENCRYPTION_KEY = previous.cipher;
-    if (previous.jwt === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous.jwt;
-  });
+  const previous = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = "sms-uses-test-secret";
+  t.after(() => { if (previous === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous; });
+  useServerCredentials(t, { SMS_TOKEN: TOKEN });
   const database = smsSettingsDatabase();
-  const save = (input) => saveSmsAccount({ actor: ACTOR, input },
-    { database, now: () => new Date("2026-11-13T12:00:00Z"), queryBalance: async () => ({ valid: true, balance: { credits: 0, sms: 0 } }) });
-  if (active) await save({ token: TOKEN, active: true });
+  const save = (input) => saveSmsAccount({ actor: ACTOR, input }, { database, queryBalance: async () => ({ valid: true, balance: { credits: 0, sms: 0 } }) });
+  if (active) await save({ active: true });
   return { database, save };
 }
 

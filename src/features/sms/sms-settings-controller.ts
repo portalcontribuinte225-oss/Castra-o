@@ -1,11 +1,11 @@
-import { buildDefaultSmsConfig, normalizeSmsConfig, SmsEnvironment, validateSmsToken } from "../../../shared/sms-contract.js";
+import { buildDefaultSmsConfig, normalizeSmsConfig, SmsEnvironment } from "../../../shared/sms-contract.js";
 import type { SmsAccountInput, SmsConnectionResult, SmsSettingsApi, SmsSettingsState, SmsTestAnswer, SmsTestOutcome } from "./sms-types";
 
-const SECURE_STORAGE_UNAVAILABLE = "A configuração segura do servidor está indisponível. É possível apenas desativar ou remover o token.";
+const MISSING_TOKEN = "Cadastre o token em SMS_TOKEN nas variáveis do servidor";
 
 function initialState(): SmsSettingsState {
-  return { config: buildDefaultSmsConfig(), token: "", ready: false, loading: false,
-    saving: false, testing: false, confirmingRemoval: false, testPhone: "", sendingTest: false, testOutcome: null, error: "", notice: "", connection: null };
+  return { config: buildDefaultSmsConfig(), ready: false, loading: false,
+    saving: false, testing: false, testPhone: "", sendingTest: false, testOutcome: null, error: "", notice: "", connection: null };
 }
 
 function connectionResult(value: SmsConnectionResult): SmsConnectionResult | null {
@@ -23,8 +23,8 @@ function testOutcome(answer: SmsTestAnswer): SmsTestOutcome {
   return { sent: true, reason: "", detail: "", providerMessageId: String(answer.providerMessageId || "") };
 }
 
-// This controller is private to one mounted municipality/permission context; secrets never enter shared storage. The master manages the
-// platform's account, with or without a municipality; the messages of a municipality need one.
+// This controller is private to one mounted municipality/permission context. The master turns the platform's channel on or off, with or
+// without a municipality (the token lives in the server's variables); the messages of a municipality need one.
 export function createSmsSettingsController(client: SmsSettingsApi, municipalityId: string, master: boolean, canManage: boolean) {
   const reachable = canManage && (Boolean(municipalityId) || master);
   let state = { ...initialState(), loading: reachable };
@@ -61,12 +61,7 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
       if (current(captured)) publish({ error: failure(error, "Não foi possível carregar a configuração de SMS.") });
     } finally { if (current(captured)) publish({ loading: false }); }
   }
-  function tokenIssue() {
-    const error = validateSmsToken(state.token);
-    if (error) publish({ error });
-    return Boolean(error);
-  }
-  // Every change to the platform's account (token, switch, removal) is stored at once and answered with the safe settings.
+  // The platform's switch is stored at once and answered with the safe settings.
   async function persist(input: SmsAccountInput, notice: string) {
     const captured = revision;
     publish({ saving: true, error: "", notice: "", connection: null, testOutcome: null });
@@ -74,25 +69,15 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
       const saved = await client.saveSmsAccount(input, municipalityId);
       if (!current(captured)) return;
       if (!saved || typeof saved !== "object") throw new Error("Missing safe configuration");
-      publish({ config: normalizeSmsConfig(saved), token: "", confirmingRemoval: false, connection: null, notice });
+      publish({ config: normalizeSmsConfig(saved), connection: null, notice });
     } catch (error) {
       if (current(captured)) publish({ error: failure(error, "Não foi possível salvar. Verifique o token e as condições de ativação e tente novamente.") });
     } finally { if (current(captured)) publish({ saving: false }); }
   }
-  function saveToken() {
-    if (!allowedAccount() || !state.token || tokenIssue()) return;
-    if (state.config.secureStorageAvailable === false) { publish({ error: SECURE_STORAGE_UNAVAILABLE }); return; }
-    return persist({ token: state.token }, "Token salvo.");
-  }
   function toggleActive(active: boolean) {
     if (!allowedAccount()) return;
-    if (active && !state.config.hasToken) { publish({ error: "Informe um token antes de ativar o SMS." }); return; }
-    if (active && state.config.secureStorageAvailable === false) { publish({ error: SECURE_STORAGE_UNAVAILABLE }); return; }
+    if (active && !state.config.hasToken) { publish({ error: `${MISSING_TOKEN} antes de ativar o SMS.` }); return; }
     return persist({ active }, active ? "SMS ativado." : "SMS desativado.");
-  }
-  function removeToken() {
-    if (!allowedAccount()) return;
-    return persist({ clearToken: true }, "Token removido e SMS desativado.");
   }
   // A message can only be turned on while the platform's channel is active; the server enforces it too.
   async function setUseActive(use: string, active: boolean) {
@@ -109,25 +94,24 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
     } finally { if (current(captured)) publish({ saving: false }); }
   }
   async function testConnection() {
-    if (!allowedAccount() || tokenIssue()) return;
-    if (!(state.token || state.config.hasToken)) { publish({ error: "Informe um token para testar a conexão." }); return; }
+    if (!allowedAccount()) return;
+    if (!state.config.hasToken) { publish({ error: `${MISSING_TOKEN} para testar a conexão.` }); return; }
     const captured = revision;
-    const input = state.token ? { token: state.token } : {};
     publish({ testing: true, error: "", notice: "", connection: null });
     try {
-      const result = connectionResult(await client.testSmsConnection(input));
+      const result = connectionResult(await client.testSmsConnection());
       if (current(captured)) publish(result ? { connection: result } : { error: "Não foi possível validar a conexão. Confira o token e tente novamente." });
     } catch (error) {
       if (current(captured)) publish({ error: failure(error, "Não foi possível consultar a conexão e o saldo. Tente novamente.") });
     } finally { if (current(captured)) publish({ testing: false }); }
   }
-  // One real SMS to the typed number, through the saved token. "Sent" is the provider taking it; the carrier may still refuse.
+  // One real SMS to the typed number, through the server's token. "Sent" is the provider taking it; the carrier may still refuse.
   async function sendTest() {
     if (!allowedAccount()) return;
     const phone = state.testPhone.trim();
     if (!phone) { publish({ testOutcome: notSent("Informe um número para o teste.") }); return; }
     if (phone.replace(/\D/g, "").length !== 11) { publish({ testOutcome: notSent("Informe o celular completo, com DDD e o 9: (00) 00000-0000.") }); return; }
-    if (!state.config.hasToken) { publish({ testOutcome: notSent("Salve o token antes de enviar um teste.") }); return; }
+    if (!state.config.hasToken) { publish({ testOutcome: notSent(`${MISSING_TOKEN} antes de enviar um teste.`) }); return; }
     const captured = revision;
     publish({ sendingTest: true, testOutcome: null, error: "", notice: "" });
     try {
@@ -142,9 +126,7 @@ export function createSmsSettingsController(client: SmsSettingsApi, municipality
     subscribe: (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; },
     load,
     cancel: () => { mounted = false; revision++; publish(initialState()); },
-    setToken: (token: string) => { if (allowedAccount()) publish({ token, connection: null, error: "", notice: "" }); },
-    setConfirmingRemoval: (confirmingRemoval: boolean) => { if (allowedAccount()) publish({ confirmingRemoval }); },
     setTestPhone: (testPhone: string) => { if (allowedAccount()) publish({ testPhone, testOutcome: null }); },
-    saveToken, toggleActive, removeToken, setUseActive, testConnection, sendTest,
+    toggleActive, setUseActive, testConnection, sendTest,
   };
 }

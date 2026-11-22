@@ -51,19 +51,21 @@ test("the notice gives the protocol, the visit, that it is under analysis and th
 
 test("the link exists only for a request with a tutor and a public address, and says whether the password is still to be created", async () => {
   const calls = [];
-  const database = (publicUrl, { profile = false } = {}) => ({ query: async (sql, values) => {
+  // The public address comes from the server's variables (APP_PUBLIC_URL).
+  const env = (url) => ({ APP_PUBLIC_URL: url });
+  const database = ({ profile = false } = {}) => ({ query: async (sql, values) => {
     calls.push(sql);
-    if (sql.startsWith("SELECT value FROM config")) return { rows: publicUrl ? [{ value: { publicUrl } }] : [] };
     if (sql.startsWith("SELECT slug FROM municipalities")) return { rows: values[0] === MUNICIPALITY ? [{ slug: "test-town" }] : [] };
     if (sql.includes("FROM tutor_profiles p JOIN users u")) return { rows: profile ? [{}] : [] };
     throw new Error(`Unexpected SQL: ${sql}`);
   } });
-  assert.equal(await loadAccessLink(registeredRequest({ cpf: null }), database("https://castracao.example.com")), null);
+  assert.equal(await loadAccessLink(registeredRequest({ cpf: null }), database(), env("https://castracao.example.com")), null);
   assert.equal(calls.length, 0, "a request without a tutor reads nothing");
-  assert.equal(await loadAccessLink(registeredRequest(), database("")), null);
-  assert.deepEqual(await loadAccessLink(registeredRequest(), database("https://castracao.example.com")), { url: URL, accountExists: false });
-  assert.deepEqual(await loadAccessLink(registeredRequest(), database("https://castracao.example.com", { profile: true })), { url: URL, accountExists: true });
-  assert.deepEqual(await loadAccessLink(registeredRequest({ tutor_id: "44444444-4444-4444-8444-444444444444" }), database("https://castracao.example.com")), { url: URL, accountExists: true });
+  assert.equal(await loadAccessLink(registeredRequest(), database(), env("")), null);
+  assert.equal(await loadAccessLink(registeredRequest(), database(), env("http://castracao.example.com")), null, "a published address is always https");
+  assert.deepEqual(await loadAccessLink(registeredRequest(), database(), env("https://castracao.example.com")), { url: URL, accountExists: false });
+  assert.deepEqual(await loadAccessLink(registeredRequest(), database({ profile: true }), env("https://castracao.example.com")), { url: URL, accountExists: true });
+  assert.deepEqual(await loadAccessLink(registeredRequest({ tutor_id: "44444444-4444-4444-8444-444444444444" }), database(), env("https://castracao.example.com")), { url: URL, accountExists: true });
 });
 
 test("the notice goes only with the notices accepted, carries the link and is kept in the history", async () => {

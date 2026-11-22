@@ -3,13 +3,18 @@ import { api } from "../../api";
 import { CONFIG_KEYS, initialWhatsappSettings } from "../../domain";
 import type { AnyRecord } from "../../types";
 
-const savedIdsOf = (source: AnyRecord) => ({ wabaId: String(source.wabaId || ""), phoneNumberId: String(source.phoneNumberId || "") });
+// The ids and the token variable as stored, to know when the screen holds something not saved yet.
+const savedFieldsOf = (source: AnyRecord) => ({
+  wabaId: String(source.wabaId || ""),
+  phoneNumberId: String(source.phoneNumberId || ""),
+  tokenVariable: String(source.tokenVariable || ""),
+});
 
-// Credentials, the "active" switch and the connection test of one municipality.
+// Credentials, the "active" switch and the connection test of one municipality. The token itself lives in the server's variables:
+// the screen only chooses which one the municipality uses.
 export function useWhatsappCredentials(municipalityId: string) {
   const [settings, setSettings] = useState<AnyRecord>(initialWhatsappSettings);
-  // The account and number ids as stored, to know when the screen holds something not saved yet.
-  const [savedIds, setSavedIds] = useState(savedIdsOf(initialWhatsappSettings));
+  const [saved, setSaved] = useState(savedFieldsOf(initialWhatsappSettings));
   const [attempt, setAttempt] = useState(0);
   const [loadedId, setLoadedId] = useState("");
   const [failedId, setFailedId] = useState("");
@@ -18,7 +23,6 @@ export function useWhatsappCredentials(municipalityId: string) {
   const [testPhone, setTestPhoneValue] = useState("");
   const [testStatus, setTestStatus] = useState("");
   const [testing, setTesting] = useState(false);
-  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
   const activeScope = useRef(municipalityId);
   const revision = useRef(0);
   activeScope.current = municipalityId;
@@ -32,8 +36,8 @@ export function useWhatsappCredentials(municipalityId: string) {
   }
 
   function apply(value: AnyRecord) {
-    setSettings({ ...initialWhatsappSettings, ...value, accessToken: "" });
-    setSavedIds(savedIdsOf(value));
+    setSettings({ ...initialWhatsappSettings, ...value });
+    setSaved(savedFieldsOf(value));
   }
 
   useEffect(() => {
@@ -46,7 +50,6 @@ export function useWhatsappCredentials(municipalityId: string) {
     setSaveStatus(municipalityId ? "" : "Selecione um município para configurar o WhatsApp.");
     setTestPhoneValue("");
     setTestStatus("");
-    setConfirmingRemoval(false);
     if (!municipalityId) return;
     api.getConfig(CONFIG_KEYS.whatsapp, municipalityId).then((whatsapp) => {
       if (!current(captured)) return;
@@ -62,12 +65,12 @@ export function useWhatsappCredentials(municipalityId: string) {
     return () => { revision.current += 1; };
   }, [municipalityId, attempt]);
 
-  const hasToken = Boolean(settings.accessToken || settings.hasAccessToken);
+  const hasToken = Boolean(settings.hasAccessToken);
   const hasCredentials = hasToken && Boolean(settings.phoneNumberId);
   const isActive = ready && hasCredentials && settings.active !== false;
   // The catalog can only be read from Meta with the token and the account id.
   const canSync = ready && hasToken && Boolean(settings.wabaId);
-  const idsChanged = settings.wabaId !== savedIds.wabaId || settings.phoneNumberId !== savedIds.phoneNumberId;
+  const changed = (Object.keys(saved) as (keyof typeof saved)[]).some((name) => String(settings[name] || "") !== saved[name]);
 
   async function persist(input: AnyRecord, pending: string, done: string, onSaved: (value: AnyRecord) => void) {
     if (!ready || saving) return;
@@ -75,10 +78,10 @@ export function useWhatsappCredentials(municipalityId: string) {
     setSaving(true);
     setSaveStatus(pending);
     try {
-      const saved = await api.setConfig(CONFIG_KEYS.whatsapp, input, municipalityId);
+      const stored = await api.setConfig(CONFIG_KEYS.whatsapp, input, municipalityId);
       if (!current(captured)) return;
-      if (!saved?.value) throw new Error("Configuração indisponível.");
-      onSaved(saved.value);
+      if (!stored?.value) throw new Error("Configuração indisponível.");
+      onSaved(stored.value);
       setSaveStatus(done);
     } catch (error) {
       if (current(captured)) setSaveStatus(`Não foi possível salvar: ${error instanceof Error ? error.message : "tente novamente."}`);
@@ -87,20 +90,19 @@ export function useWhatsappCredentials(municipalityId: string) {
     }
   }
 
+  // Sends only what changed; choosing no variable turns the channel off on the server.
   function save() {
-    return persist({
-      active: hasCredentials && settings.active !== false,
-      ...(settings.phoneNumberId !== savedIds.phoneNumberId ? { phoneNumberId: settings.phoneNumberId } : {}),
-      ...(settings.wabaId !== savedIds.wabaId ? { wabaId: settings.wabaId } : {}),
-      ...(settings.accessToken ? { accessToken: settings.accessToken } : {}),
-    }, "Salvando configuração...", "Configuração salva com sucesso.", apply);
+    const input = Object.fromEntries((Object.keys(saved) as (keyof typeof saved)[])
+      .filter((name) => String(settings[name] || "") !== saved[name])
+      .map((name) => [name, String(settings[name] || "")]));
+    return persist(input, "Salvando configuração...", "Configuração salva com sucesso.", apply);
   }
 
-  // With a token saved the switch is stored at once, so it is still there after reloading the page.
+  // The switch is stored at once. Turning it on needs a saved variable that holds a token.
   function toggleActive(checked: boolean) {
     if (!ready || saving) return;
-    if (!settings.hasAccessToken) {
-      setSettings((previous) => ({ ...previous, active: checked }));
+    if (checked && !hasToken) {
+      setSaveStatus("Escolha e salve a variável do token antes de ativar o WhatsApp.");
       return;
     }
     return persist(
@@ -109,14 +111,6 @@ export function useWhatsappCredentials(municipalityId: string) {
       checked ? "WhatsApp ativado com sucesso." : "WhatsApp desativado com sucesso.",
       (value) => setSettings((previous) => ({ ...previous, active: Boolean(value.active) })),
     );
-  }
-
-  // Removing the token also turns the channel off on the server.
-  function removeToken() {
-    return persist({ clearAccessToken: true }, "Removendo token...", "Token removido com sucesso. O WhatsApp foi desativado.", (value) => {
-      apply(value);
-      setConfirmingRemoval(false);
-    });
   }
 
   async function sendTest() {
@@ -143,7 +137,7 @@ export function useWhatsappCredentials(municipalityId: string) {
   }
 
   return {
-    settings, setSettings, ready, loadFailed, retry, saving, saveStatus, testPhone, setTestPhone, testStatus, testing, hasCredentials, isActive, canSync, idsChanged,
-    confirmingRemoval, setConfirmingRemoval, save, toggleActive, removeToken, sendTest,
+    settings, setSettings, ready, loadFailed, retry, saving, saveStatus, testPhone, setTestPhone, testStatus, testing, hasCredentials, isActive, canSync, changed,
+    savedTokenVariable: saved.tokenVariable, save, toggleActive, sendTest,
   };
 }

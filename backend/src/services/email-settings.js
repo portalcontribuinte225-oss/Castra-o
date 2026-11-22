@@ -1,10 +1,10 @@
-import { isEmailAccountConfigured, loadEmailAccount, publicEmailAccount } from "./email-account.js";
+import { isEmailAccountConfigured, publicEmailAccount, readEmailAccount } from "./email-account.js";
 import { loadEmailIdentitySummary } from "./email-identity.js";
 import { listEmailUses } from "./email-templates.js";
 
 // What the e-mail screen reads. The master also gets the account and the template ids; everyone else only the municipal view.
-export async function getEmailSettings({ municipalityId = null, master = false, database } = {}) {
-  const account = await loadEmailAccount(database);
+export async function getEmailSettings({ municipalityId = null, master = false, database, env = process.env } = {}) {
+  const account = readEmailAccount(env);
   const [uses, identity] = await Promise.all([
     listEmailUses({ account, municipalityId, master, database }),
     municipalityId ? loadEmailIdentitySummary(municipalityId, account.publicUrl, { database }) : null,

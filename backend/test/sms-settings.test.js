@@ -3,74 +3,64 @@ import assert from "node:assert/strict";
 import { SMS_ACTIVE_USES_CONFIG_KEY, validateSmsToken } from "../../shared/sms-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DeliveryCode, DeliveryStatus, NotificationEvent } from "../../shared/notification-contract.js";
+import { CredentialIssue } from "../../shared/server-credential-contract.js";
 import { smsUses } from "../../shared/sms-uses-contract.js";
 import { messageQuotaDates } from "../../shared/message-quota-contract.js";
 import { saveSmsAccount, getSmsIntegrationSettings, getPublicSmsConfig, getSmsAvailability, isSmsUseAvailable, sendSmsTestMessage, sendSmsUse, testSmsConnection } from "../src/services/sms-integration-settings.js";
-import { decryptSecretStrict, encryptSecret, encryptSecretStrict, isSecretEncryptionAvailable } from "../src/services/config-secret-cipher.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
+import { clearServerCredentials, useServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
 
 const ACTOR = { id: "33333333-3333-4333-8333-333333333333", role: "master", municipalityId: null };
 const TOKEN = "production-test-token";
 const now = () => new Date("2026-11-13T12:00:00Z");
+// The token lives in the server's variables (SMS_TOKEN); each test starts with a fake production one.
+const setToken = (value) => { if (value) process.env.SMS_TOKEN = value; else delete process.env.SMS_TOKEN; };
 function fixture(t) {
-  const previous = { cipher: process.env.CONFIG_ENCRYPTION_KEY, jwt: process.env.JWT_SECRET };
-  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 13).toString("base64"); process.env.JWT_SECRET = "sms-settings-test-secret";
-  t.after(() => {
-    if (previous.cipher === undefined) delete process.env.CONFIG_ENCRYPTION_KEY; else process.env.CONFIG_ENCRYPTION_KEY = previous.cipher;
-    if (previous.jwt === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous.jwt;
-  });
+  const previous = process.env.JWT_SECRET;
+  process.env.JWT_SECRET = "sms-settings-test-secret";
+  t.after(() => { if (previous === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous; });
+  useServerCredentials(t, { SMS_TOKEN: TOKEN });
   const database = smsSettingsDatabase(); let validations = 0;
   const queryBalance = async () => { assert.equal(database.state.borrowed, 0, "provider validation must hold no database connection"); validations += 1; return { valid: true, balance: { credits: 0, sms: 0 } }; };
-  const save = (input, deps = {}) => saveSmsAccount({ actor: ACTOR, input }, { database, now, queryBalance, ...deps });
+  const save = (input, deps = {}) => saveSmsAccount({ actor: ACTOR, input }, { database, queryBalance, ...deps });
   const read = (municipalityId = null, master = true) => getSmsIntegrationSettings({ municipalityId, master }, { database });
   return { database, save, read, queryBalance, validations: () => validations };
 }
 
-test("strict encryption blocks plaintext, absent/invalid key and tampering without changing legacy fallback", (t) => {
-  fixture(t); const encrypted = encryptSecretStrict(TOKEN); assert.match(encrypted, /^enc:v1:/); assert.equal(decryptSecretStrict(encrypted), TOKEN);
-  assert.throws(() => decryptSecretStrict(TOKEN), { status: 503 });
-  assert.throws(() => decryptSecretStrict(`${encrypted.slice(0, -4)}AAAA`), { status: 503 });
-  delete process.env.CONFIG_ENCRYPTION_KEY;
-  assert.equal(isSecretEncryptionAvailable(), false); assert.equal(encryptSecret(TOKEN), TOKEN);
-  assert.throws(() => encryptSecretStrict(TOKEN), { status: 503 });
-  process.env.CONFIG_ENCRYPTION_KEY = "not-a-valid-key";
-  assert.throws(() => decryptSecretStrict(encrypted), { status: 503 });
-});
-
-test("the platform account defaults disabled, uses an encrypted token, validates zero balance outside a transaction and never returns secrets", async (t) => {
+test("the platform channel starts off, turns on only once the provider accepts the server's token, and never stores or returns the token", async (t) => {
   const f = fixture(t); const defaults = await f.read();
-  assert.equal(defaults.active, false); assert.equal(defaults.secureStorageAvailable, true);
-  assert.equal(defaults.hasToken, false); assert.equal(defaults.tokenPreview, "");
-  await f.save({ token: TOKEN, active: true }); assert.equal(f.validations(), 1);
-  const saved = await f.read(); assert.equal(saved.active, true); assert.equal(saved.tokenValid, true); assert.equal(saved.environment, "production");
-  assert.equal(JSON.stringify(saved).includes(TOKEN), false); assert.equal(JSON.stringify(saved).includes("enc:v1:"), false);
-  assert.equal(decryptSecretStrict(f.database.state.account.token), TOKEN);
+  assert.deepEqual([defaults.active, defaults.hasToken, defaults.environment, defaults.tokenIssue], [false, true, "production", null]);
+  await f.save({ active: true }); assert.equal(f.validations(), 1);
+  const saved = await f.read(); assert.equal(saved.active, true); assert.equal(saved.environment, "production");
+  assert.equal(JSON.stringify(saved).includes(TOKEN), false);
+  assert.deepEqual(Object.keys(f.database.state.account).sort(), ["active", "provider", "revision"]);
   const audits = f.database.calls.filter(({ sql }) => sql.includes("INSERT INTO audit_logs"));
   assert.equal(audits.length, 1); assert.equal(audits[0].values[0], ACTOR.id); assert.equal(audits[0].values[1], "CONFIG_UPDATE");
-  assert.equal(JSON.stringify(audits).includes(TOKEN), false); assert.equal(JSON.stringify(audits).includes("enc:v1:"), false);
-  assert.equal(f.database.calls.some(({ sql, values }) => sql.includes("INSERT INTO config") && values[0] === "castragestao:sms" && values.length === 2), true, "the account is saved with no municipality");
+  assert.deepEqual(JSON.parse(audits[0].values[3]), { key: "castragestao:sms", active: true });
+  assert.equal(JSON.stringify(f.database.calls).includes(TOKEN), false);
+  assert.equal(f.database.calls.some(({ sql, values }) => sql.includes("INSERT INTO config") && values[0] === "castragestao:sms" && values.length === 2), true, "the switch is saved with no municipality");
+  await f.save({ active: true }); assert.equal(f.validations(), 1, "a channel already on is not validated again");
 });
 
-test("the master reads only the start of the token, eight characters, never the token whole", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: false });
+test("the master reads only the start of the token, eight characters, and which way the variable is wrong", async (t) => {
+  const f = fixture(t);
   assert.equal((await f.read()).tokenPreview, TOKEN.slice(0, 8)); assert.equal(TOKEN.slice(0, 8).length, 8);
   assert.equal(JSON.stringify(await f.read()).includes(TOKEN), false);
-  await f.save({ token: "", active: false }); assert.equal(f.database.state.account.tokenPreview, TOKEN.slice(0, 8));
-  await f.save({ token: "replacement-token-test", active: false });
-  assert.equal(f.database.state.account.tokenPreview, "replacem"); assert.equal((await f.read()).tokenPreview, "replacem");
-  await f.save({ clearToken: true });
-  assert.equal(f.database.state.account.tokenPreview, ""); assert.equal((await f.read()).tokenPreview, "");
-  f.database.state.account = { ...f.database.state.account, token: encryptSecretStrict(TOKEN) };
-  const legacy = await f.read();
-  assert.equal(legacy.hasToken, true); assert.equal(legacy.tokenPreview, "");
+  setToken("replacement-token-test"); assert.equal((await f.read()).tokenPreview, "replacem", "a new token in Render applies at once");
+  setToken(""); const missing = await f.read();
+  assert.deepEqual([missing.hasToken, missing.tokenPreview, missing.environment, missing.tokenIssue], [false, "", null, CredentialIssue.MISSING]);
+  setToken("Bearer secret"); const invalid = await f.read();
+  assert.deepEqual([invalid.hasToken, invalid.tokenPreview, invalid.tokenIssue], [false, "", CredentialIssue.INVALID]);
 });
 
 test("the municipal administration reads only whether the channel is on, with the municipality's name and one switch per message", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: true });
+  const f = fixture(t); await f.save({ active: true });
   const settings = await f.read(MUNICIPALITY, false);
   assert.equal(settings.active, true); assert.equal(settings.municipalityName, "Test Town");
-  assert.deepEqual([settings.hasToken, settings.tokenPreview, settings.environment, settings.tokenValid, settings.lastValidatedAt], [false, "", null, false, null]);
-  assert.equal(JSON.stringify(settings).includes(TOKEN), false); assert.equal(JSON.stringify(settings).includes("enc:v1:"), false);
+  assert.deepEqual([settings.hasToken, settings.tokenPreview, settings.environment, settings.tokenIssue], [false, "", null, null]);
+  assert.equal(JSON.stringify(settings).includes(TOKEN), false);
   assert.deepEqual(settings.uses.map(({ key }) => key), smsUses.map(({ key }) => key));
   assert.deepEqual(settings.uses.filter(({ active }) => active).map(({ key }) => key), [AuthPurpose.PASSWORD_RESET], "only password recovery is on by default");
   assert.equal((await f.read(OTHER, false)).municipalityName, "Other Town");
@@ -83,11 +73,12 @@ test("the municipal administration reads only whether the channel is on, with th
 test("a visitor learns only whether SMS can reach the municipality, never the account, the token or the messages", async (t) => {
   const f = fixture(t); const asked = (id) => getPublicSmsConfig(id, { database: f.database });
   assert.deepEqual(await asked(MUNICIPALITY), { active: false });
-  await f.save({ token: TOKEN, active: true });
+  await f.save({ active: true });
   assert.deepEqual(await asked(MUNICIPALITY), { active: false }, "the channel is on but the municipality has no contract");
   f.database.setContract(MUNICIPALITY, { plan: 10 });
   assert.deepEqual(await asked(MUNICIPALITY), { active: true });
   assert.deepEqual(await asked(OTHER), { active: false }, "another municipality's contract does not count");
+  setToken(""); assert.deepEqual(await asked(MUNICIPALITY), { active: false }, "the server holds no token"); setToken(TOKEN);
   f.database.setContract(MUNICIPALITY, { plan: 10, contractEnd: "2020-01-01" });
   assert.deepEqual(await asked(MUNICIPALITY), { active: false }, "the contract ended");
   f.database.setContract(MUNICIPALITY, { plan: 10, currentPeriodStart: "2000-01", currentPeriodUsed: 10 });
@@ -98,45 +89,46 @@ test("a visitor learns only whether SMS can reach the municipality, never the ac
   await assert.rejects(asked(undefined), { status: 400 });
 });
 
-test("empty token preserves, disabling preserves ciphertext, removal clears, and sandbox cannot activate", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: true }); const encrypted = f.database.state.account.token;
-  await f.save({ token: "", active: false }); assert.equal(f.database.state.account.token, encrypted);
-  delete process.env.CONFIG_ENCRYPTION_KEY;
-  await f.save({ active: false }); assert.equal(f.database.state.account.token, encrypted);
-  await f.save({ clearToken: true }); assert.equal(f.database.state.account.token, "");
-  assert.equal(f.database.state.account.active, false);
-  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 13).toString("base64");
-  await f.save({ token: "sbx_example-test-token", active: false }); assert.equal((await f.read()).environment, "sandbox");
-  await assert.rejects(f.save({ active: true }), { status: 400 });
-  f.database.setContract(MUNICIPALITY);
-  assert.equal((await getSmsAvailability(MUNICIPALITY, { database: f.database })).available, false);
+test("a missing, malformed or sandbox token cannot turn the channel on, and the input carries only the switch", async (t) => {
+  const f = fixture(t);
+  for (const token of ["", "Bearer secret", "sbx_example-test-token"]) {
+    setToken(token); await assert.rejects(f.save({ active: true }), { status: 400 }, token);
+  }
+  assert.equal((await f.read()).environment, "sandbox");
+  assert.equal(f.validations(), 0, "nothing reaches the provider");
+  setToken(TOKEN);
+  for (const input of [{ token: TOKEN, active: true }, { clearToken: true }, { active: "true" }, {}, null, [], { provider: "smsmais", active: true }]) {
+    await assert.rejects(f.save(input), { status: 400 }, JSON.stringify(input));
+  }
+  assert.equal(f.database.state.account, undefined);
+  await f.save({ active: true }); setToken("sbx_example-test-token"); f.database.setContract(MUNICIPALITY);
+  assert.equal((await getSmsAvailability(MUNICIPALITY, { database: f.database })).available, false, "a sandbox token never sends");
 });
 
 test("failed activation and failed required audit preserve previous settings", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: false }); const previous = structuredClone(f.database.state.account);
-  await assert.rejects(f.save({ token: "different-test-token", active: true }, { queryBalance: async () => ({ valid: false, reason: "Token inválido." }) }), { status: 400 });
+  const f = fixture(t); await f.save({ active: false }); const previous = structuredClone(f.database.state.account);
+  await assert.rejects(f.save({ active: true }, { queryBalance: async () => ({ valid: false, reason: "Token inválido." }) }), { status: 400 });
   assert.deepEqual(f.database.state.account, previous);
   f.database.state.failAudit = true;
   await assert.rejects(f.save({ active: true }), /private database failure/);
   assert.deepEqual(f.database.state.account, previous); assert.equal(f.database.calls.at(-1).sql, "ROLLBACK");
 });
 
-test("a delayed validation cannot overwrite a newer platform credential", async (t) => {
+test("a delayed validation cannot overwrite a newer switch", async (t) => {
   const f = fixture(t); let resume; let started;
   const pending = new Promise((resolve) => { started = resolve; });
-  const activation = f.save({ token: TOKEN, active: true }, { queryBalance: async () => {
+  const activation = f.save({ active: true }, { queryBalance: async () => {
     assert.equal(f.database.state.borrowed, 0); started(); await new Promise((resolve) => { resume = resolve; }); return { valid: true };
   } });
-  await pending; await f.save({ token: "newer-saved-token", active: false }); resume();
+  await pending; await f.save({ active: false }); resume();
   await assert.rejects(activation, { status: 409 });
-  assert.equal(decryptSecretStrict(f.database.state.account.token), "newer-saved-token");
   assert.equal(f.database.state.account.active, false);
 });
 
 test("a message is available only with the channel usable, the contract with room and that message on, and asking performs no provider call", async (t) => {
   const f = fixture(t); const reset = AuthPurpose.PASSWORD_RESET; const available = (use) => isSmsUseAvailable({ municipalityId: MUNICIPALITY, use, database: f.database });
   assert.equal((await available(reset)).available, false);
-  await f.save({ token: TOKEN, active: true }); const validations = f.validations();
+  await f.save({ active: true }); const validations = f.validations();
   assert.equal((await available(reset)).available, false, "the municipality has no contract");
   f.database.setContract(MUNICIPALITY, { plan: 1 });
   assert.equal((await available(reset)).available, true);
@@ -162,7 +154,7 @@ test("sending a message builds the fixed text for the municipality through the p
     messageId: ACTOR.id, expiresAt: "2026-11-13T12:10:00Z" };
   const unsaved = await sendSmsUse(reset, deps);
   assert.deepEqual([unsaved.status, unsaved.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED, 0]);
-  await f.save({ token: TOKEN, active: true });
+  await f.save({ active: true });
   const uncontracted = await sendSmsUse(reset, deps);
   assert.deepEqual([uncontracted.status, uncontracted.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE, 0], "no contract, no send");
   f.database.setContract(MUNICIPALITY, { plan: 2 });
@@ -188,7 +180,7 @@ test("sending a message builds the fixed text for the municipality through the p
 });
 
 test("each municipality spends only its own SMS contract", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: true });
+  const f = fixture(t); await f.save({ active: true });
   f.database.setContract(MUNICIPALITY, { plan: 5 }); f.database.setContract(OTHER, { plan: 5 });
   const deps = { database: f.database, sendMessage: async () => ({ status: DeliveryStatus.SENT }) };
   const input = { use: AuthPurpose.PASSWORD_RESET, phone: "48999991234", data: { code: "123456", minutes: "10" } };
@@ -196,8 +188,8 @@ test("each municipality spends only its own SMS contract", async (t) => {
   assert.equal(f.database.contractOf(OTHER).currentPeriodUsed, 2); assert.equal(f.database.contractOf(MUNICIPALITY).currentPeriodUsed, undefined);
 });
 
-test("an unknown message, a missing municipality, a record nobody validated and a failing provider are each answered without a wrong send", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: true }); f.database.setContract(MUNICIPALITY);
+test("an unknown message, a missing municipality, a server without token and a failing provider are each answered without a wrong send", async (t) => {
+  const f = fixture(t); await f.save({ active: true }); f.database.setContract(MUNICIPALITY);
   let sends = 0; const failing = { status: DeliveryStatus.FAILED, code: DeliveryCode.INSUFFICIENT_BALANCE };
   const deps = { database: f.database, sendMessage: async () => { sends += 1; return failing; } };
   const base = { phone: "48999991234", data: { code: "123456", minutes: "10" } };
@@ -205,32 +197,32 @@ test("an unknown message, a missing municipality, a record nobody validated and 
     { ...base, municipalityId: null, use: AuthPurpose.PASSWORD_RESET }]) {
     const result = await sendSmsUse(input, deps); assert.deepEqual([result.status, result.code], [DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED]);
   }
-  const record = structuredClone(f.database.state.account);
-  f.database.state.account = { ...record, verification: null };
-  const unvalidated = await sendSmsUse({ ...base, municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET }, deps);
-  assert.deepEqual([unvalidated.status, unvalidated.code, sends], [DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED, 0]);
-  f.database.state.account = record;
+  setToken("");
+  const unconfigured = await sendSmsUse({ ...base, municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET }, deps);
+  assert.deepEqual([unconfigured.status, unconfigured.code, sends], [DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED, 0]);
+  setToken(TOKEN);
   assert.equal(await sendSmsUse({ ...base, municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET }, deps), failing); assert.equal(sends, 1);
 });
 
-test("connection test only checks balance, never activates, saves or leaks provider extras", async (t) => {
-  const f = fixture(t);
-  const result = await testSmsConnection({ token: "sbx_connection-test", actor: ACTOR }, { database: f.database, queryBalance: f.queryBalance, now });
+test("connection test only checks the server's token against the balance, never activates, saves or leaks provider extras", async (t) => {
+  const f = fixture(t); setToken("sbx_connection-test");
+  const result = await testSmsConnection({ actor: ACTOR }, { database: f.database, queryBalance: f.queryBalance, now });
   assert.deepEqual(result, { valid: true, environment: "sandbox", checkedAt: now().toISOString(), balance: { credits: 0, sms: 0 } });
   assert.equal(f.database.state.account, undefined); assert.equal(f.database.state.borrowed, 0);
+  setToken("");
   await assert.rejects(testSmsConnection({ actor: ACTOR }, { database: f.database, queryBalance: f.queryBalance, now }), { status: 400 });
   for (const token of ["Bearer secret", "secret\nheader", "a".repeat(2049)]) assert.ok(validateSmsToken(token));
   assert.equal(validateSmsToken(""), "");
 });
 
-test("a test message goes to the typed phone through the saved token with a fixed text, spends no contract, and nothing is sent before the channel and the token are ready", async (t) => {
+test("a test message goes to the typed phone through the server's token with a fixed text, spends no contract, and nothing is sent before the channel and the token are ready", async (t) => {
   const f = fixture(t); const sent = [];
   const sendMessage = async (input) => { sent.push(input); return { status: DeliveryStatus.SENT, providerMessageId: "4321", reference: input.messageId }; };
   const deps = { database: f.database, sendMessage };
   const input = { municipalityId: MUNICIPALITY, phone: "(48) 99999-1234", actor: ACTOR };
   const off = await sendSmsTestMessage(input, deps);
   assert.deepEqual([off.status, off.code, off.reason, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED, "Ative o SMS antes de enviar um teste.", 0]);
-  await f.save({ token: TOKEN, active: true });
+  await f.save({ active: true });
   const result = await sendSmsTestMessage(input, deps);
   assert.deepEqual(result, { status: DeliveryStatus.SENT, providerMessageId: "4321", reference: sent[0].messageId });
   assert.deepEqual(Object.keys(sent[0]).sort(), ["messageId", "phone", "text", "token"]);
@@ -240,14 +232,15 @@ test("a test message goes to the typed phone through the saved token with a fixe
   await sendSmsTestMessage({ ...input, municipalityId: null }, deps);
   assert.match(sent[1].text, /^Prefeitura: teste de envio de SMS/, "with no municipality selected the text is neutral");
   assert.equal(f.database.contractOf(MUNICIPALITY), undefined, "a test spends no contract");
-  f.database.state.account = { ...f.database.state.account, verification: null };
-  const unvalidated = await sendSmsTestMessage(input, deps);
-  assert.deepEqual([unvalidated.status, unvalidated.code, unvalidated.reason], [DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED, "Salve um token de produção válido antes de enviar um teste."]);
+  setToken("");
+  const unconfigured = await sendSmsTestMessage(input, deps);
+  assert.deepEqual([unconfigured.status, unconfigured.code, unconfigured.reason],
+    [DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED, "Cadastre um token de produção válido em SMS_TOKEN nas variáveis do servidor antes de enviar um teste."]);
   assert.equal(sent.length, 2);
 });
 
 test("a test message refuses a phone that cannot receive an SMS before anything is sent, and a refusal of the provider is answered as it is", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: true });
+  const f = fixture(t); await f.save({ active: true });
   let sends = 0; const refused = { status: DeliveryStatus.FAILED, code: DeliveryCode.INSUFFICIENT_BALANCE, reason: "Saldo de SMS insuficiente." };
   const deps = { database: f.database, sendMessage: async () => { sends += 1; return refused; } };
   for (const phone of ["", "   ", "123", "abc", "489999999999", "(48) 3333-4444", "(48) 89999-1234", "(00) 99999-1234", undefined, null, 48999991234, ["48999991234"]]) {
@@ -259,7 +252,7 @@ test("a test message refuses a phone that cannot receive an SMS before anything 
 });
 
 test("test messages are limited to five in ten minutes for each administrator", async (t) => {
-  const f = fixture(t); await f.save({ token: TOKEN, active: true });
+  const f = fixture(t); await f.save({ active: true });
   let attempts = 0; let sends = 0;
   const database = { ...f.database, query: (sql, values) => sql.includes("INSERT INTO auth_rate_limits") ? { rows: [{ attempts: ++attempts }] } : f.database.query(sql, values) };
   const deps = { database, sendMessage: async () => { sends += 1; return { status: DeliveryStatus.SENT, providerMessageId: "1" }; } };
@@ -276,7 +269,7 @@ test("a service switched off for the municipality closes the channel to it: not 
   const f = fixture(t); const sent = [];
   const deps = { database: f.database, sendMessage: async (input) => { sent.push(input); return { status: DeliveryStatus.SENT }; } };
   const reset = { municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET, phone: "48999991234", data: { code: "123456", minutes: "10" } };
-  await f.save({ token: TOKEN, active: true });
+  await f.save({ active: true });
   f.database.setContract(MUNICIPALITY, { plan: 10, enabled: false }); f.database.setContract(OTHER, { plan: 10 });
   assert.deepEqual(await getPublicSmsConfig(MUNICIPALITY, { database: f.database }), { active: false });
   assert.equal((await isSmsUseAvailable({ municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET, database: f.database })).available, false);

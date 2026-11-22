@@ -6,15 +6,13 @@ import { emailUses } from "../../../shared/email-uses-contract.js";
 import { useMessageContract } from "../message-contract/use-message-contract";
 import { EmailIntegrationTab } from "./email-integration-tab";
 import type { EmailAccountView, EmailSettings, EmailUseRow } from "./email-integration-types";
-import { useEmailAccount } from "./use-email-account";
 import { useEmailSettings } from "./use-email-settings";
 
 vi.mock("./use-email-settings", () => ({ useEmailSettings: vi.fn() }));
-vi.mock("./use-email-account", () => ({ useEmailAccount: vi.fn() }));
 vi.mock("../message-contract/use-message-contract", () => ({ useMessageContract: vi.fn() }));
 
 const noop = vi.fn();
-const account: EmailAccountView = { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", hasPrivateKey: true, privateKeyPreview: "PRIVATE0" };
+const account: EmailAccountView = { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", privateKeyPreview: "PRIVATE0", issues: [] };
 const CONFIGURED_USES = 3;
 // Two of the configured uses are active.
 const rows = (master: boolean): EmailUseRow[] => emailUses.map((use, index) => ({
@@ -26,12 +24,8 @@ const settingsOf = (overrides: Partial<EmailSettings> = {}, master = true): Emai
   identity: { name: "Test Town", departmentName: "Animal Department", brasao: EmailImageStatus.READY, departmentLogo: EmailImageStatus.READY }, ...overrides,
 });
 const emailState = (settings: EmailSettings | null, overrides = {}) => ({
-  settings, drafts: {}, dirty: false, loading: false, saving: false, error: "", notice: "", ready: Boolean(settings), retry: noop, apply: noop,
+  settings, drafts: {}, dirty: false, loading: false, saving: false, error: "", notice: "", ready: Boolean(settings), retry: noop,
   editId: noop, saveTemplates: noop, toggle: noop, ...overrides,
-});
-const accountState = (overrides = {}) => ({
-  form: { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", privateKey: "" }, edit: noop, status: "", statusOk: false,
-  saving: false, changed: false, fieldsChanged: false, confirmingRemoval: false, setConfirmingRemoval: noop, save: noop, removeKey: noop, ...overrides,
 });
 
 const contractState = {
@@ -47,7 +41,6 @@ const on = (html: string) => (html.match(/aria-checked="true"/g) || []).length;
 
 beforeEach(() => {
   vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf()));
-  vi.mocked(useEmailAccount).mockReturnValue(accountState());
   vi.mocked(useMessageContract).mockReturnValue(contractState);
 });
 
@@ -126,29 +119,25 @@ describe("e-mail tab for the master", () => {
     expect(html).toContain("{{department_logo_url}}");
   });
 
-  it("shows a saved private key by its start only, with removal, and the save button only when something changed", () => {
-    const saved = tab();
-    expect(saved).toContain(`value="PRIVATE0${"•".repeat(24)}"`);
-    expect(saved).toContain("Remover chave");
-    expect(saved).not.toContain("Salvar credenciais");
-    vi.mocked(useEmailAccount).mockReturnValue(accountState({ fieldsChanged: true, changed: true }));
-    const edited = tab();
-    expect(edited).toContain("Salvar credenciais");
-    expect(edited).not.toContain("Remover chave");
-    vi.mocked(useEmailAccount).mockReturnValue(accountState({ confirmingRemoval: true }));
-    const confirming = tab();
-    expect(confirming).toContain("Confirmar");
-    expect(confirming).toContain("Remover a chave privada?");
+  it("only reads the account from the server's variables: the private key by its start, nothing to save or remove", () => {
+    const html = tab();
+    expect(html).toContain(`value="PRIVATE0${"•".repeat(24)}"`);
+    expect(html.match(/readonly=""/g)).toHaveLength(4);
+    expect(html).toContain('value="service_test"');
+    expect(html).toContain('value="https://system.example.test"');
+    for (const hidden of ["Salvar credenciais", "Remover chave", 'type="password"', "form-error"]) expect(html).not.toContain(hidden);
+    for (const variable of ["EMAILJS_SERVICE_ID", "EMAILJS_PUBLIC_KEY", "EMAILJS_PRIVATE_KEY", "APP_PUBLIC_URL"]) expect(html).toContain(variable);
+    expect(html).toContain("Use Private Key");
   });
 
-  it("asks for the private key when none is saved, and shows what happened after a save", () => {
-    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ account: { ...account, hasPrivateKey: false, privateKeyPreview: "" } })));
-    vi.mocked(useEmailAccount).mockReturnValue(accountState({ status: "Credenciais salvas.", statusOk: true }));
+  it("names each server variable that is missing or malformed", () => {
+    const issues = [{ variable: "EMAILJS_PRIVATE_KEY", problem: "missing" }, { variable: "APP_PUBLIC_URL", problem: "invalid" }];
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ account: { ...account, privateKeyPreview: "", publicUrl: "", issues } })));
     const html = tab();
-    expect(html).toContain("Salvar credenciais");
-    expect(html).not.toContain("Remover chave");
-    expect(html).toContain('type="password"');
-    expect(html).toContain("whatsapp-inline-status ok");
+    expect(html).toContain("Falta EMAILJS_PRIVATE_KEY nas variáveis do servidor.");
+    expect(html).toContain("APP_PUBLIC_URL está em formato inválido nas variáveis do servidor.");
+    expect(html).not.toContain("•");
+    expect(html).not.toContain("Vem da variável");
   });
 
   it("keeps the ids editable without a municipality, but hides the switches", () => {
@@ -197,17 +186,17 @@ describe("e-mail tab for a municipal viewer", () => {
   it("says who the e-mails identify, and whether the brasão and the department logo will appear", () => {
     const ready = tab({ master: false });
     expect(ready).toContain("<strong>Test Town</strong> · Animal Department · Brasão: cadastrado · Logo do órgão: cadastrado");
-    expect(ready).not.toContain("endereço público do sistema");
+    expect(ready).not.toContain("APP_PUBLIC_URL");
     const identity = (brasao: string, departmentLogo: string) => settingsOf({ identity: { name: "Test Town", departmentName: "", brasao, departmentLogo } }, false);
     vi.mocked(useEmailSettings).mockReturnValue(emailState(identity(EmailImageStatus.READY, EmailImageStatus.MISSING)));
     const noLogo = tab({ master: false });
     expect(noLogo).toContain("Brasão: cadastrado · Logo do órgão: não cadastrado ⚠");
     expect(noLogo).not.toContain("Animal Department");
-    expect(noLogo).not.toContain("endereço público do sistema");
+    expect(noLogo).not.toContain("APP_PUBLIC_URL");
     vi.mocked(useEmailSettings).mockReturnValue(emailState(identity(EmailImageStatus.MISSING, EmailImageStatus.NO_PUBLIC_URL)));
     const noAddress = tab({ master: false });
     expect(noAddress).toContain("Brasão: não cadastrado ⚠ · Logo do órgão: cadastrado");
-    expect(noAddress).toContain("As imagens ficam fora dos e-mails até o master configurar o endereço público do sistema ⚠");
+    expect(noAddress).toContain("As imagens ficam fora dos e-mails até o endereço público (APP_PUBLIC_URL) ser cadastrado nas variáveis do servidor ⚠");
   });
 
   it("has no shared option to send one notice through more than one channel", () => {

@@ -28,7 +28,7 @@ router.put("/account", auth, requireMaster, async (req, res, next) => {
 });
 router.post("/test-connection", auth, requireMaster, async (req, res, next) => {
   try {
-    const result = await testSmsConnection({ token: req.body?.token, actor: req.user });
+    const result = await testSmsConnection({ actor: req.user });
     res.set("Cache-Control", "no-store").json(result);
   } catch (error) { next(error); }
 });

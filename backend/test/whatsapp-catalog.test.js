@@ -8,6 +8,9 @@ import { WHATSAPP_CATALOG_CONFIG_KEY, recognizeWhatsappTemplate } from "../../sh
 import { describeGraphTemplate, fetchGraphTemplates } from "../src/services/whatsapp-graph-templates.js";
 import { markCatalogTemplateStatus, normalizeWhatsappCatalog, syncWhatsappCatalog } from "../src/services/whatsapp-catalog.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
+import { clearServerCredentials, replaceServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
 
 const clientFetch = globalThis.fetch;
 const credentials = { accessToken: "private-token", wabaId: "987654321" };
@@ -172,9 +175,10 @@ test("stored catalogs are validated on read and entries cached in an older forma
 });
 
 async function routeFixture(t, municipalityId, user, initial = {}) {
-  const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, key: process.env.CONFIG_ENCRYPTION_KEY };
+  const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
   process.env.JWT_SECRET = "whatsapp-catalog-tests-only";
-  delete process.env.CONFIG_ENCRYPTION_KEY;
+  // The token of each municipality lives in the server variable it chose.
+  const restoreCredentials = replaceServerCredentials({ WHATSAPP_TOKEN_TEST: "private-test-token" });
   const database = fakeDatabase(initial);
   const users = new Map();
   const queries = [];
@@ -190,9 +194,8 @@ async function routeFixture(t, municipalityId, user, initial = {}) {
     pool.query = previous.query;
     pool.connect = previous.connect;
     globalThis.fetch = clientFetch;
-    for (const [name, value] of [["JWT_SECRET", previous.secret], ["CONFIG_ENCRYPTION_KEY", previous.key]]) {
-      if (value === undefined) delete process.env[name]; else process.env[name] = value;
-    }
+    if (previous.secret === undefined) delete process.env.JWT_SECRET; else process.env.JWT_SECRET = previous.secret;
+    restoreCredentials();
   });
   const call = async (method, path, requestBody) => {
     const response = await clientFetch(`http://127.0.0.1:${server.address().port}${path}`, {
@@ -207,7 +210,7 @@ async function routeFixture(t, municipalityId, user, initial = {}) {
 test("the sync endpoint is the master's: it uses the credentials of the chosen municipality and returns the template list", async (t) => {
   const municipalityId = "99999999-9999-4999-8999-999999999999";
   const admin = { id: "66666666-6666-4666-8666-666666666666", role: "master" };
-  const { call, database, queries } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", accessToken: "legacy-private-token" } });
+  const { call, database, queries } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", tokenVariable: "WHATSAPP_TOKEN_TEST" } });
   const sentTo = [];
   globalThis.fetch = async (url, options) => {
     sentTo.push({ url: String(url), auth: options.headers.Authorization });
@@ -219,7 +222,7 @@ test("the sync endpoint is the master's: it uses the credentials of the chosen m
     { name: "castracao_cancelamento", canActivate: true, label: "Agendamento cancelado" },
     { name: "lembrete_atendimento", canActivate: false, label: "" },
   ]);
-  assert.equal(sentTo[0].auth, "Bearer legacy-private-token");
+  assert.equal(sentTo[0].auth, "Bearer private-test-token");
   assert.equal(sentTo[0].url.includes("/987654321/message_templates"), true);
   assert.equal(database.store.has(`${WHATSAPP_CATALOG_CONFIG_KEY}:${municipalityId}`), true);
   assert.equal(queries.every((values) => !values.includes("11111111-1111-4111-8111-111111111111")), true);
@@ -231,11 +234,11 @@ test("the sync endpoint is the master's: it uses the credentials of the chosen m
 test("the sync endpoint answers with a safe message when the provider rejects the request", async (t) => {
   const municipalityId = "88888888-8888-4888-8888-888888888888";
   const admin = { id: "77777777-7777-4777-8777-777777777777", role: "master" };
-  const { call, database } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", accessToken: "plain-private-token" } });
-  globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "plain-private-token expired" } }) });
+  const { call, database } = await routeFixture(t, municipalityId, admin, { [`whatsapp:${municipalityId}`]: { active: true, wabaId: "987654321", tokenVariable: "WHATSAPP_TOKEN_TEST" } });
+  globalThis.fetch = async () => ({ ok: false, status: 401, json: async () => ({ error: { message: "private-test-token expired" } }) });
   const result = await call("POST", "/whatsapp/templates/sync", { municipalityId });
   assert.equal(result.status, 502);
   assert.equal(result.body.code, DeliveryCode.INVALID_CREDENTIALS);
-  assert.equal(JSON.stringify(result.body).includes("plain-private-token"), false);
+  assert.equal(JSON.stringify(result.body).includes("private-test-token"), false);
   assert.equal(database.store.has(`${WHATSAPP_CATALOG_CONFIG_KEY}:${municipalityId}`), false);
 });

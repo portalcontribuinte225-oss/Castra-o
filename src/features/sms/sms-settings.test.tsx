@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { buildDefaultSmsConfig, SmsEnvironment } from "../../../shared/sms-contract.js";
+import { CredentialIssue } from "../../../shared/server-credential-contract.js";
 import { smsUses } from "../../../shared/sms-uses-contract.js";
 import { useMessageContract } from "../message-contract/use-message-contract";
 import { createSmsSettingsController } from "./sms-settings-controller";
@@ -14,11 +15,11 @@ vi.mock("./use-sms-settings", () => ({ useSmsSettings: vi.fn() }));
 vi.mock("../message-contract/use-message-contract", () => ({ useMessageContract: vi.fn() }));
 
 const PREVIEW = "SMSTOKEN";
-const stored: SmsConfig = { ...buildDefaultSmsConfig(), hasToken: true, tokenPreview: PREVIEW, secureStorageAvailable: true, municipalityName: "Test Town",
-  environment: SmsEnvironment.PRODUCTION, tokenValid: true, lastValidatedAt: "2026-11-13T12:00:00Z" };
+const stored: SmsConfig = { ...buildDefaultSmsConfig(), hasToken: true, tokenPreview: PREVIEW, municipalityName: "Test Town",
+  environment: SmsEnvironment.PRODUCTION };
 const connected: SmsConnectionResult = { valid: true, environment: SmsEnvironment.PRODUCTION,
   balance: { credits: 0, sms: 0 }, checkedAt: "2026-11-13T12:01:00Z" };
-const withoutToken: SmsConfig = { ...stored, hasToken: false, tokenPreview: "" };
+const withoutToken: SmsConfig = { ...stored, hasToken: false, tokenPreview: "", environment: null, tokenIssue: CredentialIssue.MISSING };
 const channelOn: SmsConfig = { ...stored, active: true };
 // What the municipal administration reads: whether the channel is on, the municipality's name and messages, and no account.
 const municipal: SmsConfig = { ...buildDefaultSmsConfig(), active: true, municipalityName: "Test Town" };
@@ -35,8 +36,7 @@ function apiFixture(initial: SmsConfig = stored) {
   return {
     getSmsSettings: vi.fn<SmsSettingsApi["getSmsSettings"]>(async () => server),
     saveSmsAccount: vi.fn<SmsSettingsApi["saveSmsAccount"]>(async (value) => {
-      server = value.clearToken ? buildDefaultSmsConfig()
-        : { ...server, ...(value.active === undefined ? {} : { active: value.active }), ...(value.token ? { hasToken: true, tokenPreview: value.token.slice(0, 8) } : {}) };
+      server = { ...server, active: value.active };
       return server;
     }),
     testSmsConnection: vi.fn<SmsSettingsApi["testSmsConnection"]>(async () => connected),
@@ -58,23 +58,22 @@ describe("platform SMS settings", () => {
     for (const context of [{ id: "municipality-a", master: true, allowed: false }, { id: "", master: false, allowed: true }]) {
       const api = apiFixture();
       const controller = createSmsSettingsController(api, context.id, context.master, context.allowed);
-      await controller.load(); controller.setToken("new-token"); controller.setConfirmingRemoval(true);
-      await controller.saveToken(); await controller.toggleActive(true); await controller.setUseActive("password_reset", true);
-      await controller.testConnection(); await controller.removeToken();
+      await controller.load(); await controller.toggleActive(true); await controller.setUseActive("password_reset", true);
+      await controller.testConnection();
       controller.setTestPhone("(48) 99999-1234"); await controller.sendTest();
       expect(api.getSmsSettings).not.toHaveBeenCalled(); expect(api.saveSmsAccount).not.toHaveBeenCalled();
       expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.setSmsUseActive).not.toHaveBeenCalled(); expect(api.sendSmsTest).not.toHaveBeenCalled();
-      expect(controller.getSnapshot()).toMatchObject({ token: "", confirmingRemoval: false, testPhone: "", testOutcome: null });
+      expect(controller.getSnapshot()).toMatchObject({ testPhone: "", testOutcome: null });
     }
   });
 
   it("lets the master manage the account with no municipality, and keeps the messages for a municipality", async () => {
-    const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "", true, true);
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "", true, true);
     expect(controller.getSnapshot().loading).toBe(true);
     await controller.load();
     expect(api.getSmsSettings).toHaveBeenCalledWith(""); expect(controller.getSnapshot().ready).toBe(true);
-    controller.setToken("platform-token"); await controller.saveToken();
-    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ token: "platform-token" }, "");
+    await controller.toggleActive(true);
+    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ active: true }, "");
     await controller.setUseActive("password_reset", false);
     expect(api.setSmsUseActive).not.toHaveBeenCalled();
   });
@@ -86,10 +85,10 @@ describe("platform SMS settings", () => {
     expect(controller.getSnapshot()).toMatchObject({ ready: true, config: { active: true, hasToken: false, tokenPreview: "", municipalityName: "Test Town" } });
     await controller.setUseActive("schedule_confirmed", true);
     expect(api.setSmsUseActive).toHaveBeenLastCalledWith("municipality-a", "schedule_confirmed", true);
-    controller.setToken("new-token"); controller.setConfirmingRemoval(true); controller.setTestPhone("(48) 99999-1234");
-    await controller.saveToken(); await controller.toggleActive(false); await controller.removeToken(); await controller.testConnection(); await controller.sendTest();
+    controller.setTestPhone("(48) 99999-1234");
+    await controller.toggleActive(false); await controller.testConnection(); await controller.sendTest();
     expect(api.saveSmsAccount).not.toHaveBeenCalled(); expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.sendSmsTest).not.toHaveBeenCalled();
-    expect(controller.getSnapshot()).toMatchObject({ token: "", confirmingRemoval: false, testPhone: "" });
+    expect(controller.getSnapshot()).toMatchObject({ testPhone: "" });
   });
 
   it("loads only safe metadata: the start of the token and the municipality's messages, never the token", async () => {
@@ -97,58 +96,33 @@ describe("platform SMS settings", () => {
     const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load();
     expect(api.getSmsSettings).toHaveBeenCalledWith("municipality-a");
-    expect(controller.getSnapshot()).toMatchObject({ ready: true, token: "", config: { hasToken: true, active: false, municipalityName: "Test Town", tokenPreview: PREVIEW } });
+    expect(controller.getSnapshot()).toMatchObject({ ready: true, config: { hasToken: true, active: false, municipalityName: "Test Town", tokenPreview: PREVIEW } });
     expect(controller.getSnapshot().config.uses).toHaveLength(smsUses.length);
     expect(JSON.stringify(controller.getSnapshot())).not.toContain("secret");
   });
 
-  it("stores a new token, the channel switch and the removal at once, keeping the token out of the state", async () => {
-    const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "municipality-a", true, true);
-    await controller.load();
-    await controller.toggleActive(true);
-    expect(api.saveSmsAccount).not.toHaveBeenCalled(); expect(controller.getSnapshot().error).toContain("token");
-    controller.setToken("replacement-token"); await controller.saveToken();
-    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ token: "replacement-token" }, "municipality-a");
-    expect(controller.getSnapshot()).toMatchObject({ token: "", notice: "Token salvo.", config: { hasToken: true, tokenPreview: "replacem" } });
-    expect(JSON.stringify(controller.getSnapshot())).not.toContain("replacement-token");
-    await controller.toggleActive(true);
+  it("turns the channel on only with the server's token, and stores the switch at once", async () => {
+    const empty = apiFixture(withoutToken); const blocked = createSmsSettingsController(empty, "municipality-a", true, true);
+    await blocked.load(); await blocked.toggleActive(true);
+    expect(empty.saveSmsAccount).not.toHaveBeenCalled(); expect(blocked.getSnapshot().error).toContain("SMS_TOKEN");
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
+    await controller.load(); await controller.toggleActive(true);
     expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ active: true }, "municipality-a");
-    expect(controller.getSnapshot().config.active).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({ notice: "SMS ativado.", config: { active: true } });
     await controller.toggleActive(false);
     expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ active: false }, "municipality-a");
-    controller.setConfirmingRemoval(true); expect(controller.getSnapshot().confirmingRemoval).toBe(true);
-    await controller.removeToken();
-    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ clearToken: true }, "municipality-a");
-    expect(controller.getSnapshot()).toMatchObject({ token: "", confirmingRemoval: false, config: { active: false, hasToken: false, tokenPreview: "" } });
+    expect(controller.getSnapshot()).toMatchObject({ notice: "SMS desativado.", config: { active: false } });
   });
 
-  it("tests connection with an unsaved token without saving, activating or marking it valid", async () => {
-    const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "municipality-a", true, true);
-    await controller.load(); controller.setToken("draft-token");
-    await controller.testConnection();
-    expect(api.testSmsConnection).toHaveBeenCalledWith({ token: "draft-token" });
+  it("tests the connection with the server's token without saving or activating, and asks for SMS_TOKEN when there is none", async () => {
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
+    await controller.load(); await controller.testConnection();
+    expect(api.testSmsConnection).toHaveBeenCalledWith();
     expect(api.saveSmsAccount).not.toHaveBeenCalled();
-    expect(controller.getSnapshot()).toMatchObject({ token: "draft-token", config: { active: false }, connection: { valid: true, balance: { credits: 0, sms: 0 } } });
-    controller.setToken("another-token");
-    expect(controller.getSnapshot().connection).toBeNull();
-  });
-
-  it("rejects malformed tokens and refuses secret changes or activation without secure storage", async () => {
-    const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "municipality-a", true, true);
-    await controller.load();
-    for (const token of ["Bearer secret", "bad\nvalue", "bad value"]) {
-      controller.setToken(token); await controller.saveToken(); await controller.testConnection();
-    }
-    expect(api.saveSmsAccount).not.toHaveBeenCalled(); expect(api.testSmsConnection).not.toHaveBeenCalled();
-    api.getSmsSettings.mockResolvedValue({ ...stored, hasToken: false, secureStorageAvailable: false });
-    await controller.load(); controller.setToken("new-token"); await controller.saveToken();
-    expect(api.saveSmsAccount).not.toHaveBeenCalled(); expect(controller.getSnapshot().error).toContain("indisponível");
-    await controller.testConnection();
-    expect(api.testSmsConnection).toHaveBeenLastCalledWith({ token: "new-token" });
-    api.getSmsSettings.mockResolvedValue({ ...stored, active: true, secureStorageAvailable: false });
-    await controller.load(); await controller.toggleActive(false);
-    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ active: false }, "municipality-a");
-    await controller.removeToken(); expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ clearToken: true }, "municipality-a");
+    expect(controller.getSnapshot()).toMatchObject({ config: { active: false }, connection: { valid: true, balance: { credits: 0, sms: 0 } } });
+    const empty = apiFixture(withoutToken); const idle = createSmsSettingsController(empty, "municipality-a", true, true);
+    await idle.load(); await idle.testConnection();
+    expect(empty.testSmsConnection).not.toHaveBeenCalled(); expect(idle.getSnapshot().error).toContain("SMS_TOKEN");
   });
 
   it("turns a message on or off through its own route, and only turns one on while the channel is active", async () => {
@@ -194,16 +168,15 @@ describe("platform SMS settings", () => {
     controller.setTestPhone("48999990000"); expect(controller.getSnapshot().testOutcome).toBeNull();
   });
 
-  it("asks for a saved token before testing, and clears the result when the channel or the token changes", async () => {
+  it("asks for the server's token before testing, and clears the result when the channel changes", async () => {
     const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load(); controller.setTestPhone("48999991234"); await controller.sendTest();
     expect(api.sendSmsTest).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Salve o token antes de enviar um teste.", detail: "", providerMessageId: "" });
+    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Cadastre o token em SMS_TOKEN nas variáveis do servidor antes de enviar um teste.", detail: "", providerMessageId: "" });
     const saved = apiFixture(channelOn); const next = createSmsSettingsController(saved, "municipality-a", true, true);
     await next.load(); next.setTestPhone("48999991234"); await next.sendTest();
     expect(next.getSnapshot().testOutcome?.sent).toBe(true);
     await next.toggleActive(false); expect(next.getSnapshot().testOutcome).toBeNull();
-    await next.sendTest(); await next.removeToken(); expect(next.getSnapshot().testOutcome).toBeNull();
   });
 
   it("tells why a test was not sent, with the server's words for a refused number or too many tests and nothing else of the failure", async () => {
@@ -256,16 +229,16 @@ describe("platform SMS settings", () => {
     expect(next.getSnapshot().testOutcome).toBeNull(); expect(old.getSnapshot()).toMatchObject({ testOutcome: null, sendingTest: false, testPhone: "" });
   });
 
-  it("discards late load, save and message responses after cancellation without retaining draft secrets", async () => {
-    const api = apiFixture(withoutToken); const pendingLoad = deferred<typeof stored>(); api.getSmsSettings.mockReturnValue(pendingLoad.promise);
+  it("discards late load, save and message responses after cancellation", async () => {
+    const api = apiFixture(); const pendingLoad = deferred<typeof stored>(); api.getSmsSettings.mockReturnValue(pendingLoad.promise);
     const controller = createSmsSettingsController(api, "municipality-a", true, true);
     const loading = controller.load(); controller.cancel(); pendingLoad.resolve(stored); await loading;
-    expect(controller.getSnapshot()).toMatchObject({ ready: false, loading: false, token: "" });
-    api.getSmsSettings.mockResolvedValue(withoutToken); await controller.load(); controller.setToken("discard-me");
+    expect(controller.getSnapshot()).toMatchObject({ ready: false, loading: false });
+    api.getSmsSettings.mockResolvedValue(stored); await controller.load();
     const pendingSave = deferred<typeof stored>(); api.saveSmsAccount.mockReturnValue(pendingSave.promise);
-    const saving = controller.saveToken(); controller.cancel(); pendingSave.resolve({ ...stored, active: true }); await saving;
-    expect(controller.getSnapshot()).toMatchObject({ ready: false, saving: false, token: "", notice: "", config: { active: false } });
-    await controller.saveToken(); expect(api.saveSmsAccount).toHaveBeenCalledTimes(1);
+    const saving = controller.toggleActive(true); controller.cancel(); pendingSave.resolve({ ...stored, active: true }); await saving;
+    expect(controller.getSnapshot()).toMatchObject({ ready: false, saving: false, notice: "", config: { active: false } });
+    await controller.toggleActive(true); expect(api.saveSmsAccount).toHaveBeenCalledTimes(1);
     api.getSmsSettings.mockResolvedValue(channelOn); await controller.load();
     const pendingUse = deferred<typeof stored>(); api.setSmsUseActive.mockReturnValue(pendingUse.promise);
     const switching = controller.setUseActive("completed", true); controller.cancel(); pendingUse.resolve({ ...channelOn }); await switching;
@@ -275,7 +248,7 @@ describe("platform SMS settings", () => {
   it("ignores an old connection response after another municipality opens and permits one in-flight action", async () => {
     const api = apiFixture(); const old = createSmsSettingsController(api, "municipality-a", true, true); await old.load();
     const pending = deferred<SmsConnectionResult>(); api.testSmsConnection.mockReturnValue(pending.promise);
-    const testing = old.testConnection(); await old.saveToken(); await old.removeToken(); await old.toggleActive(true); await old.testConnection();
+    const testing = old.testConnection(); await old.toggleActive(true); await old.testConnection();
     expect(api.testSmsConnection).toHaveBeenCalledTimes(1); expect(api.saveSmsAccount).not.toHaveBeenCalled();
     old.cancel(); const next = createSmsSettingsController(api, "municipality-b", true, true); await next.load();
     pending.resolve(connected); await testing;
@@ -298,9 +271,8 @@ describe("platform SMS settings", () => {
 describe("SMS settings interface", () => {
   const view = (overrides: Partial<ReturnType<typeof useSmsSettings>> = {}) => {
     const controller = createSmsSettingsController(apiFixture(), "municipality-a", true, true);
-    return { ...controller.getSnapshot(), config: stored, ready: true, loading: false, retry: controller.load, setToken: controller.setToken,
-      setConfirmingRemoval: controller.setConfirmingRemoval, saveToken: controller.saveToken, toggleActive: controller.toggleActive,
-      removeToken: controller.removeToken, setUseActive: controller.setUseActive, testConnection: controller.testConnection,
+    return { ...controller.getSnapshot(), config: stored, ready: true, loading: false, retry: controller.load, toggleActive: controller.toggleActive,
+      setUseActive: controller.setUseActive, testConnection: controller.testConnection,
       setTestPhone: controller.setTestPhone, sendTest: controller.sendTest, ...overrides };
   };
   const screen = (overrides: Partial<ReturnType<typeof useSmsSettings>> = {}, props: Partial<React.ComponentProps<typeof SmsSettings>> = {}) => {
@@ -309,21 +281,20 @@ describe("SMS settings interface", () => {
   };
   beforeEach(() => { vi.mocked(useSmsSettings).mockReturnValue(view()); vi.mocked(useMessageContract).mockReturnValue(contractState); });
 
-  it("shows a saved token by its start only, with a confirmed removal and no way to read it whole", () => {
+  it("shows the server's token by its start only, read-only, and where it comes from", () => {
     const saved = screen();
-    expect(saved).toContain(`value="${PREVIEW}${"•".repeat(24)}"`); expect(saved).toContain("readonly=\"\"");
-    expect(saved).toContain("Remover token"); expect(saved).not.toContain("Salvar credenciais");
+    expect(saved).toContain(`value="${PREVIEW}${"•".repeat(24)}"`); expect(saved).toContain('readonly=""');
+    expect(saved).toContain("<code>SMS_TOKEN</code>"); expect(saved).toContain("Ambiente: Produção.");
+    for (const hidden of ["Remover token", "Salvar credenciais", 'type="password"']) expect(saved).not.toContain(hidden);
     expect(saved).toContain("Testar conexão / Consultar saldo"); expect(saved).not.toContain("Enviar SMS");
-    const confirming = screen({ confirmingRemoval: true });
-    expect(confirming).toContain("Confirmar"); expect(confirming).toContain("O SMS será desativado para todos os municípios.");
   });
 
-  it("asks for the token when none is saved, and shows the start of what is being typed", () => {
+  it("names a missing or malformed SMS_TOKEN and locks both tests", () => {
     const empty = screen({ config: withoutToken });
-    expect(empty).toContain('type="password"'); expect(empty).toContain("Salvar credenciais"); expect(empty).not.toContain("Remover token");
-    expect(empty).toMatch(/<button[^>]*disabled=""[^>]*>Salvar credenciais/);
-    const typing = screen({ config: withoutToken, token: "typed-token-value" });
-    expect(typing).toContain("<code>typed-to</code>"); expect(typing).not.toMatch(/<button[^>]*disabled=""[^>]*>Salvar credenciais/);
+    expect(empty).toContain("Falta SMS_TOKEN nas variáveis do servidor.");
+    expect(empty).toMatch(/<button[^>]*disabled=""[^>]*>Testar conexão/);
+    expect(empty).toMatch(/<button[^>]*disabled=""[^>]*>Enviar teste/);
+    expect(screen({ config: { ...withoutToken, tokenIssue: CredentialIssue.INVALID } })).toContain("SMS_TOKEN está em formato inválido nas variáveis do servidor.");
   });
 
   it("lists the final texts for the municipality and the decisions in independent rows", () => {
@@ -476,15 +447,8 @@ describe("SMS settings interface", () => {
 
   it("labels sandbox and current zero balance without implying activation", () => {
     const html = screen({ config: { ...stored, environment: SmsEnvironment.SANDBOX }, connection: { ...connected, environment: SmsEnvironment.SANDBOX } });
-    expect(html).toContain("Homologação"); expect(html).toContain("Créditos: 0"); expect(html).toContain("O teste não salva");
+    expect(html).toContain("Homologação"); expect(html).toContain("Créditos: 0"); expect(html).toContain("O teste não ativa o SMS");
     expect(html).toContain("não envia SMS nem ativa o canal");
   });
 
-  it("permits a connection test when secure storage is unavailable while blocking saving a new token", () => {
-    const html = screen({ config: { ...withoutToken, secureStorageAvailable: false }, token: "new-token" });
-    expect(html.match(/<input[^>]*type="password"[^>]*>/)?.[0]).not.toContain("disabled");
-    expect(html).toContain("configuração segura do servidor está indisponível");
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>Salvar credenciais/);
-    expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Testar conexão/);
-  });
 });

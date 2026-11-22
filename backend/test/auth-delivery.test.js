@@ -4,6 +4,11 @@ import { deliverAuthMessage } from "../src/services/auth/auth-message-delivery.j
 import { createEmailSender } from "../src/services/email.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DeliveryStatus, DeliveryCode, NotificationChannel } from "../../shared/notification-contract.js";
+import { clearServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
+// The WhatsApp token comes from the server variable the municipality chose.
+process.env.WHATSAPP_TOKEN_TEST = "fake-whatsapp-token";
 
 function fixture() {
   const calls = [];
@@ -12,7 +17,7 @@ function fixture() {
     email: "tutor@example.test", phone: "48999999999", emailVerified: true, phoneVerified: true, code: "012345",
     channel: NotificationChannel.WHATSAPP, expiresAt: new Date(Date.now() + 600000) };
   const dependencies = {
-    loadWhatsappConfig: async (id) => { calls.push(["whatsappConfig", id]); return { active: true, accessToken: "private", phoneNumberId: "number" }; },
+    loadWhatsappConfig: async (id) => { calls.push(["whatsappConfig", id]); return { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "number" }; },
     resolveTemplate: async (id, purpose) => { calls.push(["template", id, purpose]); return { ok: true, template: { name: `whatsapp_${purpose}`, language: "pt_BR" } }; },
     markTemplateStatus: async (...args) => { calls.push(["mark", ...args]); },
     consumeQuota: async (channel, id) => { calls.push(["quota", channel, id]); return { allowed: true }; },
@@ -257,7 +262,7 @@ test("recovery expiration during template or quota reads prevents starting email
     f.input.channel = delayed === "email-template" ? NotificationChannel.EMAIL : NotificationChannel.WHATSAPP;
     if (delayed === "email-template") f.dependencies.resolveEmailTemplate = async () => { current += 101; return { ok: true, templateId: "template" }; };
     if (delayed === "whatsapp-config") f.dependencies.loadWhatsappConfig = async () => {
-      current += 101; return { active: true, accessToken: "test", phoneNumberId: "test" };
+      current += 101; return { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "test" };
     };
     if (delayed === "whatsapp-quota") f.dependencies.consumeQuota = async () => { current += 101; return { allowed: true }; };
     const result = await deliverAuthMessage(f.input, f.dependencies);
@@ -269,7 +274,7 @@ test("recovery expiration during template or quota reads prevents starting email
 test("email admission delay cannot release a recovery code that expired while waiting", async () => {
   let current = Date.now();
   let sends = 0;
-  const sender = createEmailSender({ loadAccount: async () => ({ serviceId: "test", publicKey: "test" }),
+  const sender = createEmailSender({ loadAccount: async () => ({ serviceId: "test", publicKey: "test", privateKey: "test" }),
     now: () => current, wait: async (delay) => { current += delay; }, fetchImpl: async () => { sends += 1; return { ok: true }; } });
   const input = { toEmail: "test@example.test", templateId: "test", templateParams: { code: "123456" } };
   assert.equal((await sender(input)).status, DeliveryStatus.SENT);

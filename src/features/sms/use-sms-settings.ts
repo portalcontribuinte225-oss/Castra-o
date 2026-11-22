@@ -6,7 +6,6 @@ export function useSmsSettings(municipalityId: string, master: boolean, canManag
   const controller = useMemo(() => createSmsSettingsController(api, municipalityId, master, canManage), [municipalityId, master, canManage]);
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => { void controller.load(); return controller.cancel; }, [controller]);
-  return { ...state, retry: controller.load, setToken: controller.setToken, setConfirmingRemoval: controller.setConfirmingRemoval,
-    saveToken: controller.saveToken, toggleActive: controller.toggleActive, removeToken: controller.removeToken,
+  return { ...state, retry: controller.load, toggleActive: controller.toggleActive,
     setUseActive: controller.setUseActive, testConnection: controller.testConnection, setTestPhone: controller.setTestPhone, sendTest: controller.sendTest };
 }

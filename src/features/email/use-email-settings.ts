@@ -80,5 +80,5 @@ export function useEmailSettings(municipalityId: string, master: boolean, enable
     } finally { setSaving(false); }
   }
 
-  return { settings, drafts, dirty, loading, saving, error, notice, ready: Boolean(settings), retry, apply, editId, saveTemplates, toggle };
+  return { settings, drafts, dirty, loading, saving, error, notice, ready: Boolean(settings), retry, editId, saveTemplates, toggle };
 }

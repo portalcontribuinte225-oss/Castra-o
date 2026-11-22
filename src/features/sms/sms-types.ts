@@ -1,4 +1,5 @@
 import { SmsEnvironment, SmsProvider } from "../../../shared/sms-contract.js";
+import { CredentialIssue } from "../../../shared/server-credential-contract.js";
 
 // One SMS message the municipality can turn on, as the server lists it.
 export interface SmsUseRow {
@@ -14,21 +15,18 @@ export interface SmsConfig {
   provider: typeof SmsProvider.SMSMAIS;
   active: boolean;
   hasToken: boolean;
-  // Only the start of the saved token; the token itself never arrives.
+  // Only the start of the server's token; the token itself never arrives.
   tokenPreview: string;
   environment: typeof SmsEnvironment[keyof typeof SmsEnvironment] | null;
-  tokenValid: boolean;
-  lastValidatedAt: string | null;
-  secureStorageAvailable?: boolean;
+  // Why the server holds no usable token (SMS_TOKEN missing or malformed).
+  tokenIssue: typeof CredentialIssue[keyof typeof CredentialIssue] | null;
   municipalityName: string;
   uses: SmsUseRow[];
 }
 
-// What the master saves in the platform's account: the token, its removal or the channel switch.
+// What the master saves in the platform's account: only the channel switch (the token lives in the server's variables).
 export interface SmsAccountInput {
-  active?: boolean;
-  token?: string;
-  clearToken?: boolean;
+  active: boolean;
 }
 
 export interface SmsConnectionResult {
@@ -59,12 +57,10 @@ export interface SmsTestOutcome {
 
 export interface SmsSettingsState {
   config: SmsConfig;
-  token: string;
   loading: boolean;
   saving: boolean;
   testing: boolean;
   ready: boolean;
-  confirmingRemoval: boolean;
   testPhone: string;
   sendingTest: boolean;
   testOutcome: SmsTestOutcome | null;
@@ -76,7 +72,7 @@ export interface SmsSettingsState {
 export interface SmsSettingsApi {
   getSmsSettings: (municipalityId: string) => Promise<unknown>;
   saveSmsAccount: (input: SmsAccountInput, municipalityId: string) => Promise<unknown>;
-  testSmsConnection: (body: { token?: string }) => Promise<SmsConnectionResult>;
+  testSmsConnection: () => Promise<SmsConnectionResult>;
   setSmsUseActive: (municipalityId: string, use: string, active: boolean) => Promise<unknown>;
   sendSmsTest: (municipalityId: string, phone: string) => Promise<SmsTestAnswer>;
 }

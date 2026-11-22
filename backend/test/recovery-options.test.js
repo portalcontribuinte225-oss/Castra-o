@@ -10,6 +10,11 @@ import { saveSmsAccount } from "../src/services/sms-integration-settings.js";
 import { SMS_ACTIVE_USES_CONFIG_KEY } from "../../shared/sms-contract.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY } from "./fixtures/sms-settings-db.js";
 import { authHttpFixture, authUser, AUTH_TEST_MUNICIPALITY as MUNICIPALITY, AUTH_TEST_OTHER_MUNICIPALITY as OTHER } from "./fixtures/auth-http.js";
+import { clearServerCredentials, useServerCredentials } from "./fixtures/server-credentials.js";
+
+clearServerCredentials();
+// The WhatsApp token comes from the server variable the municipality chose.
+process.env.WHATSAPP_TOKEN_TEST = "fake-whatsapp-token";
 
 const context = { audience: AuthAudience.TUTOR, municipalityId: MUNICIPALITY };
 function secret(t) {
@@ -38,7 +43,7 @@ test("discovery token and option IDs bind account revisions, context, expiry and
 test("availability lists unverified cadastral contacts only with active configured channels and does not consume quota", async (t) => {
   secret(t);
   const user = authUser({ profile_phone: "48999991234" });
-  const deps = { resolveEmail: async () => ({ ok: true, templateId: "reset" }), loadWhatsapp: async () => ({ active: true, accessToken: "test", phoneNumberId: "test" }),
+  const deps = { resolveEmail: async () => ({ ok: true, templateId: "reset" }), loadWhatsapp: async () => ({ active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "test" }),
     resolveTemplate: async () => ({ ok: true }), quotaAvailable: async () => true, smsAvailable: async () => ({ available: true }) };
   const options = await getRecoveryOptions(user, createRecoveryToken(user), deps);
   assert.deepEqual(options.map(item => item.channel), Object.values(NotificationChannel));
@@ -56,15 +61,13 @@ test("availability lists unverified cadastral contacts only with active configur
 
 test("SMS is offered in recovery only while the channel is usable, the municipality has room in its contract and the password-recovery message is on", async (t) => {
   secret(t);
-  const previous = process.env.CONFIG_ENCRYPTION_KEY;
-  process.env.CONFIG_ENCRYPTION_KEY = Buffer.alloc(32, 21).toString("base64");
-  t.after(() => { if (previous === undefined) delete process.env.CONFIG_ENCRYPTION_KEY; else process.env.CONFIG_ENCRYPTION_KEY = previous; });
+  useServerCredentials(t, { SMS_TOKEN: "production-test-token" });
   const database = smsSettingsDatabase();
   const user = authUser({ profile_phone: "48999991234" });
   const channels = async () => (await getRecoveryOptions(user, "handle", { database, resolveEmail: async () => ({ ok: false }), loadWhatsapp: async () => ({ active: false }) }))
     .map(({ channel }) => channel);
   assert.deepEqual(await channels(), [], "no SMS account saved");
-  await saveSmsAccount({ actor: { id: user.id }, input: { token: "production-test-token", active: true } },
+  await saveSmsAccount({ actor: { id: user.id }, input: { active: true } },
     { database, queryBalance: async () => ({ valid: true, balance: { credits: 0, sms: 0 } }) });
   assert.deepEqual(await channels(), [], "the municipality has no SMS contract");
   database.setContract(SMS_TEST_MUNICIPALITY, { plan: 1 });
@@ -93,7 +96,7 @@ test("availability inside a transaction uses the supplied client for every read 
     assert.ok([MUNICIPALITY, null].includes(values[1]), "reads are either municipal or the platform rows"); queried.push(values[0]);
     const authTemplate = { name: "castracao_codigo_verificacao", language: "pt_BR", status: "APPROVED", category: "AUTHENTICATION", parameterFormat: "POSITIONAL",
       hasBody: true, bodyVariables: 1, bodySequential: true, header: "NONE", buttons: ["OTP_COPY_CODE"], extraComponents: false };
-    const valuesByKey = { "whatsapp": { active: true, accessToken: "test", phoneNumberId: "test" }, "whatsapp_quota": { plan: 10 },
+    const valuesByKey = { "whatsapp": { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "test" }, "whatsapp_quota": { plan: 10 },
       "whatsapp_active_templates": { active: { password_reset: { name: authTemplate.name, language: "pt_BR" } } },
       "whatsapp_catalog": { syncedAt: "2026-11-15T10:00:00.000Z", templates: [authTemplate] } };
     return { rows: valuesByKey[values[0]] ? [{ value: valuesByKey[values[0]] }] : [] };
@@ -101,7 +104,7 @@ test("availability inside a transaction uses the supplied client for every read 
   const options = await getRecoveryOptions(authUser({ profile_phone: "48999991234" }), "handle", { database });
   assert.deepEqual(options.map(item => item.channel), [NotificationChannel.WHATSAPP]);
   assert.equal(queried.includes("castragestao:sms"), true);
-  assert.equal(queried.includes("email_account"), true);
+  assert.equal(queried.includes("email_account"), false, "the e-mail account comes from the server's variables");
 });
 
 test("discovery sends nothing; explicit choice sends one code, enforces cooldown and confirms only used contact", async (t) => {

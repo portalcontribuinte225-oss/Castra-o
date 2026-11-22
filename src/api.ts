@@ -8,7 +8,7 @@ import type { AccessSession, AccessStartBody, AccessView } from "./features/requ
 import type { MessageQuotaInput, MessageQuotaStatus } from "./features/message-contract/message-contract-types";
 import type { SmsAccountInput } from "./features/sms/sms-types";
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
-import type { EmailAccountInput, EmailSettings } from "./features/email/email-integration-types";
+import type { EmailSettings } from "./features/email/email-integration-types";
 import type { OpenStaffNotification, StaffNotificationPage } from "./features/staff-notifications/staff-notification-types";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
@@ -208,13 +208,12 @@ export const api = {
 
   getConfig: (key, municipalityId = "") => request("GET", municipalityId ? `/config/${key}?municipalityId=${encodeURIComponent(municipalityId)}` : `/config/${key}`),
   getEmailSettings: (municipalityId = ""): Promise<EmailSettings> => request("GET", municipalityId ? `/email/settings?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/settings"),
-  saveEmailAccount: (body: EmailAccountInput, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/account?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/account", body),
   saveEmailTemplates: (templates: Record<string, string>, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/templates?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/templates", { templates }),
   setEmailUseActive: (municipalityId: string, use: string, active: boolean): Promise<EmailSettings> => request("PUT", `/email/templates/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   getSmsSettings: (municipalityId = ""): Promise<unknown> => request("GET", municipalityId ? `/sms/settings?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/settings"),
   saveSmsAccount: (body: SmsAccountInput, municipalityId = ""): Promise<unknown> => request("PUT", municipalityId ? `/sms/account?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/account", body),
   getSmsAvailability: (municipalityId: string): Promise<{ active?: boolean } | null> => request("GET", `/sms/availability?municipalityId=${encodeURIComponent(municipalityId)}`),
-  testSmsConnection: (body: { token?: string }) => request("POST", "/sms/test-connection", body),
+  testSmsConnection: () => request("POST", "/sms/test-connection"),
   sendSmsTest: (municipalityId: string, phone: string) => request("POST", municipalityId ? `/sms/test-message?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/test-message", { phone }),
   setSmsUseActive: (municipalityId: string, use: string, active: boolean) => request("PUT", `/sms/uses/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   setConfig: (key, value, municipalityId = "") => request(
