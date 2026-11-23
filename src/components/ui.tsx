@@ -102,7 +102,7 @@ export function Metric({ title, value, icon: Icon, trend, compact = false }: Met
         {Icon && <Icon size={compact ? 20 : 22} aria-hidden="true" />}
       </div>
       <div className={compact ? "tw:flex tw:flex-col" : "tw:grid tw:min-w-0 tw:gap-1"}>
-        <span className={compact ? "tw:text-[0.7rem] tw:text-ui-muted" : "tw:text-sm tw:font-medium tw:text-ui-muted"}>{title}</span>
+        <span className={compact ? "tw:text-xs tw:text-ui-muted" :"tw:text-sm tw:font-medium tw:text-ui-muted"}>{title}</span>
         <strong className={compact ? "tw:order-first tw:text-[1.05rem] tw:font-bold tw:text-ui-ink" : "tw:truncate tw:text-xl tw:font-semibold tw:text-ui-ink tw:tabular-nums"}>{value}</strong>
         {trend && <small className={compact ? undefined : "tw:text-xs tw:text-ui-muted"}>{trend}</small>}
       </div>

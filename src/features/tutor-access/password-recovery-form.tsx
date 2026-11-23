@@ -31,7 +31,7 @@ export function PasswordRecoveryFields({ state, audience, onBack, onClose }: { s
     {state.step === RecoveryStep.OPTIONS && <>
       {state.options.length ? state.options.map((option) => (
         <Button variant="outline" key={option.id} disabled={state.loading || state.clock.retryIn > 0} onClick={() => void state.send(option.id)}>
-          <span className="tw:whitespace-normal tw:break-all">Receber código por {channelLabels[option.channel]}: {option.maskedDestination}</span>
+          <span className="tw:break-all">Receber código por {channelLabels[option.channel]}: {option.maskedDestination}</span>
         </Button>
       )) : <p role="status">Nenhum contato disponível. Procure o atendimento.</p>}
       <Button variant="outline" onClick={state.restart} disabled={state.loading}>Voltar</Button>

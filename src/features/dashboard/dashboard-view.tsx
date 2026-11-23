@@ -77,7 +77,7 @@ export function DashboardView({
       <div className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3">
         <nav className="tw:grid tw:min-w-0 tw:max-w-full tw:grid-flow-col tw:auto-cols-fr tw:gap-1.5 tw:max-[900px]:w-full tw:max-[900px]:grid-flow-row tw:max-[900px]:grid-cols-3 tw:max-[480px]:grid-cols-2" aria-label="Abas do painel">
           {TABS.map((item) => (
-            <Button key={item.id} variant="custom" className={`${pressedControlStyle} tw:min-w-0 tw:max-[900px]:whitespace-normal`} aria-pressed={tab === item.id} onClick={() => setTab(item.id)}>
+            <Button key={item.id} variant="custom" className={`${pressedControlStyle} tw:min-w-0`} aria-pressed={tab === item.id} onClick={() => setTab(item.id)}>
               {item.label}
             </Button>
           ))}

@@ -48,7 +48,7 @@ export function ProcessHeader({ protocol, title, subtitle, status, reportLoading
         {tabs.map((tab) => (
           <Button key={tab.id} variant="custom" role="tab" id={`${panelId}-${tab.id}`} aria-controls={panelId} aria-selected={activeTab === tab.id}
             tabIndex={activeTab === tab.id ? 0 : -1} disabled={busy}
-            className="tw:max-w-full tw:border-card-border tw:bg-card-surface tw:text-left tw:leading-snug tw:font-semibold tw:whitespace-normal tw:text-ui-text tw:aria-selected:border-ui-accent tw:aria-selected:bg-ui-accent-soft tw:aria-selected:text-ui-accent-strong tw:max-[760px]:px-2.5 tw:max-[760px]:text-xs"
+            className="tw:max-w-full tw:border-card-border tw:bg-card-surface tw:text-left tw:font-semibold tw:text-ui-text tw:aria-selected:border-ui-accent tw:aria-selected:bg-ui-accent-soft tw:aria-selected:text-ui-accent-strong tw:max-[760px]:px-2.5 tw:max-[760px]:text-xs"
             onClick={() => onTab(tab.id)}>
             {tab.label}
             {Boolean(tab.count) && <span className="prm-tab-count">{tab.count}</span>}

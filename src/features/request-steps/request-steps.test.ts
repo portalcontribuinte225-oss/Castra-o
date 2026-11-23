@@ -47,6 +47,22 @@ describe("RequestFormLayout", () => {
     }
   });
 
+  it("keeps the public navigation at the bottom of a phone and the extra actions on a line of their own", () => {
+    const noop = () => {};
+    const layout = (internal: boolean) => renderToStaticMarkup(createElement(RequestFormLayout, {
+      stepIndex: RequestStep.ANIMAL, stepInvalid: false, internal, onNavigate: noop, onSubmit: noop,
+      submitting: false, submitDisabled: false, error: "", children: "Animais", actions: createElement("span", null, "Adicionar outro animal"),
+      exit: { label: "Voltar ao início", onClick: noop },
+    }));
+    const navigation = (html: string) => html.match(/<div aria-label="Navegação da solicitação" role="group" class="([^"]*)"/)?.[1] || "";
+
+    const publicHtml = layout(false);
+    expect(navigation(publicHtml)).toContain("(max-height:480px)]:sticky");
+    expect(publicHtml).toMatch(/>Voltar<\/button><div class="[^"]*request-form:basis-full[^"]*"><span>Adicionar outro animal<\/span><\/div><button/);
+    expect(publicHtml).toMatch(/<button[^>]*class="[^"]*tw:shrink-0[^"]*"[^>]*>Voltar ao início<\/button>/);
+    expect(navigation(layout(true))).not.toContain("sticky");
+  });
+
   it("keeps the team navigation and labels for an internal request", () => {
     const noop = () => {};
     const html = renderToStaticMarkup(createElement(RequestFormLayout, {

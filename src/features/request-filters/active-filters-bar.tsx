@@ -21,7 +21,7 @@ export function ActiveFiltersBar<Dimension extends string = RequestFilterDimensi
         <Button
           key={pill.dimension}
           variant="outline"
-          className="tw:min-w-0 tw:max-w-full tw:whitespace-normal tw:text-left"
+          className="tw:min-w-0 tw:max-w-full tw:text-left"
           aria-label={`Remover filtro ${pill.label}`}
           onClick={() => onClearDimension(pill.dimension)}
         >

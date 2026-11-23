@@ -130,7 +130,7 @@ export function PublicSchedulePicker({
                   type="button"
                   variant={internal ? "custom" : undefined}
                   className={internal
-                    ? "tw:w-full tw:whitespace-normal tw:border-card-border tw:bg-card-surface tw:px-2 tw:font-medium tw:text-ui-text tw:hover:bg-[var(--accent-blue-soft)] tw:aria-pressed:border-[color:var(--blue)] tw:aria-pressed:bg-[var(--accent-blue-soft)] tw:aria-pressed:text-[color:var(--blue)]"
+                    ? "tw:w-full tw:border-card-border tw:bg-card-surface tw:px-2 tw:font-medium tw:text-ui-text tw:hover:bg-[var(--accent-blue-soft)] tw:aria-pressed:border-[color:var(--blue)] tw:aria-pressed:bg-[var(--accent-blue-soft)] tw:aria-pressed:text-[color:var(--blue)]"
                     : `sched-month-tab${i === scheduleMonthIndex ? " is-active" : ""}`}
                   aria-pressed={internal ? i === scheduleMonthIndex : undefined}
                   onClick={() => { setScheduleMonthIndex(i); closeMonthDropdown(); }}
@@ -163,7 +163,13 @@ export function PublicSchedulePicker({
                   onClick={() => onSelect(day.date, day.occurrenceKey || "")}
                 >
                   <strong>{String(day.calendarDay || day.date.slice(0, 2)).padStart(2, "0")}</strong>
-                  <small>{!day.available ? "Sem atendimento" : day.isPast ? "Já passou" : day.hasEnoughVacancies ? `${day.offeredSlot?.time || day.startTime || ""} · ${day.remaining} vagas` : "Sem vagas suficientes"}</small>
+                  {/* The time and the vacancies on lines of their own: a narrow day breaks between them, never inside a word. */}
+                  <small>{!day.available ? "Sem atendimento" : day.isPast ? "Já passou" : day.hasEnoughVacancies ? (
+                    <>
+                      <span className="tw:block">{day.offeredSlot?.time || day.startTime || ""}</span>{" "}
+                      <span className="tw:block">{day.remaining} vagas</span>
+                    </>
+                  ) : "Sem vagas suficientes"}</small>
                   {day.kind === "Mutirao" && <em>Mutirão</em>}
                 </ScheduleDayButton>
               )
@@ -181,7 +187,7 @@ export function PublicSchedulePicker({
             const disabled = !day.hasEnoughVacancies || day.isPast;
             const onClick = () => onSelect(day.date, day.occurrenceKey || "");
             return external
-              ? <Button key={day.occurrenceKey || day.id} variant={selected ? "primary" : "outline"} aria-pressed={selected} className="tw:whitespace-normal tw:text-center" disabled={disabled} onClick={onClick}>{label}</Button>
+              ? <Button key={day.occurrenceKey || day.id} variant={selected ? "primary" : "outline"} aria-pressed={selected} className="tw:text-center" disabled={disabled} onClick={onClick}>{label}</Button>
               : <button type="button" key={day.occurrenceKey || day.id} className={selected ? "primary-action" : "ghost-button"} disabled={disabled} onClick={onClick}>{label}</button>;
           })}
         </div>

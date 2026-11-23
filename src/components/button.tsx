@@ -1,9 +1,11 @@
 import { forwardRef } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
+// The base leaves the label free to wrap: in a line that is too narrow it breaks instead of spilling over its neighbours. A row
+// whose buttons must keep one line (a strip that scrolls sideways, for example) gives them tw:shrink-0.
 const buttonStyle = [
   "tw:inline-flex tw:min-h-10 tw:items-center tw:justify-center tw:gap-1.5 tw:rounded-full tw:border tw:border-solid tw:px-3.5",
-  "tw:touch-manipulation tw:text-[0.85rem] tw:leading-none tw:whitespace-nowrap tw:motion-safe:transition",
+  "tw:touch-manipulation tw:text-[0.85rem] tw:leading-tight tw:motion-safe:transition",
   "tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent",
 ].join(" ");
 

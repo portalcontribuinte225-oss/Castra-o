@@ -53,7 +53,7 @@ export function StaffNotificationPanel({ items, unreadCount, nextCursor, loading
                   disabled={busy}
                   onClick={() => openNotification(item.id)}
                 >
-                  <span className="tw:grid tw:min-w-0 tw:gap-1 tw:whitespace-normal">
+                  <span className="tw:grid tw:min-w-0 tw:gap-1">
                     <strong className="tw:font-semibold">{notificationTitle[item.type]}</strong>
                     <span className="tw:text-xs tw:break-all tw:text-ui-muted">Protocolo {item.protocol}</span>
                     <time dateTime={item.createdAt} className="tw:text-xs tw:text-ui-muted">{formatDateTime(item.createdAt)}</time>

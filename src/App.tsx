@@ -34,7 +34,6 @@ import {
   ShieldCheck,
   Shield,
   UploadCloud,
-  User,
   Users,
   Mail,
   Phone,
@@ -50,6 +49,8 @@ import { PublicAccessRequestForm } from "./features/access-request/public-access
 import { RequestTextField } from "./features/request-steps/request-text-field";
 import { HeroCard } from "./features/public-home/hero-card";
 import { PublicMetrics } from "./features/public-home/public-metrics";
+import { PUBLIC_PHONE_QUERY, PublicMenuButton, PublicServiceButtons, PublicServicesMenu } from "./features/public-home/public-services-menu";
+import { useBackLayer } from "./features/public-navigation/use-back-layer";
 import type { AnyRecord } from "./types";
 import {
   CONFIG_KEYS,
@@ -110,6 +111,7 @@ import { CloseButton } from "./components/close-button";
 import { ConfigDialogBackdrop } from "./components/config-dialog";
 import { Input } from "./components/input";
 import { useModalFocus } from "./components/modal-focus";
+import { useMediaQuery } from "./components/use-media-query";
 import { WorkspaceMobileNavigation } from "./components/workspace-mobile-navigation";
 import { DocumentPreviewModal } from "./components/document-preview-modal";
 import { ToastContainer } from "./components/toast-container";
@@ -260,7 +262,7 @@ const settingsNavButtonClassName = [
   "tw:w-full tw:min-w-0 tw:shrink-0 tw:justify-start tw:gap-2 tw:rounded-none tw:border-y-0 tw:border-r-0 tw:border-l-[3px] tw:border-transparent",
   "tw:bg-transparent tw:py-2 tw:pr-2 tw:pl-2 tw:text-left tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:aria-[current=page]:border-l-ui-accent",
 ].join(" ");
-const settingsNavLabelClassName = "tw:min-w-0 tw:flex-1 tw:leading-snug tw:whitespace-normal tw:[overflow-wrap:anywhere]";
+const settingsNavLabelClassName = "tw:min-w-0 tw:flex-1 tw:leading-snug tw:[overflow-wrap:anywhere]";
 
 const environmentConfigTabs: ConfigTabItem[] = [
   { id: "agenda", label: "Agenda" },
@@ -410,7 +412,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [selectedId, setSelectedId] = useState(null);
   const [notificationRequest, setNotificationRequest] = useState<AnyRecord | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [usesMobileMenu, setUsesMobileMenu] = useState(() => window.matchMedia(mobileWorkspaceQuery).matches);
+  const usesMobileMenu = useMediaQuery(mobileWorkspaceQuery);
   const sidebar = useRef<HTMLElement>(null);
   const sidebarTrigger = useRef<HTMLButtonElement>(null);
   const accountButton = useRef<HTMLButtonElement>(null);
@@ -429,16 +431,10 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const mobileDialogOpen = Boolean(currentUser && usesMobileMenu && mobileOpen);
 
+  // Leaving the phone layout closes its menu.
   useEffect(() => {
-    const query = window.matchMedia(mobileWorkspaceQuery);
-    function updateLayout() {
-      setUsesMobileMenu(query.matches);
-      if (!query.matches) setMobileOpen(false);
-    }
-    query.addEventListener("change", updateLayout);
-    updateLayout();
-    return () => query.removeEventListener("change", updateLayout);
-  }, []);
+    if (!usesMobileMenu) setMobileOpen(false);
+  }, [usesMobileMenu]);
 
   useEffect(() => {
     if (sidebar.current) sidebar.current.inert = usesMobileMenu && !mobileOpen;
@@ -802,30 +798,27 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
 
   if (!currentUser) {
     return (
-      <>
-        <LoginView
-          onLogin={(user) => { setAccessLink(null); setCurrentUser(user); }}
-          accessLink={accessLink}
-          onProcedureIntent={onProcedureIntent}
-          onAccessRequest={createAccessRequest}
-          adoptionAnimals={adoptionAnimals}
-          sharedAdoption={sharedAdoption}
-          onInterestSent={handleInterestSent}
-          municipalities={municipalities}
-          selectedMunicipalityId={selectedMunicipalityId}
-          onMunicipalitySelect={handleMunicipalitySelect}
-          createRequest={createRequest}
-          scheduleDays={scheduleDays}
-          requestTypes={requestTypes}
-          documentTypes={documentTypes}
-          speciesOptions={speciesOptions}
-          sizeOptions={sizeOptions}
-          breeds={breeds}
-          aiSettings={aiSettings}
-          onRequestCreated={registerCreatedRequest}
-        />
-        <PwaInstallPrompt />
-      </>
+      <LoginView
+        onLogin={(user) => { setAccessLink(null); setCurrentUser(user); }}
+        accessLink={accessLink}
+        onProcedureIntent={onProcedureIntent}
+        onAccessRequest={createAccessRequest}
+        adoptionAnimals={adoptionAnimals}
+        sharedAdoption={sharedAdoption}
+        onInterestSent={handleInterestSent}
+        municipalities={municipalities}
+        selectedMunicipalityId={selectedMunicipalityId}
+        onMunicipalitySelect={handleMunicipalitySelect}
+        createRequest={createRequest}
+        scheduleDays={scheduleDays}
+        requestTypes={requestTypes}
+        documentTypes={documentTypes}
+        speciesOptions={speciesOptions}
+        sizeOptions={sizeOptions}
+        breeds={breeds}
+        aiSettings={aiSettings}
+        onRequestCreated={registerCreatedRequest}
+      />
     );
   }
 
@@ -1354,6 +1347,8 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   useEffect(() => {
     if (showInterestForm) interestNameRef.current?.focus();
   }, [showInterestForm]);
+  // The phone's back closes the animal's window instead of leaving the page.
+  useBackLayer(adoptionOpen, closeAnimalModal);
 
   function openAnimalModal(animal, openInterestForm = false) {
     interestRequest.current = null;
@@ -1663,6 +1658,9 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   const [publicServiceSpeciesOptions, setPublicServiceSpeciesOptions] = useState(speciesOptions);
   const [publicServiceSizeOptions, setPublicServiceSizeOptions] = useState(sizeOptions);
   const [publicServiceBreeds, setPublicServiceBreeds] = useState(breeds);
+  const phoneLayout = useMediaQuery(PUBLIC_PHONE_QUERY);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuTriggerRef = useRef<HTMLButtonElement>(null);
   const adoptionSectionRef = useRef(null);
   // A shared adoption link lands on the adoption section, where its animal or its notice is.
   const sharedAdoptionState = sharedAdoption?.state || SharedAdoptionState.NONE;
@@ -1673,6 +1671,13 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   const publicMunicipalityRef = useRef(selectedMunicipalityId);
   publicMunicipalityRef.current = selectedMunicipalityId;
   useEffect(() => { setPublicServiceDone(null); setProcedurePrefill(null); setAuthEntry(null); setAuthEntryError(""); }, [selectedMunicipalityId]);
+  useEffect(() => {
+    if (!phoneLayout) setMenuOpen(false);
+  }, [phoneLayout]);
+  // The phone's back closes the ☰ menu, the sign-in and the open service before it leaves the site.
+  useBackLayer(Boolean(activePublicService), closePublicService);
+  useBackLayer(menuOpen, () => setMenuOpen(false));
+  useBackLayer(Boolean(authEntry), closeAuthEntry);
 
   useEffect(() => {
     setPublicServiceScheduleDays(scheduleDays);
@@ -1715,28 +1720,52 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
     adoptionSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
+  // A service opens, ends and closes at the top of the page, where its form or its confirmation is.
+  function scrollPublicPageToTop() {
+    window.scrollTo({ top: 0 });
+  }
+
   function openPublicService(serviceId: string) {
     setProcedurePrefill(null);
     setPublicServiceDone(null);
     setActivePublicService(serviceId);
+    scrollPublicPageToTop();
   }
 
   function joinMutirao() {
     setProcedurePrefill(nextMutirao ? { schedule: nextMutirao.date } : null);
     setPublicServiceDone(null);
     setActivePublicService("procedure_form");
+    scrollPublicPageToTop();
   }
 
   function openRequestAccess(prefill: { protocol: string; cpf: string }) {
     setAccessPrefill(prefill);
     setPublicServiceDone(null);
     setActivePublicService(REQUEST_ACCESS_SERVICE);
+    scrollPublicPageToTop();
   }
 
   function closePublicService() {
     setActivePublicService(null);
     setProcedurePrefill(null);
     setPublicServiceDone(null);
+    scrollPublicPageToTop();
+  }
+
+  function closeAuthEntry() {
+    onProcedureIntent(null);
+    setAuthEntry(null);
+  }
+
+  function selectFromMenu(serviceId: string) {
+    setMenuOpen(false);
+    openPublicService(serviceId);
+  }
+
+  function enterFromMenu() {
+    setMenuOpen(false);
+    openAuthEntry(AuthEntryOrigin.STAFF);
   }
 
   const publicFooterItems = [
@@ -1748,9 +1777,6 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   const procedureService = activePublicService === "procedure_form";
   const neighborhoodCatalog = useNeighborhoodCatalog(procedureService ? selectedMunicipalityId : "");
   const requestFormOpen = procedureService && selectedMunicipalityId && !publicServiceDone;
-  const scrollableMenuButton = "tw:[@media(max-width:820px),(max-height:480px)]:flex-none";
-  const serviceButtonLayout = requestFormOpen ? scrollableMenuButton : "tw:[@media(max-width:820px)]:flex-[1_1_calc(50%-6px)]";
-  const enterButtonLayout = requestFormOpen ? scrollableMenuButton : "tw:[@media(max-width:820px)]:w-full";
   return (
     <main className={`login-page${requestFormOpen ? " login-page--request" : ""}`}>
       <div className="public-topbar">
@@ -1760,7 +1786,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
           ) : (
             <div className="brand-mark"><PawPrint size={20} /></div>
           )}
-          <div>
+          <div className="tw:min-w-0">
             <strong>{activeMunicipality ? `Prefeitura de ${activeMunicipality.name}` : "Sistema municipal"}</strong>
             {activeMunicipality?.department_name && (
               <span className="public-topbar-department">{activeMunicipality.department_name}</span>
@@ -1778,32 +1804,18 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
             <img src={activeMunicipality.department_logo} alt="Logo do órgão" className="public-topbar-logo" />
           )}
         </div>
-        <nav className="public-topbar-nav" aria-label="Serviços públicos">
-          {publicHomeServices.map((service) => {
-            const Icon = service.icon;
-            const active = activePublicService === service.id;
-            return (
-              <Button
-                key={service.id}
-                variant="menu"
-                aria-current={active || undefined}
-                className={`tw:text-[color:var(--ink-700)] ${serviceButtonLayout}`}
-                onClick={() => openPublicService(service.id)}
-              >
-                <Icon size={14} aria-hidden="true" className={service.danger ? "tw:shrink-0 tw:text-[#b5482f]" : "tw:shrink-0 tw:text-[color:var(--ui-action)]"} />
-                <span>{service.label}</span>
-              </Button>
-            );
-          })}
-          <Button
-            variant="menu"
-            className={`tw:text-[color:var(--selected-ink)] ${enterButtonLayout}`}
-            onClick={() => openAuthEntry(AuthEntryOrigin.STAFF)}
-          >
-            <User size={15} aria-hidden="true" />
-            Entrar
-          </Button>
-        </nav>
+        {phoneLayout ? (
+          <PublicMenuButton ref={menuTriggerRef} expanded={menuOpen} onClick={() => setMenuOpen(true)} />
+        ) : (
+          <nav className="public-topbar-nav" aria-label="Serviços públicos">
+            <PublicServiceButtons
+              services={publicHomeServices}
+              activeServiceId={activePublicService}
+              onSelect={openPublicService}
+              onEnter={() => openAuthEntry(AuthEntryOrigin.STAFF)}
+            />
+          </nav>
+        )}
       </div>
 
       {authEntryError && <p className="form-error" role="alert">{authEntryError}</p>}
@@ -1853,12 +1865,12 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 selectedMunicipalityId={selectedMunicipalityId}
                 municipality={activeMunicipality}
                 onBack={closePublicService}
-                backLabel="Voltar"
                 onRegisteredAnimal={() => openAuthEntry(AuthEntryOrigin.REGISTERED_ANIMAL)}
                 onDone={(request) => {
                   if (selectedMunicipalityId !== publicMunicipalityRef.current) return;
                   const normalized = onRequestCreated?.(request, { openAdmin: true }) || normalizeRequest(request);
                   setPublicServiceDone(normalized);
+                  scrollPublicPageToTop();
                 }}
                 initialMunicipalityId={selectedMunicipalityId}
                 requestTypes={publicServiceRequestTypes}
@@ -1895,7 +1907,9 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                     request_type: RequestType.COMPLAINT,
                     municipality_id: selectedMunicipalityId,
                   });
-                  if (selectedMunicipalityId === publicMunicipalityRef.current) setPublicServiceDone(normalizeRequest(created));
+                  if (selectedMunicipalityId !== publicMunicipalityRef.current) return;
+                  setPublicServiceDone(normalizeRequest(created));
+                  scrollPublicPageToTop();
                 }}
               />
             ) : null}
@@ -1936,7 +1950,18 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
         )}
       </footer>
 
-{authEntry && <AuthEntry key={authEntryKey(authEntry)} audience={authEntry.audience} municipalityId={authEntry.municipalityId} onLogin={onLogin} onClose={() => { onProcedureIntent(null); setAuthEntry(null); }} />}
+      {menuOpen && (
+        <PublicServicesMenu
+          services={publicHomeServices}
+          activeServiceId={activePublicService}
+          returnFocus={menuTriggerRef.current}
+          onSelect={selectFromMenu}
+          onEnter={enterFromMenu}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
+      <PwaInstallPrompt visible={!activePublicService} />
+{authEntry && <AuthEntry key={authEntryKey(authEntry)} audience={authEntry.audience} municipalityId={authEntry.municipalityId} onLogin={onLogin} onClose={closeAuthEntry} />}
     </main>
   );
 }
@@ -2376,6 +2401,12 @@ function NewRequest({
   const requiredIssues = getRequestValidationIssues();
   const canSubmit = requiredIssues.length === 0;
   const currentStepIndex = Math.max(requestSteps.findIndex((item) => item.step === formStep), 0);
+  // Outside the team, the phone's back goes to the previous step and closes the windows of the form.
+  const backOnPage = !internalSimple;
+  useBackLayer(backOnPage && currentStepIndex > 0, () => navigateToStep(requestSteps[currentStepIndex - 1].step));
+  useBackLayer(backOnPage && Boolean(previewDocument), () => setPreviewDocument(null));
+  useBackLayer(backOnPage && declarationOpen, () => setDeclarationOpen(false));
+  useBackLayer(backOnPage && Boolean(reusedPreview), () => setReusedPreview(null));
   function selectedScheduleHasCapacity() {
     if (!requestData.schedule) return false;
     const selectedDay = selectScheduleOccurrence(scheduleDays, requestData.schedule, requestData.scheduleOccurrenceKey, Math.max(animals.length, 1));
@@ -2798,7 +2829,7 @@ function NewRequest({
   }
 
   const animalActionColor = internalSimple ? "tw:text-[color:var(--blue)]" : "tw:text-[color:var(--ui-action)]";
-  const animalActionStyle = `tw:min-w-0 tw:flex-1 tw:whitespace-normal tw:text-center ${animalActionColor}`;
+  const animalActionStyle = `tw:min-w-0 tw:flex-1 tw:text-center ${animalActionColor}`;
   const uploadedPhoto = documentUploads.animal_photo;
 
   return (
@@ -2901,7 +2932,7 @@ function NewRequest({
             })}
             {animals.length > 1 && hasConfiguredTypes && (
               <div className="tw:flex tw:gap-2.5">
-                <Button className="tw:whitespace-normal" variant="outline" onClick={applyFirstProceduresToAll} disabled={animalRequestTypeIds(animals[0]).length === 0}>
+                <Button variant="outline" onClick={applyFirstProceduresToAll} disabled={animalRequestTypeIds(animals[0]).length === 0}>
                   Aplicar os procedimentos do Animal 1 a todos
                 </Button>
               </div>
@@ -3317,7 +3348,9 @@ function AdminDashboard({
   );
 }
 
-function PwaInstallPrompt() {
+// The notice to install the app, on the home page only: with a service open it would cover the buttons of its form. It stays
+// mounted while hidden, so the browser's install offer of this visit is not lost.
+function PwaInstallPrompt({ visible }: { visible: boolean }) {
   const [installEvent, setInstallEvent] = useState<any>(null);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem("castragestao:pwa-dismissed") === "1");
   const [installed, setInstalled] = useState(false);
@@ -3371,7 +3404,7 @@ function PwaInstallPrompt() {
     setDismissed(true);
   }
 
-  if (dismissed || installed || isStandalone) return null;
+  if (!visible || dismissed || installed || isStandalone) return null;
   if (!installEvent && !isSafari) return null;
 
   return (
@@ -6154,7 +6187,7 @@ function ConfigView({
                 <Button
                   key={`${getItemMunicipalityId(sector)}:${sector.id}`}
                   variant="outline"
-                  className="tw:justify-start tw:whitespace-normal"
+                  className="tw:justify-start"
                   onClick={() => {
                     setNewTeamUser((current) => ({ ...current, sectorIds: [...(current.sectorIds || []), sector.id] }));
                     setSectorPickerOpen(false);
