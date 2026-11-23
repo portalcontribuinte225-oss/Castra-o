@@ -26,13 +26,14 @@ const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCA
 const definition = (overrides = {}) => canonicalDocumentDefinition({ id: "identity", name: "Identidade", reuseScope: "tutor", required: true, ...overrides });
 const settingsFor = (documents = [definition()]) => ({ documentTypes: documents,
   requestTypes: [{ id: "procedure", name: "CASTRACAO", documents: documents.map(({ id }) => ({ id })) }] });
+const PROCEDURE_ANIMALS = [{ requestTypeIds: ["procedure"] }];
 function received(documentDefinition = definition(), extra = {}) {
   return createReceivedDocument({ documentId: documentDefinition.id, dataUrl: PDF, fileName: "original.pdf", ...extra }, documentDefinition,
     { requestId: "original", ownerUserId: OWNER, municipalityId: MUNICIPALITY, animalIds: [ANIMAL], now: NOW });
 }
 function row(document, extra = {}) {
   return { id: document.requestId || "original", tutor_id: OWNER, municipality_id: MUNICIPALITY,
-    created_at: new Date("2026-10-01T00:00:00.000Z"), request_type: "procedure", animals: [{ id: ANIMAL }], document_index: 0, document, ...extra };
+    created_at: new Date("2026-10-01T00:00:00.000Z"), request_type: "procedure", animals: [{ id: ANIMAL, requestTypeIds: ["procedure"] }], document, ...extra };
 }
 function reference(source) {
   const description = describeStoredDocument(source, definition({ maxSizeMb: 12 }));
@@ -52,13 +53,12 @@ function clientFor(sources) {
         return { ...source, document };
       }) };
     }
-    const index = values[4];
     return { rows: sources.filter((source) => source.id === values[0] && source.tutor_id === values[1] && source.municipality_id === values[2]
-      && (source.document.attachmentId === values[3] || index !== null && source.document_index === index)).map((source) => structuredClone(source)) };
+      && source.document.attachmentId === values[3]).map((source) => structuredClone(source)) };
   } };
 }
 function submission(extra = {}) {
-  return { body: { request_type: "procedure", declarationAccepted: true }, user: TUTOR, tutorId: OWNER,
+  return { body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true }, user: TUTOR, tutorId: OWNER,
     municipalityId: MUNICIPALITY, settings: settingsFor(), requestId: "new-request", animalIds: [ANIMAL], now: NOW, ...extra };
 }
 
@@ -94,26 +94,26 @@ test("receipts survive JSONB key ordering and bind authority fields", () => {
   assert.equal(hasValidDocumentReceipt(document, row(document, { municipality_id: "other" })), false);
 });
 
-test("legacy approval and browser dates are not trusted; finite expiry uses original DB date", () => {
-  const document = { documentId: "identity", dataUrl: PDF, fileName: "old.pdf", status: "approved", receivedAt: "2099-01-01", review: { reviewedBy: "admin" } };
-  const source = row(document);
-  const described = describeStoredDocument(source, definition({ reuseValidityDays: 30 }), { now: NOW });
-  assert.equal(described.status, "attached");
-  assert.equal(described.receivedAt, "2026-10-01T00:00:00.000Z");
-  assert.equal(described.state, "expired");
-  assert.equal(describeStoredDocument(source, definition(), { now: NOW }).state, "pending");
-  const invalidReceipt = { ...document, receipt: { version: 1, digest: "0".repeat(64) } };
-  const unknown = describeStoredDocument(row(invalidReceipt), definition({ reuseValidityDays: 30 }), { now: NOW });
-  assert.equal(unknown.receivedAt, null);
-  assert.equal(unknown.state, "unavailable");
-  const unverifiedCopy = { ...document, origin: { requestId: "older-file", receivedAt: "2020-01-01" } };
-  const unverified = describeStoredDocument(row(unverifiedCopy), definition({ reuseValidityDays: 30 }), { now: NOW });
-  assert.equal(unverified.receivedAt, null, "An unverified copy cannot acquire the recent destination request date");
-  assert.equal(unverified.state, "unavailable");
-  assert.equal(describeStoredDocument(row(unverifiedCopy), definition(), { now: NOW }).state, "pending");
-  const decorated = decorateRequestDocuments({ ...source, documents: [document] }, settingsFor());
+test("an attachment without a valid receipt keeps its stored id but gets no approval, no receipt date and no reuse", () => {
+  const document = { attachmentId: "stored-id", documentId: "identity", dataUrl: PDF, fileName: "old.pdf", status: "approved", receivedAt: "2099-01-01",
+    review: { reviewedBy: "admin" }, origin: { requestId: "older-file", receivedAt: "2020-01-01" } };
+  const forged = { ...document, receipt: { version: 1, digest: "0".repeat(64) } };
+  const changed = { ...received(), status: "approved", receivedAt: "2099-01-01" };
+  for (const item of [document, forged, changed]) {
+    for (const policy of [definition({ reuseValidityDays: 30 }), definition()]) {
+      const described = describeStoredDocument(row(item), policy, { now: NOW });
+      assert.equal(described.attachmentId, item.attachmentId);
+      assert.equal(described.status, "attached");
+      assert.equal(described.receivedAt, null);
+      assert.equal(described.state, "unavailable");
+    }
+  }
+  const decorated = decorateRequestDocuments({ ...row(document), documents: [document] }, settingsFor());
   assert.equal(decorated.documents[0].status, "attached");
-  assert.equal(decorated.documents[0].attachmentId, described.attachmentId);
+  assert.equal(decorated.documents[0].attachmentId, "stored-id");
+  const anonymous = decorateRequestDocuments({ ...row(document), documents: [{ ...document, attachmentId: undefined }] }, settingsFor());
+  assert.equal(anonymous.documents[0].status, "attached");
+  assert.equal(anonymous.documents[0].review, undefined);
 });
 
 test("expiry happens at the exact server UTC boundary and policy changes preserve receipt dates", () => {
@@ -126,7 +126,7 @@ test("expiry happens at the exact server UTC boundary and policy changes preserv
 
 test("fresh uploads ignore forged review, dates and ownership; declaration is required of every public procedure", async () => {
   const upload = { documentId: "identity", dataUrl: PDF, fileName: "new.pdf", status: "approved", receivedAt: "2099-01-01", ownerUserId: "other", review: { reviewedBy: "fake" } };
-  const args = submission({ body: { request_type: "procedure", declarationAccepted: true, documents: [upload] } });
+  const args = submission({ body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true, documents: [upload] } });
   const [document] = await prepareRequestDocuments(clientFor([]), args);
   assert.equal(document.status, "attached");
   assert.equal(document.review, undefined);
@@ -138,10 +138,9 @@ test("fresh uploads ignore forged review, dates and ownership; declaration is re
   await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), { ...args, user: STAFF, body: { request_type: "procedure" } }));
 });
 
-test("all supported request type aliases enforce required documents", async () => {
-  for (const type of [{ requestTypeId: "procedure" }, { request_type: "procedure" }, { request_type: "CASTRACAO" },
-    { requestType: "procedure" }, { requestType: "CASTRACAO" }, { type: "CASTRACAO" }]) {
-    const args = submission({ body: { ...type, declarationAccepted: true } });
+test("the procedures of the animals decide the required documents, whatever type text comes with them", async () => {
+  for (const type of [{}, { requestTypeId: "other" }, { request_type: "procedure" }, { requestType: "CASTRACAO" }, { type: "CASTRACAO" }]) {
+    const args = submission({ body: { ...type, animals: PROCEDURE_ANIMALS, declarationAccepted: true } });
     await assert.rejects(() => prepareRequestDocuments(clientFor([]), args), { status: 400 }, JSON.stringify(type));
     await assert.doesNotReject(() => prepareRequestDocuments(clientFor([]), { ...args,
       body: { ...args.body, documents: [{ documentId: "identity", dataUrl: PDF }] } }));
@@ -175,7 +174,7 @@ test("complaint photos occupy only the reserved slots and are validated independ
   await assert.rejects(() => submitPhotos([{ ...upload, dataUrl: PDF.replace("application/pdf", "image/png") }]), { status: 400 });
   await assert.rejects(() => submitPhotos([{ ...upload, dataUrl: `data:image/png;base64,${oversized.toString("base64")}` }]), { status: 400 });
   await assert.rejects(() => prepareRequestDocuments(clientFor([]), submission({
-    settings, body: { request_type: "procedure", declarationAccepted: true, documents: [upload] },
+    settings, body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true, documents: [upload] },
   })), { status: 400 });
 });
 
@@ -214,7 +213,7 @@ test("complaint photos are kept with the case through staff evidence updates and
 test("reuse resolves persisted bytes and immutable origin under shared row lock", async () => {
   const source = row(received());
   const client = clientFor([source]);
-  const [copy] = await prepareRequestDocuments(client, submission({ body: { request_type: "procedure", declarationAccepted: true,
+  const [copy] = await prepareRequestDocuments(client, submission({ body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true,
     reusedDocuments: [{ ...reference(source), status: "approved", receivedAt: "2099-01-01", dataUrl: "fake" }] } }));
   assert.equal(copy.dataUrl, source.document.dataUrl);
   assert.equal(copy.receivedAt, source.document.receivedAt);
@@ -224,22 +223,22 @@ test("reuse resolves persisted bytes and immutable origin under shared row lock"
   assert.match(client.calls[0].sql, /FOR SHARE OF r/);
   const intermediate = row(copy, { id: copy.requestId });
   const [copyAgain] = await prepareRequestDocuments(clientFor([source, intermediate]), submission({ requestId: "third-request",
-    body: { request_type: "procedure", declarationAccepted: true, reusedDocuments: [reference(intermediate)] } }));
+    body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true, reusedDocuments: [reference(intermediate)] } }));
   assert.equal(copyAgain.origin.requestId, "original");
   assert.equal(copyAgain.receivedAt, NOW.toISOString());
   source.document.status = "rejected";
   source.document.receipt = signDocumentReceipt(source.document);
   await assert.rejects(() => prepareRequestDocuments(clientFor([source, intermediate]), submission({ body: {
-    request_type: "procedure", declarationAccepted: true, reusedDocuments: [reference(intermediate)] } })), { status: 400 });
+    request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true, reusedDocuments: [reference(intermediate)] } })), { status: 400 });
 });
 
 test("foreign owner/municipality, changed hashes, expired/rejected files and request scope cannot reuse", async () => {
   const source = row(received());
   const ref = reference(source);
-  const args = (overrides = {}) => submission({ body: { request_type: "procedure", declarationAccepted: true, reusedDocuments: [ref] }, ...overrides });
+  const args = (overrides = {}) => submission({ body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true, reusedDocuments: [ref] }, ...overrides });
   await assert.rejects(() => prepareRequestDocuments(clientFor([row(source.document, { tutor_id: "other" })]), args()), { status: 404 });
   await assert.rejects(() => prepareRequestDocuments(clientFor([row(source.document, { municipality_id: "other" })]), args()), { status: 404 });
-  await assert.rejects(() => prepareRequestDocuments(clientFor([source]), args({ body: { request_type: "procedure", declarationAccepted: true,
+  await assert.rejects(() => prepareRequestDocuments(clientFor([source]), args({ body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true,
     reusedDocuments: [{ ...ref, hash: "f".repeat(64) }] } })), { status: 400 });
   await assert.rejects(() => prepareRequestDocuments(clientFor([source]), args({ settings: settingsFor([definition({ reuseScope: "request" })]) })), { status: 400 });
   await assert.rejects(() => prepareRequestDocuments(clientFor([source]), args({ settings: settingsFor([definition({ reuseValidityDays: 1 })]), now: new Date("2026-11-15") })), { status: 400 });
@@ -268,15 +267,15 @@ test("manual decisions bind actor, bytes and current criteria; body status alone
   await assert.rejects(() => applyDocumentReviews(null, { previous, patch: { documentReviews: [] }, user: TUTOR, municipalityId: MUNICIPALITY }), { status: 403 });
 });
 
-test("legacy review uses decorated file identity without renewing receipt date", async () => {
-  const document = { documentId: "identity", dataUrl: PDF, fileName: "old.pdf", status: "approved", receivedAt: "2099-01-01" };
+test("reviewing an attachment without a valid receipt keeps its id and signs it without inventing a receipt date", async () => {
+  const document = { attachmentId: "stored-id", documentId: "identity", dataUrl: PDF, fileName: "old.pdf", status: "approved", receivedAt: "2099-01-01" };
   const previous = { ...row(document), documents: [document] };
   const beforeReview = decorateRequestDocuments(previous, settingsFor());
-  const id = beforeReview.documents[0].attachmentId;
-  const [reviewed] = await applyDocumentReviews(null, { previous, patch: { documentReviews: [{ attachmentId: id, decision: "approved" }] },
+  assert.equal(beforeReview.documents[0].attachmentId, "stored-id");
+  const [reviewed] = await applyDocumentReviews(null, { previous, patch: { documentReviews: [{ attachmentId: "stored-id", decision: "approved" }] },
     user: STAFF, municipalityId: MUNICIPALITY, settings: settingsFor(), now: NOW });
   assert.equal(reviewed.status, "approved");
-  assert.equal(reviewed.receivedAt, "2026-10-01T00:00:00.000Z");
+  assert.equal(reviewed.receivedAt, null);
   assert.equal(hasValidDocumentReceipt(reviewed, row(reviewed)), true);
   const afterReview = decorateRequestDocuments({ ...previous, documents: [reviewed] }, settingsFor());
   assert.deepEqual(selectNotificationEvents(beforeReview, afterReview), [NotificationEvent.DOCUMENTS_APPROVED]);
@@ -284,8 +283,9 @@ test("legacy review uses decorated file identity without renewing receipt date",
 
 test("catalog is metadata only, source scoped, and shared multi-animal photos are ineligible", async () => {
   const good = row(received());
-  const photo = { documentId: "animal_photo", dataUrl: `data:image/png;base64,${Buffer.from([137,80,78,71,13,10,26,10,0]).toString("base64")}`, fileName: "photo.png" };
-  const ambiguous = row(photo, { id: "multi", animals: [{ id: ANIMAL }, { id: "animal-2" }] });
+  const photo = createReceivedDocument({ documentId: PHOTO_DEFINITION.id, dataUrl: `data:image/png;base64,${Buffer.from([137,80,78,71,13,10,26,10,0]).toString("base64")}`,
+    fileName: "photo.png" }, PHOTO_DEFINITION, { requestId: "multi", ownerUserId: OWNER, municipalityId: MUNICIPALITY, animalIds: [ANIMAL, "animal-2"], now: NOW });
+  const ambiguous = row(photo, { animals: [{ id: ANIMAL }, { id: "animal-2" }] });
   const catalog = await catalogReusableDocuments(clientFor([good, ambiguous]), { userId: OWNER, municipalityId: MUNICIPALITY, animalId: ANIMAL,
     requestTypeId: "procedure", settings: settingsFor(), now: NOW });
   assert.equal(catalog.find((item) => item.documentId === "identity").eligible, true);
@@ -312,7 +312,7 @@ test("serialized UTF8 budget includes multibyte characters and server-expanded r
   const bytes = Buffer.alloc(6.5 * 1024 * 1024, 65); bytes.write("%PDF-");
   const dataUrl = `data:application/pdf;base64,${bytes.toString("base64")}`;
   const first = definition({ maxSizeMb: 12 }), second = definition({ id: "residence", maxSizeMb: 12 });
-  const sources = [row(received(first, { dataUrl })), row(received(second, { dataUrl }), { document_index: 1 })];
+  const sources = [row(received(first, { dataUrl })), row(received(second, { dataUrl }))];
   await assert.rejects(() => prepareRequestDocuments(clientFor(sources), submission({ settings: settingsFor([first, second]),
-    body: { request_type: "procedure", declarationAccepted: true, reusedDocuments: sources.map(reference) } })), { status: 413 });
+    body: { request_type: "procedure", animals: PROCEDURE_ANIMALS, declarationAccepted: true, reusedDocuments: sources.map(reference) } })), { status: 413 });
 });

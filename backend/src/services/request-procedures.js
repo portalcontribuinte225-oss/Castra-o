@@ -11,8 +11,8 @@ export function activeInMunicipality(item, municipalityId) {
 }
 
 // Checks the procedures sent for each animal against the active request types of the municipality and derives what is stored.
-// Answers `null` when no animal carries procedures (a request made the old way, with a single type); otherwise `{ animals, types,
-// fields }`: the animals with their procedures normalized, the request types in the order they were chosen and the derived fields.
+// Answers `null` when no animal carries procedures, which only a complaint may do; otherwise `{ animals, types, fields }`: the
+// animals with their procedures normalized, the request types in the order they were chosen and the derived fields.
 export function prepareRequestProcedures({ animals, municipalityId, settings }) {
   const list = Array.isArray(animals) ? animals : [];
   const carries = (animal) => Boolean(animal) && typeof animal === "object" && Object.hasOwn(animal, "requestTypeIds");
@@ -49,11 +49,12 @@ export function withDerivedProcedures(workflow, fields) {
 const procedureSignature = (animals) => JSON.stringify((Array.isArray(animals) ? animals : []).map(animalRequestTypeIds));
 
 // For the generic PATCH: when the procedures of the animals changed, the same checks as at creation apply and the derived
-// fields follow. Otherwise nothing is touched, so an old request keeps working even if one of its types was switched off since.
-// Answers `null` when there is nothing to change, or `{ animals, requestType, workflow }`.
+// fields follow, and animals left without any procedure are refused. Otherwise nothing is touched, so a request keeps working
+// even if one of its types was switched off after it was made. Answers `null` when there is nothing to change, or
+// `{ animals, requestType, workflow }`.
 export function updateRequestProcedures({ previousAnimals, nextAnimals, workflow, municipalityId, settings }) {
   if (procedureSignature(previousAnimals) === procedureSignature(nextAnimals)) return null;
   const procedures = prepareRequestProcedures({ animals: nextAnimals, municipalityId, settings });
-  if (!procedures) return null;
+  if (!procedures) invalid("Escolha ao menos um procedimento para cada animal.");
   return { animals: procedures.animals, requestType: procedures.fields.requestType, workflow: withDerivedProcedures(workflow, procedures.fields) };
 }

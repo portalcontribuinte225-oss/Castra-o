@@ -1,7 +1,7 @@
 import type { AnyRecord } from "./types";
 import { maskCpf, maskName } from "./utils";
 import { normalizeDocumentReusePolicy } from "../shared/document-reuse-contract.js";
-import { RequestKind, RequestOrigin, RequestStatus } from "../shared/request-contract.js";
+import { RequestKind, RequestOrigin, RequestStatus, RequestTag } from "../shared/request-contract.js";
 import { animalRequestTypeIds } from "../shared/request-types-contract.js";
 
 export const statuses = [
@@ -37,7 +37,7 @@ const REQUEST_TYPE_VALUES: string[] = Object.values(RequestType);
 export function normalizeRequestType(type = "") {
   const value = String(type || "").trim();
   if (REQUEST_TYPE_VALUES.includes(value)) return value;
-  // Legacy free-text request types are all treated as procedure requests
+  // Any other text is the names of the procedures, which is how a procedure request stores its type.
   return RequestType.PROCEDURE;
 }
 
@@ -273,21 +273,11 @@ export function formatSizeRange(size: AnyRecord = {}) {
   return size.description || "";
 }
 
-export function normalizeRequestStatus(status = "NOVA") {
-  if (["NOVA", "AGENDADA", "REALIZADA", "CANCELADA"].includes(status)) return status;
-  // Legacy status mapping
-  if (["EM_ANALISE", "AGUARDANDO_TRIAGEM", "TRIAGEM", "SUBMETIDA", "AGUARDANDO_ATRIBUIR", "PENDENCIA_DOCUMENTAL"].includes(status)) return "NOVA";
-  if (["AGUARDANDO_CIRURGIA", "DEFERIDA", "AGENDADA", "REAGENDADA"].includes(status)) return "AGENDADA";
-  if (["REALIZADA", "CIRURGIA_REALIZADA"].includes(status)) return "REALIZADA";
-  if (["INDEFERIDA", "CANCELADA", "ARQUIVADA"].includes(status)) return "CANCELADA";
-  return "NOVA";
-}
+const REQUEST_STATUSES: string[] = Object.values(RequestStatus);
 
-export function tagsFromLegacyStatus(status = "") {
-  const map: AnyRecord = {
-    REAGENDADA: ["REAGENDADA"],
-  };
-  return map[status] || [];
+// The status of a request; a value the system does not write reads as a new request.
+function normalizeRequestStatus(status: unknown): string {
+  return REQUEST_STATUSES.includes(String(status)) ? String(status) : RequestStatus.NEW;
 }
 
 export function requestHasTag(request: AnyRecord, tag: string) {
@@ -301,7 +291,7 @@ export function requestResultLabel(request: AnyRecord = {}) {
 }
 
 export function triageStatusTone(request: AnyRecord = {}) {
-  if (request.status === "NOVA") return requestHasTag(request, "ATRIBUIDA") ? "triage-status--analysis" : "triage-status--inbox";
+  if (request.status === RequestStatus.NEW) return requestHasTag(request, RequestTag.ASSIGNED) ? "triage-status--analysis" : "triage-status--inbox";
   if (request.status === "AGENDADA") return "triage-status--surgery";
   if (request.status === "REALIZADA") return "triage-status--archived";
   if (request.status === "CANCELADA") return "triage-status--archived";
@@ -345,7 +335,7 @@ export function requestTypeLabel(request: AnyRecord = {}) {
   return labels[type] || displayText(type) || "Castração";
 }
 
-// The procedures a request was made with, each by its own name as stored when it was made; empty for a request made with a single type.
+// The procedures a request was made with, each by its own name as stored when it was made; empty for a request that is not a procedure.
 export function storedRequestTypeNames(request: AnyRecord = {}): string[] {
   const workflow = request.workflowData || request.workflow_data || {};
   const names: string[] = Array.isArray(workflow.requestTypeNames) ? workflow.requestTypeNames.filter((name) => typeof name === "string" && name.trim()) : [];
@@ -360,7 +350,7 @@ export function animalProcedureLabels(animal: AnyRecord = {}, request: AnyRecord
   return animalRequestTypeIds(animal).map((id) => names[ids.indexOf(id)]).filter((name) => typeof name === "string" && name.trim()).map((name) => requestTypeLabel({ type: name }));
 }
 
-// Each procedure of a request by its own name; a request made with a single type has just that one.
+// Each procedure of a request by its own name; a request that is not a procedure has the label of its kind.
 export function requestTypeLabels(request: AnyRecord = {}): string[] {
   const names = storedRequestTypeNames(request);
   return names.length ? names : [requestTypeLabel(request)];
@@ -368,13 +358,8 @@ export function requestTypeLabels(request: AnyRecord = {}): string[] {
 
 export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
   const workflowData = request.workflowData || request.workflow_data || {};
-  const rawStatus = request.status || "NOVA";
-  const status = normalizeRequestStatus(rawStatus);
-  const rawTags = Array.isArray(request.tags) ? request.tags : [];
-  // Strip flow-control tags that are now represented as status
-  const flowControlTags = new Set(["DEFERIDA", "INDEFERIDA", "COMPARECEU", "NAO_COMPARECEU", "CANCELADA"]);
-  const filteredRawTags = rawTags.filter((tag) => !flowControlTags.has(tag));
-  const tags = [...new Set([...filteredRawTags, ...tagsFromLegacyStatus(rawStatus)].filter(Boolean))];
+  const status = normalizeRequestStatus(request.status);
+  const tags = [...new Set((Array.isArray(request.tags) ? request.tags : []).filter(Boolean))];
   const animals = Array.isArray(request.animals) && request.animals.length
     ? request.animals
     : [
@@ -401,8 +386,8 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
 
   const rawHistory2 = Array.isArray(request.history) ? request.history : [];
   const rescheduleCount = rawHistory2.filter(
-    (item) => typeof item === "object" && item !== null && (item.status === "REAGENDADA" || String(item.notes || "").toLowerCase().includes("reagendad")),
-  ).length || (tags.includes("REAGENDADA") ? 1 : 0);
+    (item) => typeof item === "object" && item !== null && String(item.notes || "").toLowerCase().includes("reagendad"),
+  ).length || (tags.includes(RequestTag.RESCHEDULED) ? 1 : 0);
 
   return {
     ...request,

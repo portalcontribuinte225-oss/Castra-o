@@ -4,7 +4,7 @@ import { listEmailUses, resolveEmailTemplate, saveEmailTemplateIds, setEmailUseA
 import { EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_TEMPLATES_CONFIG_KEY, isEmailUseActive, normalizeEmailActiveUses, normalizeEmailTemplateIds } from "../../shared/email-contract.js";
 import { EmailUseKind, emailUses, getEmailUse } from "../../shared/email-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
-import { DeliveryCode, LEGACY_DOCUMENTS_REVIEWED, NotificationEvent } from "../../shared/notification-contract.js";
+import { DeliveryCode, NotificationEvent } from "../../shared/notification-contract.js";
 import { fakeEmailDatabase } from "./fixtures/email-config-db.js";
 import { clearServerCredentials, replaceServerCredentials, TEST_EMAIL_CREDENTIALS } from "./fixtures/server-credentials.js";
 
@@ -60,33 +60,6 @@ test("stored templates and switches keep only known uses, and an explicit false 
   assert.equal(isEmailUseActive({}, RESET), true);
   assert.equal(isEmailUseActive({ [RESET]: false }, RESET), false);
   assert.equal(isEmailUseActive({}, CONFIRMED), false);
-});
-
-test("document notices inherit the old template and switch until an independent value is saved", async () => {
-  const approved = NotificationEvent.DOCUMENTS_APPROVED;
-  const rejected = NotificationEvent.DOCUMENTS_REJECTED;
-  const templateKey = `${EMAIL_TEMPLATES_CONFIG_KEY}:null`;
-  const activeKey = `${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`;
-  const database = configured({
-    [templateKey]: { templates: { [LEGACY_DOCUMENTS_REVIEWED]: "tpl_reviewed", [approved]: "tpl_approved" } },
-    [activeKey]: { active: { [LEGACY_DOCUMENTS_REVIEWED]: true, [rejected]: false } },
-  });
-
-  const documentRows = (await listEmailUses({ account, municipalityId: MUNICIPALITY, master: true, database }))
-    .filter(({ key }) => [approved, rejected].includes(key));
-  assert.deepEqual(documentRows.map(({ key, templateId, active }) => [key, templateId, active]), [
-    [approved, "tpl_approved", true], [rejected, "tpl_reviewed", false],
-  ]);
-  assert.equal((await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: approved, database })).ok, true);
-  assert.equal((await resolveEmailTemplate({ municipalityId: MUNICIPALITY, use: rejected, database })).code, DeliveryCode.CHANNEL_DISABLED);
-  await saveEmailTemplateIds({ patch: { [rejected]: "" }, database });
-  assert.deepEqual(database.store.get(templateKey), { templates: { [approved]: "tpl_approved" } });
-  await setEmailUseActive({ municipalityId: MUNICIPALITY, use: approved, active: false, database });
-  assert.deepEqual(database.store.get(activeKey), { active: { [approved]: false, [rejected]: false } });
-  const [approvedRow, rejectedRow] = (await listEmailUses({ account, municipalityId: MUNICIPALITY, master: true, database }))
-    .filter(({ key }) => [approved, rejected].includes(key));
-  assert.equal(approvedRow.templateId, "tpl_approved");
-  assert.equal(rejectedRow.templateId, "");
 });
 
 test("the master sees ids and variables; a municipal viewer only learns which uses are configured and on", async () => {

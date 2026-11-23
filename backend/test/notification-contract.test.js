@@ -45,7 +45,6 @@ test("the request events distinguish cancellation, a no-show, a rejection and ea
   assert.equal(NotificationEvent.REQUEST_REGISTERED, "request_registered");
   assert.equal(NotificationEvent.DOCUMENTS_APPROVED, "documents_approved");
   assert.equal(NotificationEvent.DOCUMENTS_REJECTED, "documents_rejected");
-  assert.equal(Object.values(NotificationEvent).includes(notificationContract.LEGACY_DOCUMENTS_REVIEWED), false);
   assert.equal(NotificationEvent.SCHEDULE_CANCELLED, "schedule_cancelled");
   assert.equal(Object.values(NotificationEvent).length, 9);
 });

@@ -21,24 +21,21 @@ test("the procedures of a request are the ones of every animal, each once, in or
   assert.deepEqual(distinctRequestTypeIds(undefined), []);
 });
 
-test("a request resolves to its animals' procedures first, then to its stored list, then to its single old type", () => {
+test("a request resolves to its animals' procedures, or else to its stored list, and never to a single type", () => {
   const animals = [{ requestTypeIds: ["microchip"] }, { requestTypeIds: ["castration", "microchip"] }];
   assert.deepEqual(resolveRequestTypes({ animals }, types), [microchip, castration]);
   assert.deepEqual(resolveRequestTypes({ animals: [{}], workflow: { requestTypeIds: ["vaccine", "castration"] } }, types), [vaccine, castration]);
-  assert.deepEqual(resolveRequestTypes({ workflow: { requestTypeId: "microchip" } }, types), [microchip]);
-  assert.deepEqual(resolveRequestTypes({ requestTypeId: "castration", workflow: { requestTypeId: "microchip" } }, types), [castration]);
-  assert.deepEqual(resolveRequestTypes({ requestType: "Microchipagem" }, types), [microchip]);
-  assert.deepEqual(resolveRequestTypes({ requestType: "vaccine" }, types), [vaccine]);
-  assert.deepEqual(resolveRequestTypes({ animals, workflow: { requestTypeId: "vaccine" }, requestTypeId: "vaccine", requestType: "Vacinação antirrábica" }, types), [microchip, castration],
-    "the animals win over every single-type field");
+  assert.deepEqual(resolveRequestTypes({ animals, workflow: { requestTypeIds: ["vaccine"] } }, types), [microchip, castration], "the animals win over the stored list");
+  for (const single of [{ workflow: { requestTypeId: "microchip" } }, { requestTypeId: "castration" }, { requestType: "Microchipagem" }]) {
+    assert.deepEqual(resolveRequestTypes(single, types), [], JSON.stringify(single));
+  }
 });
 
 test("a procedure the municipality does not have is not resolved, and nothing resolves without types", () => {
   assert.deepEqual(resolveRequestTypes({ animals: [{ requestTypeIds: ["castration", "gone"] }] }, types), [castration]);
   assert.deepEqual(resolveRequestTypes({ animals: [{ requestTypeIds: ["castration"] }] }, undefined), []);
-  assert.deepEqual(resolveRequestTypes({ requestType: "Desconhecido" }, types), []);
   assert.deepEqual(resolveRequestTypes(undefined, types), []);
-  assert.deepEqual(resolveRequestTypes({ workflow: [] , requestType: "castration" }, types), [castration]);
+  assert.deepEqual(resolveRequestTypes({ workflow: [] }, types), []);
 });
 
 test("the stored fields are derived from the types: ids, names and the whole names joined, never a summary", () => {

@@ -26,8 +26,8 @@ test("notifications persist structured results and only append history within th
   } }));
   assert.equal(result[0].status, DeliveryStatus.SENT);
   assert.equal(request.history.length, 1);
-  assert.deepEqual(dispatched.map(({ event, legacy, request: sent }) => [event, legacy, sent === request]), [[NotificationEvent.SCHEDULE_CONFIRMED, false, true]]);
-  assert.deepEqual(Object.keys(dispatched[0]).sort(), ["event", "legacy", "request"], "the dispatcher reads the channels itself and gets no settings");
+  assert.deepEqual(dispatched.map(({ event, request: sent }) => [event, sent === request]), [[NotificationEvent.SCHEDULE_CONFIRMED, true]]);
+  assert.deepEqual(Object.keys(dispatched[0]).sort(), ["event", "request"], "the dispatcher reads the channels itself and gets no settings");
 });
 
 test("a notice that cannot be prepared is recorded as failed without exposing the error, instead of rejecting the saved operation", async () => {
@@ -69,10 +69,13 @@ test("refusal bypasses every channel even if other contact fields exist", async 
   assert.deepEqual(result, []);
 });
 
-test("legacy requests do not acquire completion or document notification consent", async () => {
-  const oldBefore = { ...before, workflow_data: {} };
-  const result = await notifyRequestChanges(oldBefore, { ...oldBefore, status: "REALIZADA" }, dependencies({ dispatch: async () => assert.fail("no new legacy event") }));
-  assert.deepEqual(result, []);
+test("a request without follow-up sends no notice", async () => {
+  const withoutFollowUp = { ...before, workflow_data: {} };
+  for (const status of ["AGENDADA", "REALIZADA"]) {
+    const result = await notifyRequestChanges(withoutFollowUp, { ...withoutFollowUp, status },
+      dependencies({ dispatch: async () => assert.fail("no notice without follow-up") }));
+    assert.deepEqual(result, []);
+  }
 });
 
 test("unchanged state never sends a repeated notification", async () => {

@@ -7,7 +7,7 @@ import { scheduleDate } from "../../../../shared/schedule-contract.js";
 
 const SCHEDULE_WORKFLOW_KEYS = ["scheduleOccurrenceKey", "scheduleSlotTime", "scheduleTime"];
 const SCHEDULE_COLUMNS = ["schedule_date", "schedule_location_name", "schedule_address", "schedule_address_url", "schedule_municipality"];
-const PROCEDURE_WORKFLOW_KEYS = ["requestTypeId", "procedureScheduleDates", "performedProcedures", "cancelReason", "rejectionReason", "rejectionNote", "previousSchedule"];
+const PROCEDURE_WORKFLOW_KEYS = ["procedureScheduleDates", "performedProcedures", "cancelReason", "rejectionReason", "rejectionNote", "previousSchedule"];
 const PROCEDURE_ANIMAL_FIELDS = ["procedures", "doencas", "alergias", "confirmedMicrochip", "microchip", "hasChip", "microchipStatus"];
 
 export function storeResolvedProcedures(animals) {

@@ -62,8 +62,9 @@ export function procedureSignature(animals: AnyRecord[]): string {
   return [...distinctRequestTypeIds(animals)].sort().join("|");
 }
 
-export function needsProcedure(animal: AnyRecord, hasConfiguredTypes: boolean): boolean {
-  return hasConfiguredTypes && animalRequestTypeIds(animal).length === 0;
+// Every animal of a request asks for at least one procedure.
+export function needsProcedure(animal: AnyRecord): boolean {
+  return animalRequestTypeIds(animal).length === 0;
 }
 
 // "Animal 2" and, next to it, the name and the species when they are filled in.

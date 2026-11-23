@@ -46,21 +46,6 @@ async function deliverWhatsapp({ event, request, phone, runtime, template }, dep
   return sanitizedTransportResult(event, channel, transport);
 }
 
-// Requests from before follow-up existed keep their WhatsApp-only agenda notices, with every outcome reported.
-async function tryLegacyWhatsapp({ event, request }, dependencies) {
-  const channel = NotificationChannel.WHATSAPP;
-  const raw = await dependencies.loadWhatsappConfig(request.municipality_id);
-  if (raw.active === false) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED) };
-  if (!toE164Brazil(request.phone)) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.INVALID_RECIPIENT) };
-  const runtime = getRuntimeConfig(raw);
-  if (runtime.provider !== "cloud_api" || !runtime.accessToken || !runtime.phoneNumberId) {
-    return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) };
-  }
-  const resolved = await dependencies.resolveTemplate(request.municipality_id, event);
-  if (!resolved.ok) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, resolved.code) };
-  return deliverWhatsapp({ event, request, phone: request.phone, runtime, template: resolved.template }, dependencies);
-}
-
 // Each channel answers `null` when the municipality does not use it for this notice (channel off, no template or switch for the
 // notice, no contact to reach), so only the channels in use leave a result in the request history.
 async function tryWhatsapp({ event, request, followUp }, dependencies) {
@@ -122,13 +107,11 @@ async function trySms({ event, request, followUp }, dependencies) {
   return sanitizedTransportResult(event, NotificationChannel.SMS, sent);
 }
 
-export async function dispatchNotification({ event, request, legacy = false }, overrides = {}) {
+// Only a request whose tutor turned follow-up on is notified.
+export async function dispatchNotification({ event, request }, overrides = {}) {
   if (!Object.values(NotificationEvent).includes(event)) return [];
   const followUp = (request.workflow_data || request.workflowData || {}).followUp;
-  if (followUp?.enabled === false) return [];
-  const legacyEvent = event === NotificationEvent.SCHEDULE_CONFIRMED || event === NotificationEvent.SCHEDULE_CHANGED;
-  if (legacy && !legacyEvent) return [];
-  if (!legacy && followUp?.enabled !== true) return [];
+  if (followUp?.enabled !== true) return [];
   const dependencies = {
     loadWhatsappConfig: getMunicipalityWhatsappConfig,
     resolveTemplate: resolveActiveTemplate,
@@ -141,7 +124,6 @@ export async function dispatchNotification({ event, request, legacy = false }, o
     sendSms: sendSmsUse,
     ...overrides,
   };
-  if (legacy) return [await attempt(event, NotificationChannel.WHATSAPP, () => tryLegacyWhatsapp({ event, request }, dependencies))];
   // Every channel the municipality uses for this notice sends on its own: a failure in one never stops the others.
   const channels = [[NotificationChannel.EMAIL, tryEmail], [NotificationChannel.WHATSAPP, tryWhatsapp], [NotificationChannel.SMS, trySms]];
   const results = await Promise.all(channels.map(([channel, task]) =>

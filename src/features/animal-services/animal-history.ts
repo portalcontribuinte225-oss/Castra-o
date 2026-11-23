@@ -6,14 +6,12 @@ export enum AnimalRecordType {
   DEATH_REQUEST = "SOLICITACAO_OBITO",
   TRANSFER_REQUEST = "SOLICITACAO_TROCA_TUTOR",
   PROCEDURE_REQUEST = "SOLICITACAO_PROCEDIMENTO",
-  IMPORTED_REQUEST = "IMPORTACAO_SOLICITACAO",
   SURGERY_DONE = "CIRURGIA_REALIZADA",
   REQUEST = "SOLICITACAO",
 }
 
 export enum AnimalHistoryTone { DANGER = "danger", TRANSFER = "transfer", SUCCESS = "success", SCHEDULED = "scheduled", NEUTRAL = "neutral" }
 
-const AWAITING_SURGERY_STATUS = "AGUARDANDO_CIRURGIA";
 const deathTypes: string[] = [RequestKind.DEATH, AnimalRecordType.DEATH_REQUEST];
 const transferTypes: string[] = [RequestKind.TRANSFER, AnimalRecordType.TRANSFER_REQUEST];
 
@@ -23,7 +21,6 @@ const historyTitles: Record<string, string> = {
   [AnimalRecordType.DEATH_REQUEST]: "Solicitação de óbito",
   [AnimalRecordType.TRANSFER_REQUEST]: "Solicitação de troca de tutor",
   [AnimalRecordType.PROCEDURE_REQUEST]: "Solicitação de procedimento",
-  [AnimalRecordType.IMPORTED_REQUEST]: "Cadastro importado",
   [AnimalRecordType.SURGERY_DONE]: "Cirurgia realizada",
   [AnimalRecordType.REQUEST]: "Solicitação",
 };
@@ -46,7 +43,7 @@ export function getAnimalHistorySchedule(item: AnimalHistoryItem = {}): string {
 }
 
 export function isScheduledHistoryItem(item: AnimalHistoryItem = {}): boolean {
-  return item.status === RequestStatus.SCHEDULED || item.status === AWAITING_SURGERY_STATUS;
+  return item.status === RequestStatus.SCHEDULED;
 }
 
 export function animalHistoryTone(item: AnimalHistoryItem = {}): AnimalHistoryTone {

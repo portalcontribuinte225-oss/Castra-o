@@ -1,4 +1,4 @@
-import { AdoptionStatus } from "../../shared/adoption-contract.js";
+import { AdoptionStatus } from "../../../shared/adoption-contract.js";
 
 // The stages of an animal in the adoption program, as the adoption screen stores them.
 export const ADOPTION_STATUS_AVAILABLE: string = AdoptionStatus.AVAILABLE;

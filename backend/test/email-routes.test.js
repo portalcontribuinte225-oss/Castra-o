@@ -249,7 +249,7 @@ test("the group decides: the item must be in it, the group must be active and of
   assert.equal(await reads(TUTOR), 403);
   assert.equal(await reads(OTHER_ADMIN), 200, "another municipality's manager has no group there and passes by the role");
   give({ ...permissionConfigs(MUNICIPALITY, { users: [{ id: "another-id", email: "STAFF@example.test", permissionGroupId: "g" }], groups: [permissionGroup("g", [EMAIL_SETTINGS_PERMISSION])] }) });
-  assert.equal(await reads(ANALYST), 200, "the team user is also found by e-mail");
+  assert.equal(await reads(ANALYST), 403, "an entry with the same e-mail but another id gives nothing");
 });
 
 test("a service switched off for the municipality refuses to turn a message on, while turning it off stays allowed", async (t) => {

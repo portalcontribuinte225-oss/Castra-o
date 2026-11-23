@@ -35,23 +35,16 @@ export async function catalogReusableDocuments(client, { userId, municipalityId,
     const definition = definitions.find((item) => item.id === row.document?.documentId);
     if (!definition || isExcludedDocument(row.document) || candidates.get(definition.id)?.eligible) continue;
     try {
-      // Signed manifests do not require loading bytes to populate a metadata-only catalogue.
-      let description;
-      let source = row;
-      try { description = describeStoredDocument(source, definition, { now, verifyContent: false }); }
-      catch {
-        source = await readDocumentSource(client, { userId, municipalityId, sourceRequestId: row.id,
-          attachmentId: `legacy-${row.document_index}-${"0".repeat(64)}` });
-        description = describeStoredDocument(source, definition, { now });
-      }
-      const candidate = metadata(source, description, definition);
+      // The catalogue reads metadata only: a signed receipt vouches for the hash without loading the bytes.
+      const description = describeStoredDocument(row, definition, { now, verifyContent: false });
+      const candidate = metadata(row, description, definition);
       candidate.eligible = isReusableForAnimal(description, definition, animalId);
       if (candidate.eligible) {
-        try { await checkOriginalDocument(client, source, description, definition, { userId, municipalityId }, now); }
+        try { await checkOriginalDocument(client, row, description, definition, { userId, municipalityId }, now); }
         catch { candidate.eligible = false; candidate.state = DocumentReuseState.UNAVAILABLE; }
       }
       if (!candidates.has(definition.id) || candidate.eligible) candidates.set(definition.id, candidate);
-    } catch { /* Unreadable or unsupported historical files cannot become reuse candidates. */ }
+    } catch { /* A file without a valid receipt cannot become a reuse candidate. */ }
   }
   return [...candidates.values()];
 }

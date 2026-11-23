@@ -1,6 +1,6 @@
-import { ConfigField } from "../components/ui";
-import type { AnyRecord } from "../types";
-import { RequestType, normalizeRequestType } from "../domain";
+import { ConfigField } from "../../components/ui";
+import type { AnyRecord } from "../../types";
+import { RequestType, normalizeRequestType } from "../../domain";
 
 export function DeathAnalysisSection({ request }: { request: AnyRecord }) {
   const wf = request.workflowData || request.workflow_data || {};

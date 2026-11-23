@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE } from "../adoption-status";
+import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE } from "../adoption/adoption-status";
 import { adoptionSummary, adoptionsInRange, animalCounts, animalProfile, countLabels, requestOrigins } from "./animal-metrics";
 import { DashboardPeriod, periodRange } from "./dashboard-period";
 import { TEST_NOW, testRequest } from "./dashboard-test-requests";

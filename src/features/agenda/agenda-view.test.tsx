@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vitest";
-import { AgendaView } from "./agenda";
+import { AgendaView } from "./agenda-view";
 
 it("names the native agenda filters and renders the active view and calendar days as buttons", () => {
   vi.setSystemTime(new Date(2026, 10, 20, 12));

@@ -12,8 +12,6 @@ export const NotificationEvent = Object.freeze({
   REQUEST_REJECTED: "request_rejected",
 });
 
-export const LEGACY_DOCUMENTS_REVIEWED = "documents_reviewed";
-
 // The reason the staff screen stores when the tutor did not come to a scheduled visit; it is what tells a no-show from any other cancellation.
 export const NO_SHOW_CANCEL_REASON = "Não compareceu";
 

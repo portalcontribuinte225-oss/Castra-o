@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { normalizeRequest } from "../../domain";
-import { ReportsView } from "../reports";
+import { ReportsView } from "./reports-view";
 import { NO_NEIGHBORHOOD_FILTER } from "../neighborhoods/neighborhood-report";
 import { ActiveFiltersBar } from "../request-filters/active-filters-bar";
 import { RequestFilterDimension } from "../request-filters/request-filters";

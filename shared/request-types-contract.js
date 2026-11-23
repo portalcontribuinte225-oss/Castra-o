@@ -3,8 +3,6 @@
 //   workflow_data.requestTypeIds / requestTypeNames  the distinct procedures of the whole request, in order
 //   animals[].requestTypeNames                       the names of each animal's procedures
 //   request_type                                     those names, whole, joined by REQUEST_TYPE_NAME_SEPARATOR
-// A request made before this existed has only a single type (`workflow_data.requestTypeId` or the `request_type` text), and
-// it is still read through resolveRequestTypes.
 export const MAX_REQUEST_TYPES_PER_ANIMAL = 10;
 export const REQUEST_TYPE_NAME_SEPARATOR = ", ";
 const FREE_FEE_LABEL = "Gratuito";
@@ -27,18 +25,14 @@ export function distinctRequestTypeIds(animals) {
   return distinct((Array.isArray(animals) ? animals : []).flatMap(animalRequestTypeIds));
 }
 
-// The entries of the municipality's request types that a request was made with: the animals' procedures first, then the stored
-// list of the request, then the single type of requests made before procedures existed (by id or by name).
-export function resolveRequestTypes({ animals, workflow, requestTypeId, requestType } = {}, types) {
+// The entries of the municipality's request types that a request was made with: the animals' procedures, or else the list the
+// server stored for the request.
+export function resolveRequestTypes({ animals, workflow } = {}, types) {
   const list = Array.isArray(types) ? types.filter((type) => type && typeof type === "object") : [];
-  const byId = (id) => list.find((type) => type.id === id);
   const stored = (workflow && typeof workflow === "object" && !Array.isArray(workflow)) ? workflow : {};
   const ids = distinctRequestTypeIds(animals);
   const chosen = ids.length ? ids : idsOf(stored.requestTypeIds);
-  if (chosen.length) return chosen.map(byId).filter(Boolean);
-  const singleId = requestTypeId || stored.requestTypeId;
-  const single = singleId ? byId(singleId) : list.find((type) => type.id === requestType || type.name === requestType);
-  return single ? [single] : [];
+  return chosen.map((id) => list.find((type) => type.id === id)).filter(Boolean);
 }
 
 // What the server stores for the procedures of a request, from the entries of the municipality's request types.

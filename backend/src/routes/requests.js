@@ -30,17 +30,7 @@ import { isProcedureRequest, RequestOrigin, RequestStatus, RequestTag, withoutRe
 
 const router = Router();
 const ALLOWED_REQUEST_STATUSES = new Set(Object.values(RequestStatus));
-const ALLOWED_REQUEST_TAGS = new Set([
-  "ATRIBUIDA",
-  RequestTag.RESCHEDULED,
-  "PRIORIDADE",
-  "RETORNO_TUTOR",
-  "MUTIRAO",
-  "PRESENCIAL",
-  "MICROCHIP",
-  "OBITO",
-  "TROCA_TUTOR",
-]);
+const ALLOWED_REQUEST_TAGS = new Set(Object.values(RequestTag));
 
 function pick(...values) {
   return values.find((value) => value !== undefined);
@@ -113,16 +103,11 @@ router.post("/", optionalAuth, async (req, res) => {
       body, user: req.user, municipalityId,
       workflow: parseJsonObject(body.workflow_data || body.workflowData), settings,
     });
-    // With procedures per animal the request type is derived from them; the single type the client may also send is dropped.
-    body = { ...body, request_type: requestType, ...(procedureAnimals ? { animals: procedureAnimals, requestTypeId: "" } : {}) };
+    // The request type is derived from the procedures of the animals.
+    body = { ...body, request_type: requestType, ...(procedureAnimals ? { animals: procedureAnimals } : {}) };
     await validateRequestAnimalLink(client, { body, user: req.user, municipalityId });
     body = await reserveRequestSchedule(client, { body: { ...body, status: RequestStatus.NEW, workflow_data: submittedWorkflow }, municipalityId, user: req.user });
     const workflow = body.workflow_data;
-    if (!procedureAnimals) {
-      const selectedType = settings.requestTypes.find((item) => item.id === body.requestTypeId || item.name === requestType || item.id === requestType);
-      if (selectedType) workflow.requestTypeId = selectedType.id;
-      else delete workflow.requestTypeId;
-    }
     // No account is made here: the tutor creates the password on the first access, with a code sent to the request's contact.
     const tutorId = await resolveRequestTutor(client, { cpf, municipalityId, user: req.user });
     const protocol = await nextDocumentNumber(client, { municipalityId, sequence: DocumentSequence.PROTOCOL });
@@ -378,11 +363,6 @@ router.patch("/:id", auth, async (req, res) => {
         if (position >= 0) dedupedEntries[position] = [key, value];
         else dedupedEntries.push([key, value]);
       }
-    }
-    if (!procedureUpdate && nextRequest.request_type !== existingRows[0].request_type) {
-      const nextType = settings.requestTypes.find((item) => item.name === nextRequest.request_type || item.id === nextRequest.request_type);
-      if (nextType) nextWorkflow.requestTypeId = nextType.id;
-      else delete nextWorkflow.requestTypeId;
     }
     if (changesDocuments) {
       const documents = await applyDocumentReviews(client, { previous: existingRows[0], patch: body, user: req.user, municipalityId: existingRows[0].municipality_id, settings });

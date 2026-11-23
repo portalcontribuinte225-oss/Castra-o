@@ -9,6 +9,8 @@ import { allocateScheduleAvailability, buildScheduleOccurrences, requestSchedule
 import { NO_SHOW_CANCEL_REASON, REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
 import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
 import { decorateRequestDocuments } from "../src/services/documents/document-reviews.js";
+import { canonicalDocumentDefinition } from "../src/services/documents/document-policy.js";
+import { createReceivedDocument } from "../src/services/documents/request-documents.js";
 import { deriveProcedureRequestState } from "../src/services/procedure-actions/procedure-request-state.js";
 import { bookingChanged } from "../src/services/schedule/schedule-booking.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
@@ -96,17 +98,14 @@ async function fixture(t, existing, { requiredDocument = false, vacancies = 10 }
 
 const statusesOf = (row) => row.animals.map((animal) => animal.procedures.map((procedure) => procedure.status));
 
-test("an old request is read as procedures with its own status and agenda; requests that are not procedures have none", () => {
+test("a request is read as the procedures of its animals, with its own status and agenda; requests that are not procedures have none", () => {
   const scheduled = resolveRequestProcedures(twoAnimalRequest({ status: "AGENDADA" }), REQUEST_TYPES);
   assert.deepEqual(scheduled.map((animal) => animal.procedures.map((item) => [item.name, item.status, item.schedule.date])),
     [[["Castração", "AGENDADO", FUTURE_DATE], ["Microchipagem", "AGENDADO", FUTURE_DATE]], [["Castração", "AGENDADO", FUTURE_DATE], ["Microchipagem", "AGENDADO", FUTURE_DATE]]]);
   const noShow = resolveRequestProcedures(twoAnimalRequest({ status: "CANCELADA", workflow_data: { cancelReason: NO_SHOW_CANCEL_REASON } }), REQUEST_TYPES);
   assert.equal(noShow[0].procedures[0].status, ProcedureStatus.NO_SHOW);
   const single = resolveRequestProcedures({ status: "NOVA", request_type: "Castração", animals: [{ name: "Rex" }], workflow_data: { requestTypeId: "castration" } }, REQUEST_TYPES);
-  assert.deepEqual(single[0].procedures.map((item) => [item.requestTypeId, item.name]), [["castration", "Castração"]]);
-  const legacy = resolveRequestProcedures({ status: "NOVA", request_type: "Castração", animal_name: "Legado", species: "Cão", animals: [] }, REQUEST_TYPES);
-  assert.equal(legacy[0].name, "Legado");
-  assert.equal(legacy[0].procedures[0].status, ProcedureStatus.WAITING);
+  assert.deepEqual(single[0].procedures, [], "a single type of the request is no procedure of the animal");
   assert.deepEqual(resolveRequestProcedures({ request_type: "Castração", animals: [] }, REQUEST_TYPES), []);
   assert.deepEqual(resolveRequestProcedures({ request_type: "ANIMAL_OBITO", animals: [{ name: "Rex" }] })[0].procedures, []);
 });
@@ -200,9 +199,11 @@ test("scheduling waits for the required documents", async (t) => {
 
 test("a document adjustment requires a note, and the schedule is unblocked when the document is approved", async (t) => {
   const dataUrl = `data:application/pdf;base64,${Buffer.from("%PDF-1.4\ntest document\n").toString("base64")}`;
-  const { call, row, documentRows } = await fixture(t, twoAnimalRequest({
-    documents: [{ documentId: "identity", documentName: "Documento de identidade", fileName: "identidade.pdf", dataUrl }],
-  }), { requiredDocument: true });
+  const { call, row, documentRows } = await fixture(t, twoAnimalRequest(), { requiredDocument: true });
+  // Signed after the fixture sets the secret, as the server signs what it receives.
+  row().documents = [createReceivedDocument({ documentId: "identity", fileName: "identidade.pdf", dataUrl },
+    canonicalDocumentDefinition({ id: "identity", name: "Documento de identidade", required: true }),
+    { requestId: REQUEST_ID, ownerUserId: null, municipalityId: MUNICIPALITY_ID, animalIds: [] })];
   const [{ attachmentId }] = documentRows();
   const action = { action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 0, requestTypeId: "castration" };
   const patch = { method: "PATCH", path: `/requests/${REQUEST_ID}` };
@@ -272,15 +273,6 @@ test("a procedure action keeps the contact CPF in storage and omits it from the 
   assert.equal(response.status, 200);
   assert.equal(Object.hasOwn(response.body.workflow_data, REQUEST_CONTACT_CPF_KEY), false);
   assert.equal(row().workflow_data[REQUEST_CONTACT_CPF_KEY], request.workflow_data[REQUEST_CONTACT_CPF_KEY]);
-});
-
-test("a stored procedure stays discoverable when a legacy request has only a workflow type id", async (t) => {
-  const request = twoAnimalRequest({ request_type: "Castração", animals: [{ name: "Bidu" }] });
-  request.workflow_data.requestTypeId = "castration";
-  const { call, row } = await fixture(t, request);
-  assert.equal((await call({ action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 0, requestTypeId: "castration" })).status, 200);
-  assert.equal((await call({ workflow_data: { requestTypeId: "microchip" } }, { method: "PATCH", path: `/requests/${REQUEST_ID}` })).status, 409);
-  assert.equal(resolveRequestProcedures(row(), REQUEST_TYPES)[0].procedures[0].status, ProcedureStatus.SCHEDULED);
 });
 
 test("cancelling releases only the places no procedure uses and a new slot is required before confirming", async (t) => {

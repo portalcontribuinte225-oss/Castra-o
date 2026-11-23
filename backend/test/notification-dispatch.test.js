@@ -337,13 +337,6 @@ test("dispatcher preserves only known finite transport codes and replaces unsafe
   }
 });
 
-test("legacy reschedule uses the reschedule template, not the confirmation one", async () => {
-  const f = fixture();
-  f.request.workflow_data = { scheduleTime: "09:00" };
-  await dispatchNotification({ event: NotificationEvent.SCHEDULE_CHANGED, request: f.request, legacy: true }, f.dependencies);
-  assert.equal(f.calls.find(([kind]) => kind === "whatsapp")[1].templateName, "castracao_reagendamento");
-});
-
 test("a rejection reaches every channel in use with its reason, and never the staff's internal note", async () => {
   const f = fixture();
   const event = NotificationEvent.REQUEST_REJECTED;
@@ -359,33 +352,11 @@ test("a rejection reaches every channel in use with its reason, and never the st
   assert.doesNotMatch(JSON.stringify([whatsapp, sms]), /private staff note/);
 });
 
-test("legacy requests preserve WhatsApp-only agenda behavior, never e-mail nor SMS", async () => {
+test("a request without follow-up is not notified on any channel", async () => {
   const f = fixture();
-  f.request.workflow_data = {};
-  for (const event of [NotificationEvent.COMPLETED, NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.DOCUMENTS_REJECTED, NotificationEvent.SCHEDULE_CANCELLED, NotificationEvent.NO_SHOW, NotificationEvent.REQUEST_REJECTED]) {
-    assert.deepEqual(await dispatchNotification({ event, request: f.request, legacy: true }, f.dependencies), []);
+  f.request.workflow_data = { scheduleTime: "09:00" };
+  for (const event of Object.values(NotificationEvent)) {
+    assert.deepEqual(await dispatchNotification({ event, request: f.request }, f.dependencies), []);
   }
-  f.dependencies.sendWhatsapp = async () => ({ status: DeliveryStatus.FAILED });
-  const results = await dispatchNotification({ event: NotificationEvent.SCHEDULE_CHANGED, request: f.request, legacy: true }, f.dependencies);
-  assert.equal(results.length, 1);
-  assert.equal(results[0].channel, NotificationChannel.WHATSAPP);
-  assert.equal(ran(f, "email") || ran(f, "emailTemplate") || ran(f, "sms"), false);
-});
-
-test("a legacy request is told when its WhatsApp is off, as before", async () => {
-  const f = fixture();
-  f.request.workflow_data = {};
-  f.dependencies.loadWhatsappConfig = async () => ({ active: false });
-  const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request, legacy: true }, f.dependencies);
-  assert.deepEqual([results.length, results[0].status, results[0].code], [1, DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED]);
-});
-
-test("legacy Brazilian country-code recipients reach WhatsApp without consuming another channel", async () => {
-  const f = fixture();
-  f.request.workflow_data = {};
-  f.request.phone = "+55 (48) 99999-9999";
-  const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request, legacy: true }, f.dependencies);
-  assert.equal(results[0].status, DeliveryStatus.SENT);
-  assert.equal(ran(f, "whatsapp"), true);
-  assert.equal(ran(f, "email") || ran(f, "sms"), false);
+  assert.equal(ran(f, "whatsapp") || ran(f, "email") || ran(f, "emailTemplate") || ran(f, "sms"), false);
 });

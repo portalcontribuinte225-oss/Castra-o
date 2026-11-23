@@ -4,9 +4,9 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
  * Cifra secrets salvos na tabela config (ex.: config.ai.apiKey) com AES-256-GCM.
  * Chave mestra vem de CONFIG_ENCRYPTION_KEY (32 bytes, base64), única por ambiente.
  *
- * Payload cifrado tem o prefixo ENC_PREFIX para ser distinguível de valores
- * legados salvos em texto plano antes desta mudança — isso permite ler dados
- * antigos sem quebrar e cifrá-los apenas na próxima escrita (backfill implícito).
+ * Payload cifrado tem o prefixo ENC_PREFIX. Sem CONFIG_ENCRYPTION_KEY o valor é
+ * gravado em texto plano; com a chave, um valor em texto plano é cifrado na
+ * próxima escrita.
  */
 
 const ENC_PREFIX = "enc:v1:";
@@ -63,8 +63,8 @@ export function encryptSecret(plainText = "") {
 }
 
 /**
- * Decifra um valor salvo por encryptSecret. Valores sem o prefixo esperado
- * são tratados como texto plano legado e retornados como estão.
+ * Decifra um valor salvo por encryptSecret. Valores sem o prefixo esperado são
+ * texto plano (gravados sem CONFIG_ENCRYPTION_KEY) e retornam como estão.
  */
 export function decryptSecret(storedValue = "") {
   const value = String(storedValue || "");

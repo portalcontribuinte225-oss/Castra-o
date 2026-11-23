@@ -16,10 +16,10 @@ const procedure = { requestTypeId: "castration", name: "Castração", status: Pr
 const microchip = { ...procedure, requestTypeId: "chip", name: "Microchipagem" };
 
 describe("ProcessModal", () => {
-  it("opens on attachments and shows the required documents of a legacy single-procedure request", () => {
+  it("opens on attachments and shows the required documents of the procedures of the animals", () => {
     const html = renderToStaticMarkup(<ProcessModal
       request={{ id: "request-a", protocol: "123/2026", status: "NOVA", tutor_name: "Maria Silva", request_type: "Castração",
-        workflow_data: { requestTypeId: "castration" }, animals: [{ name: "Bidu" }] }}
+        workflow_data: { requestTypeIds: ["castration"], requestTypeNames: ["Castração"] }, animals: [{ name: "Bidu", requestTypeIds: ["castration"] }] }}
       requestTypes={[{ id: "castration", name: "Castração", documents: [{ id: "identity", name: "Identidade" }] }]}
       onClose={noop}
     />);

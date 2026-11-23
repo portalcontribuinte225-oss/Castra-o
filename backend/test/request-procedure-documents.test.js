@@ -41,13 +41,13 @@ test("a document is required when any of the procedures requires it, and it is n
   assert.equal(onlyCastration.find(({ id }) => id === "extra").required, false, "required by the other procedure only");
 });
 
-test("the single type of an old request, by id, by name or as a plain string, still gives its documents", () => {
+test("one type by its id or name gives its documents; a request gives only the documents of its animals' procedures", () => {
   assert.deepEqual(ids(requestDocumentDefinitions(settings(), "castration")), ["residence", "identity", "extra"]);
   assert.deepEqual(ids(requestDocumentDefinitions(settings(), "Vacinação antirrábica")), ["vaccine-card", "extra", "residence"]);
-  for (const input of [{ requestTypeId: "castration" }, { request_type: "Castração" }, { requestType: "castration" }, { type: "Castração" }, { workflow_data: { requestTypeId: "castration" } }]) {
-    assert.deepEqual(ids(requestDocumentDefinitions(settings(), input)), ["residence", "identity", "extra"], JSON.stringify(input));
+  for (const input of [{ requestTypeId: "castration" }, { request_type: "Castração" }, { requestType: "castration" }, { type: "Castração" },
+    { workflow_data: { requestTypeId: "castration" } }, { request_type: "Castração, Vacinação antirrábica" }]) {
+    assert.deepEqual(requestDocumentDefinitions(settings(), input), [], JSON.stringify(input));
   }
-  assert.deepEqual(requestDocumentDefinitions(settings(), { request_type: "Castração, Vacinação antirrábica" }), [], "a joined text is not a type: the procedures come from the ids");
   assert.deepEqual(resolveDocumentRequestTypes(settings(), { animals: animals(["vaccine"]), requestTypeId: "castration" }).map(({ id }) => id), ["vaccine"]);
 });
 

@@ -14,8 +14,8 @@ function definitionFor(document, definitions) {
     || canonicalDocumentDefinition({ id: document.documentId, name: document.documentName || "Documento", required: false });
 }
 
-function normalizeExisting(previous, document, index, definition) {
-  const source = { ...previous, document, document_index: index };
+function normalizeExisting(previous, document, definition) {
+  const source = { ...previous, document };
   const description = describeStoredDocument(source, definition);
   const normalized = { attachmentId: description.attachmentId, requestId: previous.id,
     ownerUserId: previous.tutor_id || null, municipalityId: previous.municipality_id, documentId: document.documentId,
@@ -27,14 +27,14 @@ function normalizeExisting(previous, document, index, definition) {
   return { ...normalized, receipt: signDocumentReceipt(normalized) };
 }
 
-// Read-only projection grants legacy attachments a stable identity without trusting caller-supplied metadata.
+// What the screens get of each attachment: the id, hash and receipt date the server describes, and the review only under a valid receipt.
 export function decorateRequestDocuments(request, settings = {}) {
   const definitions = definitionsForRequest(settings, request);
-  return { ...request, documents: (Array.isArray(request.documents) ? request.documents : []).map((document, index) => {
+  return { ...request, documents: (Array.isArray(request.documents) ? request.documents : []).map((document) => {
     if (isExcludedDocument(document) || isComplaintPhotoId(document?.documentId)) return document;
     try {
       const definition = definitionFor(document, definitions);
-      const source = { ...request, document, document_index: index };
+      const source = { ...request, document };
       const description = describeStoredDocument(source, definition);
       const trustedReview = hasValidDocumentReceipt(document, source) && document.review?.hash === description.hash;
       return { ...document, attachmentId: description.attachmentId, hash: description.hash, receivedAt: description.receivedAt,
@@ -55,10 +55,10 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
   const reviews = patch.documentReviews === undefined ? [] : patch.documentReviews;
   if (!Array.isArray(supplied) || !Array.isArray(reviews) || supplied.length > MAX_REQUEST_DOCUMENTS || reviews.length > MAX_REQUEST_DOCUMENTS) throw documentError("Anexos ou decisões inválidos.");
   const definitions = definitionsForRequest(settings, previous);
-  const normalizedOld = oldDocuments.map((document, index) => {
+  const normalizedOld = oldDocuments.map((document) => {
     if (isComplaintPhotoId(document?.documentId)) return document;
     if (isExcludedDocument(document)) return { ...document, internalEvidence: true };
-    try { return normalizeExisting(previous, document, index, definitionFor(document, definitions)); }
+    try { return normalizeExisting(previous, document, definitionFor(document, definitions)); }
     catch { return { ...document, status: DocumentReviewStatus.ATTACHED, review: undefined, receipt: undefined }; }
   });
   const animalIds = (previous.animals || []).map((animal) => animal?.id).filter(Boolean);

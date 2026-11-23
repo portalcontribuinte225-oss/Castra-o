@@ -1,17 +1,6 @@
+import { RequestStatus, RequestTag } from "../../../shared/request-contract.js";
 import type { AnyRecord } from "../../types";
 import { requestHasTag } from "../../domain";
-
-enum RequestStatus {
-  NEW = "NOVA",
-  SCHEDULED = "AGENDADA",
-  DONE = "REALIZADA",
-  CANCELED = "CANCELADA",
-}
-
-enum RequestWorkflowTag {
-  ASSIGNED = "ATRIBUIDA",
-  RESCHEDULED = "REAGENDADA",
-}
 
 export enum RequestStage {
   INBOX = "inbox",
@@ -49,13 +38,13 @@ export const requestStageOptions: { value: RequestStage; label: string }[] = req
 export function getRequestStage(request: AnyRecord = {}): RequestStage {
   switch (request.status) {
     case RequestStatus.SCHEDULED:
-      return requestHasTag(request, RequestWorkflowTag.RESCHEDULED) ? RequestStage.RESCHEDULED : RequestStage.SCHEDULED;
-    case RequestStatus.DONE:
+      return requestHasTag(request, RequestTag.RESCHEDULED) ? RequestStage.RESCHEDULED : RequestStage.SCHEDULED;
+    case RequestStatus.COMPLETED:
       return RequestStage.DONE;
-    case RequestStatus.CANCELED:
+    case RequestStatus.CANCELLED:
       return RequestStage.CANCELED;
     case RequestStatus.NEW:
     default:
-      return requestHasTag(request, RequestWorkflowTag.ASSIGNED) ? RequestStage.ANALYSIS : RequestStage.INBOX;
+      return requestHasTag(request, RequestTag.ASSIGNED) ? RequestStage.ANALYSIS : RequestStage.INBOX;
   }
 }

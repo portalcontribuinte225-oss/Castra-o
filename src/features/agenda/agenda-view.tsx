@@ -1,13 +1,14 @@
 import { useId, useMemo, useRef, useState } from "react";
+import { RequestTag } from "../../../shared/request-contract.js";
 import {
   CalendarDays, ChevronLeft, ChevronRight,
   Clock, MapPin,
 } from "lucide-react";
-import type { AnyRecord } from "../types";
-import { Button } from "../components/button";
-import { Card } from "../components/card";
-import { CloseButton } from "../components/close-button";
-import { useModalFocus } from "../components/modal-focus";
+import type { AnyRecord } from "../../types";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
+import { CloseButton } from "../../components/close-button";
+import { useModalFocus } from "../../components/modal-focus";
 import {
   normalizeRequest,
   normalizeScheduleDateText,
@@ -15,10 +16,10 @@ import {
   requestResultLabel,
   requestTypeLabel,
   requestTypeLabels,
-} from "../domain";
-import { ToastContainer } from "../components/toast-container";
-import { ProcessModal } from "./process-modal/process-modal";
-import { canEditRequests, useRequestActions } from "./request-actions";
+} from "../../domain";
+import { ToastContainer } from "../../components/toast-container";
+import { ProcessModal } from "../process-modal/process-modal";
+import { canEditRequests, useRequestActions } from "../request-actions/request-actions";
 
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -100,7 +101,7 @@ function initials(name: string): string {
 function statusTone(request: AnyRecord): "success" | "danger" | "info" | "pending" | "neutral" {
   if (request.status === "REALIZADA") return "success";
   if (request.status === "CANCELADA") return "danger";
-  if (requestHasTag(request, "REAGENDADA")) return "info";
+  if (requestHasTag(request, RequestTag.RESCHEDULED)) return "info";
   if (request.status === "AGENDADA") return "pending";
   return "neutral";
 }

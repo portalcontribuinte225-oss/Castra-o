@@ -3,7 +3,10 @@ export const RequestStatus = Object.freeze({
 });
 // Who registered the request: the person, on the public form, or the staff, at the counter.
 export const RequestOrigin = Object.freeze({ PUBLIC: "PUBLICA", INTERNAL: "INTERNA" });
-export const RequestTag = Object.freeze({ RESCHEDULED: "REAGENDADA" });
+// The marks a request carries besides its status: assigned to someone, rescheduled, or made from an animal's microchip, death or transfer.
+export const RequestTag = Object.freeze({
+  ASSIGNED: "ATRIBUIDA", RESCHEDULED: "REAGENDADA", MICROCHIP: "MICROCHIP", DEATH: "OBITO", TRANSFER: "TROCA_TUTOR",
+});
 export const REQUEST_CONTACT_CPF_KEY = "requestContactCpf";
 
 export function withoutRequestContactCpf(workflow) {

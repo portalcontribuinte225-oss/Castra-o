@@ -69,12 +69,12 @@ test("the derived workflow keys are replaced by the server's, and the client's c
   assert.deepEqual([...DERIVED_WORKFLOW_KEYS], ["requestTypeIds", "requestTypeNames"]);
 });
 
-test("a PATCH that leaves the procedures as they were touches nothing, even if one of the types was switched off since", () => {
+test("a PATCH that leaves the procedures as they were touches nothing, even if one of the types was switched off since; one that drops them is refused", () => {
   const stored = [{ name: "Rex", requestTypeIds: ["vaccine"] }];
   const same = [{ name: "Rex II", requestTypeIds: ["vaccine"], species: "Canino" }];
   assert.equal(updateRequestProcedures({ previousAnimals: stored, nextAnimals: same, workflow: {}, municipalityId: MUNICIPALITY, settings }), null);
-  assert.equal(updateRequestProcedures({ previousAnimals: stored, nextAnimals: [{ name: "Rex" }], workflow: {}, municipalityId: MUNICIPALITY, settings }), null,
-    "animals sent back without procedures keep the request-level ones");
+  assert.throws(() => updateRequestProcedures({ previousAnimals: stored, nextAnimals: [{ name: "Rex" }], workflow: {}, municipalityId: MUNICIPALITY, settings }),
+    /ao menos um procedimento/, "animals sent back without procedures are refused");
 });
 
 test("a PATCH that changes the procedures applies the creation checks and derives the fields again", () => {

@@ -4,14 +4,14 @@ import {
   ShieldCheck,
   XCircle,
 } from "lucide-react";
-import type { AnyRecord } from "../types";
-import { initialTeams } from "../domain";
-import { normalizeText } from "../utils";
-import { Button } from "../components/button";
-import { Card } from "../components/card";
-import { CloseButton } from "../components/close-button";
-import { useModalFocus } from "../components/modal-focus";
-import { configFieldStyle, configTextareaStyle } from "../components/ui";
+import type { AnyRecord } from "../../types";
+import { initialTeams } from "../../domain";
+import { normalizeText } from "../../utils";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
+import { CloseButton } from "../../components/close-button";
+import { useModalFocus } from "../../components/modal-focus";
+import { configFieldStyle, configTextareaStyle } from "../../components/ui";
 
 export function accessStatusLabel(status = "") {
   return (

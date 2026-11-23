@@ -24,7 +24,7 @@ const clientFetch = globalThis.fetch;
 // The columns that mark the query reading the animal's requests for its history.
 const REQUEST_HISTORY_COLUMNS = "signed_at, created_at, updated_at";
 
-async function fixture(t, { existingAnimal = true, globalCollision = false, chipless = false, requestHistory = [] } = {}) {
+async function fixture(t, { existingAnimal = true, chipless = false, requestHistory = [] } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
   process.env.JWT_SECRET = "animal-access-tests-only";
   const calls = [];
@@ -49,7 +49,6 @@ async function fixture(t, { existingAnimal = true, globalCollision = false, chip
       return { rows: [] };
     }
     if (sql.includes("FROM requests r")) {
-      if (sql.includes("JOIN LATERAL")) return { rows: [{ id: "source", municipality_id: MUNICIPALITY, cpf: CPF, matched_animal: {} }] };
       assert.equal(values[2], MUNICIPALITY);
       assert.match(sql, /r\.municipality_id = \$3/);
       return { rows: structuredClone(requestHistory) };
@@ -57,10 +56,6 @@ async function fixture(t, { existingAnimal = true, globalCollision = false, chip
     if (sql.includes("INSERT INTO document_counters")) {
       assert.deepEqual(values.slice(0, 2), [MUNICIPALITY, DocumentSequence.PROTOCOL]);
       return { rows: [{ seq: 1 }] };
-    }
-    if (sql.includes("INSERT INTO animals")) {
-      assert.match(sql, /ON CONFLICT \(microchip\) DO NOTHING/);
-      return { rows: globalCollision ? [] : [structuredClone(animal)] };
     }
     if (sql.includes("INSERT INTO requests")) {
       assertInsertShape(sql, values);
@@ -187,16 +182,11 @@ test("internal animal action does not assign staff as tutor and ignores a CPF in
   assert.equal(calls.find(({ sql }) => sql.includes("INSERT INTO requests")).sql.includes("validation_key"), false);
 });
 
-test("external consultation never materializes an animal from a claimed microchip", async (t) => {
+test("a microchip finds only an animal registered in the municipality, for the tutor and the staff alike", async (t) => {
   const { request, calls } = await fixture(t, { existingAnimal: false });
-  assert.equal((await request("/consult", { microchip: "CHIP123" }, TUTOR)).status, 404);
-  assert.equal((await request("/lookup", { microchip: "CHIP123", municipalityId: MUNICIPALITY }, TUTOR)).status, 404);
-  assert.equal(calls.some(({ sql }) => sql.includes("INSERT INTO animals") || sql.includes("INSERT INTO animal_tutors") || sql.includes("JOIN LATERAL")), false);
-});
-
-test("a globally existing microchip cannot be reassigned by scoped staff materialization", async (t) => {
-  const { request, calls } = await fixture(t, { existingAnimal: false, globalCollision: true });
-  const response = await request("/consult", { microchip: "CHIP123" }, { ...TUTOR, role: "analista" });
-  assert.equal(response.status, 404);
-  assert.equal(calls.some(({ sql }) => sql.includes("INSERT INTO animal_tutors") || sql.includes("INSERT INTO animal_records")), false);
+  for (const user of [TUTOR, { ...TUTOR, role: "analista" }]) {
+    assert.equal((await request("/consult", { microchip: "CHIP123" }, user)).status, 404);
+    assert.equal((await request("/lookup", { microchip: "CHIP123", municipalityId: MUNICIPALITY }, user)).status, 404);
+  }
+  assert.equal(calls.some(({ sql }) => /INSERT INTO|JOIN LATERAL/.test(sql)), false);
 });

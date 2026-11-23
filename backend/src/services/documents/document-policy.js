@@ -10,14 +10,14 @@ export function canonicalDocumentDefinition(document = {}) {
     maxSizeMb: Number(document.maxSizeMb) > 0 ? Number(document.maxSizeMb) : 5 };
 }
 
-// The request types a document check refers to: the procedures of a request (or its single old type), or the id/name of one type.
+// The request types a document check refers to: the procedures of a request, or one type by its id or name.
 export function resolveDocumentRequestTypes(settings, input) {
-  const types = Array.isArray(settings?.requestTypes) ? settings.requestTypes : [];
-  if (typeof input === "string") return resolveRequestTypes({ requestType: input }, types);
-  return resolveRequestTypes({
-    animals: input?.animals, workflow: input?.workflow_data ?? input?.workflowData, requestTypeId: input?.requestTypeId,
-    requestType: input?.request_type ?? input?.requestType ?? input?.type,
-  }, types);
+  const types = (Array.isArray(settings?.requestTypes) ? settings.requestTypes : []).filter((type) => type && typeof type === "object");
+  if (typeof input === "string") {
+    const type = types.find((item) => item.id === input || item.name === input);
+    return type ? [type] : [];
+  }
+  return resolveRequestTypes({ animals: input?.animals, workflow: input?.workflow_data ?? input?.workflowData }, types);
 }
 
 // The documents of a request are the sum of the documents of all its procedures, each once; one is required if any procedure requires it.

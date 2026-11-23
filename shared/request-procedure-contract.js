@@ -6,7 +6,7 @@ import { animalRequestTypeIds } from "./request-types-contract.js";
 //   { requestTypeId, status, schedule: { date, occurrenceKey, slotTime, locationName, address, addressUrl } | null,
 //     microchip, prescription: { text, professionalName, professionalRegistry, issuedAt, issuedBy } | null,
 //     rejection: { reason, note } | null, updatedAt, updatedBy }
-// A request saved before this existed has no `procedures`: they are read from the request's own status and agenda.
+// A procedure that is not stored yet is read from the request's own status and agenda.
 // The request's status is derived from its procedures (deriveRequestStatus), so lists, filters and notices keep working.
 export const ProcedureStatus = Object.freeze({
   WAITING: "AGUARDANDO", SCHEDULED: "AGENDADO", DONE: "REALIZADO", NO_SHOW: "NAO_COMPARECEU", REJECTED: "INDEFERIDO",
@@ -112,16 +112,11 @@ export function resolveRequestProcedures(request, requestTypes = []) {
   const animals = requestAnimals(request);
   const kind = request?.request_type ?? request?.type;
   if (!isProcedureRequest(kind)) return animals.map((animal) => ({ ...animal, procedures: [] }));
-  const workflow = workflowOf(request);
   const types = Array.isArray(requestTypes) ? requestTypes : [];
-  const legacyId = workflow.requestTypeId || String(kind || "");
   return animals.map((animal) => {
-    const ids = animalRequestTypeIds(animal);
-    const chosen = ids.length ? ids : [legacyId];
     const stored = Array.isArray(animal?.procedures) ? animal.procedures : [];
-    const procedures = chosen.map((requestTypeId, index) => {
-      const name = types.find((type) => type?.id === requestTypeId)?.name
-        || (ids.length ? animal?.requestTypeNames?.[index] : String(kind || "")) || requestTypeId;
+    const procedures = animalRequestTypeIds(animal).map((requestTypeId, index) => {
+      const name = types.find((type) => type?.id === requestTypeId)?.name || animal?.requestTypeNames?.[index] || requestTypeId;
       const saved = stored.find((item) => item?.requestTypeId === requestTypeId);
       if (saved && STATUSES.includes(saved.status)) return { ...saved, name };
       return { requestTypeId, name, status: statusFromRequest(request), schedule: scheduleFromRequest(request),

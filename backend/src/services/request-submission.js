@@ -5,7 +5,7 @@ import { REQUEST_CONTACT_CPF_KEY } from "../../../shared/request-contract.js";
 import { isInternalUser } from "../tenant.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
 import { prepareAnimalNeighborhoods } from "./request-neighborhoods.js";
-import { DERIVED_WORKFLOW_KEYS, activeInMunicipality, prepareRequestProcedures, withDerivedProcedures } from "./request-procedures.js";
+import { DERIVED_WORKFLOW_KEYS, prepareRequestProcedures, withDerivedProcedures } from "./request-procedures.js";
 
 function invalid(message) {
   throw Object.assign(new Error(message), { status: 400 });
@@ -20,10 +20,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   const suppliedCpf = body.cpf ?? body.tutor_cpf;
   const cleanCpf = normalizeCpf(suppliedCpf);
   const hasCpfInput = suppliedCpf !== undefined && suppliedCpf !== null && String(suppliedCpf).trim() !== "";
-  // The procedures of each animal, when the request carries them; their derived fields replace whatever the client sent.
+  // The procedures of each animal, which every request but a complaint carries; their derived fields replace whatever the client sent.
   const procedures = isComplaint ? null : prepareRequestProcedures({ animals: body.animals, municipalityId, settings });
-  // With procedures per animal (the form of the public and the internal request) each new animal names the neighborhood where it
-  // lives; the normalized animals replace the ones the client sent. A request made the old way has no animal form to ask it in.
+  // Each new animal names the neighborhood where it lives; the normalized animals replace the ones the client sent.
   const located = procedures ? prepareAnimalNeighborhoods({ animals: procedures.animals, municipalityId, settings }) : null;
   const nextWorkflow = withDerivedProcedures(workflow, procedures?.fields);
   delete nextWorkflow.notificationDispatches;
@@ -42,21 +41,8 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
     return answer;
   }
 
-  // A request made the old way has one type for the whole request, found by id or by name.
-  function selectSingleRequestType() {
-    const requestTypeId = body.requestTypeId;
-    const candidates = settings.requestTypes.filter((item) => activeInMunicipality(item, municipalityId));
-    const matches = candidates.filter((item) => requestTypeId ? item.id === requestTypeId
-      : item.id === requestType || item.name === requestType);
-    const selected = matches.length === 1 ? matches[0] : null;
-    if ((requestTypeId || settings.requestTypes.length) && !selected) invalid("Tipo de solicitação inválido para o município.");
-    return selected;
-  }
-
   let tutorRequired = true;
   if (publicProcedure) {
-    // An old-style request names its single type, which still has to be a valid one.
-    if (!procedures) selectSingleRequestType();
     if (Array.isArray(body.animals) && body.animals.some((animal) => !animal || typeof animal !== "object" || Array.isArray(animal))) {
       invalid("Dados do animal inválidos.");
     }
@@ -65,6 +51,7 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   } else if (workflow.followUp !== undefined) {
     nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
   }
+  if (!isComplaint && !procedures) invalid("Escolha ao menos um procedimento para cada animal.");
   // Staff register a tutor too, unless they answer that the animal has none; the request types never dispense it.
   if (internal && !isComplaint) tutorRequired = tutorshipRequiresTutor(selectTutorship());
 

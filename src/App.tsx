@@ -135,11 +135,11 @@ import {
   onlyDigits,
   readFileAsDataUrl,
 } from "./utils";
-import { AccessRequestsView } from "./features/accessRequests";
-import { AgendaView } from "./features/agenda";
-import { canEditRequests, useRequestActions } from "./features/request-actions";
+import { AccessRequestsView } from "./features/access-requests/access-requests-view";
+import { AgendaView } from "./features/agenda/agenda-view";
+import { canEditRequests, useRequestActions } from "./features/request-actions/request-actions";
 import { ProcessModal } from "./features/process-modal/process-modal";
-import { ReportsView } from "./features/reports";
+import { ReportsView } from "./features/reports/reports-view";
 import { ActiveFiltersBar } from "./features/request-filters/active-filters-bar";
 import { StaffNotificationBell } from "./features/staff-notifications/staff-notification-bell";
 import { SidebarMunicipalityBrand } from "./components/sidebar-municipality-brand";
@@ -204,8 +204,8 @@ import { TutorArea } from "./features/tutor-access/tutor-area";
 import { stripEphemeralCredentials, stripMunicipalityBootstrap } from "./features/tutor-access/submission-envelope";
 import { validateTutorName } from "./features/tutor-access/tutor-identity";
 import { SessionBoundary } from "./features/tutor-access/session-boundary";
-import { getAdoptionInterestCount } from "./features/adoption-interest-count";
-import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE, ADOPTION_STATUS_IN_PROGRESS } from "./features/adoption-status";
+import { getAdoptionInterestCount } from "./features/adoption/adoption-interest-count";
+import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE, ADOPTION_STATUS_IN_PROGRESS } from "./features/adoption/adoption-status";
 import { MAX_ADOPTION_PHOTO_BYTES } from "../shared/adoption-contract.js";
 import { ShareAdoptionButton, ShareButtonLook } from "./features/adoption-share/share-adoption-button";
 import { SharedAdoptionState, useSharedAdoption } from "./features/adoption-share/use-shared-adoption";
@@ -821,10 +821,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     );
   }
 
-  const currentTeamUser = (teams.users || []).find((user) => (
-    String(user.id || "") === String(currentUser?.id || "") ||
-    String(user.email || "").toLowerCase() === String(currentUser?.email || "").toLowerCase()
-  ));
+  const currentTeamUser = (teams.users || []).find((user) => currentUser?.id && user.id === currentUser.id);
   const currentPermissionGroup = permissionGroups.find((group) => group.id === currentTeamUser?.permissionGroupId && group.active !== false);
   const canUsePermissions = Boolean(currentPermissionGroup && !isGlobalRole(currentUser?.role));
   const visibleMenu = canUsePermissions
@@ -1211,7 +1208,7 @@ function getMunicipalityLabel(municipalityId = "", municipalities = []) {
 
 function defaultMunicipalityUserToTeamUser(user: AnyRecord = {}, municipalityId = "") {
   return {
-    id: user.id || `usuario_padrao_${municipalityId}`,
+    id: user.id,
     name: user.name || "Administrador municipal",
     email: user.email || "",
     defaultMunicipalityUser: true,
@@ -2333,8 +2330,6 @@ function NewRequest({
   // The request types the animals ask for, together: they decide the steps, the tutor and the documents of the request.
   const selectedRequestTypes = resolveRequestTypes({ animals }, configuredRequestTypes);
   const procedureFields = deriveRequestTypeFields(selectedRequestTypes);
-  // Without request types configured there is nothing to choose, so the animals go without procedures, as before.
-  const payloadAnimals = (items: AnyRecord[]) => items.map(({ requestTypeIds, ...animal }) => (hasConfiguredTypes ? { ...animal, requestTypeIds } : animal));
   // Whoever is a tutor already (the account, or a registered animal) is not asked whether the animal has one: the answer is "with tutor".
   const tutorshipFixed = registered || currentUser.role === "tutor";
   const tutorship = registeredContext ? (registeredContext.animal.tutorship || AnimalTutorship.WITH_TUTOR)
@@ -2461,12 +2456,12 @@ function NewRequest({
     else if (!selectedScheduleHasCapacity()) issues.push("Escolha uma data com vagas suficientes para todos os animais.");
     filledAnimals.forEach((animal, index) => {
       if (registered) {
-        if (needsProcedure(animal, hasConfiguredTypes)) issues.push("Selecione o tipo de solicitação.");
+        if (needsProcedure(animal)) issues.push("Selecione o tipo de solicitação.");
         if (!animal.species || !animal.sex || !animal.size || !animal.breedType) issues.push("O cadastro do animal está incompleto. Procure o atendimento para conferência.");
         return;
       }
       const label = filledAnimals.length > 1 ? ` do animal ${index + 1}` : " do animal";
-      if (needsProcedure(animal, hasConfiguredTypes)) issues.push(`Escolha ao menos um procedimento${label}.`);
+      if (needsProcedure(animal)) issues.push(`Escolha ao menos um procedimento${label}.`);
       if (!animal.species) issues.push(`Selecione a espécie${label}.`);
       if (!animal.sex) issues.push(`Selecione o sexo${label}.`);
       if (!animal.size) issues.push(`Selecione o porte${label}.`);
@@ -2504,7 +2499,7 @@ function NewRequest({
       if (registered && (contextLoading || registeredContext.eligibility?.canSubmit === false)) return [true];
       return animals
         .flatMap((animal) => [
-          needsProcedure(animal, hasConfiguredTypes),
+          needsProcedure(animal),
           !animal.species,
           !animal.sex,
           !animal.size,
@@ -2737,8 +2732,7 @@ function NewRequest({
         [sent.address, sent.number, sent.neighborhood, sent.city, sent.state]
           .filter(Boolean)
           .join(", ") || "Endereço não informado",
-      type: procedureFields.requestType || "Cadastro animal",
-      requestTypeId: registeredContext ? selectedRequestTypes[0]?.id || "" : "",
+      type: procedureFields.requestType,
       fee: combineRequestFees(selectedRequestTypes),
       phone: sent.phone || "",
       cpf: sent.cpf || "",
@@ -2767,12 +2761,12 @@ function NewRequest({
         followUp: buildFollowUpPayload({ enabled: noticesEnabled }, tutorContacts, followUpPolicy.phoneEnabled),
       },
       animalId: registeredContext?.animal.id || "",
-      animals: registeredContext ? [{ id: registeredContext.animal.id }] : payloadAnimals(animals.map((animal) => ({
+      animals: registeredContext ? [{ id: registeredContext.animal.id, requestTypeIds: animalRequestTypeIds(animals[0]) }] : animals.map((animal) => ({
         ...animal,
         ...tutorshipAnswer,
         name: animal.name || "",
         age: animal.birthDate || animal.age || "",
-      }))),
+      })),
       ...buildDocumentSubmission(uploadedDocumentsToSend, reusedDocuments),
     };
   }
@@ -2868,12 +2862,12 @@ function NewRequest({
                   onToggle={() => setExpandedAnimal(expandedAnimal === index ? -1 : index)}
                 >
                   <AnimalFields
-                    procedures={hasConfiguredTypes && (
+                    procedures={(
                       <RequestProcedureList
                         types={configuredRequestTypes}
                         selectedIds={animalRequestTypeIds(animal)}
                         onChange={(ids) => changeProcedures(index, ids)}
-                        invalid={submitAttempted && needsProcedure(animal, hasConfiguredTypes)}
+                        invalid={submitAttempted && needsProcedure(animal)}
                       />
                     )}
                     animal={animal}
@@ -4443,10 +4437,7 @@ function ConfigView({
   const [userSaveError, setUserSaveError] = useState("");
   const [agendaForm, setAgendaForm] = useState(emptyAgendaForm);
   const [aiSaveStatus, setAiSaveStatus] = useState("");
-  const configCurrentTeamUser = (teams.users || []).find((user) => (
-    String(user.id || "") === String(currentUser?.id || "")
-    || String(user.email || "").toLowerCase() === String(currentUser?.email || "").toLowerCase()
-  ));
+  const configCurrentTeamUser = (teams.users || []).find((user) => currentUser?.id && user.id === currentUser.id);
   const configCurrentPermissionGroup = permissionGroups.find((group) =>
     group.id === configCurrentTeamUser?.permissionGroupId && group.active !== false
   );
@@ -4805,7 +4796,7 @@ function ConfigView({
             : current.sectors,
           users: [
             defaultTeamUser,
-            ...(current.users || []).filter((user) => user.email !== defaultTeamUser.email),
+            ...(current.users || []).filter((user) => user.id !== defaultTeamUser.id),
           ],
         }));
       }

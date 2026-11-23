@@ -9,6 +9,10 @@ import { isAnimalTutorship } from "../../../../shared/request-tutorship-contract
 import { resolveRequestProcedures } from "../../../../shared/request-procedure-contract.js";
 import { storeResolvedProcedures } from "../procedure-actions/procedure-request-state.js";
 
+// The procedures the client chose for an animal, kept when the registered animal replaces what the client sent about it.
+const chosenProcedures = (animal) => animal && typeof animal === "object" && Object.hasOwn(animal, "requestTypeIds")
+  ? { requestTypeIds: animal.requestTypeIds } : {};
+
 export function isProcedureRequest(body) {
   return isProcedureKind(body.request_type || body.requestType || body.requestTypeId || body.type);
 }
@@ -30,7 +34,7 @@ export async function prepareRegisteredRequest(client, { body, user, municipalit
       const animal = await findOwnedAnimal(client, { id, municipalityId, internal: true, lock: true });
       requireLiveAnimal(animal); resolved.set(id, animalView(animal));
     }
-    return { ...body, animals: (body.animals || [{ id: requestedIds[0] }]).map((animal) => animal.id ? resolved.get(animal.id) : animal) };
+    return { ...body, animals: (body.animals || [{ id: requestedIds[0] }]).map((animal) => animal.id ? { ...resolved.get(animal.id), ...chosenProcedures(animal) } : animal) };
   }
   if (user.role !== "tutor") return body;
   if (requestedIds.length !== 1 || (Array.isArray(body.animals) && body.animals.length !== 1)) throw authError(400, "Escolha um animal cadastrado por solicitação.");
@@ -45,7 +49,7 @@ export async function prepareRegisteredRequest(client, { body, user, municipalit
     city: tutor.city, state: tutor.state, cep: tutor.cep,
     animal_id: animal.id, animalId: animal.id, animal_microchip: animal.microchip || null,
     animal_name: animal.name, species: animal.species, size: animal.size,
-    animals: [animalView(animal)],
+    animals: [{ ...animalView(animal), ...chosenProcedures(Array.isArray(body.animals) ? body.animals[0] : null) }],
     workflow_data: { ...(body.workflow_data || body.workflowData || {}), tutorship } };
 }
 

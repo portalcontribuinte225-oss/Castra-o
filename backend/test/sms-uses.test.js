@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { SMS_ACTIVE_USES_CONFIG_KEY, isSmsUseActive, normalizeSmsActiveUses, normalizeSmsUseRows } from "../../shared/sms-contract.js";
 import { SmsUseKind, getSmsUse, smsUses } from "../../shared/sms-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
-import { LEGACY_DOCUMENTS_REVIEWED, NotificationEvent } from "../../shared/notification-contract.js";
+import { NotificationEvent } from "../../shared/notification-contract.js";
 import { isSmsUseOn, listSmsUses, loadActiveSmsUses, setSmsUseActive } from "../src/services/sms-uses.js";
 import { saveSmsAccount } from "../src/services/sms-integration-settings.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY as MUNICIPALITY, SMS_TEST_OTHER as OTHER } from "./fixtures/sms-settings-db.js";
@@ -60,24 +60,6 @@ test("stored switches keep only known uses with real booleans", () => {
   assert.equal(rows.find(({ key }) => key === RESET).active, false);
   assert.equal(rows.find(({ key }) => key === COMPLETED).active, false);
   assert.equal(rows.length, smsUses.length);
-});
-
-test("document notices inherit an older switch and can be turned off independently", async (t) => {
-  const { database } = await fixture(t);
-  const approved = NotificationEvent.DOCUMENTS_APPROVED;
-  const rejected = NotificationEvent.DOCUMENTS_REJECTED;
-  database.configs.set(keyOf(MUNICIPALITY), { active: { [LEGACY_DOCUMENTS_REVIEWED]: true } });
-  assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: approved, database }), true);
-  assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: rejected, database }), true);
-
-  const rows = normalizeSmsUseRows([{ key: LEGACY_DOCUMENTS_REVIEWED, active: true }, { key: approved, active: false }]);
-  assert.equal(rows.find(({ key }) => key === approved).active, false);
-  assert.equal(rows.find(({ key }) => key === rejected).active, true);
-
-  await setSmsUseActive({ municipalityId: MUNICIPALITY, use: rejected, active: false, database });
-  assert.deepEqual(database.configs.get(keyOf(MUNICIPALITY)), { active: { [approved]: true, [rejected]: false } });
-  assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: approved, database }), true);
-  assert.equal(await isSmsUseOn({ municipalityId: MUNICIPALITY, use: rejected, database }), false);
 });
 
 test("a municipality starts with the defaults, and the switches of one never show in another", async (t) => {

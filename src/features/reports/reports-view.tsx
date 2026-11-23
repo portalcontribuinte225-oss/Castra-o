@@ -1,24 +1,24 @@
 import { useMemo, useState } from "react";
 import { Download, FileText, Search } from "lucide-react";
-import { Button } from "../components/button";
-import { Card } from "../components/card";
-import { EmptyState } from "../components/ui";
-import { formatScheduleDate, initialTeams, normalizeRequest } from "../domain";
-import type { AnyRecord } from "../types";
-import { animalNeighborhoodsOf, neighborhoodFilterOptions, tutorNeighborhoodOf } from "./neighborhoods/neighborhood-report";
-import { printHtmlViaIframe } from "./reports/print-html";
-import { ActiveFiltersBar } from "./request-filters/active-filters-bar";
-import { RequestFiltersDrawer } from "./request-filters/request-filters-drawer";
-import { RequestFiltersToolbar } from "./request-filters/request-filters-toolbar";
-import { requestFiltersReducer, RequestFiltersActionType, type RequestFiltersAction } from "./request-filters/use-request-filters";
-import { buildOperationalReport, reportColumns } from "./reports/operational-report";
-import { ReportFilterFields } from "./reports/report-filter-fields";
+import { Button } from "../../components/button";
+import { Card } from "../../components/card";
+import { EmptyState } from "../../components/ui";
+import { formatScheduleDate, initialTeams, normalizeRequest } from "../../domain";
+import type { AnyRecord } from "../../types";
+import { animalNeighborhoodsOf, neighborhoodFilterOptions, tutorNeighborhoodOf } from "../neighborhoods/neighborhood-report";
+import { printHtmlViaIframe } from "./print-html";
+import { ActiveFiltersBar } from "../request-filters/active-filters-bar";
+import { RequestFiltersDrawer } from "../request-filters/request-filters-drawer";
+import { RequestFiltersToolbar } from "../request-filters/request-filters-toolbar";
+import { requestFiltersReducer, RequestFiltersActionType, type RequestFiltersAction } from "../request-filters/use-request-filters";
+import { buildOperationalReport, reportColumns } from "./operational-report";
+import { ReportFilterFields } from "./report-filter-fields";
 import {
   buildReportFilterDetails, buildReportPills, buildReportScope, clearReportFilter,
   emptyReportQuery, hasInvalidReportPeriod, hasReportFilters,
-} from "./reports/report-filters";
-import type { ReportDimension, ReportQuery } from "./reports/report-filters";
-import { buildReportPrintHtml } from "./reports/report-print";
+} from "./report-filters";
+import type { ReportDimension, ReportQuery } from "./report-filters";
+import { buildReportPrintHtml } from "./report-print";
 
 const REPORT_PAGE_SIZE = 50;
 

@@ -1,3 +1,4 @@
+import { RequestStatus } from "../shared/request-contract.js";
 import type { AnyRecord } from "./types";
 import { initialTeams, normalizeRequest, requestTypeLabel, storedRequestTypeNames } from "./domain";
 
@@ -58,7 +59,7 @@ export function getRequestClosedByName(request: AnyRecord = {}, teams: AnyRecord
     if (!item || typeof item === "string") return false;
     const status = String(item.status || "");
     const notes = String(item.notes || "");
-    return status === "REALIZADA" || status === "CANCELADA" || status === "ARQUIVADA" || /comparec|cancel|indefer/i.test(notes);
+    return status === RequestStatus.COMPLETED || status === RequestStatus.CANCELLED || /comparec|cancel|indefer/i.test(notes);
   });
   const byFromEntry = getTeamUserName(closingEntry?.by, teams, currentUser);
   if (byFromEntry) return byFromEntry;

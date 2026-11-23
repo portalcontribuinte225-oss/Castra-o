@@ -9,7 +9,7 @@ import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { insertRequestCreatedNotification } from "../repositories/staff-notifications.js";
 import { nextDocumentNumber } from "../repositories/document-numbers.js";
 import { DocumentSequence } from "../../../shared/document-number-contract.js";
-import { withoutRequestContactCpf } from "../../../shared/request-contract.js";
+import { RequestTag, withoutRequestContactCpf } from "../../../shared/request-contract.js";
 
 const router = Router();
 router.get("/mine", auth, animalEndpoint(mine));
@@ -77,99 +77,6 @@ function readAnimalSelector(body = {}) {
   }
   const microchip = normalizeMicrochip(body.microchip);
   return microchip.length >= 4 && microchip.length <= 32 ? { microchip } : { error: "Microchip invalido." };
-}
-
-async function fetchLegacyAnimalRequest(client, microchip, req) {
-  const owner = requestOwnerScope(req, "r", 3);
-  const { rows } = await client.query(
-    `SELECT r.*, elem AS matched_animal
-     FROM requests r
-     JOIN LATERAL jsonb_array_elements(COALESCE(r.animals, '[]'::jsonb)) elem ON TRUE
-     WHERE regexp_replace(upper(COALESCE(elem->>'microchip', '')), '[^A-Z0-9]', '', 'g') = $1
-       AND r.municipality_id = $2${owner.sql}
-     ORDER BY r.created_at DESC
-     LIMIT 1`,
-    [microchip, pickMunicipalityId(req), ...owner.values],
-  );
-  return rows[0] || null;
-}
-
-async function ensureAnimalFromLegacyRequest(client, microchip, req) {
-  const existing = await fetchAnimalByMicrochip(client, microchip, pickMunicipalityId(req));
-  if (existing) return existing;
-
-  // An externally submitted microchip is not proof of ownership of an existing animal.
-  if (!isInternalUser(req.user)) return null;
-  const request = await fetchLegacyAnimalRequest(client, microchip, req);
-  if (!request) return null;
-
-  const animalData = request.matched_animal || {};
-  const registeredId = animalData.id || (request.animals?.length === 1 ? request.animal_id : null);
-  if (registeredId) return fetchAnimalById(client, registeredId, pickMunicipalityId(req));
-  const { rows } = await client.query(
-    `INSERT INTO animals (microchip, name, species, sex, size, breed, color, metadata)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)
-     ON CONFLICT (microchip) DO NOTHING
-     RETURNING *`,
-    [
-      microchip,
-      pick(animalData.name, request.animal_name),
-      pick(animalData.species, request.species),
-      animalData.sex || null,
-      pick(animalData.size, request.size),
-      animalData.breed || null,
-      animalData.color || null,
-      JSON.stringify({ source: "requests", request_id: request.id }),
-    ],
-  );
-  const animal = rows[0];
-  if (!animal) return null;
-
-  const cpf = normalizeCpf(request.cpf);
-  if (cpf) {
-    await client.query(
-      `INSERT INTO animal_tutors (
-        animal_id, user_id, tutor_name, tutor_email, cpf, phone, address,
-        neighborhood, city, state, cep, active, started_at
-      )
-      SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, TRUE, COALESCE($12, NOW())
-      WHERE NOT EXISTS (
-        SELECT 1 FROM animal_tutors WHERE animal_id = $1 AND cpf = $5 AND active = TRUE
-      )`,
-      [
-        animal.id,
-        request.tutor_id,
-        request.tutor_name,
-        request.tutor_email,
-        cpf,
-        request.phone,
-        request.address,
-        request.neighborhood,
-        request.city,
-        request.state,
-        request.cep,
-        request.created_at,
-      ],
-    );
-  }
-
-  await client.query(
-    `INSERT INTO animal_records (animal_id, request_id, municipality_id, record_type, title, data, occurred_at)
-     SELECT $1, $2, $3, 'IMPORTACAO_SOLICITACAO', 'Animal vinculado por microchip', $4::jsonb, COALESCE($5, NOW())
-     WHERE NOT EXISTS (
-       SELECT 1 FROM animal_records
-       WHERE animal_id = $1 AND request_id = $2 AND record_type = 'IMPORTACAO_SOLICITACAO'
-     )`,
-    [
-      animal.id,
-      request.id,
-      request.municipality_id,
-      JSON.stringify({ protocol: request.protocol, microchip }),
-      request.created_at,
-    ],
-  );
-
-  return animal;
 }
 
 async function isUserAuthorizedForAnimal(client, user, animal, municipalityId) {
@@ -325,17 +232,12 @@ router.post("/lookup", auth, requireAnimalContext, async (req, res) => {
 
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    if (isInternalUser(req.user)) await lockMunicipalSchedule(client, pickMunicipalityId(req));
-    const animal = await ensureAnimalFromLegacyRequest(client, microchip, req);
+    const animal = await fetchAnimalByMicrochip(client, microchip, pickMunicipalityId(req));
     if (!animal || !await isUserAuthorizedForAnimal(client, req.user, animal, pickMunicipalityId(req))) {
-      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Animal não encontrado ou consulta não autorizada." });
     }
-    await client.query("COMMIT");
     res.json({ found: true, animal: publicAnimal(animal) });
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -348,33 +250,22 @@ router.post("/consult", auth, requireAnimalContext, async (req, res) => {
 
   const client = await pool.connect();
   try {
-    await client.query("BEGIN");
-    if (isInternalUser(req.user)) await lockMunicipalSchedule(client, pickMunicipalityId(req));
     const animal = selector.animalId
       ? await fetchAnimalById(client, selector.animalId, pickMunicipalityId(req))
-      : await ensureAnimalFromLegacyRequest(client, selector.microchip, req);
-    if (!animal) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ error: "Animal nao encontrado." });
-    }
+      : await fetchAnimalByMicrochip(client, selector.microchip, pickMunicipalityId(req));
+    if (!animal) return res.status(404).json({ error: "Animal nao encontrado." });
 
     const authorized = await isUserAuthorizedForAnimal(client, req.user, animal, pickMunicipalityId(req));
-    if (!authorized) {
-      await client.query("ROLLBACK");
-      return res.status(403).json({ error: "Consulta nao autorizada para este animal." });
-    }
+    if (!authorized) return res.status(403).json({ error: "Consulta nao autorizada para este animal." });
 
     const tutor = await fetchActiveTutor(client, animal.id, req);
     const history = await buildAnimalHistory(client, animal, req);
-    await client.query("COMMIT");
-
     res.json({
       animal,
       tutor,
       history,
     });
   } catch (err) {
-    await client.query("ROLLBACK").catch(() => {});
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -454,7 +345,7 @@ router.post("/:id/death", auth, requireAnimalContext, async (req, res) => {
         notes,
         deathDate || null,
         deathCause || null,
-        JSON.stringify(["MICROCHIP", "OBITO"]),
+        JSON.stringify([RequestTag.MICROCHIP, RequestTag.DEATH]),
         JSON.stringify(workflowData),
         municipalityId,
       ],
@@ -574,7 +465,7 @@ router.post("/:id/transfer", auth, requireAnimalContext, async (req, res) => {
         target.city,
         target.state,
         target.cep,
-        JSON.stringify(["MICROCHIP", "TROCA_TUTOR"]),
+        JSON.stringify([RequestTag.MICROCHIP, RequestTag.TRANSFER]),
         JSON.stringify(workflowData),
         municipalityId,
       ],

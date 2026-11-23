@@ -4,7 +4,7 @@ import { formatScheduleDate } from "./notification-message.js";
 const MAX_PARAMETER_LENGTH = 1024;
 const EMPTY_PARAMETER = "não informado";
 
-// Only mapped fields are resolved: never arbitrary request properties, CPF, contacts or the legacy validation key.
+// Only mapped fields are resolved: never arbitrary request properties, the CPF or the contacts.
 export function resolveWhatsappField(field, request = {}) {
   const workflow = request.workflow_data || request.workflowData || {};
   const values = {

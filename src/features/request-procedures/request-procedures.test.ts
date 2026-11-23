@@ -121,10 +121,10 @@ describe("procedureSignature and needsProcedure", () => {
     expect(procedureSignature([])).toBe("");
   });
 
-  it("asks for a procedure only when the municipality has types to choose from", () => {
-    expect(needsProcedure(dog(), true)).toBe(true);
-    expect(needsProcedure(dog({ requestTypeIds: ["castration"] }), true)).toBe(false);
-    expect(needsProcedure(dog(), false)).toBe(false);
+  it("asks every animal for at least one procedure", () => {
+    expect(needsProcedure(dog())).toBe(true);
+    expect(needsProcedure(dog({ requestTypeIds: [] }))).toBe(true);
+    expect(needsProcedure(dog({ requestTypeIds: ["castration"] }))).toBe(false);
   });
 });
 

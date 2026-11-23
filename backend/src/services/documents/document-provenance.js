@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { authenticatedDigest, safeDigestEqual } from "../auth/auth-security.js";
 
 function receiptPayload(document) {
@@ -19,8 +18,4 @@ export function hasValidDocumentReceipt(document, source) {
   if (document?.receipt?.version !== 1 || document.requestId !== source.id
     || (document.ownerUserId || null) !== (source.tutor_id || null) || document.municipalityId !== source.municipality_id) return false;
   return safeDigestEqual(document.receipt.digest, signDocumentReceipt(document).digest);
-}
-
-export function legacyAttachmentId(requestId, index, hash) {
-  return `legacy-${index}-${createHash("sha256").update(JSON.stringify([requestId, index, hash])).digest("hex")}`;
 }

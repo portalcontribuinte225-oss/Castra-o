@@ -75,7 +75,7 @@ test("a review and an attendance transition remain distinct events", () => {
   }), [NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.COMPLETED]);
 });
 
-test("malformed legacy document entries do not suppress an agenda event", () => {
+test("malformed document entries do not suppress an agenda event", () => {
   assert.deepEqual(selectNotificationEvents({ status: "NOVA", documents: [null, "invalid"] }, {
     status: "AGENDADA", documents: [null, "invalid"],
   }), [NotificationEvent.SCHEDULE_CONFIRMED]);

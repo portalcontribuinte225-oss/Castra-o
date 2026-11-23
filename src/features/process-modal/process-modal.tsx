@@ -7,7 +7,7 @@ import { RequestType, displayText, getItemMunicipalityId, normalizeRequest, norm
 import type { AnyRecord } from "../../types";
 import { getUserUploadedProcessDocuments } from "../../utils";
 import { neighborhoodNames } from "../neighborhoods/neighborhoods";
-import { getSpecialRequestSection, specialRequestConfirmLabel } from "../request-analysis-sections";
+import { getSpecialRequestSection, specialRequestConfirmLabel } from "./special-request-sections";
 import { TutorDataTab } from "../tutor-data/tutor-data-tab";
 import { generateProcessReportPdf } from "../process-report/process-report-pdf";
 import { AttachmentsTab } from "./attachments-tab";

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { NO_SHOW_CANCEL_REASON } from "../../../shared/notification-contract.js";
-import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE } from "../adoption-status";
+import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE } from "../adoption/adoption-status";
 import type { DashboardData } from "./dashboard-data";
 import { DashboardPeriod, periodRange, previousPeriodRange, seriesGrouping } from "./dashboard-period";
 import { TEST_NOW, testRequest } from "./dashboard-test-requests";

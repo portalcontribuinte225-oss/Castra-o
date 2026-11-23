@@ -1,5 +1,5 @@
 import { emailUses, getEmailUse } from "./email-uses-contract.js";
-import { inheritDocumentNoticeValues, isUseOn, normalizeUseSwitches } from "./use-switches-contract.js";
+import { isUseOn, normalizeUseSwitches } from "./use-switches-contract.js";
 
 export const EMAIL_SETTINGS_PERMISSION = "email_settings";
 // The template ids belong to the platform (no municipality); the switches belong to each municipality. The account lives in the environment.
@@ -14,7 +14,7 @@ const asObject = (value) => value && typeof value === "object" && !Array.isArray
 
 // Reads the stored `email_templates` row: only known uses with a valid id survive.
 export function normalizeEmailTemplateIds(stored) {
-  const templates = inheritDocumentNoticeValues(asObject(stored).templates);
+  const templates = asObject(asObject(stored).templates);
   return Object.fromEntries(emailUses
     .filter(({ key }) => typeof templates[key] === "string" && EMAIL_ID_PATTERN.test(templates[key].trim()))
     .map(({ key }) => [key, templates[key].trim()]));

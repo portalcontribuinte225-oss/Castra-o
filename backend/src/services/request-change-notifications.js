@@ -61,7 +61,7 @@ function requestForProcedure(request, event, { procedure, animal, previousSchedu
 
 // Each result becomes one entry of the request history. The request was committed already, so a history that cannot be written
 // is reported with the results instead of failing: reporting the request as failed would invite duplicate submissions.
-export async function recordNotificationResults(results, request, { appendHistory, failureChannel = NotificationChannel.EMAIL }) {
+export async function recordNotificationResults(results, request, { appendHistory }) {
   const entries = results.map((result) => ({
     status: request.status, by: "sistema", at: new Date(),
     notes: `${notificationEventLabels[result.event]} — ${channelLabels[result.channel]}: ${deliveryLabels[result.status]}.${result.reason ? ` ${result.reason}` : ""}`,
@@ -72,27 +72,26 @@ export async function recordNotificationResults(results, request, { appendHistor
       await appendHistory(entries, request.id, request.municipality_id);
       request.history = [...(Array.isArray(request.history) ? request.history : []), ...entries];
     } catch {
-      results.push({ channel: failureChannel, status: DeliveryStatus.FAILED, reason: "Operação salva; histórico do envio indisponível." });
+      results.push({ channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED, reason: "Operação salva; histórico do envio indisponível." });
     }
   }
   return results;
 }
 
 export async function notifyRequestChanges(before, after, { appendHistory, dispatch = dispatchNotification, procedureChange = null }) {
-  const legacy = after.workflow_data?.followUp === undefined;
-  const failureChannel = legacy ? NotificationChannel.WHATSAPP : NotificationChannel.EMAIL;
-  if (after.workflow_data?.followUp?.enabled === false) return [];
+  // Only a request whose tutor turned follow-up on is notified.
+  if (after.workflow_data?.followUp?.enabled !== true) return [];
   const selected = selectNotificationEvents(before, after);
-  const events = (procedureChange ? procedureEvents(selected, procedureChange) : selected).filter((event) => !legacy || agendaEvents.has(event));
+  const events = procedureChange ? procedureEvents(selected, procedureChange) : selected;
   const results = [];
   for (const event of events) {
     try {
       const request = procedureChange && (agendaEvents.has(event) || event === NotificationEvent.SCHEDULE_CANCELLED || procedureOutcomes.has(event))
         ? requestForProcedure(after, event, procedureChange) : after;
-      results.push(...await dispatch({ event, request, legacy }));
+      results.push(...await dispatch({ event, request }));
     } catch {
-      results.push({ event, channel: failureChannel, status: DeliveryStatus.FAILED, reason: "Não foi possível preparar a notificação." });
+      results.push({ event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED, reason: "Não foi possível preparar a notificação." });
     }
   }
-  return recordNotificationResults(results, after, { appendHistory, failureChannel });
+  return recordNotificationResults(results, after, { appendHistory });
 }

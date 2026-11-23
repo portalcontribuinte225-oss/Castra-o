@@ -120,7 +120,7 @@ export function allocateScheduleBookings(days, bookings) {
     const date = scheduleDate(booking.date);
     const matches = output.filter((day) => scheduleDate(day.date) === date);
     const exact = booking.occurrenceKey ? matches.filter((day) => day.occurrenceKey === booking.occurrenceKey) : [];
-    // Unknown/ambiguous legacy occurrence consumes conservatively in every matching location.
+    // A booking without an occurrence the agenda still has takes a place in every location of its date, to stay on the safe side.
     const targets = exact.length ? exact : matches;
     for (const day of targets) {
       let count = booking.count;

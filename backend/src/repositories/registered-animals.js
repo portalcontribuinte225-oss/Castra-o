@@ -2,7 +2,7 @@ import { authError } from "../services/auth/auth-security.js";
 import { normalizeAnimalData, animalFingerprint, validUuid } from "../services/registered-animals/animal-data.js";
 import { AnimalTutorship } from "../../../shared/request-tutorship-contract.js";
 
-// Compatibility adapter for the existing pg schema. All identity lookups retain municipal predicates.
+// The registered animals with their tutors and records. Every identity lookup keeps the municipality in its predicates.
 export async function findOwnedAnimal(client, { id, userId, municipalityId, lock = false, internal = false }) {
   if (!validUuid(id)) throw authError(400, "Identificador do animal inválido.");
   const { rows } = await client.query(`SELECT a.* FROM animals a WHERE a.id = $1

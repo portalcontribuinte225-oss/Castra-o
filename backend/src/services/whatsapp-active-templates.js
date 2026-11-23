@@ -1,6 +1,6 @@
 import { DeliveryCode, NotificationEvent } from "../../../shared/notification-contract.js";
 import {
-  WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_APPROVED_STATUS, WHATSAPP_LEGACY_DOCUMENTS_LABEL, WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY, activateTemplate, activeUseKeys,
+  WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_APPROVED_STATUS, WHATSAPP_DOCUMENT_OUTCOMES_LABEL, WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY, activateTemplate, activeUseKeys,
   cleanTemplateIdentity, deactivateTemplate, findTemplateLink, getWhatsappUse, isWhatsappTemplateUsable, noticeStructureReason,
   normalizeActiveTemplates, normalizeTemplateLinks, recognizeWhatsappTemplate, templateFields, templateLinkIssue, whatsappFieldLabels,
 } from "../../../shared/whatsapp-templates-contract.js";
@@ -17,7 +17,7 @@ const sameTemplate = (item, name, language) => item.name === name && item.langua
 
 function templateLabel(uses) {
   if (uses.includes(NotificationEvent.DOCUMENTS_APPROVED) && uses.includes(NotificationEvent.DOCUMENTS_REJECTED)) {
-    return WHATSAPP_LEGACY_DOCUMENTS_LABEL;
+    return WHATSAPP_DOCUMENT_OUTCOMES_LABEL;
   }
   return getWhatsappUse(uses[0])?.groupLabel || "";
 }

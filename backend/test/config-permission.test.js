@@ -64,12 +64,11 @@ test("an inactive, missing or unlinked group counts as no group", async () => {
   assert.equal(await allowed(analyst, database(stranger)), false);
 });
 
-test("the team user is found by id or by e-mail, ignoring case", async () => {
+test("the team user is found only by the account id; an entry with the same e-mail gives nothing", async () => {
   const byEmail = permissionConfigs(A, { users: [{ id: "other-id", email: "analyst@example.TEST", permissionGroupId: "g" }], groups: [permissionGroup("g", [SMS])] });
-  assert.equal(await allowed(analyst, database(byEmail)), true);
-  const noEmail = permissionConfigs(A, { users: [{ id: "other-id", email: "", permissionGroupId: "g" }], groups: [permissionGroup("g", [SMS])] });
-  assert.equal(await allowed({ ...analyst, email: "" }, database(noEmail)), false, "two empty e-mails are not a match");
-  assert.equal(await allowed({ ...analyst, email: undefined }, database(noEmail)), false);
+  assert.equal(await allowed(analyst, database(byEmail)), false);
+  const byId = permissionConfigs(A, { users: [{ id: analyst.id, email: "", permissionGroupId: "g" }], groups: [permissionGroup("g", [SMS])] });
+  assert.equal(await allowed({ ...analyst, email: "" }, database(byId)), true);
 });
 
 test("a municipality's groups never decide for the users of another one", async () => {
@@ -90,15 +89,13 @@ test("malformed configuration is read as no group", async () => {
   }
 });
 
-test("the Requests permission prefers the authenticated ID and accepts one unambiguous legacy team email", () => {
-  const oldAccount = { id: manager.id, email: analyst.email, permissionGroupId: "allowed" };
-  const canonical = { id: analyst.id, email: analyst.email, permissionGroupId: "denied" };
+test("the Requests permission follows only the entry with the account id, never another entry with the same e-mail", () => {
+  const otherAccount = { id: manager.id, email: analyst.email, permissionGroupId: "denied" };
+  const own = { id: analyst.id, email: analyst.email, permissionGroupId: "allowed" };
   const groups = [{ id: "allowed", allowedMenuItems: [REQUESTS_MENU_ITEM] }, { id: "denied", allowedMenuItems: ["dashboard"] }];
   const allows = (...users) => requestsMenuAllowed(analyst, { teams: { users }, groups });
-  assert.equal(allows(oldAccount, canonical), false);
-  assert.equal(allows(oldAccount), false);
-  const legacy = { ...oldAccount, id: "legacy-analyst" };
-  assert.equal(allows(legacy), true);
-  assert.equal(allows(legacy, { ...legacy, id: "another-legacy-entry" }), false);
+  assert.equal(allows(otherAccount, own), true);
+  assert.equal(allows({ ...own, permissionGroupId: "denied" }, { ...otherAccount, permissionGroupId: "allowed" }), false);
+  assert.equal(allows(otherAccount), true, "without an entry of its own the account has no group");
   assert.equal(allows(), true);
 });

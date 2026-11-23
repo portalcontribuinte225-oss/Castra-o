@@ -27,12 +27,7 @@ function wasDocumentConfiguredForRequest(document: AnyRecord, request: AnyRecord
 // The documents the procedures of the request ask for, each once, as the municipality configured them.
 export function requestDocumentTypes(request: AnyRecord, requestTypes: AnyRecord[], documentTypes: AnyRecord[]): AnyRecord[] {
   const workflow = request.workflow_data || request.workflowData;
-  const types = resolveRequestTypes({
-    animals: request.animals,
-    workflow,
-    requestTypeId: workflow?.requestTypeId || requestTypes.find((type) => type.id === request.requestTypeId)?.id,
-    requestType: request.request_type || request.type,
-  }, requestTypes);
+  const types = resolveRequestTypes({ animals: request.animals, workflow }, requestTypes);
   return mergeProcedureDocuments(types.map((type: AnyRecord) => (type.documents || [])
     .map((document: AnyRecord) => normalizeDocumentType({ ...document, ...documentTypes.find((item) => item.id === document.id) }))
     .filter((document: AnyRecord) => document.active !== false && wasDocumentConfiguredForRequest(document, request))));

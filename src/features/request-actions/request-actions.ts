@@ -1,9 +1,10 @@
 import { useCallback, useState } from "react";
-import type { AnyRecord } from "../types";
-import { getItemMunicipalityId, mergeTags, normalizeRequest } from "../domain";
-import { getNotificationNotice } from "./notifications/notification-results";
-import { normalizeText } from "../utils";
-import { REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
+import { RequestTag } from "../../../shared/request-contract.js";
+import type { AnyRecord } from "../../types";
+import { getItemMunicipalityId, mergeTags, normalizeRequest } from "../../domain";
+import { getNotificationNotice } from "../notifications/notification-results";
+import { normalizeText } from "../../utils";
+import { REJECTED_CANCEL_REASON } from "../../../shared/notification-contract.js";
 
 export function canEditRequests(role = ""): boolean {
   return ["master", "suporte", "admin_municipal", "analista", "servidor_publico"].includes(normalizeText(role));
@@ -34,8 +35,7 @@ export function useRequestActions({
 
   const activeUsers = teams.users?.filter((user: AnyRecord) => user.active !== false) || [];
   const activeSectors = teams.sectors?.filter((sector: AnyRecord) => sector.active !== false) || [];
-  const currentTeamUser = activeUsers.find((user: AnyRecord) => user.id === currentUser?.id)
-    || activeUsers.find((user: AnyRecord) => user.email && currentUser?.email && user.email.toLowerCase() === currentUser.email.toLowerCase());
+  const currentTeamUser = activeUsers.find((user: AnyRecord) => currentUser?.id && user.id === currentUser.id);
 
   function showNotificationNotice(updated: AnyRecord) {
     const notice = getNotificationNotice(updated?.notificationResults);
@@ -91,7 +91,7 @@ export function useRequestActions({
       assignedSectorName: sector.name,
       assignedUserId: user.id,
       responsible: user.name || sector.name || "Equipe",
-      tags: mergeTags(request.tags, ["ATRIBUIDA"]),
+      tags: mergeTags(request.tags, [RequestTag.ASSIGNED]),
     };
     try {
       const updated = await patchRequest?.(request.id, patch, `Atribuída para ${sector.name} / ${user.name}`);
@@ -120,7 +120,7 @@ export function useRequestActions({
       assignedSectorName: sector.name,
       assignedUserId: userId,
       responsible: userName,
-      tags: mergeTags(request.tags, ["ATRIBUIDA"]),
+      tags: mergeTags(request.tags, [RequestTag.ASSIGNED]),
     };
     try {
       const updated = await patchRequest?.(request.id, patch, `Assumida por ${userName}`);

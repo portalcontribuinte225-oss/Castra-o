@@ -1,7 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { LEGACY_DOCUMENTS_REVIEWED, NotificationEvent } from "../../../shared/notification-contract.js";
+import { NotificationEvent } from "../../../shared/notification-contract.js";
 import { WhatsappTemplateField } from "../../../shared/whatsapp-templates-contract.js";
 import { useMessageContract } from "../message-contract/use-message-contract";
 import { useWhatsappCredentials } from "./use-whatsapp-credentials";
@@ -196,18 +196,17 @@ describe("template configuration", () => {
     expect(modal({ bodyText: "" })).toContain("Sincronize os templates para ver o texto.");
   });
 
-  it("offers separate document outcomes and keeps a legacy link and its field mapping editable", () => {
-    const legacy = modal({
-      name: "castracao_documentos_analisados", configured: true, linkedUse: LEGACY_DOCUMENTS_REVIEWED,
+  it("offers each document outcome as its own notice and keeps a link and its field mapping editable", () => {
+    const linked = modal({
+      name: "castracao_documentos_analisados", configured: true, linkedUse: NotificationEvent.DOCUMENTS_REJECTED,
       bodyText: "Olá {{1}}, confira os documentos do protocolo {{2}}.", bodyVariables: 2, fields: ["tutor_name", "protocol"],
     });
-    expect(legacy).toContain('<option value="documents_reviewed" selected="">Documentos deferidos e indeferidos</option>');
-    expect(legacy).toContain('<option value="documents_approved">Documentos deferidos</option>');
-    expect(legacy).toContain('<option value="documents_rejected">Documentos indeferidos</option>');
-    expect(legacy).toContain("Olá Maria Silva, confira os documentos do protocolo 123/2026.");
+    expect(linked).toContain('<option value="documents_approved">Documentos deferidos</option>');
+    expect(linked).toContain('<option value="documents_rejected" selected="">Documentos indeferidos</option>');
+    expect(linked).toContain("Olá Maria Silva, confira os documentos do protocolo 123/2026.");
     const distinct = modal({ uses: [NotificationEvent.DOCUMENTS_APPROVED], bodyVariables: 2, fields: ["protocol", "notification_message"] });
     expect(distinct).toContain('<option value="documents_approved" selected="">Documentos deferidos</option>');
-    expect(distinct).not.toContain('value="documents_reviewed"');
+    expect(distinct).not.toContain("Documentos deferidos e indeferidos");
   });
 });
 

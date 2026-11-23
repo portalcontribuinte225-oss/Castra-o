@@ -28,10 +28,10 @@ const clone = (value) => structuredClone(value);
 
 function procedureBody(overrides = {}) {
   return {
-    municipalityId: MUNICIPALITY_ID, requestTypeId: "castration", type: "Castração", declarationAccepted: true,
+    municipalityId: MUNICIPALITY_ID, type: "Castração", declarationAccepted: true,
     // The agenda is a fixed step: a public procedure always comes with the date it chose.
     preferredSchedule: FUTURE_DATE,
-    animals: [{ species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida" }],
+    animals: [{ species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida", neighborhood: "Centro", requestTypeIds: ["castration"] }],
     workflow_data: { tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp: { enabled: false } }, ...overrides,
   };
 }
@@ -86,9 +86,8 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
           pendingStaffNotifications.push(values);
           return { rows: [] };
         }
-        if (sql.includes("FROM users u JOIN municipalities m") && sql.includes("u.id = ANY")) {
-          return { rows: staffAccounts.filter((user) => user.municipality_id === values[0]
-            && (values[1].includes(user.id) || values[2].includes(user.email))) };
+        if (sql.includes("FROM users u JOIN municipalities m") && sql.includes("u.id = $2")) {
+          return { rows: staffAccounts.filter((user) => user.municipality_id === values[0] && user.id === values[1]) };
         }
         if (sql.includes("INSERT INTO auth_rate_limits")) return { rows: [{ attempts: 1 }] };
         if (sql.includes("DELETE FROM auth_rate_limits")) return { rows: [] };
@@ -263,7 +262,8 @@ test("forged origin, skipTutor and stepTutor flags cannot dispense CPF", async (
 
 test("unknown request types and authenticated tutor identity cannot use no-Tutor CPF exemption", async (t) => {
   const { request, row } = await fixture(t);
-  assert.equal((await request({ body: procedureBody({ requestTypeId: undefined, type: "unknown" }) })).status, 400);
+  assert.equal((await request({ body: procedureBody({ animals: [{ ...procedureBody().animals[0], requestTypeIds: ["unknown"] }] }) })).status, 400);
+  assert.equal((await request({ body: procedureBody({ animals: [{ ...procedureBody().animals[0], requestTypeIds: undefined }], requestTypeId: "castration" }) })).status, 400);
   assert.equal((await request({ user: { ...ADMIN, role: "tutor" }, body: procedureBody() })).status, 400);
   assert.equal((await request({ body: procedureBody({ cpf: "invalid" }) })).status, 400);
   assert.equal(row(), null);
@@ -473,7 +473,7 @@ test("concurrent identical PATCHes serialize snapshots and produce only one noti
   assert.equal(stats.calls.slice(0, firstNotificationRead).some(({ sql }) => sql === "COMMIT"), true);
 });
 
-test("assignment is serialized, resolves legacy accounts and alerts an eligible reassignment", async (t) => {
+test("assignment is serialized and alerts the account of an eligible reassignment", async (t) => {
   const staff = (id, email, rest = {}) => ({ id, email, role: "analista", municipality_id: MUNICIPALITY_ID, active: true, ...rest });
   const first = staff("55555555-5555-4555-8555-555555555555", "first@example.test");
   const second = staff("66666666-6666-4666-8666-666666666666", "second@example.test");
@@ -482,11 +482,11 @@ test("assignment is serialized, resolves legacy accounts and alerts an eligible 
   const denied = staff("99999999-9999-4999-8999-999999999999", "denied@example.test");
   const { request, stats } = await fixture(t, {
     existing: pendingRequest(), staffAccounts: [first, second, remote, inactive, denied],
-    teamUsers: [{ id: "legacy-first", email: first.email }, { id: denied.id, permissionGroupId: "dashboard" }],
+    teamUsers: [{ id: first.id, email: first.email }, { id: denied.id, permissionGroupId: "dashboard" }],
     permissionGroups: [{ id: "dashboard", allowedMenuItems: ["dashboard"] }],
   });
   const assign = (assignedUserId) => request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { assignedUserId } });
-  const concurrent = await Promise.all([assign("legacy-first"), assign("legacy-first")]);
+  const concurrent = await Promise.all([assign(first.id), assign(first.id)]);
   assert.ok(concurrent.every(({ status }) => status === 200));
   assert.deepEqual(stats.staffNotifications.map((event) => event[3]), [first.id]);
   for (const next of [first.id, second.id, first.id, ADMIN.id, remote.id, inactive.id, denied.id]) {
@@ -564,7 +564,7 @@ test("a municipality that uses no channel for the notice leaves no result and no
 
 test("HTTP submissions share the last agenda place without leaking another request", async (t) => {
   const { request, stats } = await fixture(t);
-  const payload = procedureBody({ animals:Array.from({length:10},()=>({species:"Cão",sex:"Macho",size:"Pequeno",breedType:"Indefinida"})), preferredSchedule:FUTURE_DATE });
+  const payload = procedureBody({ animals:Array.from({length:10},()=>({species:"Cão",sex:"Macho",size:"Pequeno",breedType:"Indefinida",neighborhood:"Centro",requestTypeIds:["castration"]})), preferredSchedule:FUTURE_DATE });
   const results = await Promise.all([request({body:payload}),request({body:payload})]);
   assert.deepEqual(results.map(r=>r.status).sort(),[201,409]);
   const rejected = results.find(r=>r.status===409);
@@ -574,9 +574,9 @@ test("HTTP submissions share the last agenda place without leaking another reque
   assert.equal(forgedCancellation.status,409, "A public status hint must not bypass the reservation of a new NOVA request");
 });
 
-test("public requestType alias cannot omit the configured mandatory document", async (t) => {
+test("a public procedure cannot omit the configured mandatory document", async (t) => {
   const { request, stats } = await fixture(t, { requiredDocument: true });
-  const result = await request({ body: procedureBody({ type: undefined, requestTypeId: undefined, requestType: "Castração" }) });
+  const result = await request({ body: procedureBody() });
   assert.equal(result.status, 400);
   assert.match(result.body.error, /documento obrigatório/i);
   assert.equal(stats.calls.some(({ sql }) => sql === "COMMIT"), false);
