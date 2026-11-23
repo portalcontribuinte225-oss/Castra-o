@@ -85,22 +85,19 @@ export function PrescriptionDialog({ request, animal, procedure, municipality, d
             <ConfigField label="Profissional responsável" value={form.professionalName} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={!canSave || pending} onChange={(value) => setForm((current) => ({ ...current, professionalName: value }))} />
             <ConfigField label="Registro profissional" value={form.professionalRegistry} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={!canSave || pending} placeholder="Ex.: CRMV-SC 12345" onChange={(value) => setForm((current) => ({ ...current, professionalRegistry: value }))} />
           </div>
-          <div className="prescription-rx-area">
-            <span className="prescription-rx-symbol">Rx</span>
-            <label className={configFieldStyle}>
-              <span>Prescrição e orientações</span>
-              <textarea
-                data-ui-input=""
-                className={`${configTextareaStyle} tw:min-h-[200px] tw:resize-y tw:font-mono tw:leading-relaxed`}
-                value={form.text}
-                maxLength={MAX_PRESCRIPTION_TEXT}
-                readOnly={!canSave || pending}
-                onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))}
-                placeholder="Escreva a prescrição e as orientações para o tutor."
-                rows={10}
-              />
-            </label>
-          </div>
+          <label className={configFieldStyle}>
+            <span>Prescrição e orientações</span>
+            <textarea
+              data-ui-input=""
+              className={`${configTextareaStyle} tw:min-h-[200px] tw:resize-y tw:font-mono tw:leading-relaxed`}
+              value={form.text}
+              maxLength={MAX_PRESCRIPTION_TEXT}
+              readOnly={!canSave || pending}
+              onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))}
+              placeholder="Escreva a prescrição e as orientações para o tutor."
+              rows={10}
+            />
+          </label>
           {pdfError && <p role="alert">{pdfError}</p>}
         </div>
         <footer className="prescription-modal-footer">

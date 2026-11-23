@@ -2141,21 +2141,6 @@ main {
 }
 
 
-.prescription-rx-area {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.prescription-rx-symbol {
-  font-size: 2rem;
-  font-style: italic;
-  font-weight: 700;
-  color: #15803d;
-  line-height: 1;
-  font-family: Georgia, serif;
-}
-
 .prescription-modal-footer {
   padding: 12px 20px;
   border-top: 1px solid #e8eef6;
