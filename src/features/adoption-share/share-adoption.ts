@@ -23,9 +23,13 @@ export function adoptionShareUrl(origin: string, id: string): string {
   return `${origin}${adoptionSharePath(id)}`;
 }
 
+export function adoptionAnimalName(animal: { name?: string; animal_name?: string }): string {
+  return String(animal.name || animal.animal_name || "").trim();
+}
+
 // What goes along with the link: the animal's name in the title and a line inviting to meet it.
 export function adoptionShareDetails(animal: { id: string; name?: string; animal_name?: string }, origin: string): ShareDetails {
-  const name = String(animal.name || animal.animal_name || "").trim();
+  const name = adoptionAnimalName(animal);
   return {
     title: name ? `${name} para adoção` : "Animal para adoção",
     text: `Conheça ${name || "este animal"}, que está esperando por um lar.`,

@@ -1447,10 +1447,13 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
                 </div>
               </button>
               <div className="public-animal-footer">
-                <span className={interestCount > 0 ? "public-interest-count has-interest" : "public-interest-count"}>
-                  <Users size={13} />
-                  {interestCount} interessado{interestCount === 1 ? "" : "s"}
-                </span>
+                <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
+                  <span className={interestCount > 0 ? "public-interest-count has-interest" : "public-interest-count"}>
+                    <Users size={13} />
+                    {interestCount} interessado{interestCount === 1 ? "" : "s"}
+                  </span>
+                  <ShareAdoptionButton animal={animal} iconOnly />
+                </div>
                 <Button
                   className="tw:w-full"
                   onClick={() => openAnimalModal(animal, true)}
@@ -3404,6 +3407,10 @@ const adoptionSelectedButtonStyle = "tw:border-card-border tw:bg-card-surface tw
 const adoptionPrimaryButtonStyle = "tw:border-[color:var(--action-primary-border)] tw:bg-[var(--action-primary)] tw:font-semibold tw:text-[color:var(--action-primary-ink)] tw:enabled:hover:bg-[var(--action-primary-hover)]";
 const adoptionIconButtonStyle = "tw:w-10 tw:shrink-0 tw:px-0";
 const adoptionBlueButtonStyle = "tw:border-[color:var(--teal)] tw:bg-[var(--teal)] tw:text-white tw:enabled:hover:brightness-95";
+// Small translucent controls over the photo of an adoption card: the dark glass keeps them readable on light and dark photos.
+const adoptionPhotoControlStyle = "tw:absolute tw:top-2 tw:z-[3] tw:inline-flex tw:h-7 tw:min-w-7 tw:items-center tw:justify-center tw:gap-1 tw:rounded-full tw:border-0 tw:bg-slate-900/45 tw:px-2 tw:text-xs tw:text-white tw:backdrop-blur-sm tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-white";
+// Icon actions of an adoption card without border or fill: the color stays in the icon and the hover brings a light background.
+const adoptionGhostIconButtonStyle = `${adoptionIconButtonStyle} tw:border-transparent tw:bg-transparent tw:enabled:hover:bg-card-page`;
 
 function AdoptionChoiceGroup({ label, choices, value, onChange }: { label: string; choices: AdoptionChoice[]; value: string; onChange: (value: string) => void }) {
   return (
@@ -3870,29 +3877,29 @@ function AdoptionView({
 
                       {canManageAdoptions && (
                         <>
-                          <Button variant="danger" className={`${adoptionIconButtonStyle} tw:absolute tw:right-2 tw:top-2 tw:z-[3]`} aria-label={`Excluir ${displayName}`} onClick={() => deleteAnimal(animal)}>
+                          <button type="button" className={`${adoptionPhotoControlStyle} tw:right-2 tw:hover:bg-ui-danger`} aria-label={`Excluir ${displayName}`} onClick={() => deleteAnimal(animal)}>
                             <X size={14} aria-hidden="true" />
-                          </Button>
-                          <Button
-                            variant="custom"
-                            className={`tw:absolute tw:left-2 tw:top-2 tw:z-[3] ${interestCount > 0 ? "tw:border-ui-accent tw:bg-ui-accent-soft tw:text-ui-accent-strong" : "tw:border-card-border tw:bg-card-surface tw:text-ui-muted"}`}
+                          </button>
+                          <button
+                            type="button"
+                            className={`${adoptionPhotoControlStyle} tw:left-2 tw:hover:bg-slate-900/65`}
                             onClick={(event) => openInterestsModal(animal, event.currentTarget)}
                             title="Interessados"
                             aria-label={`Interessados em ${displayName}: ${interestCount}`}
                           >
                             <Users size={13} aria-hidden="true" />
-                            <span>{interestCount}</span>
-                          </Button>
+                            <span className={interestCount > 0 ? "tw:font-semibold" : undefined}>{interestCount}</span>
+                          </button>
                           <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-1.5 tw:p-2">
-                            <Button variant="outline" className={adoptionIconButtonStyle} onClick={(event) => editAnimal(animal, event.currentTarget)} title="Editar" aria-label={`Editar ${displayName}`}>
+                            <Button variant="custom" className={`${adoptionGhostIconButtonStyle} tw:text-ui-muted tw:enabled:hover:text-ui-ink`} onClick={(event) => editAnimal(animal, event.currentTarget)} title="Editar" aria-label={`Editar ${displayName}`}>
                               <Edit3 size={15} aria-hidden="true" />
                             </Button>
                             {animal.status === ADOPTION_STATUS_ADOPTED ? (
-                              <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label={`Reativar ${displayName}`}>
+                              <Button variant="custom" className={`${adoptionGhostIconButtonStyle} tw:text-[color:var(--teal)]`} onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label={`Reativar ${displayName}`}>
                                 <RefreshCw size={15} aria-hidden="true" />
                               </Button>
                             ) : (
-                              <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={(event) => openAdoptionConfirmModal(animal, event.currentTarget)} title="Concluir adoção" aria-label={`Concluir adoção de ${displayName}`}>
+                              <Button variant="custom" className={`${adoptionGhostIconButtonStyle} tw:text-[color:var(--teal)]`} onClick={(event) => openAdoptionConfirmModal(animal, event.currentTarget)} title="Concluir adoção" aria-label={`Concluir adoção de ${displayName}`}>
                                 <CheckCircle2 size={15} aria-hidden="true" />
                               </Button>
                             )}
