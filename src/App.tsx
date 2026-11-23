@@ -1306,6 +1306,8 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [selectedAnimal, setSelectedAnimal] = useState(null);
   const [photoIndex, setPhotoIndex] = useState(0);
+  // The photo each card is showing, so the window opens on it.
+  const cardPhotoIndex = useRef(new Map<string, number>());
   const [showInterestForm, setShowInterestForm] = useState(false);
   const [interestSent, setInterestSent] = useState(false);
   const [interestForm, setInterestForm] = useState({ name: "", phone: "", visit_date: "" });
@@ -1356,10 +1358,10 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   // The phone's back closes the animal's window instead of leaving the page.
   useBackLayer(adoptionOpen, closeAnimalModal);
 
-  function openAnimalModal(animal, openInterestForm = false) {
+  function openAnimalModal(animal, openInterestForm = false, startPhoto?: number) {
     interestRequest.current = null;
     setSelectedAnimal(animal);
-    setPhotoIndex(animal.mainPhotoIndex || 0);
+    setPhotoIndex(startPhoto ?? (animal.mainPhotoIndex || 0));
     setShowInterestForm(openInterestForm);
     setInterestSent(false);
     setInterestSaving(false);
@@ -1435,6 +1437,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
         )}
         {filteredAnimals.map((animal) => {
           const displayName = String(animal.name || animal.animal_name || "Animal").trim();
+          const cardKey = String(animal.id || animal.name);
           const interestCount = getAdoptionInterestCount(animal);
           const highlighted = isAdoptionHighlighted(animal);
           return (
@@ -1443,11 +1446,18 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
               className={`public-animal-card tw:grid tw:grid-rows-[1fr_auto] tw:overflow-hidden tw:shadow-sm tw:motion-safe:transition-shadow tw:hover:shadow-md${highlighted ? " is-highlighted" : ""}`}
               key={animal.id || animal.name}
             >
-              <button className="tw:grid tw:h-full tw:w-full tw:border-0 tw:bg-transparent tw:p-0 tw:text-inherit tw:focus-visible:outline-2 tw:focus-visible:-outline-offset-2 tw:focus-visible:outline-ui-accent" type="button" aria-label={`Ver detalhes de ${displayName}`} onClick={() => openAnimalModal(animal)}>
-                <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
-                  {getAnimalMainPhoto(animal) ? <img src={getAnimalMainPhoto(animal)} alt={displayName} /> : <PawPrint size={24} />}
-                </div>
-              </button>
+              <div className={`public-animal-photo ${getAnimalGradient(animal)}`}>
+                <AdoptionPhotoCarousel
+                  photos={getAnimalPhotos(animal)}
+                  startIndex={animal.mainPhotoIndex || 0}
+                  name={displayName}
+                  fallbackClassName={getAnimalGradient(animal)}
+                  fallbackIconSize={24}
+                  deferOtherPhotos
+                  onIndexChange={(index) => cardPhotoIndex.current.set(cardKey, index)}
+                  onPhotoClick={(index) => openAnimalModal(animal, false, index)}
+                />
+              </div>
               <div className="public-animal-footer">
                 <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
                   <span className={interestCount > 0 ? "public-interest-count has-interest" : "public-interest-count"}>
@@ -1458,7 +1468,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
                 </div>
                 <Button
                   className="tw:w-full"
-                  onClick={() => openAnimalModal(animal, true)}
+                  onClick={() => openAnimalModal(animal, true, cardPhotoIndex.current.get(cardKey))}
                 >
                   <HeartHandshake size={14} />
                   Quero adotar

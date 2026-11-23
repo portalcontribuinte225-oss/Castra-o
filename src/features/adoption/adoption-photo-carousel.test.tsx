@@ -47,6 +47,31 @@ describe("adoption photo carousel", () => {
     expect(html).toContain("<svg");
   });
 
+  it("opens the animal from a photo of a card, on the photo that was showing", () => {
+    const html = renderToStaticMarkup(
+      <AdoptionPhotoCarousel photos={[photo(1), photo(2)]} startIndex={0} name="Mel" fallbackClassName="photo-teal" onIndexChange={noop} onPhotoClick={noop} />,
+    );
+    expect(html).toMatch(/<button type="button"[^>]*aria-label="Ver detalhes de Mel, foto 1 de 2" tabindex="0"><img src="[^"]*animal-1\.jpg" alt=""/);
+    // Only the photo showing takes the focus: a card stays a single stop for the keyboard.
+    expect(html).toContain('aria-label="Ver detalhes de Mel, foto 2 de 2" tabindex="-1"');
+  });
+
+  it("loads only the main photo of a card until the person uses the carousel", () => {
+    const html = renderToStaticMarkup(
+      <AdoptionPhotoCarousel photos={[photo(1), photo(2), photo(3)]} startIndex={2} name="Mel" fallbackClassName="photo-teal" deferOtherPhotos onIndexChange={noop} onPhotoClick={noop} />,
+    );
+    expect(html.match(/<img/g)).toHaveLength(1);
+    expect(html).toContain("animal-3.jpg");
+    expect(html.match(/aria-label="Foto \d de 3"/g)).toHaveLength(3);
+  });
+
+  it("opens an animal without a photo from its paw", () => {
+    const html = renderToStaticMarkup(
+      <AdoptionPhotoCarousel photos={[]} startIndex={0} name="Mel" fallbackClassName="photo-rose" fallbackIconSize={24} onIndexChange={noop} onPhotoClick={noop} />,
+    );
+    expect(html).toMatch(/<button type="button" class="[^"]*photo-rose[^"]*" aria-label="Ver detalhes de Mel"><svg[^>]*width="24"/);
+  });
+
   it("keeps the photo that was showing as a thumbnail, or the paw without a photo", () => {
     expect(renderToStaticMarkup(<AdoptionPhotoThumb photo={photo(2)} fallbackClassName="photo-sky" />)).toMatch(/<img src="https:\/\/fotos\.teste\.local\/animal-2\.jpg" alt=""/);
     const paw = renderToStaticMarkup(<AdoptionPhotoThumb photo="" fallbackClassName="photo-sky" />);
