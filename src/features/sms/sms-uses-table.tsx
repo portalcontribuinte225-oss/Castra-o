@@ -5,19 +5,15 @@ import type { SmsUseRow } from "./sms-types";
 interface Props {
   rows: SmsUseRow[];
   municipalityName: string;
-  // A message only goes out while the platform's channel is active and the municipality's service is on, so the switches stay locked until then.
-  channelActive: boolean;
-  serviceOn: boolean;
+  // A message only goes out while SMS is integrated, so the switches stay locked until then.
+  integrated: boolean;
   busy: boolean;
   onToggle: (key: string, active: boolean) => void;
 }
 
-const PLATFORM_OFF_REASON = "O SMS precisa estar ativo na plataforma para ligar as mensagens.";
-const SERVICE_OFF_REASON = "O serviço de SMS está desativado para este município.";
+const NOT_INTEGRATED_REASON = "O SMS precisa estar integrado para ligar as mensagens.";
 
-export function SmsUsesTable({ rows, municipalityName, channelActive, serviceOn, busy, onToggle }: Props) {
-  const open = channelActive && serviceOn;
-  const lockReason = channelActive ? SERVICE_OFF_REASON : PLATFORM_OFF_REASON;
+export function SmsUsesTable({ rows, municipalityName, integrated, busy, onToggle }: Props) {
   return (
     <div className="whatsapp-grid-wrap">
       <table className="whatsapp-grid">
@@ -30,7 +26,7 @@ export function SmsUsesTable({ rows, municipalityName, channelActive, serviceOn,
         </thead>
         <tbody>
           {rows.map((row) => {
-            const on = row.active && open;
+            const on = row.active && integrated;
             return (
               <tr key={row.key}>
                 <td>{row.label}</td>
@@ -43,10 +39,10 @@ export function SmsUsesTable({ rows, municipalityName, channelActive, serviceOn,
                       aria-checked={on}
                       aria-label={`${on ? "Desativar" : "Ativar"} ${row.label}`}
                       className={`whatsapp-switch${on ? " whatsapp-switch--on" : ""}`}
-                      disabled={busy || !open}
+                      disabled={busy || !integrated}
                       onClick={() => onToggle(row.key, !on)}
                     ><span className="whatsapp-switch-knob" /></button>
-                    {!open && <span role="img" aria-label={lockReason} title={lockReason}><Lock size={14} aria-hidden="true" /></span>}
+                    {!integrated && <span role="img" aria-label={NOT_INTEGRATED_REASON} title={NOT_INTEGRATED_REASON}><Lock size={14} aria-hidden="true" /></span>}
                   </div>
                 </td>
               </tr>

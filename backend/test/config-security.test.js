@@ -5,7 +5,6 @@ import configRoutes from "../src/routes/config.js";
 import whatsappRoutes from "../src/routes/whatsapp.js";
 import { pool } from "../src/db/index.js";
 import { decryptSecret, encryptSecretStrict } from "../src/services/config-secret-cipher.js";
-import { SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
 import { registerTestSession, resolveTestSession } from "./fixtures/session-user.js";
 import { clearServerCredentials } from "./fixtures/server-credentials.js";
 
@@ -126,10 +125,10 @@ test("tutors cannot read internal config or write any known or unknown key", asy
   assert.equal(calls.length, 0);
 });
 
-test("the retired auth delivery, notification, contract and SMS keys are no longer served or writable", async (t) => {
+test("the retired auth delivery, notification and contract keys are not served or writable through the generic route", async (t) => {
   const { request, calls, store } = await fixture(t);
   store.set(`castragestao:notifications:${MUNICIPALITY_ID}`, { multiChannel: true });
-  for (const key of ["castragestao:auth-delivery", "castragestao:notifications", "whatsapp_quota", "sms_quota", "email_quota", SMS_CONFIG_KEY]) {
+  for (const key of ["castragestao:auth-delivery", "castragestao:notifications", "whatsapp_quota", "sms_quota", "email_quota"]) {
     assert.equal((await request(`/config/${key}?municipalityId=${MUNICIPALITY_ID}`)).status, 404, key);
     assert.equal((await request(`/config/${key}`, { user: ADMIN, method: "PUT", body: { multiChannel: true } })).status, 403, key);
   }
@@ -257,17 +256,17 @@ test("WhatsApp tests are the master's: the manager, the operators and the suppor
 
 test("the WhatsApp connection is written by the master only, who chooses the municipality, and the manager cannot write it", async (t) => {
   const { request, calls, store } = await fixture(t);
-  store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: false });
-  store.set(`whatsapp:${OTHER_MUNICIPALITY_ID}`, { active: false });
-  const refused = await request("/config/whatsapp", { method: "PUT", user: ADMIN, body: { active: true } });
+  store.set(`whatsapp:${MUNICIPALITY_ID}`, { phoneNumberId: "12345" });
+  store.set(`whatsapp:${OTHER_MUNICIPALITY_ID}`, { phoneNumberId: "12345" });
+  const refused = await request("/config/whatsapp", { method: "PUT", user: ADMIN, body: { tokenVariable: "WHATSAPP_TOKEN_TEST" } });
   assert.equal(refused.status, 403);
-  assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).active, false);
+  assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).tokenVariable, undefined);
   assert.equal(calls.some(({ sql }) => sql.includes("INSERT INTO config")), false);
-  const written = await request(`/config/whatsapp?municipalityId=${OTHER_MUNICIPALITY_ID}`, { method: "PUT", user: MASTER, body: { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST" } });
+  const written = await request(`/config/whatsapp?municipalityId=${OTHER_MUNICIPALITY_ID}`, { method: "PUT", user: MASTER, body: { tokenVariable: "WHATSAPP_TOKEN_TEST" } });
   assert.equal(written.status, 200);
   assert.equal(written.body.municipality_id, OTHER_MUNICIPALITY_ID);
-  assert.equal(store.get(`whatsapp:${OTHER_MUNICIPALITY_ID}`).active, true);
-  assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).active, false);
+  assert.equal(store.get(`whatsapp:${OTHER_MUNICIPALITY_ID}`).tokenVariable, "WHATSAPP_TOKEN_TEST");
+  assert.equal(store.get(`whatsapp:${MUNICIPALITY_ID}`).tokenVariable, undefined);
   const tested = await request("/whatsapp/test", { method: "POST", user: MASTER, body: { municipalityId: MUNICIPALITY_ID, phone: "48999991234" } });
   assert.equal(tested.status, 200);
   assert.equal(tested.body.status, "skipped");
@@ -276,7 +275,7 @@ test("the WhatsApp connection is written by the master only, who chooses the mun
 test("WhatsApp test requires valid phone and does not expose provider error data", async (t) => {
   const { request, store } = await fixture(t);
   assert.equal((await request("/whatsapp/test", { method: "POST", user: MASTER, body: { phone: "123", municipalityId: MUNICIPALITY_ID } })).status, 400);
-  store.set(`whatsapp:${MUNICIPALITY_ID}`, { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "12345" });
+  store.set(`whatsapp:${MUNICIPALITY_ID}`, { tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "12345" });
   store.set(`whatsapp_active_templates:${MUNICIPALITY_ID}`, { active: { schedule_confirmed: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } } });
   store.set(`whatsapp_catalog:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [{ name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "APPROVED", category: "UTILITY",
     parameterFormat: "POSITIONAL", hasBody: true, bodyVariables: 5, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false }] });

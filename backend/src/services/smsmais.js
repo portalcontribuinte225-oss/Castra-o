@@ -52,9 +52,9 @@ async function providerRequest(path, token, body, { fetchImpl = globalThis.fetch
   }, Math.max(1, Math.min(timeoutMs, TIMEOUT_MS))); });
   try {
     const operation = async () => {
-      const response = await fetchImpl(`${BASE_URL}${path}`, { method: body ? "POST" : "GET", redirect: "error",
-        signal: controller.signal, headers: { Authorization: `Bearer ${token}`, Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) },
-        ...(body ? { body: JSON.stringify(body) } : {}) });
+      const response = await fetchImpl(`${BASE_URL}${path}`, { method: "POST", redirect: "error",
+        signal: controller.signal, headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(body) });
       if (response.status !== 200) {
         const code = response.status === 401 ? DeliveryCode.INVALID_CREDENTIALS : response.status === 402 ? DeliveryCode.INSUFFICIENT_BALANCE
           : response.status === 429 ? DeliveryCode.RATE_LIMITED : response.status >= 500 ? DeliveryCode.TRANSPORT_FAILED : DeliveryCode.PROVIDER_REJECTED;
@@ -68,17 +68,6 @@ async function providerRequest(path, token, body, { fetchImpl = globalThis.fetch
       : controller.signal.aborted || error.code === DeliveryCode.TIMEOUT ? DeliveryCode.TIMEOUT : DeliveryCode.TRANSPORT_FAILED),
       ...(error.code === DeliveryCode.INVALID_RESPONSE && error.detail ? { detail: error.detail } : {}) };
   } finally { clearTimeout(timer); controller.abort(); }
-}
-
-export async function querySmsBalance(token, options = {}) {
-  const result = await providerRequest("/saldo", token, undefined, options);
-  if (!result.ok) return { valid: false, code: result.code, reason: result.reason };
-  const data = result.data?.data;
-  if (result.data?.success !== true || typeof data?.saldo !== "number" || !Number.isFinite(data.saldo)
-    || !Number.isSafeInteger(data.sms_equivalente) || data.sms_equivalente < 0) {
-    return { valid: false, ...failure(DeliveryCode.INVALID_RESPONSE) };
-  }
-  return { valid: true, balance: { credits: data.saldo, sms: data.sms_equivalente } };
 }
 
 const MESSAGE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

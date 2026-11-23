@@ -1,125 +1,97 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { MessageContractForm } from "./message-contract-form";
-import { MessageContractStatus } from "./message-contract-status";
-import { MessageServiceToggle } from "./message-service-toggle";
+import { ContractState } from "../../../shared/message-quota-contract.js";
+import { MessageContractCard } from "./message-contract-card";
 import type { MessageQuotaStatus } from "./message-contract-types";
-import type { MessageContract } from "./use-message-contract";
+import { contractInput, type MessageContract } from "./use-message-contract";
 
 const noop = vi.fn();
-const live: MessageQuotaStatus = { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true };
-const contractState = (extra: Partial<MessageContract> = {}): MessageContract => ({
-  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "", live,
-  ready: true, loadFailed: false, retry: noop, saving: false, serviceStatus: "",
-  confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop, ...extra,
+const live: MessageQuotaStatus = { plan: 500, used: 12, contractStart: null, contractEnd: "2026-12-31", state: ContractState.IN_FORCE };
+const contractOf = (extra: Partial<MessageContract> = {}): MessageContract => ({
+  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "", saveOk: false, live,
+  ready: true, loadFailed: false, retry: noop, saving: false, contractOn: true, canTurnOn: true, setActive: noop, ...extra,
 });
+const card = (extra: Partial<MessageContract> = {}, master = true) => renderToStaticMarkup(<MessageContractCard contract={contractOf(extra)} master={master} />);
+const fieldTags = (html: string) => html.match(/<input[^>]*data-ui-input=""[^>]*>/g) || [];
+const switchTag = (html: string) => html.match(/<input[^>]*type="checkbox"[^>]*>/)?.[0] || "";
 
-describe("contract status", () => {
-  const status = (active: boolean, contract: MessageQuotaStatus | null) => renderToStaticMarkup(<MessageContractStatus active={active} live={contract} />);
-
-  it("tells whether the channel is on, how many messages the month has used and until when the contract goes", () => {
-    const html = status(true, live);
-    expect(html).toContain("whatsapp-dot--on"); expect(html).toContain("Ativo"); expect(html).not.toContain("Inativo");
-    expect(html).toContain("<strong>12/500</strong> mensagens este mês");
-    expect(html).toContain("Contrato vigente até 31/12/2026");
-    expect(html).not.toContain("whatsapp-status-err\">Contrato");
+describe("contract card", () => {
+  it("tells where the contract stands and the month's usage at the top", () => {
+    const html = card();
+    expect(html).toContain("Contrato e cota");
+    expect(html).toContain("Vigente");
+    expect(html).toContain("12/500");
+    expect(html).not.toContain("mensagens este mês");
   });
 
-  it("marks an inactive channel and an ended contract", () => {
-    const html = status(false, { ...live, active: false });
-    expect(html).toContain("whatsapp-dot--off"); expect(html).toContain("Inativo");
-    expect(html).toContain("Contrato encerrado até 31/12/2026"); expect(html).toContain('whatsapp-statusbar-text whatsapp-status-err');
+  it.each([
+    [ContractState.OFF, "Desativado"],
+    [ContractState.OUT_OF_PERIOD, "Fora do período"],
+  ])("marks a contract that lets no message go (%s)", (state, label) => {
+    const html = card({ live: { ...live, state } });
+    expect(html).toContain(`tw:text-ui-danger">${label}</span>`);
   });
 
-  it("says the quota is not configured when the municipality has no contract, and drops the end date when there is none", () => {
-    expect(status(true, null)).toContain("Cota não configurada");
-    expect(status(true, null)).not.toContain("mensagens este mês");
-    const open = status(true, { ...live, contractEnd: null });
-    expect(open).toContain("Contrato vigente"); expect(open).not.toContain(" até ");
+  it("says when there is no contract, without a count", () => {
+    const html = card({ live: null, contractOn: false });
+    expect(html).toContain("Sem contrato");
+    expect(html).not.toContain("/500");
   });
 
-  it("keeps unavailable settings distinct from a turned-off channel or a municipality without a quota", () => {
-    const html = renderToStaticMarkup(<MessageContractStatus active={null} live={undefined} />);
-    expect(html).toContain("Status da integração indisponível");
-    expect(html).toContain("Cota indisponível");
-    expect(html).not.toContain("Inativo");
-    expect(html).not.toContain("Cota não configurada");
+  it("gives the master the three fields and the switch, and no other action", () => {
+    const html = card();
+    expect(fieldTags(html)).toHaveLength(3);
+    expect(switchTag(html)).toContain('checked=""');
+    expect(html).not.toMatch(/data-ui-button=""/);
+    for (const gone of ["Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).not.toContain(gone);
   });
-});
 
-describe("contract form", () => {
-  const form = (extra: Partial<MessageContract> = {}, municipalityId = "municipality-a") => renderToStaticMarkup(
-    <MessageContractForm municipalityId={municipalityId} contract={contractState(extra)} />,
-  );
+  it("locks the fields while the contract is on and frees them when it is off", () => {
+    const locked = (html: string) => fieldTags(html).filter((tag) => tag.includes('disabled=""')).length;
+    expect(locked(card())).toBe(3);
+    expect(locked(card({ contractOn: false, live: { ...live, state: ContractState.OFF } }))).toBe(0);
+  });
 
-  it("puts the contract actions beside the save button, without an actions legend, using the standard buttons", () => {
-    const html = form();
-    expect(html).toContain("Contrato e cota"); expect(html).toContain("Limite mensal");
-    expect(html).not.toContain("Ações");
-    const labels = Array.from(html.matchAll(/<button[^>]*data-ui-button=""[^>]*>([^<]*)<\/button>/g), ([, label]) => label);
-    expect(labels).toEqual(["Salvar cota", "Encerrar contrato", "Zerar cota do mês"]);
-    expect(html).toMatch(/<button[^>]*tw:border-ui-danger[^>]*>Encerrar contrato<\/button>/);
-    expect(html.match(/data-ui-input=""/g)).toHaveLength(3);
+  it("keeps the switch locked without a valid limit to turn on, and during a save", () => {
+    expect(switchTag(card({ contractOn: false, canTurnOn: false, live: null }))).toContain('disabled=""');
+    expect(switchTag(card({ contractOn: false, canTurnOn: true, live: null }))).not.toContain('disabled=""');
+    expect(switchTag(card({ saving: true }))).toContain('disabled=""');
+  });
+
+  it("shows the staff only where the contract stands and the usage", () => {
+    const html = card({}, false);
+    expect(html).toContain("Vigente");
+    expect(html).toContain("12/500");
+    expect(fieldTags(html)).toHaveLength(0);
     expect(html).not.toContain('type="checkbox"');
   });
 
-  it("asks for confirmation in the same line before ending the contract", () => {
-    const html = form({ confirmingEnd: true });
-    expect(html).toContain("Encerrar contrato hoje (");
-    expect(html).toContain("Confirmar");
-    expect(html).toContain("Cancelar");
-    expect(html).not.toContain("Zerar cota do mês");
-    expect(html.indexOf("Confirmar")).toBeGreaterThan(html.indexOf("Salvar cota"));
-  });
-
-  it("locks the actions without a municipality, ending needs a plan and zeroing needs a live contract", () => {
-    const disabled = (html: string, label: string) => new RegExp(`<button[^>]*disabled=""[^>]*>\\s*${label}`).test(html);
-    const none = form({}, "");
-    for (const label of ["Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(disabled(none, label), label).toBe(true);
-    const ready = form();
-    for (const label of ["Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(disabled(ready, label), label).toBe(false);
-    const empty = form({ settings: { plan: "", contractStart: "", contractEnd: "" }, live: null });
-    expect(disabled(empty, "Salvar cota")).toBe(false); expect(disabled(empty, "Encerrar contrato")).toBe(true); expect(disabled(empty, "Zerar cota do mês")).toBe(true);
-  });
-
-  it("keeps the form unavailable until the quota loads and offers a retry on failure", () => {
-    const loading = form({ ready: false, live: undefined });
-    const failed = form({ ready: false, loadFailed: true, live: undefined });
-    expect(loading).toContain("Carregando contrato e cota...");
+  it("waits for the contract to load and offers a retry on failure", () => {
+    expect(card({ ready: false, live: undefined })).toContain("Carregando contrato e cota...");
+    const failed = card({ ready: false, loadFailed: true, live: undefined });
     expect(failed).toContain("Carregar novamente");
-    for (const html of [loading, failed]) {
-      expect(html).not.toContain("Salvar cota");
-      expect(html).not.toContain("Encerrar contrato");
-      expect(html).not.toContain("Zerar cota do mês");
-    }
+    expect(failed).not.toContain("Limite mensal");
   });
 
-  it("shows what was saved, told apart from a failure", () => {
-    expect(form({ saveStatus: "Cota salva com sucesso." })).toContain('class="whatsapp-inline-status ok"');
-    expect(form({ saveStatus: "Cota do mês zerada." })).toContain('class="whatsapp-inline-status ok"');
-    expect(form({ saveStatus: "Contrato encerrado hoje." })).toContain('class="whatsapp-inline-status ok"');
-    const failure = form({ saveStatus: "Não foi possível salvar: Informe um limite mensal válido." });
-    expect(failure).toContain('class="whatsapp-inline-status"'); expect(failure).not.toContain("inline-status ok");
-    expect(form()).not.toContain("whatsapp-inline-status ok");
+  it("tells a saved switch apart from a failure", () => {
+    expect(card({ saveStatus: "Contrato ativado.", saveOk: true })).toContain('class="whatsapp-inline-status ok"');
+    const failure = card({ saveStatus: "Não foi possível salvar: Informe um limite mensal válido." });
+    expect(failure).toContain('class="whatsapp-inline-status"');
+    expect(failure).not.toContain("inline-status ok");
   });
 });
 
-describe("municipal service toggle", () => {
-  const toggle = (extra: Partial<MessageContract> = {}) => renderToStaticMarkup(<MessageServiceToggle contract={contractState(extra)} />);
+describe("what the contract switch saves", () => {
+  const settings = { plan: "300", contractStart: "2026-01-01", contractEnd: "" };
 
-  it("reflects the saved municipal switch after the contract is loaded", () => {
-    expect(toggle()).toContain("Ativo no município");
-    expect(toggle()).toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
-    const off = toggle({ live: { ...live, enabled: false } });
-    expect(off).toContain("Inativo no município");
-    expect(off).not.toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
-    expect(toggle({ ready: false, live: undefined })).toBe("");
-    expect(toggle({ live: null })).toBe("");
+  it("turns on with the form as typed", () => {
+    expect(contractInput(true, settings, null)).toEqual({ plan: 300, contractStart: "2026-01-01", contractEnd: "", enabled: true });
+    expect(contractInput(true, { ...settings, plan: "abc" }, null)?.plan).toBe(0);
+    expect(contractInput(true, { ...settings, plan: "1.5" }, null)?.plan).toBe(0);
   });
 
-  it("shows the result next to the switch and disables it during a save", () => {
-    expect(toggle({ saving: true })).toMatch(/<input[^>]*type="checkbox"[^>]*disabled=""/);
-    const message = "Não foi possível alterar o serviço.";
-    expect(toggle({ serviceStatus: message })).toContain(message);
+  it("turns off keeping the stored limit and dates, whatever the form holds", () => {
+    expect(contractInput(false, { ...settings, plan: "9" }, live)).toEqual({ plan: 500, contractStart: "", contractEnd: "2026-12-31", enabled: false });
+    expect(contractInput(false, settings, null)).toBeNull();
   });
 });

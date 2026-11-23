@@ -81,7 +81,7 @@ export const initialAiSettings: AnyRecord = {
 };
 
 export const initialWhatsappSettings: AnyRecord = {
-  active: false,
+  integrated: false,
   phoneNumberId: "",
   wabaId: "",
   tokenVariable: "",

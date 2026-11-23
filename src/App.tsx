@@ -5534,9 +5534,9 @@ function ConfigView({
         );
       })()}
 
-      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.EMAIL, canManageAiSettings(currentUser?.role))} canEditContract={isMasterRole(currentUser?.role)} />}
+      {configArea === "integrations" && configTab === "email" && integrationsTabs.some((tab) => tab.id === "email") && <EmailIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.EMAIL, canManageAiSettings(currentUser?.role))} />}
 
-      {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canEditContract={isMasterRole(currentUser?.role)} canManage={canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.SMS, canManageAiSettings(currentUser?.role))} />}
+      {configArea === "integrations" && configTab === "sms" && integrationsTabs.some((tab) => tab.id === "sms") && <SmsSettings key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} master={isMasterRole(currentUser?.role)} canManage={canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.SMS, canManageAiSettings(currentUser?.role))} />}
 
       {configArea === "integrations" && configTab === "ai_settings" && integrationsTabs.some((tab) => tab.id === "ai_settings") && (
         <div className="config-panel wide">
@@ -6131,7 +6131,7 @@ function ConfigView({
       )}
 
       {configArea === "integrations" && configTab === "whatsapp" && (
-        <WhatsappIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.WHATSAPP, canManageAiSettings(currentUser?.role))} master={isMasterRole(currentUser?.role)} canEditContract={isMasterRole(currentUser?.role)} />
+        <WhatsappIntegrationTab key={configMunicipalityScopeId} municipalityId={configMunicipalityScopeId} readOnly={!canUseIntegration(Boolean(canUseConfigPermissions), configCurrentPermissionGroup, IntegrationConfigItem.WHATSAPP, canManageAiSettings(currentUser?.role))} master={isMasterRole(currentUser?.role)} />
       )}
 
       {configArea === "environment" && configTab === "documents" && (

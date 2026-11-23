@@ -3,16 +3,16 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { emailUses } from "../../../shared/email-uses-contract.js";
-import { useMessageContract } from "../message-contract/use-message-contract";
+import { ContractState } from "../../../shared/message-quota-contract.js";
+import { useMessageContract, type MessageContract } from "../message-contract/use-message-contract";
 import { EmailIntegrationTab } from "./email-integration-tab";
-import type { EmailAccountView, EmailSettings, EmailUseRow } from "./email-integration-types";
+import type { EmailSettings, EmailUseRow } from "./email-integration-types";
 import { useEmailSettings } from "./use-email-settings";
 
 vi.mock("./use-email-settings", () => ({ useEmailSettings: vi.fn() }));
 vi.mock("../message-contract/use-message-contract", () => ({ useMessageContract: vi.fn() }));
 
 const noop = vi.fn();
-const account: EmailAccountView = { serviceId: "service_test", publicKey: "public-key-test", publicUrl: "https://system.example.test", privateKeyPreview: "PRIVATE0", issues: [] };
 const CONFIGURED_USES = 3;
 // Two of the configured uses are active.
 const rows = (master: boolean): EmailUseRow[] => emailUses.map((use, index) => ({
@@ -20,7 +20,7 @@ const rows = (master: boolean): EmailUseRow[] => emailUses.map((use, index) => (
   ...(master ? { variables: [...use.variables], templateId: index < CONFIGURED_USES ? `tpl_${index}` : "" } : {}),
 }));
 const settingsOf = (overrides: Partial<EmailSettings> = {}, master = true): EmailSettings => ({
-  account: master ? account : null, configured: true, municipal: true, uses: rows(master),
+  integrated: true, municipal: true, uses: rows(master),
   identity: { name: "Test Town", departmentName: "Animal Department", brasao: EmailImageStatus.READY, departmentLogo: EmailImageStatus.READY }, ...overrides,
 });
 const emailState = (settings: EmailSettings | null, overrides = {}) => ({
@@ -28,14 +28,13 @@ const emailState = (settings: EmailSettings | null, overrides = {}) => ({
   editId: noop, saveTemplates: noop, toggle: noop, ...overrides,
 });
 
-const contractState = {
-  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "",
-  ready: true, loadFailed: false, retry: noop, saving: false, serviceStatus: "",
-  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
-  confirmingEnd: false, setConfirmingEnd: noop, save: noop, endContractToday: noop, resetUsed: noop, setEnabled: noop,
+const contractState: MessageContract = {
+  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: noop, saveStatus: "", saveOk: false,
+  ready: true, loadFailed: false, retry: noop, saving: false, contractOn: true, canTurnOn: true, setActive: noop,
+  live: { plan: 500, used: 12, contractStart: null, contractEnd: "2026-12-31", state: ContractState.IN_FORCE },
 };
 const tab = (props: Partial<React.ComponentProps<typeof EmailIntegrationTab>> = {}) => renderToStaticMarkup(
-  <EmailIntegrationTab municipalityId="municipality-a" master canManage canEditContract {...props} />,
+  <EmailIntegrationTab municipalityId="municipality-a" master canManage {...props} />,
 );
 const on = (html: string) => (html.match(/aria-checked="true"/g) || []).length;
 
@@ -44,48 +43,41 @@ beforeEach(() => {
   vi.mocked(useMessageContract).mockReturnValue(contractState);
 });
 
-describe("e-mail contract", () => {
-  it("counts the messages of the contract at the top, whether the account is configured or not", () => {
-    const html = tab({ master: false, canEditContract: false });
-    expect(html).toContain('aria-label="Estado da integração"'); expect(html).toContain("12/500"); expect(html).toContain("Contrato vigente"); expect(html).toContain("Ativo");
-    expect(html.indexOf('aria-label="Estado da integração"')).toBeLessThan(html.indexOf("Templates"));
-    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ configured: false })));
-    expect(tab()).toContain("Inativo");
+describe("e-mail integration and contract", () => {
+  it("says beside the title whether the account is integrated, and nothing of the account itself", () => {
+    const html = tab();
+    expect(html).toContain("Integrado");
+    expect(html.indexOf("E-mail")).toBeLessThan(html.indexOf("Integrado"));
+    for (const hidden of ["Credenciais", "Service ID", "Public Key", "Private Key", "Endereço público do sistema", "EMAILJS_", "Allow EmailJS API", "•"]) expect(html).not.toContain(hidden);
+    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ integrated: false })));
+    expect(tab()).toContain("Não integrado");
   });
 
-  it("offers the contract form only to who edits it, after the templates", () => {
-    const viewer = tab({ master: false, canEditContract: false });
-    for (const hidden of ["Contrato e cota", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(viewer).not.toContain(hidden);
-    const editor = tab();
-    for (const shown of ["Contrato e cota", "Limite mensal", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(editor).toContain(shown);
-    expect(editor.indexOf("Templates")).toBeLessThan(editor.indexOf("Contrato e cota"));
+  it("puts the contract, with its usage, right above the templates", () => {
+    const html = tab();
+    expect(html).toContain("12/500");
+    expect(html).toContain("Vigente");
+    expect(html.indexOf("Contrato e cota")).toBeLessThan(html.indexOf("Templates"));
+    for (const gone of ["Estado da integração", "mensagens este mês", "Ativo no município", "Salvar cota", "Encerrar contrato", "Zerar cota do mês"]) expect(html).not.toContain(gone);
   });
 
-  it("places the one municipal switch in credentials only for an authorized master with an existing quota", () => {
+  it("gives only the master the contract fields and its switch, the only one of the channel", () => {
     const editor = tab();
     expect(editor.match(/type="checkbox"/g)).toHaveLength(1);
-    expect(editor.indexOf("Credenciais")).toBeLessThan(editor.indexOf("Ativo no município"));
-    expect(editor.indexOf("Ativo no município")).toBeLessThan(editor.indexOf("ID do serviço"));
-    expect(editor.slice(editor.indexOf("Contrato e cota"))).not.toContain('type="checkbox"');
-    expect(tab({ master: false })).not.toContain('type="checkbox"');
-    expect(tab({ canEditContract: false })).not.toContain('type="checkbox"');
-    expect(tab({ municipalityId: "" })).not.toContain('type="checkbox"');
-    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, ready: false, live: undefined });
-    expect(tab()).not.toContain('type="checkbox"');
-    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: null });
-    expect(tab()).not.toContain('type="checkbox"');
+    expect(editor.indexOf("Contrato e cota")).toBeLessThan(editor.indexOf('type="checkbox"'));
+    expect(editor).toContain("Limite mensal");
+    const viewer = tab({ master: false });
+    expect(viewer).toContain("12/500");
+    expect(viewer).not.toContain("Limite mensal");
+    expect(viewer).not.toContain('type="checkbox"');
   });
 
-  it("shows the saved municipal state and locks each message with the reason while the service is off", () => {
-    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: { ...contractState.live, enabled: false } });
-    const off = tab({ master: false, canEditContract: false });
-    expect(off).toContain("Inativo");
-    expect(off.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(emailUses.length);
-    expect(off.match(/aria-label="O serviço de e-mail está desativado para este município\."/g)).toHaveLength(emailUses.length);
-    expect(off).not.toContain('aria-checked="true"');
-    const editor = tab();
-    expect(editor).toContain("Inativo no município");
-    expect(editor).not.toMatch(/<input[^>]*type="checkbox"[^>]*checked=""/);
+  it("leaves the message switches to the templates, whatever the state of the contract", () => {
+    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, contractOn: false, live: { ...contractState.live!, state: ContractState.OFF } });
+    const html = tab({ master: false });
+    expect(html).toContain("Desativado");
+    expect(html.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(emailUses.length - CONFIGURED_USES);
+    expect(on(html)).toBe(2);
   });
 
   it("reads the contract of the e-mail channel for the municipality, and for none while the viewer cannot manage", () => {
@@ -95,20 +87,17 @@ describe("e-mail contract", () => {
     expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("email", "");
   });
 
-  it("shows neither the counter nor the form while the screen is not loaded or no municipality is chosen", () => {
+  it("shows no contract without a municipality, and no badge while the screen is not loaded", () => {
+    expect(tab({ municipalityId: "" })).not.toContain("Contrato e cota");
     vi.mocked(useEmailSettings).mockReturnValue(emailState(null));
-    expect(tab()).not.toContain('aria-label="Estado da integração"');
-    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf()));
-    const noMunicipality = tab({ municipalityId: "" });
-    expect(noMunicipality).not.toContain('aria-label="Estado da integração"');
+    expect(tab()).not.toContain("Integrado");
   });
 });
 
 describe("e-mail tab for the master", () => {
-  it("shows the platform credentials and all messages in one table", () => {
+  it("shows all messages in one table, with the ids and the variables", () => {
     const html = tab();
-    for (const label of ["ID do serviço (Service ID)", "Chave pública (Public Key)", "Endereço público do sistema", "Chave privada (Private Key)", "Salvar templates", "Variáveis"]) expect(html).toContain(label);
-    expect(html).toContain("Allow EmailJS API for non-browser applications");
+    for (const label of ["Salvar templates", "Variáveis"]) expect(html).toContain(label);
     expect(html.match(/<tr>/g)).toHaveLength(emailUses.length + 1);
     for (const use of emailUses) expect(html).toContain(use.label);
     expect(html).not.toContain("Confirmação de telefone");
@@ -117,27 +106,6 @@ describe("e-mail tab for the master", () => {
     expect(html).toContain('value="tpl_0"');
     expect(html).toContain("{{municipality_brasao_url}}");
     expect(html).toContain("{{department_logo_url}}");
-  });
-
-  it("only reads the account from the server's variables: the private key by its start, nothing to save or remove", () => {
-    const html = tab();
-    expect(html).toContain(`value="PRIVATE0${"•".repeat(24)}"`);
-    expect(html.match(/readonly=""/g)).toHaveLength(4);
-    expect(html).toContain('value="service_test"');
-    expect(html).toContain('value="https://system.example.test"');
-    for (const hidden of ["Salvar credenciais", "Remover chave", 'type="password"', "form-error"]) expect(html).not.toContain(hidden);
-    for (const variable of ["EMAILJS_SERVICE_ID", "EMAILJS_PUBLIC_KEY", "EMAILJS_PRIVATE_KEY", "APP_PUBLIC_URL"]) expect(html).toContain(variable);
-    expect(html).toContain("Use Private Key");
-  });
-
-  it("names each server variable that is missing or malformed", () => {
-    const issues = [{ variable: "EMAILJS_PRIVATE_KEY", problem: "missing" }, { variable: "APP_PUBLIC_URL", problem: "invalid" }];
-    vi.mocked(useEmailSettings).mockReturnValue(emailState(settingsOf({ account: { ...account, privateKeyPreview: "", publicUrl: "", issues } })));
-    const html = tab();
-    expect(html).toContain("Falta EMAILJS_PRIVATE_KEY nas variáveis do servidor.");
-    expect(html).toContain("APP_PUBLIC_URL está em formato inválido nas variáveis do servidor.");
-    expect(html).not.toContain("•");
-    expect(html).not.toContain("Vem da variável");
   });
 
   it("keeps the ids editable without a municipality, but hides the switches", () => {

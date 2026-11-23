@@ -3094,48 +3094,6 @@ main {
 /* -- WhatsApp config ------------------------------------------------ */
 
 
-.whatsapp-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-
-.whatsapp-dot--on {
-  background: #16a34a;
-  box-shadow: 0 0 0 2px #bbf7d0;
-}
-
-
-.whatsapp-dot--off {
-  background: #ef4444;
-}
-
-
-.whatsapp-statusbar-state {
-  font-weight: 700;
-  font-size: 0.85rem;
-}
-
-
-.whatsapp-statusbar-sep {
-  color: var(--line);
-  font-weight: 300;
-}
-
-
-.whatsapp-statusbar-text strong {
-  color: var(--ink);
-  font-weight: 700;
-}
-
-
-.whatsapp-status-ok { color: #15803d; }
-
-.whatsapp-status-err { color: #b91c1c; }
-
-
 .whatsapp-section-label {
   font-size: 0.75rem;
   font-weight: 700;

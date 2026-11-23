@@ -1,45 +1,32 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { buildDefaultSmsConfig, SmsEnvironment } from "../../../shared/sms-contract.js";
-import { CredentialIssue } from "../../../shared/server-credential-contract.js";
+import { ContractState } from "../../../shared/message-quota-contract.js";
+import { buildDefaultSmsConfig } from "../../../shared/sms-contract.js";
 import { smsUses } from "../../../shared/sms-uses-contract.js";
-import { useMessageContract } from "../message-contract/use-message-contract";
+import { useMessageContract, type MessageContract } from "../message-contract/use-message-contract";
 import { createSmsSettingsController } from "./sms-settings-controller";
-import { SmsCredentials } from "./sms-credentials";
 import { SmsSettings } from "./sms-settings";
+import { SmsTestMessage } from "./sms-test-message";
 import { useSmsSettings } from "./use-sms-settings";
-import type { SmsConfig, SmsConnectionResult, SmsSettingsApi } from "./sms-types";
+import type { SmsConfig, SmsSettingsApi } from "./sms-types";
 
 vi.mock("./use-sms-settings", () => ({ useSmsSettings: vi.fn() }));
 vi.mock("../message-contract/use-message-contract", () => ({ useMessageContract: vi.fn() }));
 
-const PREVIEW = "SMSTOKEN";
-const stored: SmsConfig = { ...buildDefaultSmsConfig(), hasToken: true, tokenPreview: PREVIEW, municipalityName: "Test Town",
-  environment: SmsEnvironment.PRODUCTION };
-const connected: SmsConnectionResult = { valid: true, environment: SmsEnvironment.PRODUCTION,
-  balance: { credits: 0, sms: 0 }, checkedAt: "2026-11-13T12:01:00Z" };
-const withoutToken: SmsConfig = { ...stored, hasToken: false, tokenPreview: "", environment: null, tokenIssue: CredentialIssue.MISSING };
-const channelOn: SmsConfig = { ...stored, active: true };
-// What the municipal administration reads: whether the channel is on, the municipality's name and messages, and no account.
-const municipal: SmsConfig = { ...buildDefaultSmsConfig(), active: true, municipalityName: "Test Town" };
-const contractState = {
-  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: vi.fn(), saveStatus: "",
-  ready: true, loadFailed: false, retry: vi.fn(), saving: false, serviceStatus: "",
-  live: { plan: 500, used: 12, remaining: 488, contractStart: null, contractEnd: "2026-12-31", active: true, enabled: true },
-  confirmingEnd: false, setConfirmingEnd: vi.fn(), save: vi.fn(), endContractToday: vi.fn(), resetUsed: vi.fn(), setEnabled: vi.fn(),
+const integrated: SmsConfig = { ...buildDefaultSmsConfig(), integrated: true, municipalityName: "Test Town" };
+const notIntegrated: SmsConfig = { ...integrated, integrated: false };
+const contractState: MessageContract = {
+  settings: { plan: "500", contractStart: "", contractEnd: "2026-12-31" }, setSettings: vi.fn(), saveStatus: "", saveOk: false,
+  ready: true, loadFailed: false, retry: vi.fn(), saving: false, contractOn: true, canTurnOn: true, setActive: vi.fn(),
+  live: { plan: 500, used: 12, contractStart: null, contractEnd: "2026-12-31", state: ContractState.IN_FORCE },
 };
 
 // A stand-in server that keeps what was stored, so a sequence of changes answers like the real one.
-function apiFixture(initial: SmsConfig = stored) {
+function apiFixture(initial: SmsConfig = integrated) {
   let server = initial;
   return {
     getSmsSettings: vi.fn<SmsSettingsApi["getSmsSettings"]>(async () => server),
-    saveSmsAccount: vi.fn<SmsSettingsApi["saveSmsAccount"]>(async (value) => {
-      server = { ...server, active: value.active };
-      return server;
-    }),
-    testSmsConnection: vi.fn<SmsSettingsApi["testSmsConnection"]>(async () => connected),
     sendSmsTest: vi.fn<SmsSettingsApi["sendSmsTest"]>(async () => ({ status: "sent", providerMessageId: "4321" })),
     setSmsUseActive: vi.fn<SmsSettingsApi["setSmsUseActive"]>(async (_municipalityId, use, active) => {
       server = { ...server, uses: server.uses.map((row) => row.key === use ? { ...row, active } : row) };
@@ -53,95 +40,64 @@ function deferred<T>() {
   return { promise, resolve: (value: T) => resolve(value) };
 }
 
-describe("platform SMS settings", () => {
+describe("SMS settings controller", () => {
   it("does not load or mutate without administrative permission, nor for a municipal administrator without a municipality", async () => {
     for (const context of [{ id: "municipality-a", master: true, allowed: false }, { id: "", master: false, allowed: true }]) {
       const api = apiFixture();
       const controller = createSmsSettingsController(api, context.id, context.master, context.allowed);
-      await controller.load(); await controller.toggleActive(true); await controller.setUseActive("password_reset", true);
-      await controller.testConnection();
+      await controller.load(); await controller.setUseActive("password_reset", true);
       controller.setTestPhone("(48) 99999-1234"); await controller.sendTest();
-      expect(api.getSmsSettings).not.toHaveBeenCalled(); expect(api.saveSmsAccount).not.toHaveBeenCalled();
-      expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.setSmsUseActive).not.toHaveBeenCalled(); expect(api.sendSmsTest).not.toHaveBeenCalled();
+      expect(api.getSmsSettings).not.toHaveBeenCalled(); expect(api.setSmsUseActive).not.toHaveBeenCalled(); expect(api.sendSmsTest).not.toHaveBeenCalled();
       expect(controller.getSnapshot()).toMatchObject({ testPhone: "", testOutcome: null });
     }
   });
 
-  it("lets the master manage the account with no municipality, and keeps the messages for a municipality", async () => {
+  it("lets the master load with no municipality, and keeps the messages for a municipality", async () => {
     const api = apiFixture(); const controller = createSmsSettingsController(api, "", true, true);
     expect(controller.getSnapshot().loading).toBe(true);
     await controller.load();
     expect(api.getSmsSettings).toHaveBeenCalledWith(""); expect(controller.getSnapshot().ready).toBe(true);
-    await controller.toggleActive(true);
-    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ active: true }, "");
     await controller.setUseActive("password_reset", false);
     expect(api.setSmsUseActive).not.toHaveBeenCalled();
   });
 
-  it("lets the municipal administration read the settings and switch the messages, and never save or test the account", async () => {
-    const api = apiFixture(municipal); const controller = createSmsSettingsController(api, "municipality-a", false, true);
+  it("lets the municipal administration read the settings and switch the messages, and never send a test", async () => {
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", false, true);
     await controller.load();
     expect(api.getSmsSettings).toHaveBeenCalledWith("municipality-a");
-    expect(controller.getSnapshot()).toMatchObject({ ready: true, config: { active: true, hasToken: false, tokenPreview: "", municipalityName: "Test Town" } });
+    expect(controller.getSnapshot()).toMatchObject({ ready: true, config: { integrated: true, municipalityName: "Test Town" } });
     await controller.setUseActive("schedule_confirmed", true);
     expect(api.setSmsUseActive).toHaveBeenLastCalledWith("municipality-a", "schedule_confirmed", true);
-    controller.setTestPhone("(48) 99999-1234");
-    await controller.toggleActive(false); await controller.testConnection(); await controller.sendTest();
-    expect(api.saveSmsAccount).not.toHaveBeenCalled(); expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.sendSmsTest).not.toHaveBeenCalled();
+    controller.setTestPhone("(48) 99999-1234"); await controller.sendTest();
+    expect(api.sendSmsTest).not.toHaveBeenCalled();
     expect(controller.getSnapshot()).toMatchObject({ testPhone: "" });
   });
 
-  it("loads only safe metadata: the start of the token and the municipality's messages, never the token", async () => {
-    const api = apiFixture(); api.getSmsSettings.mockResolvedValue({ ...stored, token: "server-secret", encryptedToken: "encrypted-secret", tokenPreview: "SMSTOKEN-and-more-secret" });
+  it("keeps only whether SMS is integrated and the messages, never anything of the token", async () => {
+    const api = apiFixture();
+    api.getSmsSettings.mockResolvedValue({ ...integrated, token: "server-secret", tokenPreview: "SMSTOKEN-secret", environment: "production", active: true });
     const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load();
-    expect(api.getSmsSettings).toHaveBeenCalledWith("municipality-a");
-    expect(controller.getSnapshot()).toMatchObject({ ready: true, config: { hasToken: true, active: false, municipalityName: "Test Town", tokenPreview: PREVIEW } });
+    expect(controller.getSnapshot().config).toEqual({ integrated: true, municipalityName: "Test Town", uses: expect.any(Array) });
     expect(controller.getSnapshot().config.uses).toHaveLength(smsUses.length);
     expect(JSON.stringify(controller.getSnapshot())).not.toContain("secret");
   });
 
-  it("turns the channel on only with the server's token, and stores the switch at once", async () => {
-    const empty = apiFixture(withoutToken); const blocked = createSmsSettingsController(empty, "municipality-a", true, true);
-    await blocked.load(); await blocked.toggleActive(true);
-    expect(empty.saveSmsAccount).not.toHaveBeenCalled(); expect(blocked.getSnapshot().error).toContain("SMS_TOKEN");
-    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
-    await controller.load(); await controller.toggleActive(true);
-    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ active: true }, "municipality-a");
-    expect(controller.getSnapshot()).toMatchObject({ notice: "SMS ativado.", config: { active: true } });
-    await controller.toggleActive(false);
-    expect(api.saveSmsAccount).toHaveBeenLastCalledWith({ active: false }, "municipality-a");
-    expect(controller.getSnapshot()).toMatchObject({ notice: "SMS desativado.", config: { active: false } });
-  });
-
-  it("tests the connection with the server's token without saving or activating, and asks for SMS_TOKEN when there is none", async () => {
-    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
-    await controller.load(); await controller.testConnection();
-    expect(api.testSmsConnection).toHaveBeenCalledWith();
-    expect(api.saveSmsAccount).not.toHaveBeenCalled();
-    expect(controller.getSnapshot()).toMatchObject({ config: { active: false }, connection: { valid: true, balance: { credits: 0, sms: 0 } } });
-    const empty = apiFixture(withoutToken); const idle = createSmsSettingsController(empty, "municipality-a", true, true);
-    await idle.load(); await idle.testConnection();
-    expect(empty.testSmsConnection).not.toHaveBeenCalled(); expect(idle.getSnapshot().error).toContain("SMS_TOKEN");
-  });
-
-  it("turns a message on or off through its own route, and only turns one on while the channel is active", async () => {
-    const inactive = apiFixture(); const idle = createSmsSettingsController(inactive, "municipality-a", true, true);
+  it("turns a message on or off through its own route, and only turns one on while SMS is integrated", async () => {
+    const off = apiFixture(notIntegrated); const idle = createSmsSettingsController(off, "municipality-a", true, true);
     await idle.load(); await idle.setUseActive("schedule_confirmed", true);
-    expect(inactive.setSmsUseActive).not.toHaveBeenCalled();
-    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true, true);
+    expect(off.setSmsUseActive).not.toHaveBeenCalled();
+    await idle.setUseActive("password_reset", false);
+    expect(off.setSmsUseActive).toHaveBeenLastCalledWith("municipality-a", "password_reset", false);
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load();
     await controller.setUseActive("schedule_confirmed", true);
     expect(api.setSmsUseActive).toHaveBeenLastCalledWith("municipality-a", "schedule_confirmed", true);
     expect(controller.getSnapshot().config.uses.find((row) => row.key === "schedule_confirmed")?.active).toBe(true);
-    await controller.setUseActive("password_reset", false);
-    expect(api.setSmsUseActive).toHaveBeenLastCalledWith("municipality-a", "password_reset", false);
-    expect(controller.getSnapshot().config.uses.find((row) => row.key === "password_reset")?.active).toBe(false);
-    expect(api.saveSmsAccount).not.toHaveBeenCalled();
   });
 
   it("shows a failure of a message switch without exposing the server detail, and a missing answer as a failure", async () => {
-    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true, true);
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load();
     api.setSmsUseActive.mockRejectedValue(Object.assign(new Error("raw-provider-secret"), { status: 400 }));
     await controller.setUseActive("completed", true);
@@ -150,11 +106,11 @@ describe("platform SMS settings", () => {
     api.setSmsUseActive.mockResolvedValue(null);
     await controller.setUseActive("completed", true);
     expect(controller.getSnapshot().error).toContain("Não foi possível alterar a mensagem");
-    expect(controller.getSnapshot().config.active).toBe(true);
+    expect(controller.getSnapshot().config.integrated).toBe(true);
   });
 
-  it("sends one test message to the typed number through the saved token, and says the provider took it", async () => {
-    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true, true);
+  it("sends one test message to the typed number through the server's token, and says the provider took it", async () => {
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load();
     await controller.sendTest();
     expect(api.sendSmsTest).not.toHaveBeenCalled();
@@ -164,27 +120,22 @@ describe("platform SMS settings", () => {
     expect(api.sendSmsTest).toHaveBeenCalledTimes(1);
     expect(api.sendSmsTest).toHaveBeenLastCalledWith("municipality-a", "(48) 99999-1234");
     expect(controller.getSnapshot()).toMatchObject({ sendingTest: false, testPhone: "  (48) 99999-1234  ", testOutcome: { sent: true, reason: "", detail: "", providerMessageId: "4321" } });
-    expect(api.saveSmsAccount).not.toHaveBeenCalled();
     controller.setTestPhone("48999990000"); expect(controller.getSnapshot().testOutcome).toBeNull();
   });
 
-  it("asks for the server's token before testing, and clears the result when the channel changes", async () => {
-    const api = apiFixture(withoutToken); const controller = createSmsSettingsController(api, "municipality-a", true, true);
+  it("tells that SMS is not integrated instead of sending a test", async () => {
+    const api = apiFixture(notIntegrated); const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load(); controller.setTestPhone("48999991234"); await controller.sendTest();
     expect(api.sendSmsTest).not.toHaveBeenCalled();
-    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Cadastre o token em SMS_TOKEN nas variáveis do servidor antes de enviar um teste.", detail: "", providerMessageId: "" });
-    const saved = apiFixture(channelOn); const next = createSmsSettingsController(saved, "municipality-a", true, true);
-    await next.load(); next.setTestPhone("48999991234"); await next.sendTest();
-    expect(next.getSnapshot().testOutcome?.sent).toBe(true);
-    await next.toggleActive(false); expect(next.getSnapshot().testOutcome).toBeNull();
+    expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "O SMS não está integrado.", detail: "", providerMessageId: "" });
   });
 
   it("tells why a test was not sent, with the server's words for a refused number or too many tests and nothing else of the failure", async () => {
-    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true, true);
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true);
     await controller.load(); controller.setTestPhone("48999991234");
     const outcome = () => controller.getSnapshot().testOutcome;
-    api.sendSmsTest.mockResolvedValue({ status: "skipped", reason: "Ative o SMS antes de enviar um teste." });
-    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Ative o SMS antes de enviar um teste.", detail: "", providerMessageId: "" });
+    api.sendSmsTest.mockResolvedValue({ status: "skipped", reason: "O SMS não está integrado." });
+    await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "O SMS não está integrado.", detail: "", providerMessageId: "" });
     api.sendSmsTest.mockResolvedValue({ status: "failed", reason: "Saldo de SMS insuficiente.", providerMessageId: "must-not-show" });
     await controller.sendTest(); expect(outcome()).toEqual({ sent: false, reason: "Saldo de SMS insuficiente.", detail: "", providerMessageId: "" });
     api.sendSmsTest.mockResolvedValue({ status: "failed", reason: "Não foi possível confirmar o aceite da mensagem.", detail: "externalId: enviado com 36 caracteres, devolvido com 32 caracteres" });
@@ -206,7 +157,7 @@ describe("platform SMS settings", () => {
   });
 
   it("sends the test only to a complete mobile number: eleven digits, with the DDD and the 9", async () => {
-    const api = apiFixture(channelOn); const controller = createSmsSettingsController(api, "municipality-a", true, true); await controller.load();
+    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true); await controller.load();
     for (const phone of ["(48) 9999-9999", "(48) 99999-12", "48", "(48) 99999-12345", "abc"]) {
       controller.setTestPhone(phone); await controller.sendTest();
       expect(controller.getSnapshot().testOutcome).toEqual({ sent: false, reason: "Informe o celular completo, com DDD e o 9: (00) 00000-0000.", detail: "", providerMessageId: "" });
@@ -217,84 +168,49 @@ describe("platform SMS settings", () => {
   });
 
   it("keeps one test in flight and ignores its answer after another municipality opens", async () => {
-    const api = apiFixture(channelOn); const old = createSmsSettingsController(api, "municipality-a", true, true); await old.load();
+    const api = apiFixture(); const old = createSmsSettingsController(api, "municipality-a", true, true); await old.load();
     const pending = deferred<{ status: string; providerMessageId: string }>(); api.sendSmsTest.mockReturnValue(pending.promise);
     old.setTestPhone("48999991234"); const sending = old.sendTest();
     expect(old.getSnapshot().sendingTest).toBe(true);
-    await old.sendTest(); await old.testConnection(); await old.toggleActive(false); old.setTestPhone("48988887777");
-    expect(api.sendSmsTest).toHaveBeenCalledTimes(1); expect(api.testSmsConnection).not.toHaveBeenCalled(); expect(api.saveSmsAccount).not.toHaveBeenCalled();
+    await old.sendTest(); await old.setUseActive("completed", true); old.setTestPhone("48988887777");
+    expect(api.sendSmsTest).toHaveBeenCalledTimes(1); expect(api.setSmsUseActive).not.toHaveBeenCalled();
     expect(old.getSnapshot().testPhone).toBe("48999991234");
     old.cancel(); const next = createSmsSettingsController(api, "municipality-b", true, true); await next.load();
     pending.resolve({ status: "sent", providerMessageId: "4321" }); await sending;
     expect(next.getSnapshot().testOutcome).toBeNull(); expect(old.getSnapshot()).toMatchObject({ testOutcome: null, sendingTest: false, testPhone: "" });
   });
 
-  it("discards late load, save and message responses after cancellation", async () => {
-    const api = apiFixture(); const pendingLoad = deferred<typeof stored>(); api.getSmsSettings.mockReturnValue(pendingLoad.promise);
+  it("discards late load and message responses after cancellation", async () => {
+    const api = apiFixture(); const pendingLoad = deferred<SmsConfig>(); api.getSmsSettings.mockReturnValue(pendingLoad.promise);
     const controller = createSmsSettingsController(api, "municipality-a", true, true);
-    const loading = controller.load(); controller.cancel(); pendingLoad.resolve(stored); await loading;
+    const loading = controller.load(); controller.cancel(); pendingLoad.resolve(integrated); await loading;
     expect(controller.getSnapshot()).toMatchObject({ ready: false, loading: false });
-    api.getSmsSettings.mockResolvedValue(stored); await controller.load();
-    const pendingSave = deferred<typeof stored>(); api.saveSmsAccount.mockReturnValue(pendingSave.promise);
-    const saving = controller.toggleActive(true); controller.cancel(); pendingSave.resolve({ ...stored, active: true }); await saving;
-    expect(controller.getSnapshot()).toMatchObject({ ready: false, saving: false, notice: "", config: { active: false } });
-    await controller.toggleActive(true); expect(api.saveSmsAccount).toHaveBeenCalledTimes(1);
-    api.getSmsSettings.mockResolvedValue(channelOn); await controller.load();
-    const pendingUse = deferred<typeof stored>(); api.setSmsUseActive.mockReturnValue(pendingUse.promise);
-    const switching = controller.setUseActive("completed", true); controller.cancel(); pendingUse.resolve({ ...channelOn }); await switching;
+    api.getSmsSettings.mockResolvedValue(integrated); await controller.load();
+    const pendingUse = deferred<SmsConfig>(); api.setSmsUseActive.mockReturnValue(pendingUse.promise);
+    const switching = controller.setUseActive("completed", true); controller.cancel(); pendingUse.resolve({ ...integrated }); await switching;
     expect(controller.getSnapshot()).toMatchObject({ ready: false, saving: false, error: "" });
-  });
-
-  it("ignores an old connection response after another municipality opens and permits one in-flight action", async () => {
-    const api = apiFixture(); const old = createSmsSettingsController(api, "municipality-a", true, true); await old.load();
-    const pending = deferred<SmsConnectionResult>(); api.testSmsConnection.mockReturnValue(pending.promise);
-    const testing = old.testConnection(); await old.toggleActive(true); await old.testConnection();
-    expect(api.testSmsConnection).toHaveBeenCalledTimes(1); expect(api.saveSmsAccount).not.toHaveBeenCalled();
-    old.cancel(); const next = createSmsSettingsController(api, "municipality-b", true, true); await next.load();
-    pending.resolve(connected); await testing;
-    expect(next.getSnapshot().connection).toBeNull(); expect(old.getSnapshot().connection).toBeNull();
-    expect(api.getSmsSettings).toHaveBeenLastCalledWith("municipality-b");
-  });
-
-  it("handles invalid connection envelopes and failures without displaying provider secrets", async () => {
-    const api = apiFixture(); const controller = createSmsSettingsController(api, "municipality-a", true, true); await controller.load();
-    api.testSmsConnection.mockResolvedValue({ ...connected, valid: false, reason: "raw-provider-secret" });
-    await controller.testConnection();
-    expect(controller.getSnapshot().connection).toBeNull(); expect(controller.getSnapshot().error).not.toContain("secret");
-    api.testSmsConnection.mockRejectedValue(Object.assign(new Error("raw-provider-secret"), { status: 403 }));
-    await controller.testConnection(); expect(controller.getSnapshot().error).toContain("Sem permissão");
-    api.saveSmsAccount.mockRejectedValue(new Error("raw-provider-secret")); await controller.toggleActive(true);
-    expect(controller.getSnapshot().error).not.toContain("secret"); expect(controller.getSnapshot().saving).toBe(false);
   });
 });
 
 describe("SMS settings interface", () => {
   const view = (overrides: Partial<ReturnType<typeof useSmsSettings>> = {}) => {
     const controller = createSmsSettingsController(apiFixture(), "municipality-a", true, true);
-    return { ...controller.getSnapshot(), config: stored, ready: true, loading: false, retry: controller.load, toggleActive: controller.toggleActive,
-      setUseActive: controller.setUseActive, testConnection: controller.testConnection,
-      setTestPhone: controller.setTestPhone, sendTest: controller.sendTest, ...overrides };
+    return { ...controller.getSnapshot(), config: integrated, ready: true, loading: false, retry: controller.load,
+      setUseActive: controller.setUseActive, setTestPhone: controller.setTestPhone, sendTest: controller.sendTest, ...overrides };
   };
   const screen = (overrides: Partial<ReturnType<typeof useSmsSettings>> = {}, props: Partial<React.ComponentProps<typeof SmsSettings>> = {}) => {
     vi.mocked(useSmsSettings).mockReturnValue(view(overrides));
-    return renderToStaticMarkup(<SmsSettings municipalityId="municipality-a" master canManage canEditContract={false} {...props} />);
+    return renderToStaticMarkup(<SmsSettings municipalityId="municipality-a" master canManage {...props} />);
   };
   beforeEach(() => { vi.mocked(useSmsSettings).mockReturnValue(view()); vi.mocked(useMessageContract).mockReturnValue(contractState); });
 
-  it("shows the server's token by its start only, read-only, and where it comes from", () => {
-    const saved = screen();
-    expect(saved).toContain(`value="${PREVIEW}${"•".repeat(24)}"`); expect(saved).toContain('readonly=""');
-    expect(saved).toContain("<code>SMS_TOKEN</code>"); expect(saved).toContain("Ambiente: Produção.");
-    for (const hidden of ["Remover token", "Salvar credenciais", 'type="password"']) expect(saved).not.toContain(hidden);
-    expect(saved).toContain("Testar conexão / Consultar saldo"); expect(saved).not.toContain("Enviar SMS");
-  });
-
-  it("names a missing or malformed SMS_TOKEN and locks both tests", () => {
-    const empty = screen({ config: withoutToken });
-    expect(empty).toContain("Falta SMS_TOKEN nas variáveis do servidor.");
-    expect(empty).toMatch(/<button[^>]*disabled=""[^>]*>Testar conexão/);
-    expect(empty).toMatch(/<button[^>]*disabled=""[^>]*>Enviar teste/);
-    expect(screen({ config: { ...withoutToken, tokenIssue: CredentialIssue.INVALID } })).toContain("SMS_TOKEN está em formato inválido nas variáveis do servidor.");
+  it("says beside the title whether SMS is integrated, and nothing of the token", () => {
+    const html = screen();
+    expect(html.indexOf("<h2>SMS</h2>")).toBeLessThan(html.indexOf("Integrado"));
+    for (const hidden of ["Credenciais", "Token de API SMSMais", "SMS_TOKEN", "•", "Ambiente", "Testar conexão", "Consultar saldo", "Créditos", "Homologação", 'readonly=""']) {
+      expect(html).not.toContain(hidden);
+    }
+    expect(screen({ config: notIntegrated })).toContain("Não integrado");
   });
 
   it("lists the final texts for the municipality and the decisions in independent rows", () => {
@@ -306,31 +222,45 @@ describe("SMS settings interface", () => {
     expect(html).toContain("<th>Texto</th>"); expect(html).not.toContain("Exemplo");
     expect(html).toContain("<td>Documentos deferidos</td><td>Test Town: um ou mais documentos foram deferidos. Acesse sua solicitacao para acompanhar a analise. Protocolo: {protocolo}.</td>");
     expect(html).toContain("<td>Documentos indeferidos</td><td>Test Town: um ou mais documentos foram indeferidos. Acesse sua solicitacao para ver o motivo. Protocolo: {protocolo}.</td>");
-    expect(screen({ config: { ...stored, municipalityName: "" } })).toContain("Municipio: recebemos um pedido para redefinir sua senha.");
+    expect(screen({ config: { ...integrated, municipalityName: "" } })).toContain("Municipio: recebemos um pedido para redefinir sua senha.");
   });
 
-  it("locks every switch while the channel is inactive, and unlocks them with the stored state once it is active", () => {
-    const locked = screen();
+  it("locks every message switch while SMS is not integrated, telling why, and unlocks them with the stored state once it is", () => {
+    const locked = screen({ config: notIntegrated });
     expect(locked.match(/<td><div class="integration-table-actions">/g)).toHaveLength(smsUses.length);
-    expect(locked.match(/role="switch"/g)).toHaveLength(smsUses.length);
     expect(locked.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(smsUses.length);
-    expect(locked.match(/aria-label="O SMS precisa estar ativo na plataforma para ligar as mensagens\."/g)).toHaveLength(smsUses.length);
+    expect(locked.match(/aria-label="O SMS precisa estar integrado para ligar as mensagens\."/g)).toHaveLength(smsUses.length);
     expect(locked).not.toContain('aria-checked="true"');
-    const open = screen({ config: channelOn });
+    const open = screen();
     expect(open).not.toMatch(/<button[^>]*role="switch"[^>]*disabled=""/);
-    expect(open).not.toContain("O SMS precisa estar ativo na plataforma");
+    expect(open).not.toContain("O SMS precisa estar integrado");
     expect(open.match(/aria-checked="true"/g)).toHaveLength(1);
     expect(open).toContain('aria-label="Desativar Recuperação de senha"');
     expect(open).toContain('aria-label="Ativar Agendamento confirmado"');
   });
 
-  it("asks for a number to test next to the credentials, and only lets it go with a saved token", () => {
+  it("puts the send test, the contract and the messages in this order, with no switch but the contract's", () => {
     const html = screen();
-    expect(html).toContain("Teste de envio"); expect(html).toContain("Número"); expect(html).toContain("Enviar teste");
+    const order = ["Teste de envio", "Contrato e cota", "Mensagens"].map((text) => html.indexOf(text));
+    expect(order.every((position) => position >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html.match(/type="checkbox"/g)).toHaveLength(1);
+    expect(html).toContain("12/500");
+    for (const gone of ['aria-label="Estado da integração"', "Ativo na plataforma", "Ativo no município", "O SMS da plataforma está inativo", "Salvar cota", "Encerrar contrato",
+      "Zerar cota do mês"]) {
+      expect(html).not.toContain(gone);
+    }
+    expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "municipality-a");
+    screen({}, { canManage: false });
+    expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "");
+  });
+
+  it("asks for a number to test, and only lets it go while SMS is integrated", () => {
+    const html = screen();
+    expect(html).toContain("Número"); expect(html).toContain("Enviar teste");
     expect(html).toContain('placeholder="(00) 00000-0000"');
-    expect(html.indexOf("Credenciais")).toBeLessThan(html.indexOf("Teste de envio")); expect(html.indexOf("Teste de envio")).toBeLessThan(html.indexOf("Mensagens"));
     expect(html).not.toMatch(/<button[^>]*disabled=""[^>]*>Enviar teste/);
-    expect(screen({ config: withoutToken })).toMatch(/<button[^>]*disabled=""[^>]*>Enviar teste/);
+    expect(screen({ config: notIntegrated })).toMatch(/<button[^>]*disabled=""[^>]*>Enviar teste/);
     const sending = screen({ sendingTest: true });
     expect(sending).toMatch(/<button[^>]*disabled=""[^>]*>Enviando\.\.\./); expect(sending).not.toContain("Enviar teste");
     expect(screen({ testPhone: "48999991234" })).toContain('value="48999991234"');
@@ -338,7 +268,7 @@ describe("SMS settings interface", () => {
 
   it("masks the number as it is typed: (00) 00000-0000, digits only, never more than eleven", () => {
     const setTestPhone = vi.fn();
-    const tree = SmsCredentials({ state: view({ setTestPhone }) }) as React.ReactElement<{ children: React.ReactNode }>;
+    const tree = SmsTestMessage({ state: view({ setTestPhone }) }) as React.ReactElement<{ children: React.ReactNode }>;
     const find = (node: React.ReactNode): React.ReactElement<{ onChange?: (value: string) => void; type?: string }> | null => {
       if (!React.isValidElement(node)) return Array.isArray(node) ? node.map(find).find(Boolean) ?? null : null;
       const props = node.props as { label?: string; children?: React.ReactNode };
@@ -367,88 +297,34 @@ describe("SMS settings interface", () => {
   });
 
   it("does not render settings for unauthorized contexts, and asks a municipal administrator without a municipality for one", () => {
-    expect(screen({}, { canManage: false })).not.toContain("Credenciais");
+    expect(screen({}, { canManage: false })).not.toContain("Teste de envio");
     expect(screen({}, { municipalityId: "", master: false })).toContain("Selecione um município");
-    expect(screen({}, { municipalityId: "", master: false })).not.toContain("Credenciais");
+    expect(screen({}, { municipalityId: "", master: false })).not.toContain("Teste de envio");
   });
 
-  it("shows the credentials only to the master, and the municipal administration only the messages", () => {
-    vi.mocked(useSmsSettings).mockReturnValue(view({ config: municipal }));
-    const admin = renderToStaticMarkup(<SmsSettings municipalityId="municipality-a" master={false} canManage canEditContract={false} />);
-    for (const hidden of ["Credenciais", "Teste de envio", "Token de API SMSMais", "Enviar teste", "Remover token"]) expect(admin).not.toContain(hidden);
-    expect(admin).toContain("<table"); expect(admin).toContain("Mensagens");
+  it("shows the send test only to the master, and the municipal administration the contract state and the messages", () => {
+    vi.mocked(useSmsSettings).mockReturnValue(view());
+    const admin = renderToStaticMarkup(<SmsSettings municipalityId="municipality-a" master={false} canManage />);
+    for (const hidden of ["Teste de envio", "Enviar teste", "Limite mensal", 'type="checkbox"']) expect(admin).not.toContain(hidden);
+    expect(admin).toContain("<table"); expect(admin).toContain("Mensagens"); expect(admin).toContain("12/500");
     expect(admin).not.toMatch(/role="switch"[^>]*disabled=""/);
-    expect(screen()).toContain("Credenciais");
   });
 
-  it("lets the master work on the account with no municipality, while the messages wait for one", () => {
+  it("lets the master send a test with no municipality, while the messages and the contract wait for one", () => {
     const html = screen({}, { municipalityId: "" });
-    expect(html).toContain("Credenciais"); expect(html).toContain("Teste de envio");
+    expect(html).toContain("Teste de envio");
+    expect(html).not.toContain("Contrato e cota");
     expect(html).toContain("Selecione um município para ligar ou desligar as mensagens.");
     expect(html.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(smsUses.length);
-    expect(html).not.toContain('aria-label="Estado da integração"');
+    expect(html).not.toContain('type="checkbox"');
     expect(screen()).not.toContain("Selecione um município");
-  });
-
-  it("counts the messages of the contract at the top, and offers the contract only to who edits it", () => {
-    const viewer = screen();
-    expect(viewer).toContain('aria-label="Estado da integração"'); expect(viewer).toContain("12/500"); expect(viewer).toContain("Contrato vigente");
-    expect(viewer).not.toContain("Contrato e cota"); expect(viewer).not.toContain("Salvar cota");
-    expect(viewer.indexOf('aria-label="Estado da integração"')).toBeLessThan(viewer.indexOf("Credenciais"));
-    const editor = screen({}, { canEditContract: true });
-    expect(editor).toContain("Contrato e cota"); expect(editor).toContain("Salvar cota");
-    expect(editor).toContain("Ativo no município"); expect(viewer).not.toContain("Ativo no município");
-    expect(editor.indexOf("Mensagens")).toBeLessThan(editor.indexOf("Contrato e cota"));
-    expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "municipality-a");
-    screen({}, { canManage: false });
-    expect(vi.mocked(useMessageContract)).toHaveBeenLastCalledWith("sms", "");
-  });
-
-  it("shows one activation switch in credentials for the selected SMS scope", () => {
-    const props = { canEditContract: true };
-    const platform = screen({ config: channelOn }, { ...props, municipalityId: "" });
-    expect(platform).toContain("Ativo na plataforma");
-    expect(platform).not.toContain("Ativo no município");
-    expect(platform.match(/type="checkbox"/g)).toHaveLength(1);
-
-    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: { ...contractState.live, enabled: false } });
-    const municipality = screen({ config: channelOn }, props);
-    expect(municipality).toContain("Inativo no município");
-    expect(municipality).not.toContain("Ativo na plataforma");
-    expect(municipality.match(/type="checkbox"/g)).toHaveLength(1);
-    expect(municipality.indexOf("Credenciais")).toBeLessThan(municipality.indexOf("Inativo no município"));
-    expect(municipality.indexOf("Inativo no município")).toBeLessThan(municipality.indexOf("Token de API SMSMais"));
-
-    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: null });
-    expect(screen({ config: channelOn }, props)).not.toContain('type="checkbox"');
-  });
-
-  it("locks the messages and marks the channel inactive while the service is switched off for the municipality, telling why", () => {
-    vi.mocked(useMessageContract).mockReturnValue({ ...contractState, live: { ...contractState.live, enabled: false } });
-    const off = screen({ config: channelOn });
-    expect(off).toContain("Inativo"); expect(off).not.toContain("whatsapp-dot--on");
-    expect(off.match(/role="switch"[^>]*disabled=""/g)).toHaveLength(smsUses.length);
-    expect(off.match(/aria-label="O serviço de SMS está desativado para este município\."/g)).toHaveLength(smsUses.length);
-    expect(off).not.toContain('aria-checked="true"');
-    const platformOff = screen({ config: { ...channelOn, active: false } });
-    expect(platformOff).toContain("O SMS precisa estar ativo na plataforma para ligar as mensagens.");
-    vi.mocked(useMessageContract).mockReturnValue(contractState);
-    expect(screen({ config: channelOn })).not.toContain("O serviço de SMS está desativado");
-    expect(screen({ config: channelOn })).toContain("Ativo");
   });
 
   it("shows loading, and an error with a way to try again but without the settings", () => {
     expect(screen({ ready: false, loading: true })).toContain("Carregando configuração de SMS...");
     const failed = screen({ ready: false, error: "Não foi possível carregar a configuração de SMS." });
     expect(failed).toContain("Não foi possível carregar a configuração de SMS."); expect(failed).toContain("Carregar novamente");
-    expect(failed).not.toContain("Credenciais"); expect(failed).not.toContain("<table"); expect(failed).not.toContain('aria-label="Estado da integração"');
-    expect(screen({ error: "Informe um token antes de ativar o SMS." })).toContain("<table");
+    for (const hidden of ["Teste de envio", "<table", "Integrado", "Contrato e cota"]) expect(failed).not.toContain(hidden);
+    expect(screen({ error: "Não foi possível alterar a mensagem. Tente novamente." })).toContain("<table");
   });
-
-  it("labels sandbox and current zero balance without implying activation", () => {
-    const html = screen({ config: { ...stored, environment: SmsEnvironment.SANDBOX }, connection: { ...connected, environment: SmsEnvironment.SANDBOX } });
-    expect(html).toContain("Homologação"); expect(html).toContain("Créditos: 0"); expect(html).toContain("O teste não ativa o SMS");
-    expect(html).toContain("não envia SMS nem ativa o canal");
-  });
-
 });

@@ -1,13 +1,10 @@
 import { Button } from "../../components/button";
-import { IntegrationCard } from "../../components/integration-card";
+import { IntegrationCard, IntegrationStatusBadge } from "../../components/integration-card";
 import { PanelHeader } from "../../components/ui";
 import { EmailImageStatus } from "../../../shared/email-contract.js";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
-import { MessageContractForm } from "../message-contract/message-contract-form";
-import { MessageContractStatus } from "../message-contract/message-contract-status";
-import { MessageServiceToggle } from "../message-contract/message-service-toggle";
+import { MessageContractCard } from "../message-contract/message-contract-card";
 import { useMessageContract } from "../message-contract/use-message-contract";
-import { EmailCredentials } from "./email-credentials";
 import { EmailTemplatesTable } from "./email-templates-table";
 import { useEmailSettings } from "./use-email-settings";
 
@@ -18,27 +15,20 @@ const imageText: Record<string, string> = {
   [EmailImageStatus.NO_PUBLIC_URL]: "cadastrado",
 };
 
-// E-mail tab: the master reads the platform account (it lives in the server's variables), sets the template ids, the municipality's contract and whether its service is on; whoever has the
-// e-mail permission turns the municipality's messages on or off.
-export function EmailIntegrationTab({ municipalityId, master, canManage, canEditContract }: { municipalityId: string; master: boolean; canManage: boolean; canEditContract: boolean }) {
+// E-mail tab: whether the platform account is integrated (it lives in the server's variables), the municipality's contract (its switch
+// is the master's), and the templates: the master sets their ids, whoever has the e-mail permission turns the messages on or off.
+export function EmailIntegrationTab({ municipalityId, master, canManage }: { municipalityId: string; master: boolean; canManage: boolean }) {
   const email = useEmailSettings(municipalityId, master, canManage);
   const contract = useMessageContract(NotificationChannel.EMAIL, canManage ? municipalityId : "");
   if (!canManage) return <p role="status">Configuração de e-mail restrita à administração.</p>;
   if (!municipalityId && !master) return <p>Selecione um município para configurar o e-mail.</p>;
   const { settings } = email;
   const identity = settings?.identity;
-  const serviceOn = contract.live?.enabled !== false;
   return (
     <div className="config-panel wide">
-      <PanelHeader title="E-mail" />
-      {municipalityId && settings && <MessageContractStatus active={contract.ready ? settings.configured && serviceOn : null} live={contract.live} />}
+      <PanelHeader title="E-mail" aside={settings && <IntegrationStatusBadge integrated={settings.integrated} />} />
       <div className="tw:grid tw:gap-3">
-        {master && settings?.account && (
-          <EmailCredentials
-            account={settings.account}
-            actions={canEditContract && municipalityId ? <MessageServiceToggle contract={contract} /> : null}
-          />
-        )}
+        {municipalityId && <MessageContractCard contract={contract} master={master} />}
         <IntegrationCard title="Templates">
           {email.loading && <p role="status">Carregando a integração de e-mail...</p>}
           {email.error && (
@@ -63,7 +53,6 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
               rows={settings.uses}
               master={master}
               municipal={settings.municipal}
-              serviceOn={serviceOn}
               drafts={email.drafts}
               busy={email.saving}
               onEditId={email.editId}
@@ -72,7 +61,6 @@ export function EmailIntegrationTab({ municipalityId, master, canManage, canEdit
           )}
           {master && settings && <Button className="tw:justify-self-start" disabled={!email.dirty || email.saving} onClick={email.saveTemplates}>{email.saving ? "Salvando..." : "Salvar templates"}</Button>}
         </IntegrationCard>
-        {canEditContract && settings && <MessageContractForm municipalityId={municipalityId} contract={contract} />}
       </div>
     </div>
   );

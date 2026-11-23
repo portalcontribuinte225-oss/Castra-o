@@ -18,6 +18,6 @@ export function publicOrigin(value) {
 
 // The address of the system (APP_PUBLIC_URL) that builds the links and images leaving in messages. Without it they go without them.
 export function readPublicUrl(env = process.env) {
-  const { value, issue } = readServerCredential(ServerCredential.APP_PUBLIC_URL, (text) => Boolean(publicOrigin(text)), env);
-  return { url: value ? publicOrigin(value) : "", issue };
+  const { value } = readServerCredential(ServerCredential.APP_PUBLIC_URL, (text) => Boolean(publicOrigin(text)), env);
+  return { url: value ? publicOrigin(value) : "" };
 }

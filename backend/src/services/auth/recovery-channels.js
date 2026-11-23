@@ -2,6 +2,7 @@ import { pool } from "../../db/index.js";
 import { AuthPurpose } from "../../../../shared/auth-contract.js";
 import { NotificationChannel } from "../../../../shared/notification-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../whatsapp.js";
+import { isWhatsappReady } from "../whatsapp-credentials.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { resolveEmailTemplate } from "../email-templates.js";
 import { isQuotaAvailable } from "../message-quota.js";
@@ -24,9 +25,7 @@ export async function getRecoveryOptions(user, token, overrides = {}) {
   if (contacts.email && (await deps.resolveEmail(municipalityId || null)).ok
     && (!municipalityId || await deps.quotaAvailable(NotificationChannel.EMAIL, municipalityId))) available.push(NotificationChannel.EMAIL);
   if (municipalityId && contacts.whatsapp) {
-    const raw = await deps.loadWhatsapp(municipalityId);
-    const runtime = getRuntimeConfig(raw);
-    if (raw.active === true && runtime.provider === "cloud_api" && runtime.accessToken && runtime.phoneNumberId
+    if (isWhatsappReady(getRuntimeConfig(await deps.loadWhatsapp(municipalityId)))
       && (await deps.resolveTemplate(municipalityId, AuthPurpose.PASSWORD_RESET)).ok && await deps.quotaAvailable(NotificationChannel.WHATSAPP, municipalityId)) available.push(NotificationChannel.WHATSAPP);
     if ((await deps.smsAvailable(municipalityId)).available) available.push(NotificationChannel.SMS);
   }

@@ -4,6 +4,7 @@ import { pickMunicipalityId } from "../tenant.js";
 import { isValidPhone } from "../utils.js";
 import { DeliveryCode, NotificationEvent } from "../../../shared/notification-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig } from "../services/whatsapp.js";
+import { isWhatsappReady } from "../services/whatsapp-credentials.js";
 import { resolveActiveTemplate } from "../services/whatsapp-active-templates.js";
 import { sendResolvedTemplate } from "../services/whatsapp-template-sender.js";
 import { buildBodyComponents, previewRequest } from "../services/notifications/whatsapp-template-parameters.js";
@@ -20,11 +21,8 @@ router.post("/test", auth, requireMaster, async (req, res) => {
   try {
     const rawConfig = await getMunicipalityWhatsappConfig(mId);
     const config = getRuntimeConfig(rawConfig);
-    if (rawConfig.active === false) {
-      return res.json({ status: "skipped", reason: "WhatsApp desativado para o município" });
-    }
-    if (!config.accessToken || !config.phoneNumberId) {
-      return res.json({ status: "skipped", reason: "Escolha a variável do token e informe o ID do número antes de testar." });
+    if (!isWhatsappReady(config)) {
+      return res.json({ status: "skipped", reason: "Escolha a key do token e informe o ID do número antes de testar." });
     }
     const resolved = await resolveActiveTemplate(mId, NotificationEvent.SCHEDULE_CONFIRMED);
     if (!resolved.ok) {

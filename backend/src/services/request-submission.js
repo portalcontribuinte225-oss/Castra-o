@@ -4,6 +4,7 @@ import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../shared/phone-contr
 import { REQUEST_CONTACT_CPF_KEY } from "../../../shared/request-contract.js";
 import { isInternalUser } from "../tenant.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
+import { canReachByPhone } from "./follow-up-phone.js";
 import { prepareAnimalNeighborhoods } from "./request-neighborhoods.js";
 import { DERIVED_WORKFLOW_KEYS, prepareRequestProcedures, withDerivedProcedures } from "./request-procedures.js";
 
@@ -12,7 +13,7 @@ function invalid(message) {
 }
 
 // Only the answer to "does the animal have a tutor?" may dispense the tutor's identity; origin, skipTutor and stepTutor sent by the client cannot.
-export function prepareRequestSubmission({ body, user, municipalityId, workflow, settings }) {
+export function prepareRequestSubmission({ body, user, municipalityId, workflow, settings, env = process.env }) {
   const requestType = body.request_type ?? body.requestType ?? body.requestTypeId ?? body.type;
   const isComplaint = requestType === "DENUNCIA";
   const internal = Boolean(user && isInternalUser(user));
@@ -47,9 +48,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
       invalid("Dados do animal inválidos.");
     }
     tutorRequired = tutorshipRequiresTutor(selectTutorship());
-    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
+    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: canReachByPhone(settings, env) });
   } else if (workflow.followUp !== undefined) {
-    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: settings.phoneEnabled });
+    nextWorkflow.followUp = normalizeFollowUp(workflow.followUp, { phoneEnabled: canReachByPhone(settings, env) });
   }
   if (!isComplaint && !procedures) invalid("Escolha ao menos um procedimento para cada animal.");
   // Staff register a tutor too, unless they answer that the animal has none; the request types never dispense it.

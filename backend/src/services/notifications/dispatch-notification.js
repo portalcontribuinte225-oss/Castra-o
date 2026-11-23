@@ -1,6 +1,7 @@
 import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode, rejectionReasonText } from "../../../../shared/notification-contract.js";
 import { WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
+import { isWhatsappReady, usesWhatsapp } from "../whatsapp-credentials.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
 import { sendResolvedTemplate } from "../whatsapp-template-sender.js";
@@ -51,15 +52,13 @@ async function deliverWhatsapp({ event, request, phone, runtime, template }, dep
 async function tryWhatsapp({ event, request, followUp }, dependencies) {
   const channel = NotificationChannel.WHATSAPP;
   const raw = await dependencies.loadWhatsappConfig(request.municipality_id);
-  if (raw.active !== true || !followUp.phone) return null;
+  if (!usesWhatsapp(raw) || !followUp.phone) return null;
   const resolved = await dependencies.resolveTemplate(request.municipality_id, event);
   if (!resolved.ok && resolved.code === DeliveryCode.NOT_CONFIGURED) return null;
   if (!resolved.ok) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, resolved.code) };
   if (!toE164Brazil(followUp.phone)) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.INVALID_RECIPIENT) };
   const runtime = getRuntimeConfig(raw);
-  if (runtime.provider !== "cloud_api" || !runtime.accessToken || !runtime.phoneNumberId) {
-    return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) };
-  }
+  if (!isWhatsappReady(runtime)) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.NOT_CONFIGURED) };
   return deliverWhatsapp({ event, request, phone: followUp.phone, runtime, template: resolved.template }, dependencies);
 }
 

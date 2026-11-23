@@ -6,7 +6,7 @@ import { statusLabels } from "../domain";
 import { Card } from "./card";
 import { Button } from "./button";
 import { CloseButton } from "./close-button";
-import { Input } from "./input";
+import { Input, fieldControlStyle } from "./input";
 
 export function EmptyState({ title, text, action, onAction }: AnyRecord) {
   return (
@@ -110,11 +110,12 @@ export function Metric({ title, value, icon: Icon, trend, compact = false }: Met
   );
 }
 
+// The aside (a status, for example) sits beside the title; the action goes to the end of the line.
 export function PanelHeader({ title, action, onAction, aside, actionClassName = "ghost-button" }: AnyRecord) {
+  const heading = <h2>{title}</h2>;
   return (
     <div className="panel-header">
-      <h2>{title}</h2>
-      {aside}
+      {aside ? <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-3">{heading}{aside}</div> : heading}
       {action && <button className={actionClassName} type="button" onClick={onAction}>{action}</button>}
     </div>
   );
@@ -162,6 +163,26 @@ export function ConfigField({ label, className = "", value, type = "text", inval
     <label className={`${configFieldStyle} ${className}`.trim()}>
       <span>{label}</span>
       <Input {...props} type={type} value={value ?? ""} aria-invalid={invalid || props["aria-invalid"]} onChange={(event) => onChange?.(event.target.value)} />
+    </label>
+  );
+}
+
+interface ConfigSelectFieldProps {
+  label: ReactNode;
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}
+
+// A choice among known options, with the same label and box as ConfigField.
+export function ConfigSelectField({ label, value, options, onChange, disabled = false }: ConfigSelectFieldProps) {
+  return (
+    <label className={configFieldStyle}>
+      <span>{label}</span>
+      <select className={fieldControlStyle} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
+        {options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
     </label>
   );
 }

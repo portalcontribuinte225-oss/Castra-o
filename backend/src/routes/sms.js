@@ -2,7 +2,7 @@ import { Router } from "express";
 import { auth, requireConfigItem, requireMaster } from "../middleware/auth.js";
 import { isMasterUser, pickMunicipalityId } from "../tenant.js";
 import { auditCtx } from "../services/audit.js";
-import { getPublicSmsConfig, getSmsIntegrationSettings, saveSmsAccount, sendSmsTestMessage, testSmsConnection } from "../services/sms-integration-settings.js";
+import { getPublicSmsConfig, getSmsIntegrationSettings, sendSmsTestMessage } from "../services/sms-integration-settings.js";
 import { setSmsUseActive } from "../services/sms-uses.js";
 import { IntegrationConfigItem } from "../../../shared/config-permission-contract.js";
 
@@ -14,22 +14,10 @@ router.get("/availability", async (req, res, next) => {
     res.set("Cache-Control", "no-store").json(await getPublicSmsConfig(req.query?.municipalityId));
   } catch (error) { next(error); }
 });
-// The master reads the platform's account (and, with a municipality, its messages); whoever has the SMS permission reads the messages.
+// Whether SMS is integrated and, with a municipality, its messages: for the master and for whoever has the SMS permission.
 router.get("/settings", auth, requireSmsItem, async (req, res, next) => {
   try {
     res.set("Cache-Control", "no-store").json(await getSmsIntegrationSettings({ municipalityId: pickMunicipalityId(req), master: isMasterUser(req.user) }));
-  } catch (error) { next(error); }
-});
-router.put("/account", auth, requireMaster, async (req, res, next) => {
-  try {
-    await saveSmsAccount({ input: req.body, actor: req.user });
-    res.set("Cache-Control", "no-store").json(await getSmsIntegrationSettings({ municipalityId: pickMunicipalityId(req), master: true }));
-  } catch (error) { next(error); }
-});
-router.post("/test-connection", auth, requireMaster, async (req, res, next) => {
-  try {
-    const result = await testSmsConnection({ actor: req.user });
-    res.set("Cache-Control", "no-store").json(result);
   } catch (error) { next(error); }
 });
 // Sends one test SMS to the phone typed on the screen and answers only whether it went: never the text, the token or the provider's body.

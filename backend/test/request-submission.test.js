@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { prepareRequestSubmission, mergeProtectedWorkflow } from "../src/services/request-submission.js";
 import { loadRequestSettings } from "../src/repositories/request-settings.js";
-import { SMS_CONFIG_KEY } from "../../shared/sms-contract.js";
+import { canReachByPhone } from "../src/services/follow-up-phone.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
 
@@ -15,9 +15,14 @@ const defaults = {
   workflow: { tutorship: AnimalTutorship.WITH_TUTOR, followUp: { enabled: false } },
   settings: {
     requestTypes: [{ id: "surgery", name: "Cirurgia", active: true }],
-    phoneEnabled: false,
+    whatsapp: {},
+    smsQuota: null,
   },
+  // The server's variables the requests are judged with: a fake WhatsApp key, which the default settings do not choose.
+  env: { WHATSAPP_TOKEN_TEST: "fake-whatsapp-token" },
 };
+// Settings of a municipality that reaches the tutor's phone by WhatsApp.
+const phoneSettings = () => ({ ...structuredClone(defaults.settings), whatsapp: { tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "123456" } });
 
 function prepare(overrides = {}) {
   return prepareRequestSubmission({ ...structuredClone(defaults), ...overrides });
@@ -100,7 +105,7 @@ test("contact normalization keeps notification recipients separate and clears hi
 
 test("the phone is kept only when the municipality has a phone channel, and must then be valid", () => {
   const followUp = (phone) => ({ followUp: { enabled: true, email: "citizen@example.com", phone } });
-  const settings = { ...structuredClone(defaults.settings), phoneEnabled: true };
+  const settings = phoneSettings();
   assert.deepEqual(prepare({ settings, workflow: followUp("(48) 99999-1234") }).workflow.followUp, { enabled: true, email: "citizen@example.com", phone: "48999991234" });
   assert.equal(prepare({ settings, workflow: followUp("") }).workflow.followUp.phone, "");
   assert.throws(() => prepare({ settings, workflow: followUp("123") }), /celular/);
@@ -153,39 +158,39 @@ test("settings repository scopes every config lookup to an active municipality a
   const database = { query: async (sql, parameters) => {
     assert.match(sql, /m\.id = \$1 AND m\.active = TRUE/);
     assert.match(sql, /c\.municipality_id = m\.id/);
-    assert.match(sql, /c\.municipality_id IS NULL AND c\.key = \$3/, "the SMS account is the one platform value read");
+    assert.doesNotMatch(sql, /municipality_id IS NULL/, "no platform row is read");
     assert.equal(parameters[0], municipalityId);
-    assert.equal(parameters[2], SMS_CONFIG_KEY);
+    assert.equal(parameters.length, 2);
     asked.push(...parameters[1]);
     return { rows: [{ municipality_id: municipalityId, key: null, value: null }] };
   } };
   const settings = await loadRequestSettings(municipalityId, database);
   assert.equal("identificationTypes" in settings, false, "the identification types are not part of the settings any more");
-  assert.equal(settings.phoneEnabled, false);
-  assert.equal("whatsappEnabled" in settings || "notifications" in settings, false);
+  assert.deepEqual([settings.whatsapp, settings.smsQuota], [{}, null], "the channels come as stored, judged by a service");
+  assert.equal("phoneEnabled" in settings || "whatsappEnabled" in settings || "notifications" in settings, false);
   assert.equal(asked.includes("whatsapp") && asked.includes("sms_quota"), true);
-  assert.equal(asked.includes(SMS_CONFIG_KEY), false, "a municipal SMS row is never read");
   assert.equal(asked.includes("castragestao:notifications"), false);
   assert.equal(asked.includes("castragestao:identification-types"), false, "the answer about the tutor is not configured");
   await assert.rejects(loadRequestSettings(municipalityId, { query: async () => ({ rows: [] }) }), /Município/);
 });
 
-test("the phone is asked as soon as WhatsApp is active or SMS can reach the municipality, and only when one really can", async () => {
+test("the phone is asked as soon as WhatsApp can send or SMS reaches the municipality, and only when one really can", async () => {
   const withConfig = (config) => ({ query: async () => ({ rows: [{ municipality_id: municipalityId, key: null, value: null },
     ...Object.entries(config).map(([key, value]) => ({ municipality_id: municipalityId, key, value }))] }) });
-  const phoneEnabled = async (config) => (await loadRequestSettings(municipalityId, withConfig(config))).phoneEnabled;
-  assert.equal(await phoneEnabled({ whatsapp: { active: true } }), true);
-  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10 } }), true);
-  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true } }), false, "the channel is on but the municipality has no SMS contract");
-  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, contractEnd: "2020-01-01" } }), false, "the contract ended");
-  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: false }, sms_quota: { plan: 10 } }), false, "the contract alone does not turn the channel on");
-  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, enabled: false } }), false, "the service is switched off for the municipality");
-  assert.equal(await phoneEnabled({ [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, enabled: true } }), true);
-  assert.equal(await phoneEnabled({ whatsapp: { active: true }, [SMS_CONFIG_KEY]: { active: true }, sms_quota: { plan: 10, enabled: false } }), true, "WhatsApp still reaches the phone");
-  assert.equal(await phoneEnabled({ whatsapp: { active: true }, [SMS_CONFIG_KEY]: { active: false } }), true);
-  assert.equal(await phoneEnabled({ whatsapp: { active: false }, [SMS_CONFIG_KEY]: { active: false } }), false);
-  assert.equal(await phoneEnabled({ whatsapp: { active: "true" }, [SMS_CONFIG_KEY]: { hasToken: true } }), false);
-  assert.equal(await phoneEnabled({}), false);
+  const whatsapp = { tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "123456" };
+  const env = { WHATSAPP_TOKEN_TEST: "fake-whatsapp-token", SMS_TOKEN: "production-test-token" };
+  const reach = async (config, values = env) => canReachByPhone(await loadRequestSettings(municipalityId, withConfig(config)), values);
+  assert.equal(await reach({ whatsapp }), true);
+  assert.equal(await reach({ whatsapp: { ...whatsapp, phoneNumberId: "" } }, { WHATSAPP_TOKEN_TEST: "fake-whatsapp-token" }), false, "no sender number");
+  assert.equal(await reach({ whatsapp }, { SMS_TOKEN: "production-test-token" }), false, "the chosen key is not in the server and there is no SMS contract");
+  assert.equal(await reach({ whatsapp: { active: true } }), false, "an old switch alone reaches nothing");
+  assert.equal(await reach({ sms_quota: { plan: 10 } }), true);
+  assert.equal(await reach({}), false, "SMS is integrated but the municipality has no SMS contract");
+  assert.equal(await reach({ sms_quota: { plan: 10, contractEnd: "2020-01-01" } }), false, "the contract ended");
+  assert.equal(await reach({ sms_quota: { plan: 10, enabled: false } }), false, "the contract is switched off");
+  assert.equal(await reach({ sms_quota: { plan: 10 } }, { SMS_TOKEN: "sbx_example-test-token" }), false, "a sandbox token is not integrated");
+  assert.equal(await reach({ sms_quota: { plan: 10 } }, {}), false, "SMS is not integrated");
+  assert.equal(await reach({ whatsapp, sms_quota: { plan: 10, enabled: false } }), true, "WhatsApp still reaches the phone");
 });
 
 const procedureSettings = (extra = {}) => ({
@@ -303,7 +308,7 @@ test("the mobile is not asked of a logged tutor (the profile has it), a tutorles
 });
 
 test("the follow-up needs at least one contact, and an internal request carries its follow-up through", () => {
-  const settings = { ...structuredClone(defaults.settings), phoneEnabled: true };
+  const settings = phoneSettings();
   const only = (contacts, extra = {}) => prepare({ settings, ...extra, workflow: { followUp: { enabled: true, ...contacts } } }).workflow.followUp;
   assert.deepEqual(only({ email: "citizen@example.com" }), { enabled: true, email: "citizen@example.com", phone: "" });
   assert.deepEqual(only({ phone: "(48) 99999-1234" }), { enabled: true, email: "", phone: "48999991234" });

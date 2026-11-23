@@ -1,4 +1,3 @@
-import { secretPreview } from "../../../shared/secret-preview-contract.js";
 import { CredentialIssue, WHATSAPP_TOKEN_VARIABLE_PATTERN } from "../../../shared/server-credential-contract.js";
 import { readServerCredential } from "./server-credentials.js";
 
@@ -32,36 +31,35 @@ export function listWhatsappTokenVariables(env = process.env) {
     .sort();
 }
 
-// Builds the stored value from a master save. Only known fields are kept, so removed settings disappear on the next save. Choosing
-// no variable turns the channel off; turning it on needs a variable that holds a token.
+// The municipality chose a key, so WhatsApp is in use there; without one the channel is simply not used.
+export const usesWhatsapp = (config) => Boolean(String(config?.tokenVariable || ""));
+
+// A runtime configuration that can send: the Cloud API, a token from the server and the sender's number id.
+export const isWhatsappReady = (runtime) => runtime?.provider === "cloud_api" && Boolean(runtime.accessToken) && Boolean(runtime.phoneNumberId);
+
+// Builds the stored value from a master save. Only known fields are kept, so removed settings disappear on the next save. The chosen
+// key must be one the server holds; choosing none takes the channel out of use.
 export function prepareWhatsappCredentials(current = {}, input = {}, env = process.env) {
   const phoneNumberId = pick(input.phoneNumberId, current.phoneNumberId);
   const wabaId = pick(input.wabaId, current.wabaId);
   const tokenVariable = pick(input.tokenVariable, current.tokenVariable);
   if (phoneNumberId && !ID_PATTERN.test(phoneNumberId)) throw fail("O ID do número de telefone deve conter apenas dígitos.");
   if (wabaId && !ID_PATTERN.test(wabaId)) throw fail("O ID da conta do WhatsApp Business deve conter apenas dígitos.");
-  const tokenIssue = readWhatsappToken(tokenVariable, env).issue;
-  if (input.tokenVariable !== undefined && tokenVariable && tokenIssue) throw fail("Escolha uma das variáveis do WhatsApp cadastradas no servidor.");
-  if (input.active === true && tokenIssue) throw fail("Escolha uma variável do token disponível no servidor antes de ativar o WhatsApp.");
-  const active = Boolean(tokenVariable) && (input.active === undefined ? current.active === true : input.active === true);
-  return { active, provider: "cloud_api", phoneNumberId, wabaId, tokenVariable };
+  if (input.tokenVariable !== undefined && tokenVariable && readWhatsappToken(tokenVariable, env).issue) {
+    throw fail("Escolha uma das variáveis do WhatsApp cadastradas no servidor.");
+  }
+  return { provider: "cloud_api", phoneNumberId, wabaId, tokenVariable };
 }
 
-// Visitors only learn whether the channel can send (the public follow-up form needs that); staff also see the identifiers and
-// whether a token is there; only the master sees the variable names and how the token starts.
+// No part of a token ever leaves. Everyone learns whether the channel can send (the follow-up form needs that); staff also whether
+// the chosen key is in the server; only the master sees the ids and the key names to choose from.
 export function publicWhatsappConfig(value, { internal = false, master = false } = {}, env = process.env) {
   const source = asObject(value);
   const tokenVariable = String(source.tokenVariable || "");
-  const { token, issue } = readWhatsappToken(tokenVariable, env);
-  const active = source.active === true;
-  if (!internal) return { active: active && Boolean(token) };
-  const view = {
-    active,
-    provider: "cloud_api",
-    phoneNumberId: String(source.phoneNumberId || ""),
-    wabaId: String(source.wabaId || ""),
-    hasAccessToken: Boolean(token),
-  };
-  if (!master) return view;
-  return { ...view, tokenVariable, tokenVariables: listWhatsappTokenVariables(env), tokenPreview: secretPreview(token), tokenIssue: issue };
+  const phoneNumberId = String(source.phoneNumberId || "");
+  const integrated = Boolean(readWhatsappToken(tokenVariable, env).token);
+  const active = integrated && Boolean(phoneNumberId);
+  if (!internal) return { active };
+  if (!master) return { active, integrated };
+  return { active, integrated, phoneNumberId, wabaId: String(source.wabaId || ""), tokenVariable, tokenVariables: listWhatsappTokenVariables(env) };
 }

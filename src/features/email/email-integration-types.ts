@@ -1,18 +1,3 @@
-// A server variable of the account that is missing or malformed, by name.
-export interface EmailCredentialIssue {
-  variable: string;
-  problem: string;
-}
-
-// What the master sees of the account, read from the server's variables: the private key itself never arrives, only how it starts.
-export interface EmailAccountView {
-  serviceId: string;
-  publicKey: string;
-  publicUrl: string;
-  privateKeyPreview: string;
-  issues: EmailCredentialIssue[];
-}
-
 // One message the system can send by e-mail. Ids and variables come only for the master.
 export interface EmailUseRow {
   key: string;
@@ -31,11 +16,11 @@ export interface EmailIdentitySummary {
   departmentLogo: string;
 }
 
+// Whether the platform's account is integrated (it lives in the server's variables and never reaches the screen), the messages and
+// how the municipality appears in the e-mails.
 export interface EmailSettings {
-  account: EmailAccountView | null;
-  configured: boolean;
+  integrated: boolean;
   municipal: boolean;
   uses: EmailUseRow[];
   identity: EmailIdentitySummary | null;
 }
-

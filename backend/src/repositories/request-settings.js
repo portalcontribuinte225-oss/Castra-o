@@ -1,28 +1,27 @@
 import { pool } from "../db/index.js";
-import { SMS_CONFIG_KEY } from "../../../shared/sms-contract.js";
-import { MESSAGE_QUOTA_KEYS, isServiceAvailable } from "../../../shared/message-quota-contract.js";
+import { MESSAGE_QUOTA_KEYS } from "../../../shared/message-quota-contract.js";
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { REQUEST_TYPES_CONFIG_KEY } from "../services/request-type-defaults.js";
 import { NEIGHBORHOODS_CONFIG_KEY } from "../services/neighborhood-defaults.js";
 
 // This adapter extends the existing pg/config storage: no Drizzle runtime exists in this application.
-// All lookups are parameterized and scoped to an active municipality. The one platform value read here is the SMS account, which
-// no municipality owns: whether SMS reaches the municipality depends on it and on the municipality's own SMS contract.
+// All lookups are parameterized and scoped to an active municipality. The WhatsApp settings and the SMS contract come as stored:
+// whether they reach a phone also depends on the server's variables, which a service judges.
 const SMS_QUOTA_KEY = MESSAGE_QUOTA_KEYS[NotificationChannel.SMS];
 export async function loadRequestSettings(municipalityId, database = pool) {
   const keys = [REQUEST_TYPES_CONFIG_KEY, "whatsapp", SMS_QUOTA_KEY, "castragestao:document-types", NEIGHBORHOODS_CONFIG_KEY];
   const { rows } = await database.query(
     `SELECT m.id AS municipality_id, c.key, c.value
-     FROM municipalities m LEFT JOIN config c ON (c.municipality_id = m.id AND c.key = ANY($2::text[])) OR (c.municipality_id IS NULL AND c.key = $3)
+     FROM municipalities m LEFT JOIN config c ON c.municipality_id = m.id AND c.key = ANY($2::text[])
      WHERE m.id = $1 AND m.active = TRUE`,
-    [municipalityId, keys, SMS_CONFIG_KEY],
+    [municipalityId, keys],
   );
   if (!rows.length) throw Object.assign(new Error("Município indisponível para esta operação."), { status: 400 });
   const values = Object.fromEntries(rows.filter((row) => row.key).map((row) => [row.key, row.value]));
   return {
     requestTypes: Array.isArray(values[REQUEST_TYPES_CONFIG_KEY]) ? values[REQUEST_TYPES_CONFIG_KEY] : [],
-    // The follow-up form asks for a phone as soon as the municipality can reach one, by WhatsApp or by SMS (the channel on, the municipality's service on and its contract in force).
-    phoneEnabled: values.whatsapp?.active === true || (values[SMS_CONFIG_KEY]?.active === true && isServiceAvailable(values[SMS_QUOTA_KEY])),
+    whatsapp: values.whatsapp || {},
+    smsQuota: values[SMS_QUOTA_KEY] || null,
     documentTypes: Array.isArray(values["castragestao:document-types"]) ? values["castragestao:document-types"] : [],
     neighborhoods: Array.isArray(values[NEIGHBORHOODS_CONFIG_KEY]) ? values[NEIGHBORHOODS_CONFIG_KEY] : [],
   };

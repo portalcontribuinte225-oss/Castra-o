@@ -6,6 +6,7 @@ import { sendEmailTemplate } from "../email.js";
 import { loadEmailIdentityParams } from "../email-identity.js";
 import { resolveEmailTemplate } from "../email-templates.js";
 import { getMunicipalityWhatsappConfig, getRuntimeConfig, sendWhatsappTemplateComponents, toE164Brazil } from "../whatsapp.js";
+import { isWhatsappReady, usesWhatsapp } from "../whatsapp-credentials.js";
 import { resolveActiveTemplate } from "../whatsapp-active-templates.js";
 import { markCatalogTemplateStatus } from "../whatsapp-catalog.js";
 import { sendResolvedTemplate } from "../whatsapp-template-sender.js";
@@ -63,11 +64,9 @@ async function tryWhatsapp(input, dependencies) {
   const channel = NotificationChannel.WHATSAPP;
   if (!toE164Brazil(input.phone)) return unavailable(input.purpose, channel, DeliveryCode.INVALID_RECIPIENT);
   const raw = await dependencies.loadWhatsappConfig(input.municipalityId);
-  if (raw.active !== true) return unavailable(input.purpose, channel, DeliveryCode.CHANNEL_DISABLED);
+  if (!usesWhatsapp(raw)) return unavailable(input.purpose, channel, DeliveryCode.CHANNEL_DISABLED);
   const runtime = getRuntimeConfig(raw);
-  if (runtime.provider !== "cloud_api" || !runtime.accessToken || !runtime.phoneNumberId) {
-    return unavailable(input.purpose, channel, DeliveryCode.NOT_CONFIGURED);
-  }
+  if (!isWhatsappReady(runtime)) return unavailable(input.purpose, channel, DeliveryCode.NOT_CONFIGURED);
   const resolved = await dependencies.resolveTemplate(input.municipalityId, input.purpose);
   if (!resolved.ok) return unavailable(input.purpose, channel, resolved.code);
   if (!(await dependencies.consumeQuota(channel, input.municipalityId)).allowed) return unavailable(input.purpose, channel, DeliveryCode.QUOTA_UNAVAILABLE);

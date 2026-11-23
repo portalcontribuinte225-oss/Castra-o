@@ -1,19 +1,19 @@
-// What the server tells about the contract of one channel for one municipality: the plan, the month's usage and the dates.
+import type { ContractState } from "../../../shared/message-quota-contract.js";
+
+// What the server tells about the contract of one channel for one municipality: the plan, the month's usage, the dates and where
+// it stands today.
 export interface MessageQuotaStatus {
   plan: number;
   used: number;
-  remaining: number;
   contractStart: string | null;
   contractEnd: string | null;
-  // Whether today is inside the dates of the contract (the balance of the month is another matter).
-  active: boolean;
-  // Whether the platform's administrator left the service on for the municipality (SMS and e-mail; a contract with no switch is on).
-  enabled: boolean;
+  state: (typeof ContractState)[keyof typeof ContractState];
 }
 
-// What a save carries: the monthly limit and the dates, which stay empty when the contract has none.
+// What a save carries: the monthly limit, the dates (empty when the contract has none) and whether the contract is on.
 export interface MessageQuotaInput {
   plan: number;
   contractStart: string;
   contractEnd: string;
+  enabled: boolean;
 }

@@ -5,7 +5,7 @@ import express from "express";
 import emailRoutes from "../src/routes/email.js";
 import { pool } from "../src/db/index.js";
 import { EMAIL_ACTIVE_USES_CONFIG_KEY, EMAIL_SETTINGS_PERMISSION, EMAIL_TEMPLATES_CONFIG_KEY } from "../../shared/email-contract.js";
-import { CredentialIssue, ServerCredential } from "../../shared/server-credential-contract.js";
+import { ServerCredential } from "../../shared/server-credential-contract.js";
 import { emailUses } from "../../shared/email-uses-contract.js";
 import { AuthPurpose } from "../../shared/auth-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
@@ -79,14 +79,14 @@ test("every route needs a session and rejects tutors and operational users", asy
   assert.equal(database.calls.filter((call) => !isPermissionRead(call)).length, 0, "only the permission is read before the refusal");
 });
 
-test("a municipal administrator reads only the municipal view: no account, no ids, no variables, and a forged municipality is ignored", async (t) => {
+test("a municipal administrator reads only the municipal view: no ids, no variables, and a forged municipality is ignored", async (t) => {
   const { request, database } = await fixture(t, ready());
   const response = await request(`/email/settings?municipalityId=${OTHER}`, { user: ADMIN });
   assert.equal(response.status, 200);
   assert.equal(response.cacheControl, "no-store");
-  assert.equal(response.body.account, null);
+  assert.deepEqual(Object.keys(response.body).sort(), ["identity", "integrated", "municipal", "uses"]);
   assert.equal(response.body.municipal, true);
-  assert.equal(response.body.configured, true);
+  assert.equal(response.body.integrated, true);
   assert.deepEqual(response.body.identity, { name: "Test Town", departmentName: "", brasao: "missing", departmentLogo: "missing" });
   assert.deepEqual(response.body.uses.map(({ key }) => key), emailUses.map(({ key }) => key));
   for (const row of response.body.uses) assert.equal(Object.hasOwn(row, "templateId") || Object.hasOwn(row, "variables"), false);
@@ -94,13 +94,13 @@ test("a municipal administrator reads only the municipal view: no account, no id
   assert.equal(database.calls.filter(({ sql }) => sql.includes("SELECT value FROM config")).every(({ values }) => values[1] === MUNICIPALITY || values[1] === null), true);
 });
 
-test("the master reads the account and the ids; the support reads only the municipal view and needs a municipality", async (t) => {
+test("the master reads the ids; the support reads only the municipal view and needs a municipality", async (t) => {
   const { request } = await fixture(t, ready());
   const master = await request("/email/settings", { user: MASTER });
   assert.equal(master.status, 200);
   assert.equal(master.body.municipal, false);
   assert.equal(master.body.identity, null);
-  assert.equal(master.body.account.serviceId, "test-service");
+  assert.equal(master.body.integrated, true);
   assert.equal(master.body.uses.find(({ key }) => key === RESET).templateId, "tpl_reset");
   assert.equal(master.body.uses.some(({ active }) => active), false);
   const withMunicipality = await request(`/email/settings?municipalityId=${MUNICIPALITY}`, { user: MASTER });
@@ -109,34 +109,28 @@ test("the master reads the account and the ids; the support reads only the munic
   assert.equal((await request("/email/settings", { user: SUPPORT })).status, 400);
   const support = await request(`/email/settings?municipalityId=${MUNICIPALITY}`, { user: SUPPORT });
   assert.equal(support.status, 200);
-  assert.equal(support.body.account, null);
+  assert.equal(Object.hasOwn(support.body, "account"), false);
   assert.equal(JSON.stringify(support.body).includes("tpl_"), false);
   assert.equal((await request("/email/settings?municipalityId=not-a-uuid", { user: MASTER })).status, 400);
 });
 
-test("the master reads the account of the server's variables, with only the start of the private key, and can no longer save one", async (t) => {
+test("nobody reads anything of the account: the master learns only that it is integrated, and there is no route to save one", async (t) => {
   const { request, database } = await fixture(t);
   const master = await request("/email/settings", { user: MASTER });
-  assert.deepEqual(master.body.account, {
-    serviceId: "test-service", publicKey: "test-public", publicUrl: "https://system.example.test", privateKeyPreview: PRIVATE_KEY.slice(0, 8), issues: [],
-  });
-  assert.equal(master.body.configured, true);
+  assert.equal(master.body.integrated, true);
+  for (const value of ["test-service", "test-public", PRIVATE_KEY.slice(0, 8), "system.example.test"]) assert.equal(JSON.stringify(master.body).includes(value), false, value);
   assert.equal(emailRoutes.stack.some((layer) => layer.route?.path === "/account"), false, "there is no route to save the account");
   assert.equal(database.store.size, 0);
   assert.equal(database.audits.length, 0);
 });
 
-test("the master learns which variables of the account are missing or malformed, and nothing is configured", async (t) => {
+test("a missing or malformed variable leaves the account not integrated, names no variable and counts no message as configured", async (t) => {
   const { request } = await fixture(t, ready(), { [ServerCredential.EMAILJS_SERVICE_ID]: "service id", [ServerCredential.EMAILJS_PUBLIC_KEY]: "test-public" });
   const master = await request("/email/settings", { user: MASTER });
-  assert.equal(master.body.configured, false);
-  assert.deepEqual(master.body.account.issues, [
-    { variable: ServerCredential.EMAILJS_SERVICE_ID, problem: CredentialIssue.INVALID },
-    { variable: ServerCredential.EMAILJS_PRIVATE_KEY, problem: CredentialIssue.MISSING },
-    { variable: ServerCredential.APP_PUBLIC_URL, problem: CredentialIssue.MISSING },
-  ]);
+  assert.equal(master.body.integrated, false);
   assert.equal(master.body.uses.some(({ configured }) => configured), false);
   assert.equal(JSON.stringify(master.body).includes("service id"), false);
+  assert.equal(JSON.stringify(master.body).includes("EMAILJS_"), false);
 });
 
 test("the private key never appears in any response or audit entry", async (t) => {
@@ -220,7 +214,7 @@ const emailGroup = (items = [EMAIL_SETTINGS_PERMISSION], member = ANALYST, extra
 test("a staff user with the e-mail permission reads the municipal view and switches the messages, and never reaches the platform's routes", async (t) => {
   const { request, database } = await fixture(t, { ...ready(), ...emailGroup() });
   const read = await request("/email/settings", { user: ANALYST });
-  assert.equal(read.status, 200); assert.equal(read.body.account, null); assert.equal(read.body.municipal, true);
+  assert.equal(read.status, 200); assert.equal(Object.hasOwn(read.body, "account"), false); assert.equal(read.body.integrated, true); assert.equal(read.body.municipal, true);
   const on = await request("/email/templates/active", { method: "PUT", user: ANALYST, body: { use: CONFIRMED, active: true } });
   assert.equal(on.status, 200);
   assert.equal(database.store.get(`${EMAIL_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`).active[CONFIRMED], true);
@@ -252,9 +246,8 @@ test("the group decides: the item must be in it, the group must be active and of
   assert.equal(await reads(ANALYST), 403, "an entry with the same e-mail but another id gives nothing");
 });
 
-test("a service switched off for the municipality refuses to turn a message on, while turning it off stays allowed", async (t) => {
+test("turning a message on does not depend on the contract, which decides only the sending", async (t) => {
   const { request } = await fixture(t, { ...ready(), [`email_quota:${MUNICIPALITY}`]: { plan: 10, enabled: false } });
-  const on = await request("/email/templates/active", { method: "PUT", user: ADMIN, body: { use: CONFIRMED, active: true } });
-  assert.equal(on.status, 400); assert.match(on.body.error, /desativado/);
+  assert.equal((await request("/email/templates/active", { method: "PUT", user: ADMIN, body: { use: CONFIRMED, active: true } })).status, 200);
   assert.equal((await request("/email/templates/active", { method: "PUT", user: ADMIN, body: { use: CONFIRMED, active: false } })).status, 200);
 });

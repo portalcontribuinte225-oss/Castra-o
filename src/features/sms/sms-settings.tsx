@@ -1,53 +1,41 @@
 import { NotificationChannel } from "../../../shared/notification-contract.js";
 import { Button } from "../../components/button";
-import { IntegrationCard } from "../../components/integration-card";
-import { ConfigActiveToggle, PanelHeader } from "../../components/ui";
-import { MessageContractForm } from "../message-contract/message-contract-form";
-import { MessageContractStatus } from "../message-contract/message-contract-status";
-import { MessageServiceToggle } from "../message-contract/message-service-toggle";
+import { IntegrationCard, IntegrationStatusBadge } from "../../components/integration-card";
+import { PanelHeader } from "../../components/ui";
+import { MessageContractCard } from "../message-contract/message-contract-card";
 import { useMessageContract } from "../message-contract/use-message-contract";
-import { SmsCredentials } from "./sms-credentials";
+import { SmsTestMessage } from "./sms-test-message";
 import { SmsUsesTable } from "./sms-uses-table";
 import { useSmsSettings } from "./use-sms-settings";
 
-// SMS tab: the master sets the platform's account, the municipality's contract and whether its service is on; whoever has the SMS permission
-// turns the municipality's messages on or off.
-export function SmsSettings({ municipalityId, master, canManage, canEditContract }: { municipalityId: string; master: boolean; canManage: boolean; canEditContract: boolean }) {
+// SMS tab: whether the platform's token is integrated (it lives in the server's variables), the master's send test, the municipality's
+// contract (its switch is the master's) and the messages, which whoever has the SMS permission turns on or off.
+export function SmsSettings({ municipalityId, master, canManage }: { municipalityId: string; master: boolean; canManage: boolean }) {
   const state = useSmsSettings(municipalityId, master, canManage);
   const contract = useMessageContract(NotificationChannel.SMS, canManage ? municipalityId : "");
   if (!canManage) return <p role="status">Configuração de SMS restrita à administração.</p>;
   if (!municipalityId && !master) return <p>Selecione um município para configurar o SMS.</p>;
-  const busy = state.loading || state.saving || state.testing || state.sendingTest;
-  const serviceOn = contract.live?.enabled !== false;
-  const activationControl = municipalityId
-    ? canEditContract && <MessageServiceToggle contract={contract} />
-    : <ConfigActiveToggle checked={state.config.active} onChange={state.toggleActive} onText="Ativo na plataforma" offText="Inativo na plataforma" disabled={busy} />;
+  const busy = state.loading || state.saving || state.sendingTest;
   return (
     <div className="config-panel wide">
-      <PanelHeader title="SMS" />
-      {state.ready && municipalityId && <MessageContractStatus active={contract.ready ? state.config.active && serviceOn : null} live={contract.live} />}
+      <PanelHeader title="SMS" aside={state.ready && <IntegrationStatusBadge integrated={state.config.integrated} />} />
       {state.loading && <p role="status">Carregando configuração de SMS...</p>}
       {state.error && <p role="alert" className="form-error">{state.error}</p>}
-      {state.notice && <p role="status">{state.notice}</p>}
       {!state.ready && !state.loading && <Button variant="outline" onClick={state.retry}>Carregar novamente</Button>}
       {state.ready && (
         <div className="tw:grid tw:gap-3">
-          {master && <SmsCredentials state={state} actions={activationControl} />}
-          {master && municipalityId && !state.config.active && (
-            <p className="whatsapp-note">O SMS da plataforma está inativo. Para ativá-lo, selecione “Todos os municípios”.</p>
-          )}
+          {master && <SmsTestMessage state={state} />}
+          {municipalityId && <MessageContractCard contract={contract} master={master} />}
           <IntegrationCard title="Mensagens">
             {!municipalityId && <p className="whatsapp-note">Selecione um município para ligar ou desligar as mensagens.</p>}
             <SmsUsesTable
               rows={state.config.uses}
               municipalityName={state.config.municipalityName}
-              channelActive={state.config.active}
-              serviceOn={serviceOn}
+              integrated={state.config.integrated}
               busy={busy || !municipalityId}
               onToggle={state.setUseActive}
             />
           </IntegrationCard>
-          {canEditContract && <MessageContractForm municipalityId={municipalityId} contract={contract} />}
         </div>
       )}
     </div>

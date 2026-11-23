@@ -1,15 +1,9 @@
-import { secretPreview } from "./secret-preview-contract.js";
-import { CredentialIssue } from "./server-credential-contract.js";
 import { getSmsUse, smsUses } from "./sms-uses-contract.js";
 import { isUseOn, normalizeUseSwitches } from "./use-switches-contract.js";
 
-// The platform's SMS channel switch: one row with no municipality, which only the master changes. The token lives in the environment.
-export const SMS_CONFIG_KEY = "castragestao:sms";
-// Per municipality: which SMS messages the municipality turned on.
+// Per municipality: which SMS messages the municipality turned on. The platform's token lives in the server's environment.
 export const SMS_ACTIVE_USES_CONFIG_KEY = "sms_active_uses";
 export const SMS_MAX_TOKEN_LENGTH = 2048;
-export const SmsProvider = Object.freeze({ SMSMAIS: "smsmais" });
-export const SmsEnvironment = Object.freeze({ PRODUCTION: "production", SANDBOX: "sandbox" });
 
 export const normalizeSmsActiveUses = (stored) => normalizeUseSwitches(stored, smsUses);
 
@@ -23,18 +17,12 @@ export function normalizeSmsUseRows(rows) {
 }
 
 export function buildDefaultSmsConfig() {
-  return { provider: SmsProvider.SMSMAIS, active: false, hasToken: false, tokenPreview: "", environment: null, tokenIssue: null,
-    municipalityName: "", uses: normalizeSmsUseRows() };
+  return { integrated: false, municipalityName: "", uses: normalizeSmsUseRows() };
 }
 
-// This contract only projects public metadata: of the token, only its start (the preview) is readable; the token itself never
-// belongs in a DTO. The issue says why the server holds no usable token.
+// What the screen reads: whether the server holds a production token (never the token), the municipality's name and its messages.
 export function normalizeSmsConfig(value = {}) {
-  const hasToken = value?.hasToken === true;
-  return { provider: SmsProvider.SMSMAIS, active: value?.active === true, hasToken,
-    tokenPreview: hasToken && typeof value?.tokenPreview === "string" ? secretPreview(value.tokenPreview) : "",
-    environment: Object.values(SmsEnvironment).includes(value?.environment) ? value.environment : null,
-    tokenIssue: Object.values(CredentialIssue).includes(value?.tokenIssue) ? value.tokenIssue : null,
+  return { integrated: value?.integrated === true,
     municipalityName: typeof value?.municipalityName === "string" ? value.municipalityName.slice(0, 200) : "",
     uses: normalizeSmsUseRows(value?.uses) };
 }

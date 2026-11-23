@@ -28,7 +28,6 @@ export async function getMunicipalityWhatsappConfig(municipalityId, database = p
 // The only place that hands out a token: the one in the variable the municipality chose, read from the environment.
 export function getRuntimeConfig(config = {}, env = process.env) {
   return {
-    active: config.active === true,
     provider: config.provider || "cloud_api",
     accessToken: readWhatsappToken(config.tokenVariable, env).token,
     phoneNumberId: String(config.phoneNumberId || ""),

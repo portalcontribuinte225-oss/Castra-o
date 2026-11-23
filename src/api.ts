@@ -6,7 +6,6 @@ import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAn
 import type { TrackedRequest, TrackingSession, TrackingStartBody } from "./features/request-tracking/tracking-types";
 import type { AccessSession, AccessStartBody, AccessView } from "./features/request-access/access-types";
 import type { MessageQuotaInput, MessageQuotaStatus } from "./features/message-contract/message-contract-types";
-import type { SmsAccountInput } from "./features/sms/sms-types";
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
 import type { EmailSettings } from "./features/email/email-integration-types";
 import type { OpenStaffNotification, StaffNotificationPage } from "./features/staff-notifications/staff-notification-types";
@@ -224,9 +223,7 @@ export const api = {
   saveEmailTemplates: (templates: Record<string, string>, municipalityId = ""): Promise<EmailSettings> => request("PUT", municipalityId ? `/email/templates?municipalityId=${encodeURIComponent(municipalityId)}` : "/email/templates", { templates }),
   setEmailUseActive: (municipalityId: string, use: string, active: boolean): Promise<EmailSettings> => request("PUT", `/email/templates/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   getSmsSettings: (municipalityId = ""): Promise<unknown> => request("GET", municipalityId ? `/sms/settings?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/settings"),
-  saveSmsAccount: (body: SmsAccountInput, municipalityId = ""): Promise<unknown> => request("PUT", municipalityId ? `/sms/account?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/account", body),
   getSmsAvailability: (municipalityId: string): Promise<{ active?: boolean } | null> => request("GET", `/sms/availability?municipalityId=${encodeURIComponent(municipalityId)}`),
-  testSmsConnection: () => request("POST", "/sms/test-connection"),
   sendSmsTest: (municipalityId: string, phone: string) => request("POST", municipalityId ? `/sms/test-message?municipalityId=${encodeURIComponent(municipalityId)}` : "/sms/test-message", { phone }),
   setSmsUseActive: (municipalityId: string, use: string, active: boolean) => request("PUT", `/sms/uses/active?municipalityId=${encodeURIComponent(municipalityId)}`, { use, active }),
   setConfig: (key, value, municipalityId = "") => request(
@@ -244,8 +241,6 @@ export const api = {
 
   getMessageQuota: (channel: string, municipalityId: string): Promise<MessageQuotaStatus | null> => request("GET", `/message-quota/${channel}?municipalityId=${encodeURIComponent(municipalityId)}`),
   saveMessageQuota: (channel: string, municipalityId: string, body: MessageQuotaInput): Promise<MessageQuotaStatus | null> => request("PUT", `/message-quota/${channel}?municipalityId=${encodeURIComponent(municipalityId)}`, body),
-  resetMessageQuota: (channel: string, municipalityId: string): Promise<MessageQuotaStatus | null> => request("POST", `/message-quota/${channel}/reset?municipalityId=${encodeURIComponent(municipalityId)}`),
-  setMessageService: (channel: string, municipalityId: string, enabled: boolean): Promise<MessageQuotaStatus | null> => request("PUT", `/message-quota/${channel}/enabled?municipalityId=${encodeURIComponent(municipalityId)}`, { enabled }),
   sendWhatsappTest: (municipalityId: string, phone: string) => request("POST", "/whatsapp/test", { municipalityId, phone }),
   getWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("GET", `/whatsapp/templates?municipalityId=${encodeURIComponent(municipalityId)}`),
   syncWhatsappTemplates: (municipalityId: string): Promise<WhatsappTemplateList> => request("POST", "/whatsapp/templates/sync", { municipalityId }),

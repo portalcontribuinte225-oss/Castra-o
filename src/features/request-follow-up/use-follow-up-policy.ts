@@ -8,8 +8,8 @@ interface PolicyState {
   phoneEnabled: boolean;
 }
 
-// E-mail is always asked; the phone is asked as soon as the municipality can reach it, by WhatsApp or by SMS (the platform's channel is on
-// and the municipality has a contract).
+// E-mail is always asked; the phone is asked as soon as the municipality can reach it, by WhatsApp (its key and sender number are set)
+// or by SMS (integrated, with the municipality's contract on and in force).
 export async function loadFollowUpPolicy(municipalityId: string, readConfig = api.getConfig, readSmsAvailability = api.getSmsAvailability) {
   const [whatsapp, sms] = await Promise.all([
     readConfig("whatsapp", municipalityId),

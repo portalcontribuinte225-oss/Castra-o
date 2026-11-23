@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeSmsPhone, querySmsBalance, sendSmsMessage } from "../src/services/smsmais.js";
+import { normalizeSmsPhone, sendSmsMessage } from "../src/services/smsmais.js";
 import { DeliveryCode, DeliveryStatus } from "../../shared/notification-contract.js";
 import { SMS_MAX_LENGTH } from "../../shared/sms-messages-contract.js";
 
@@ -39,15 +39,6 @@ test("a notice has no expiry and is sent under the id it was given, with any pla
     const message = JSON.parse(options.body).messages[0];
     return json([{ id: 8, externalId: message.id, to: message.destinations[0].to, msg: message.msg, schedule: "" }]);
   } })).status, DeliveryStatus.SENT);
-});
-
-test("balance requires the official success envelope, accepts zero and projects no financial history", async () => {
-  let url;
-  const valid = await querySmsBalance(input.token, { fetchImpl: async (target) => { url = target; return json({ success: true, data: { saldo: 0, sms_equivalente: 0, total_recargas: 1000, token: input.token } }); } });
-  assert.equal(url, "https://smsmais.com/saldo"); assert.deepEqual(valid, { valid: true, balance: { credits: 0, sms: 0 } });
-  for (const body of [{ success: false, data: { saldo: 0, sms_equivalente: 0 } }, { saldo: 1 }, { success: true, data: { saldo: "1", sms_equivalente: 1 } }]) {
-    assert.equal((await querySmsBalance(input.token, { fetchImpl: async () => json(body) })).valid, false);
-  }
 });
 
 test("provider failures are finite and sanitized, never retried", async () => {
@@ -92,7 +83,6 @@ test("an answer that is not for this message cannot count as accepted, and says 
   for (const [content, detail] of [["invalid JSON", "a resposta não é um JSON válido"], ["x".repeat(32769), "a resposta é grande demais"]]) {
     const result = await sendSmsMessage(input, { now: () => NOW, fetchImpl: async () => new Response(content) });
     assert.equal(result.code, DeliveryCode.INVALID_RESPONSE); assert.equal(result.detail, detail);
-    assert.equal((await querySmsBalance(input.token, { fetchImpl: async () => new Response(content) })).code, DeliveryCode.INVALID_RESPONSE);
   }
 });
 
@@ -118,7 +108,7 @@ test("HTTP errors abort the fetch lifecycle even when the provider leaves its re
   let reads = 0;
   const response = new Response(new ReadableStream({ pull() { reads += 1; } }), { status: 503 });
   try {
-    const result = await querySmsBalance(input.token, { fetchImpl: async (_url, options) => { signal = options.signal; return response; } });
+    const result = await sendSmsMessage(input, { now: () => NOW, fetchImpl: async (_url, options) => { signal = options.signal; return response; } });
     assert.equal(result.code, DeliveryCode.TRANSPORT_FAILED);
     assert.equal(signal.aborted, true, "The completed error request must release its network resources");
     assert.equal(response.body.locked, false);

@@ -234,13 +234,13 @@ test("refusal and missing preference never infer consent from existing contacts"
   assert.deepEqual(f.calls, []);
 });
 
-test("a WhatsApp that is active but cannot send is reported, and the other channels still go out", async () => {
+test("a WhatsApp in use that cannot send is reported, and the other channels still go out", async () => {
   for (const scenario of ["phone", "quota", "template", "credentials"]) {
     const f = fixture();
     if (scenario === "phone") f.request.workflow_data.followUp.phone = "123";
     if (scenario === "quota") f.dependencies.consumeQuota = async (channel) => ({ allowed: channel !== NotificationChannel.WHATSAPP, reason: "private" });
     if (scenario === "template") f.dependencies.resolveTemplate = async () => ({ ok: false, code: DeliveryCode.TEMPLATE_UNAVAILABLE });
-    if (scenario === "credentials") f.dependencies.loadWhatsappConfig = async () => ({ active: true });
+    if (scenario === "credentials") f.dependencies.loadWhatsappConfig = async () => ({ tokenVariable: "WHATSAPP_TOKEN_GONE", phoneNumberId: "123456" });
     const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
     const whatsapp = results.find(({ channel }) => channel === NotificationChannel.WHATSAPP);
     assert.equal(whatsapp.status, DeliveryStatus.SKIPPED, scenario);
@@ -250,7 +250,7 @@ test("a WhatsApp that is active but cannot send is reported, and the other chann
   }
 });
 
-test("a municipality without its own credentials never sends by WhatsApp, even when the host has WhatsApp variables", async () => {
+test("a municipality without its own key never sends by WhatsApp, even when the host has WhatsApp variables", async () => {
   const previous = { token: process.env.WHATSAPP_TOKEN, number: process.env.WHATSAPP_PHONE_NUMBER_ID };
   process.env.WHATSAPP_TOKEN = "host-token";
   process.env.WHATSAPP_PHONE_NUMBER_ID = "host-number";
@@ -258,7 +258,7 @@ test("a municipality without its own credentials never sends by WhatsApp, even w
     const f = fixture();
     f.dependencies.loadWhatsappConfig = async () => ({ active: true });
     const results = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
-    assert.equal(results[1].code, DeliveryCode.NOT_CONFIGURED);
+    assert.equal(results.some(({ channel }) => channel === NotificationChannel.WHATSAPP), false, "no key chosen: WhatsApp is not in use, an old switch notwithstanding");
     assert.equal(ran(f, "whatsapp") || spent(f, NotificationChannel.WHATSAPP), false);
   } finally {
     for (const [key, value] of [["WHATSAPP_TOKEN", previous.token], ["WHATSAPP_PHONE_NUMBER_ID", previous.number]]) {
