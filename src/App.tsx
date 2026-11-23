@@ -2943,20 +2943,30 @@ function NewRequest({
 
               <div className="documents-step-grid">
                 <aside className="documents-photo-column">
-                  <Card className="tw:grid tw:justify-items-center tw:gap-3 tw:p-3 tw:text-center">
-                    {uploadedPhoto?.dataUrl ? (
-                      <img className="tw:max-h-40 tw:w-full tw:rounded-[var(--ui-radius-md)] tw:object-contain" src={uploadedPhoto.dataUrl} alt="Foto do animal" />
-                    ) : <ImagePlus size={22} aria-hidden="true" className="tw:text-ui-accent" />}
-                    <span className="tw:text-sm tw:font-medium" role={animalPhotoLoading ? "status" : undefined}>
-                      {animalPhotoLoading ? "Carregando foto..." : reusedDocuments.animal_photo?.fileName || "Foto do animal"}
-                    </span>
-                    <small className="tw:text-ui-muted">{reusedDocuments.animal_photo ? "Foto reaproveitada" : "Opcional"}</small>
+                  <Card className="tw:grid tw:overflow-hidden tw:text-center">
+                    {/* The whole card picks the photo: a click anywhere attaches it, or replaces the one already attached. */}
+                    <button
+                      type="button"
+                      className="tw:grid tw:w-full tw:justify-items-center tw:gap-3 tw:border-0 tw:bg-transparent tw:p-3 tw:text-inherit tw:enabled:hover:bg-card-page tw:focus-visible:outline-2 tw:focus-visible:-outline-offset-2 tw:focus-visible:outline-ui-accent"
+                      disabled={animalPhotoLoading}
+                      aria-label={`${uploadedPhoto ? "Substituir" : "Anexar"} foto do animal`}
+                      onClick={() => animalPhotoInput.current?.click()}
+                    >
+                      {uploadedPhoto?.dataUrl ? (
+                        <img className="tw:max-h-40 tw:w-full tw:rounded-[var(--ui-radius-md)] tw:object-contain" src={uploadedPhoto.dataUrl} alt="Foto do animal" />
+                      ) : <ImagePlus size={22} aria-hidden="true" className="tw:text-ui-accent" />}
+                      <span className="tw:text-sm tw:font-medium" role={animalPhotoLoading ? "status" : undefined}>
+                        {animalPhotoLoading ? "Carregando foto..." : reusedDocuments.animal_photo?.fileName || "Foto do animal"}
+                      </span>
+                      <small className="tw:text-ui-muted">{reusedDocuments.animal_photo ? "Foto reaproveitada" : "Opcional"}</small>
+                    </button>
                     <input ref={animalPhotoInput} type="file" accept="image/*" hidden onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => handleAnimalPhotoFile(event.target.files?.[0])} />
-                    <div className="tw:flex tw:flex-wrap tw:justify-center tw:gap-2">
-                      <Button variant="outline" disabled={animalPhotoLoading} onClick={() => animalPhotoInput.current?.click()}>{uploadedPhoto ? "Substituir foto" : "Anexar foto"}</Button>
-                      {uploadedPhoto?.dataUrl && <Button variant="outline" onClick={() => setPreviewDocument(uploadedPhoto)}>Ver foto</Button>}
-                      {uploadedPhoto && <Button variant="danger" onClick={() => removeDocumentFile("animal_photo")}>Remover foto</Button>}
-                    </div>
+                    {uploadedPhoto && (
+                      <div className="tw:flex tw:flex-wrap tw:justify-center tw:gap-2 tw:px-3 tw:pb-3">
+                        {uploadedPhoto.dataUrl && <Button variant="outline" onClick={() => setPreviewDocument(uploadedPhoto)}>Ver foto</Button>}
+                        <Button variant="danger" onClick={() => removeDocumentFile("animal_photo")}>Remover foto</Button>
+                      </div>
+                    )}
                   </Card>
                   {registeredContext && !contextLoading && <ReusableDocumentChoices candidates={registeredContext.documents.filter((candidate) => candidate.documentId === "animal_photo")} selected={reusedDocuments.animal_photo} onSelect={(candidate) => { animalPhotoGeneration.current += 1; setAnimalPhotoLoading(false); removeDocumentFile("animal_photo"); setReusedDocuments((current) => ({ ...current, animal_photo: candidate })); }} onPreview={setReusedPreview} onRemove={() => setReusedDocuments((current) => removeReusedDocument(current, "animal_photo"))} />}
                 </aside>
@@ -2991,7 +3001,13 @@ function NewRequest({
                   {!internalSimple && <div className="doc-declaration">
                     <p>
                       <span>Declaração de responsabilidade</span>{" · "}
-                      <Button variant="outline" onClick={() => setDeclarationOpen(true)}>Ler</Button>
+                      <button
+                        type="button"
+                        className="tw:rounded-sm tw:border-0 tw:bg-transparent tw:p-0 tw:text-[color:var(--blue)] tw:underline tw:underline-offset-2 tw:hover:no-underline tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-[color:var(--blue)]"
+                        onClick={() => setDeclarationOpen(true)}
+                      >
+                        Ler
+                      </button>
                     </p>
                     <label className={`tw:flex tw:min-h-10 tw:cursor-pointer tw:items-center tw:gap-2 tw:text-sm ${showInvalid("accepted") ? "tw:text-ui-danger" : "tw:text-ui-text"}`}>
                       <input type="checkbox" className="tw:size-5 tw:shrink-0 tw:accent-ui-accent tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent" aria-invalid={showInvalid("accepted") || undefined} checked={accepted} onChange={(e) => setAccepted(e.target.checked)} />
@@ -6817,7 +6833,7 @@ function DocumentScannerUpload({ document, upload, aiActive, onUpload, onRemove,
           }
           {publicMessage && <small className="doc-row-msg">{publicMessage}</small>}
         </div>
-        <div className="tw:flex tw:w-full tw:flex-wrap tw:gap-2">
+        <div className="tw:ml-auto tw:flex tw:flex-wrap tw:justify-end tw:gap-2">
           <input ref={fileInput} type="file" hidden accept={(document.accept || []).join(",")} onClick={(event) => { event.currentTarget.value = ""; }} onChange={(event) => onUpload(event.target.files?.[0])} />
           <Button variant="outline" onClick={() => fileInput.current?.click()} aria-label={`${upload ? "Substituir" : "Anexar"} ${document.name}`}>
             <Paperclip size={15} aria-hidden="true" />{upload ? "Substituir" : "Anexar"}
