@@ -36,8 +36,18 @@ export function isInvalidSession(error: unknown) {
     || error.message === "Sessão inválida ou expirada." || error.message === "Sessão expirada.");
 }
 
+// A page opened by a shared adoption link ignores the session saved in the browser until someone signs in on it; the
+// saved session stays for the other tabs and the next visit.
+let ignoresSavedSession = false;
+
 function getToken() {
-  return localStorage.getItem("castragestao:token");
+  return ignoresSavedSession ? null : localStorage.getItem("castragestao:token");
+}
+
+// The session this page signs in with, which it uses from then on even when it was ignoring the saved one.
+function saveToken(token: string) {
+  ignoresSavedSession = false;
+  localStorage.setItem("castragestao:token", token);
 }
 
 function headers(json = true, bearerToken?: string) {
@@ -79,10 +89,13 @@ export const api = {
     const version = ++sessionMutationVersion;
     const data = await request("POST", "/auth/login", { identifier, password, audience, municipalityId }, "json", options);
     if (version !== sessionMutationVersion || options?.signal?.aborted || options?.isCurrent?.() === false) throw new DOMException("Operação encerrada.", "AbortError");
-    localStorage.setItem("castragestao:token", data.token);
+    saveToken(data.token);
     return data.user;
   },
   hasToken: () => Boolean(getToken()),
+  ignoreSavedSession() {
+    ignoresSavedSession = true;
+  },
   async getSession(options?: Pick<AuthRequestOptions, "signal">): Promise<{ user: SessionUser }> {
     const token = getToken();
     const version = sessionMutationVersion;
@@ -100,7 +113,7 @@ export const api = {
     const version = ++sessionMutationVersion;
     const data = await request("POST", "/auth/change-password", body, "json", options);
     if (version !== sessionMutationVersion || options?.signal?.aborted || options?.isCurrent?.() === false) throw new DOMException("Operação encerrada.", "AbortError");
-    localStorage.setItem("castragestao:token", data.token);
+    saveToken(data.token);
     return data.user;
   },
   getRecoveryOptions: (body: RecoveryContext & { identifier: string }, options?: AuthRequestOptions) => request("POST", "/auth/recovery-options", body, "json", options),
@@ -127,7 +140,7 @@ export const api = {
       if (token !== getToken() || version !== sessionMutationVersion) throw new DOMException("Operação encerrada.", "AbortError");
       if (data.session?.token) {
         sessionMutationVersion += 1;
-        localStorage.setItem("castragestao:token", data.session.token);
+        saveToken(data.session.token);
       }
       return data;
     } finally {
@@ -181,7 +194,7 @@ export const api = {
       const version = ++sessionMutationVersion;
       const data = await request("POST", "/request-access/password", { password }, "json", { ...options, bearerToken: token });
       if (version !== sessionMutationVersion || options?.signal?.aborted || options?.isCurrent?.() === false) throw new DOMException("Operação encerrada.", "AbortError");
-      localStorage.setItem("castragestao:token", data.token);
+      saveToken(data.token);
       return data.user;
     },
   },

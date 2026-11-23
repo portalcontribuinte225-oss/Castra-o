@@ -5,11 +5,6 @@ import type { AnyRecord } from "../../types";
 import { Button } from "../../components/button";
 import { ShareOutcome, adoptionShareDetails, shareAdoptionLink } from "./share-adoption";
 
-export enum ShareButtonLook {
-  FULL = "full",
-  ICON = "icon",
-}
-
 const FEEDBACK_MS = 2500;
 const FEEDBACK: Partial<Record<ShareOutcome, string>> = {
   [ShareOutcome.COPIED]: "Link copiado",
@@ -17,7 +12,7 @@ const FEEDBACK: Partial<Record<ShareOutcome, string>> = {
 };
 
 // Shares the link of an animal for adoption; after a copy, says so for a moment.
-export function ShareAdoptionButton({ animal, look = ShareButtonLook.FULL }: { animal: AnyRecord; look?: ShareButtonLook }) {
+export function ShareAdoptionButton({ animal }: { animal: AnyRecord }) {
   const [outcome, setOutcome] = useState<ShareOutcome | null>(null);
   useEffect(() => {
     if (!outcome) return undefined;
@@ -33,9 +28,6 @@ export function ShareAdoptionButton({ animal, look = ShareButtonLook.FULL }: { a
 
   const label = (outcome && FEEDBACK[outcome]) || "Compartilhar";
   const icon = outcome === ShareOutcome.COPIED ? <Check size={15} aria-hidden="true" /> : <Share2 size={15} aria-hidden="true" />;
-  if (look === ShareButtonLook.ICON) {
-    return <Button variant="outline" className="tw:w-10 tw:shrink-0 tw:px-0" onClick={share} title={label} aria-label={label}>{icon}</Button>;
-  }
   return (
     <Button variant="outline" className="tw:w-full" onClick={share} aria-live="polite">
       {icon}

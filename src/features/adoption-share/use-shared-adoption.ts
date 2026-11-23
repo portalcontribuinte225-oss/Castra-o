@@ -19,8 +19,8 @@ export interface SharedAdoption {
 
 // The animal of the shared link the public page was opened with: read from the address once, then fetched. The page
 // switches to the animal's municipality, and the address goes back to the home page.
-export function useSharedAdoption(enabled: boolean, onMunicipality: (municipalityId: string) => void): SharedAdoption {
-  const [id] = useState(() => (enabled ? readAdoptionShareId(window.location.pathname) : ""));
+export function useSharedAdoption(onMunicipality: (municipalityId: string) => void): SharedAdoption {
+  const [id] = useState(() => readAdoptionShareId(window.location.pathname));
   const [result, setResult] = useState<Omit<SharedAdoption, "id">>(() => ({
     state: id ? SharedAdoptionState.LOADING : SharedAdoptionState.NONE,
     animal: null,

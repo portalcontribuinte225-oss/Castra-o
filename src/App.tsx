@@ -207,7 +207,7 @@ import { SessionBoundary } from "./features/tutor-access/session-boundary";
 import { getAdoptionInterestCount } from "./features/adoption/adoption-interest-count";
 import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE, ADOPTION_STATUS_IN_PROGRESS } from "./features/adoption/adoption-status";
 import { MAX_ADOPTION_PHOTO_BYTES } from "../shared/adoption-contract.js";
-import { ShareAdoptionButton, ShareButtonLook } from "./features/adoption-share/share-adoption-button";
+import { ShareAdoptionButton } from "./features/adoption-share/share-adoption-button";
 import { SharedAdoptionState, useSharedAdoption } from "./features/adoption-share/use-shared-adoption";
 import { SharedAdoptionNotice } from "./features/adoption-share/shared-adoption-notice";
 import { compressAdoptionPhoto } from "./features/adoption-share/compress-adoption-photo";
@@ -436,8 +436,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
     if (sidebar.current) sidebar.current.inert = usesMobileMenu && !mobileOpen;
   }, [usesMobileMenu, mobileOpen, currentUser]);
   useModalFocus(sidebar, mobileDialogOpen, sidebarTrigger.current);
-  // A shared adoption link opens the public page on the animal; whoever is signed in sees the app as usual.
-  const sharedAdoption = useSharedAdoption(!currentUser, handleMunicipalitySelect);
+  // A shared adoption link always opens the public page on the animal: main.tsx makes that page ignore a saved session.
+  const sharedAdoption = useSharedAdoption(handleMunicipalitySelect);
 
 
   useEffect(() => {
@@ -3856,7 +3856,6 @@ function AdoptionView({
                             <Button variant="outline" className={adoptionIconButtonStyle} onClick={(event) => editAnimal(animal, event.currentTarget)} title="Editar" aria-label={`Editar ${displayName}`}>
                               <Edit3 size={15} aria-hidden="true" />
                             </Button>
-                            {animal.status !== ADOPTION_STATUS_ADOPTED && <ShareAdoptionButton animal={animal} look={ShareButtonLook.ICON} />}
                             {animal.status === ADOPTION_STATUS_ADOPTED ? (
                               <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label={`Reativar ${displayName}`}>
                                 <RefreshCw size={15} aria-hidden="true" />
@@ -3898,7 +3897,6 @@ function AdoptionView({
                         <div className="adoption-list-actions">
                           <Button variant="outline" className={adoptionIconButtonStyle} onClick={(event) => showAdoptionDrawer(animal, event.currentTarget)} title="Ver ficha" aria-label={`Ver ficha de ${displayName}`}><Eye size={15} aria-hidden="true" /></Button>
                           <Button variant="outline" className={adoptionIconButtonStyle} onClick={(event) => editAnimal(animal, event.currentTarget)} title="Editar" aria-label={`Editar ${displayName}`}><Edit3 size={15} aria-hidden="true" /></Button>
-                          {animal.status !== ADOPTION_STATUS_ADOPTED && <ShareAdoptionButton animal={animal} look={ShareButtonLook.ICON} />}
                           {animal.status === ADOPTION_STATUS_ADOPTED ? (
                             <Button variant="custom" className={`${adoptionIconButtonStyle} ${adoptionBlueButtonStyle}`} onClick={() => updateAnimalStatus(animal, ADOPTION_STATUS_AVAILABLE)} title="Reativar" aria-label={`Reativar ${displayName}`}><RefreshCw size={15} aria-hidden="true" /></Button>
                           ) : (
