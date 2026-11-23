@@ -27,7 +27,7 @@ async function fixture(t, existingAdmin) {
       return { rows: matches ? [existingAdmin] : [] };
     }
     if (sql.includes("INSERT INTO users")) return { rows: [{ id: adminId, name: values[0], email: values[1], role: values[3], municipality_id: values[4] }] };
-    if (sql.includes("INSERT INTO config") || sql.includes("INSERT INTO sectors") || sql.includes("INSERT INTO user_sectors") || sql.includes("INSERT INTO audit_logs")) return { rows: [] };
+    if (sql.includes("INSERT INTO config") || sql.includes("INSERT INTO audit_logs")) return { rows: [] };
     throw new Error("Unexpected test database query");
   };
   pool.query = query;

@@ -12,4 +12,4 @@ A central usa a sessão da equipe e verifica a permissão **Solicitações** no 
 
 O evento de criação usa a transação da solicitação. A atribuição registra o evento quando a conta responsável muda, para um destinatário ativo que pode acessar Solicitações. A leitura é por usuário e pode ser repetida com segurança.
 
-A migração [20261120-staff-notifications.sql](../backend/src/db/sql/20261120-staff-notifications.sql) deve ser aplicada com autorização explícita antes do deploy do backend.
+As tabelas `staff_notifications` e `staff_notification_reads` fazem parte do esquema de `backend/src/db/migrations.js`, criado no boot.

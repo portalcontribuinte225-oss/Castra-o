@@ -147,22 +147,6 @@ router.post("/", auth, async (req, res) => {
     // Upserta configs padrão (setores, tipos, permissões, agenda, etc.)
     const defaultConfigs = await upsertMunicipalityDefaultConfigs(client, municipality, adminUser);
 
-    // Registra o setor padrão na tabela relacional sectors também
-    await client.query(
-      `INSERT INTO sectors (id, municipality_id, name, active, is_default, created_by)
-       VALUES ($1, $2, $3, TRUE, TRUE, $4)
-       ON CONFLICT (id, municipality_id) DO NOTHING`,
-      [defaultConfigs.defaultSector.id, municipality.id, defaultConfigs.defaultSector.name, adminUser.id],
-    );
-
-    // Vincula o admin ao setor padrão na tabela user_sectors
-    await client.query(
-      `INSERT INTO user_sectors (user_id, sector_id, municipality_id, is_primary)
-       VALUES ($1, $2, $3, TRUE)
-       ON CONFLICT (user_id, sector_id, municipality_id) DO NOTHING`,
-      [adminUser.id, defaultConfigs.defaultSector.id, municipality.id],
-    );
-
     await logAudit(client, {
       ...auditCtx(req),
       municipalityId: municipality.id,

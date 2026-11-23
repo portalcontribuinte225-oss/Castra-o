@@ -1,12 +1,8 @@
 # Animal já cadastrado — fase 6
 
-## Schema antes de executar
+## Schema
 
-O código depende de `backend/src/db/sql/20261113-registered-animals.sql`. A migration permite microchip nulo e acrescenta índices de propriedade, município e agenda; não contém backfill, seed ou exclusão de dados.
-
-Confirmar explicitamente a autorização e o banco de destino antes de aplicar essa SQL. A autorização da migration de acesso do tutor não se estende a esta migration. O runner legado do boot não aplica o arquivo novo. Não reiniciar a API com o código novo antes de preparar o schema.
-
-Após aplicação autorizada, conferir nulabilidade de `animals.microchip`, preservação da unicidade e os índices criados. O desenvolvimento/testes desta fase não aplica a migration nem altera `.env`.
+O esquema de `backend/src/db/migrations.js`, criado no boot, já traz o microchip opcional e único de `animals` e os índices de propriedade, município e agenda.
 
 ## Identidade dos animais
 

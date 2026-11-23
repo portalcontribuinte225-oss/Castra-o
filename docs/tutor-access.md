@@ -2,23 +2,11 @@
 
 Contas de tutor são municipais; não há migração de contas antigas nem compartilhamento automático de solicitações por CPF.
 
-## Aplicação do schema
+## Schema
 
-O código depende da migration nova `backend/src/db/sql/20261113-tutor-access.sql`. Ela **não** é executada pelo boot legado. Não iniciar o servidor nem publicar a aplicação dependente desse schema antes de aplicar a migration no ambiente correto.
+As tabelas e restrições do acesso do tutor (`tutor_profiles`, `auth_challenges`, `auth_rate_limits` e as regras de e-mail de `users`) fazem parte do esquema de `backend/src/db/migrations.js`, criado no boot.
 
-1. Confirmar explicitamente o ambiente e a autorização para alterar o banco.
-2. Revisar a migration e conferir que ela ainda não foi aplicada. Não executar duas vezes: a migration é transacional, com criação explícita de tabelas/constraints.
-3. Usar a conexão PostgreSQL previamente configurada pelo operador. Exemplo de comando, **não executado pela implementação**:
-
-   ```powershell
-   psql -v ON_ERROR_STOP=1 -f backend/src/db/sql/20261113-tutor-access.sql
-   ```
-
-4. Conferir tabelas, índices e constraints criados antes de implantar o código.
-
-O arquivo preserva a unicidade global de `users.email` para contas internas e permite valor nulo somente para tutores. CPF e contatos do tutor ficam em `tutor_profiles`, com unicidade de CPF no município e FK de correspondência municipal. Não há backfill, seed, alteração de senha existente ou limpeza de registros.
-
-O índice único de e-mail normalizado falha se existirem contas internas distintas com e-mails que diferem apenas em maiúsculas/minúsculas. Nesse caso, a transação deve falhar e a implantação aguardar intervenção autorizada; não mesclar, excluir ou renomear identidades automaticamente.
+O esquema mantém a unicidade global de `users.email` para contas internas e permite valor nulo somente para tutores. CPF e contatos do tutor ficam em `tutor_profiles`, com unicidade de CPF no município e FK de correspondência municipal.
 
 O runtime continua usando o entrypoint `pg` existente, com queries parametrizadas, validação de município e transações explícitas nos repositories. Não presumir RLS automático ou Drizzle; nenhum ORM novo foi instalado nesta fase.
 
@@ -120,7 +108,6 @@ Referências do contrato: [API SMSMais](https://smsmais.com/api-sms) e [OpenAPI]
 - No Render, mantenha o mesmo `JWT_SECRET` entre deploys para que as sessões ativas continuem válidas até a expiração. `ADMIN_EMAIL` e `ADMIN_PASSWORD` criam a conta inicial se o e-mail ainda estiver livre. Para uma conta existente, use a troca ou a recuperação de senha no sistema.
 - Mantenha `DATABASE_URL` apontando para o mesmo banco de produção e preserve o valor de `CONFIG_ENCRYPTION_KEY` entre deploys: a chave de IA é salva cifrada no PostgreSQL.
 - As credenciais das integrações ficam só nas variáveis do servidor: `SMS_TOKEN`, `EMAILJS_SERVICE_ID`, `EMAILJS_PUBLIC_KEY`, `EMAILJS_PRIVATE_KEY`, `APP_PUBLIC_URL` e uma `WHATSAPP_TOKEN_<NOME>` por conta da Meta. A tela do WhatsApp de cada município escolhe uma delas pelo nome; só nomes com esse prefixo podem ser escolhidos ou lidos, e vários municípios podem usar a mesma. Variável ausente ou inválida deixa o canal como não configurado e gera um aviso no log com o nome, nunca o valor.
-- `backend/src/db/sql/20261122-credenciais-no-ambiente.sql` apaga do banco os segredos gravados antes (token do SMS, conta do EmailJS e tokens do WhatsApp). Aplicar à mão depois do deploy e depois de escolher a variável do WhatsApp de cada município.
 - Códigos expiram, têm limite de tentativas e são consumidos atomicamente. Reenvio não oferece tentativas ilimitadas.
 - Limites por origem usam `req.ip`, sem confiar em um `X-Forwarded-For` arbitrário. Em implantação atrás de proxy, o operador deve validar a topologia antes de configurar proxies confiáveis; sem isso, o limite de origem pode agrupar clientes do mesmo proxy. Limites por conta/finalidade continuam persistentes.
 - A equipe corrige os dados do tutor e define uma senha nova na aba "Dados do tutor" do atendimento (`GET`/`PUT /auth/request-tutor/:requestId`). Exige equipe interna do município da solicitação; o CPF não muda; a senha digitada vale como está, sem troca obrigatória, e não vai para o log. Sem auditoria (`TUTOR_DATA_UPDATE`), a operação não se efetiva.

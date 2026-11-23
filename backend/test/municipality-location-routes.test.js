@@ -36,7 +36,7 @@ async function fixture(t, { config = {} } = {}) {
     if (sql.startsWith("UPDATE municipalities")) return { rows: values.at(-1) === MUNICIPALITY ? [{ id: MUNICIPALITY }] : [] };
     if (sql.startsWith("SELECT id, name, email, role, municipality_id, is_default_admin FROM users")) return { rows: [] };
     if (sql.includes("INSERT INTO users")) return { rows: [{ id: ADMIN, name: values[0], email: values[1], role: values[3], municipality_id: values[4] }] };
-    if (["INSERT INTO config", "INSERT INTO sectors", "INSERT INTO user_sectors", "INSERT INTO audit_logs"].some((start) => sql.includes(start))) return { rows: [] };
+    if (["INSERT INTO config", "INSERT INTO audit_logs"].some((start) => sql.includes(start))) return { rows: [] };
     throw new Error(`Unexpected test database query: ${sql}`);
   };
   pool.query = query;
