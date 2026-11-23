@@ -218,6 +218,7 @@ import { getAdoptionInterestCount } from "./features/adoption/adoption-interest-
 import { ADOPTION_STATUS_ADOPTED, ADOPTION_STATUS_AVAILABLE, ADOPTION_STATUS_IN_PROGRESS } from "./features/adoption/adoption-status";
 import { MAX_ADOPTION_PHOTO_BYTES } from "../shared/adoption-contract.js";
 import { ShareAdoptionButton } from "./features/adoption-share/share-adoption-button";
+import { AdoptionPhotoCarousel, AdoptionPhotoThumb, MAX_ADOPTION_PHOTOS, carouselStartIndex } from "./features/adoption/adoption-photo-carousel";
 import { SharedAdoptionState, useSharedAdoption } from "./features/adoption-share/use-shared-adoption";
 import { SharedAdoptionNotice } from "./features/adoption-share/shared-adoption-notice";
 import { compressAdoptionPhoto } from "./features/adoption-share/compress-adoption-photo";
@@ -1304,6 +1305,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   const availableAnimals = sortAdoptionsForHighlight(adoptionAnimals.filter((animal) => animal.status !== ADOPTION_STATUS_ADOPTED));
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [selectedAnimal, setSelectedAnimal] = useState(null);
+  const [photoIndex, setPhotoIndex] = useState(0);
   const [showInterestForm, setShowInterestForm] = useState(false);
   const [interestSent, setInterestSent] = useState(false);
   const [interestForm, setInterestForm] = useState({ name: "", phone: "", visit_date: "" });
@@ -1320,6 +1322,10 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
     phone: isValidPhone(interestForm.phone) ? "" : "Informe um WhatsApp com DDD.",
   };
   const adoptionOpen = Boolean(selectedAnimal);
+  const adoptionPhotos = selectedAnimal ? getAnimalPhotos(selectedAnimal).slice(0, MAX_ADOPTION_PHOTOS) : [];
+  const adoptionName = selectedAnimal ? selectedAnimal.name || selectedAnimal.animal_name || "Animal" : "";
+  // With the interest form open (or sent), the photos give way to a thumbnail beside the name.
+  const compactProfile = showInterestForm || interestSent;
   const speciesQuickFilters = [
     { value: "", label: "Todos" },
     { value: "canino", label: "Cães" },
@@ -1353,6 +1359,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
   function openAnimalModal(animal, openInterestForm = false) {
     interestRequest.current = null;
     setSelectedAnimal(animal);
+    setPhotoIndex(animal.mainPhotoIndex || 0);
     setShowInterestForm(openInterestForm);
     setInterestSent(false);
     setInterestSaving(false);
@@ -1447,7 +1454,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
                     <Users size={13} />
                     {interestCount} interessado{interestCount === 1 ? "" : "s"}
                   </span>
-                  <ShareAdoptionButton animal={animal} iconOnly />
+                  <ShareAdoptionButton animal={animal} />
                 </div>
                 <Button
                   className="tw:w-full"
@@ -1466,7 +1473,7 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
 
     {selectedAnimal && (
       <div className="modal-backdrop">
-        <Card as="section" className="animal-detail-modal adoption-profile-modal" role="dialog" aria-modal="true" aria-labelledby={adoptionTitleId}
+        <Card as="section" className={`animal-detail-modal adoption-profile-modal${compactProfile ? " adoption-profile-modal--compact" : ""}`} role="dialog" aria-modal="true" aria-labelledby={adoptionTitleId}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
@@ -1486,21 +1493,29 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
           <div className="tw:absolute tw:end-3 tw:top-3 tw:z-20">
             <CloseButton aria-label="Fechar detalhes do animal" ref={adoptionCloseRef} onClick={closeAnimalModal} />
           </div>
-          <div className="adoption-profile-media">
-            <div className={`adoption-main-photo ${getAnimalGradient(selectedAnimal)}`}>
-              {getAnimalMainPhoto(selectedAnimal) ? <img src={getAnimalMainPhoto(selectedAnimal)} alt={selectedAnimal.name} /> : <PawPrint size={54} />}
+          {!compactProfile && (
+            <div className="adoption-profile-media">
+              <AdoptionPhotoCarousel
+                key={selectedAnimal.id || adoptionName}
+                photos={adoptionPhotos}
+                startIndex={photoIndex}
+                name={adoptionName}
+                fallbackClassName={getAnimalGradient(selectedAnimal)}
+                onIndexChange={setPhotoIndex}
+              />
             </div>
-            {getAnimalPhotos(selectedAnimal).length > 1 && (
-              <div className="adoption-thumb-row">
-                {getAnimalPhotos(selectedAnimal).slice(0, 5).map((photo, index) => (
-                  <img src={photo} alt={`${selectedAnimal.name} ${index + 1}`} key={`${selectedAnimal.name}-photo-${index}`} />
-                ))}
-              </div>
-            )}
-          </div>
+          )}
           <div className="adoption-profile-info">
             <div className="adoption-profile-identity">
-              <h2 id={adoptionTitleId}>{selectedAnimal.name || selectedAnimal.animal_name || "Animal"}</h2>
+              <div className={compactProfile ? "tw:flex tw:min-w-0 tw:items-center tw:gap-3" : "tw:contents"}>
+                {compactProfile && (
+                  <AdoptionPhotoThumb
+                    photo={adoptionPhotos[carouselStartIndex(photoIndex, adoptionPhotos.length)] || ""}
+                    fallbackClassName={getAnimalGradient(selectedAnimal)}
+                  />
+                )}
+                <h2 id={adoptionTitleId}>{adoptionName}</h2>
+              </div>
               <div className="adoption-profile-tags">
                 {selectedAnimal.species && <Chip>{selectedAnimal.species}</Chip>}
                 {selectedAnimal.sex && <Chip>{selectedAnimal.sex}</Chip>}
@@ -1518,14 +1533,8 @@ function AdoptionCarousel({ adoptionAnimals, limit = 24, onInterestSent, sharedA
               </Button>
             )}
 
-            <ShareAdoptionButton animal={selectedAnimal} />
-
             {showInterestForm && !interestSent && (
-              <form className="adoption-interest-form" noValidate onSubmit={submitInterest}>
-                <div className="interest-form-heading">
-                  <HeartHandshake size={15} />
-                  <span>Registrar interesse</span>
-                </div>
+              <form className="adoption-interest-form" aria-label="Registrar interesse" noValidate onSubmit={submitInterest}>
                 <RequestTextField ref={interestNameRef} label="Nome completo" required value={interestForm.name} error={(interestAttempted && interestIssues.name) || undefined} onChange={(e) => setInterestForm((f) => ({ ...f, name: e.target.value }))} autoComplete="name" />
                 <RequestTextField label="WhatsApp" required type="tel" value={interestForm.phone} error={(interestAttempted && interestIssues.phone) || undefined} onChange={(e) => setInterestForm((f) => ({ ...f, phone: formatPhone(e.target.value) }))} placeholder="(00) 00000-0000" autoComplete="tel" />
                 <label className="tw:grid tw:gap-1.5 tw:text-sm tw:font-medium">Data da visita

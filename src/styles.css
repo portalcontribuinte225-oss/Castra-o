@@ -1179,13 +1179,21 @@ button:disabled {
 .adoption-profile-modal {
   position: relative;
   width: min(820px, calc(100vw - 28px));
-  height: min(82vh, 620px);
+  height: min(82dvh, 620px);
   max-height: none;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.85fr);
   gap: 0;
   padding: 0;
   overflow: hidden;
   border-radius: 22px;
+}
+
+/* With the interest form open, the photos become a thumbnail beside the name and the window keeps a single column. */
+.adoption-profile-modal--compact {
+  grid-template-columns: minmax(0, 1fr);
+  height: auto;
+  max-height: min(82dvh, 620px);
+  overflow-y: auto;
 }
 
 
@@ -1196,48 +1204,6 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 0;
-}
-
-
-.adoption-main-photo {
-  min-height: 0;
-  flex: 1;
-  border-radius: 0;
-  overflow: hidden;
-  display: grid;
-  place-items: center;
-  color: white;
-}
-
-
-.adoption-main-photo img,
-.adoption-thumb-row img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-
-.adoption-thumb-row {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  padding: 10px;
-  background: rgba(0, 0, 0, 0.35);
-}
-
-
-.adoption-thumb-row img {
-  aspect-ratio: 1;
-  border-radius: 8px;
-  overflow: hidden;
-  opacity: 0.8;
-  transition: opacity 0.15s;
-}
-
-
-.adoption-thumb-row img:hover {
-  opacity: 1;
 }
 
 
@@ -1302,21 +1268,6 @@ button:disabled {
 .adoption-interest-form {
   display: grid;
   gap: 10px;
-}
-
-
-.interest-form-heading {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--teal);
-  padding-bottom: 10px;
-  border-bottom: 1.5px solid #f1f5f9;
-  margin-bottom: 2px;
 }
 
 
@@ -3862,16 +3813,19 @@ main {
   }
 
 
+  /* On a phone the window scrolls as a whole and fits the visible screen; the photos are a band at the top. */
   .adoption-profile-modal {
-    grid-template-columns: 1fr;
-    height: calc(100vh - 20px);
-    width: calc(100vw - 20px);
+    grid-template-columns: minmax(0, 1fr);
+    height: auto;
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
     border-radius: 16px;
   }
 
 
-  .adoption-main-photo {
-    min-height: 260px;
+  .adoption-profile-media {
+    aspect-ratio: 16 / 10;
+    max-height: 40dvh;
   }
 
 
@@ -3879,6 +3833,7 @@ main {
     padding: 18px;
     align-content: start;
     gap: 12px;
+    overflow-y: visible;
   }
 
 

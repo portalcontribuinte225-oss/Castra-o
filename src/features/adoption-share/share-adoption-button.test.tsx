@@ -5,14 +5,8 @@ import { ShareAdoptionButton } from "./share-adoption-button";
 const animal = { id: "animal-1", name: "Mel" };
 
 describe("share adoption button", () => {
-  it("shows the Compartilhar label in the animal window", () => {
-    const html = renderToStaticMarkup(<ShareAdoptionButton animal={animal} />);
-
-    expect(html).toMatch(/<button[^>]*aria-live="polite"[^>]*>.*Compartilhar<\/button>/);
-  });
-
   it("shows only the icon on a card, named after the animal", () => {
-    const html = renderToStaticMarkup(<ShareAdoptionButton animal={animal} iconOnly />);
+    const html = renderToStaticMarkup(<ShareAdoptionButton animal={animal} />);
 
     expect(html).toMatch(/<button[^>]*aria-label="Compartilhar Mel"[^>]*title="Compartilhar Mel"/);
     expect(html).toContain("<svg");
@@ -21,7 +15,7 @@ describe("share adoption button", () => {
   });
 
   it("falls back to a generic name when the animal has none", () => {
-    const html = renderToStaticMarkup(<ShareAdoptionButton animal={{ id: "animal-2" }} iconOnly />);
+    const html = renderToStaticMarkup(<ShareAdoptionButton animal={{ id: "animal-2" }} />);
 
     expect(html).toContain('aria-label="Compartilhar o animal"');
   });
