@@ -95,7 +95,6 @@ function smsNoticeData(event, request) {
       ? workflow.scheduleSlotTime || workflow.scheduleTime || request.schedule_time : field(WhatsappTemplateField.SCHEDULE_TIME),
     location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
     ...rejection,
-    ...(event === NotificationEvent.REQUEST_REGISTERED ? { scheduled: Boolean(request.schedule_date), link: request.access_link?.url || "" } : {}),
   };
 }
 

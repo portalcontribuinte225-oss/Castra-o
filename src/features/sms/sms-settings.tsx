@@ -1,4 +1,5 @@
 import { NotificationChannel } from "../../../shared/notification-contract.js";
+import { SMS_PART_LENGTH, SMS_SINGLE_LENGTH } from "../../../shared/sms-messages-contract.js";
 import { Button } from "../../components/button";
 import { IntegrationCard, IntegrationStatusBadge } from "../../components/integration-card";
 import { PanelHeader } from "../../components/ui";
@@ -26,7 +27,11 @@ export function SmsSettings({ municipalityId, master, canManage }: { municipalit
         <div className="tw:grid tw:gap-3">
           {master && <SmsTestMessage state={state} />}
           {municipalityId && <MessageContractCard contract={contract} master={master} />}
-          <IntegrationCard title="Mensagens">
+          <IntegrationCard title="Mensagens" actions={(
+            <span className="tw:text-xs tw:text-ui-muted">
+              Até {SMS_SINGLE_LENGTH} caracteres por SMS. Textos maiores seguem em partes de {SMS_PART_LENGTH} caracteres, e cada parte é cobrada.
+            </span>
+          )}>
             {!municipalityId && <p className="whatsapp-note">Selecione um município para ligar ou desligar as mensagens.</p>}
             <SmsUsesTable
               rows={state.config.uses}

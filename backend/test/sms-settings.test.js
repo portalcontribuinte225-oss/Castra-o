@@ -103,7 +103,7 @@ test("sending a message builds the fixed text for the municipality through the p
   assert.deepEqual([uncontracted.status, uncontracted.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE, 0], "no contract, no send");
   f.database.setContract(MUNICIPALITY, { plan: 2 });
   assert.equal((await sendSmsUse(reset, deps)).status, DeliveryStatus.SENT);
-  assert.deepEqual(sent[0], { token: TOKEN, phone: "48999991234", text: "Test Town: recebemos um pedido para redefinir sua senha. Codigo: 123456. Valido por 10 minutos. Nao compartilhe.",
+  assert.deepEqual(sent[0], { token: TOKEN, phone: "48999991234", text: "Test Town: recebemos um pedido para redefinir sua senha. Código: 123456. Válido por 10 minutos. Não compartilhe.",
     messageId: ACTOR.id, expiresAt: "2026-11-13T12:10:00Z" });
   assert.equal(f.database.contractOf(MUNICIPALITY).currentPeriodUsed, 1);
   const notice = { municipalityId: MUNICIPALITY, use: NotificationEvent.SCHEDULE_CONFIRMED, phone: "48999991234",
@@ -113,7 +113,7 @@ test("sending a message builds the fixed text for the municipality through the p
   assert.equal(f.database.contractOf(MUNICIPALITY).currentPeriodUsed, 1, "a message that is off spends nothing");
   f.database.configs.set(`${SMS_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true } });
   assert.equal((await sendSmsUse(notice, deps)).status, DeliveryStatus.SENT);
-  assert.equal(sent[1].text, "Test Town: agendamento confirmado! Esperamos voce em 20/11/2026, as 09:00 na Unidade Veterinaria Municipal. Protocolo: 123/2026.");
+  assert.equal(sent[1].text, "Test Town: agendamento confirmado! Esperamos você em 20/11/2026, às 09:00 na Unidade Veterinária Municipal. Protocolo: 123/2026.");
   assert.match(sent[1].messageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(sent[1].expiresAt, undefined);
   const spent = await sendSmsUse(notice, deps);
@@ -163,7 +163,7 @@ test("a test message goes to the typed phone through the server's token with a f
   assert.deepEqual(result, { status: DeliveryStatus.SENT, providerMessageId: "4321", reference: sent[0].messageId });
   assert.deepEqual(Object.keys(sent[0]).sort(), ["messageId", "phone", "text", "token"]);
   assert.deepEqual([sent[0].token, sent[0].phone], [TOKEN, "(48) 99999-1234"]);
-  assert.equal(sent[0].text, "Test Town: teste de envio de SMS do sistema de castracao. Se voce recebeu esta mensagem, o envio esta funcionando.");
+  assert.equal(sent[0].text, "Test Town: teste de envio de SMS do sistema de castração. Se você recebeu esta mensagem, o envio está funcionando.");
   assert.match(sent[0].messageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   await sendSmsTestMessage({ ...input, municipalityId: null }, deps);
   assert.match(sent[1].text, /^Prefeitura: teste de envio de SMS/, "with no municipality selected the text is neutral");

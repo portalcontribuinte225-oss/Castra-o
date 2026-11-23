@@ -6,7 +6,7 @@ import { SMS_MAX_LENGTH } from "../../shared/sms-messages-contract.js";
 
 const ID = "11111111-1111-4111-8111-111111111111";
 const NOW = new Date("2026-11-13T12:00:00Z");
-const TEXT = "Test Town: seu codigo e 123456. Valido por 10 minutos. Nao compartilhe.";
+const TEXT = "Test Town: seu código é 123456. Válido por 10 minutos. Não compartilhe.";
 const input = { token: "production-token-test", phone: "(48) 99999-1234", text: TEXT, messageId: ID, expiresAt: "2026-11-13T12:10:00Z" };
 const json = (value, status = 200) => new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
 
@@ -25,9 +25,9 @@ test("SMSMais uses one fixed-origin POST message, bearer header and message refe
   assert.equal(JSON.stringify(result).includes("123456"), false); assert.equal(JSON.stringify(result).includes("99999"), false);
 });
 
-test("a notice has no expiry and is sent under the id it was given, with any plain text up to the limit", async () => {
+test("a notice has no expiry and is sent under the id it was given, with any clean text up to the limit, accents included", async () => {
   const { expiresAt, ...notice } = input;
-  const text = "Test Town: castracao agendada em 20/11/2026 as 09:00, Unidade Veterinaria Municipal. Protocolo 123/2026.";
+  const text = "Test Town: castração agendada em 20/11/2026, às 09:00 na Unidade Veterinária Municipal. Protocolo: 123/2026.";
   let sent;
   const result = await sendSmsMessage({ ...notice, text }, { now: () => NOW, fetchImpl: async (_url, options) => {
     sent = JSON.parse(options.body).messages[0];
@@ -118,7 +118,7 @@ test("HTTP errors abort the fetch lifecycle even when the provider leaves its re
 
 test("sandbox, expired codes, invalid destination, id or text never call the provider", async () => {
   const overrides = [{ token: "sbx_test-token" }, { expiresAt: NOW.toISOString() }, { phone: "123" }, { messageId: "not-a-uuid" }, { messageId: undefined },
-    { text: "" }, { text: undefined }, { text: "x".repeat(SMS_MAX_LENGTH + 1) }, { text: "Ação com acento e cedilha" }, { text: "Line one" + String.fromCharCode(10) + "line two" }];
+    { text: "" }, { text: undefined }, { text: "x".repeat(SMS_MAX_LENGTH + 1) }, { text: "emoji 😀 no texto" }, { text: "Line one" + String.fromCharCode(10) + "line two" }];
   for (const override of overrides) {
     let calls = 0;
     const result = await sendSmsMessage({ ...input, ...override }, { now: () => NOW, fetchImpl: async () => { calls += 1; throw new Error("Network forbidden"); } });

@@ -217,12 +217,14 @@ describe("SMS settings interface", () => {
     const html = screen();
     expect(html.match(/<tr>/g)).toHaveLength(smsUses.length + 1);
     for (const use of smsUses) expect(html).toContain(use.label);
-    expect(html).toContain("Test Town: recebemos um pedido para redefinir sua senha. Codigo: {codigo}. Valido por {minutos} minutos. Nao compartilhe.");
-    expect(html).toContain("Test Town: atendimento concluido! Obrigado pelo cuidado com seu animal. Protocolo: {protocolo}.");
+    expect(html).toContain("Test Town: recebemos um pedido para redefinir sua senha. Código: {codigo}. Válido por {minutos} minutos. Não compartilhe.");
+    expect(html).toContain("Test Town: atendimento concluído! Obrigado pelo cuidado com seu animal. Protocolo: {protocolo}.");
     expect(html).toContain("<th>Texto</th>"); expect(html).not.toContain("Exemplo");
-    expect(html).toContain("<td>Documentos deferidos</td><td>Test Town: um ou mais documentos foram deferidos. Acesse sua solicitacao para acompanhar a analise. Protocolo: {protocolo}.</td>");
-    expect(html).toContain("<td>Documentos indeferidos</td><td>Test Town: um ou mais documentos foram indeferidos. Acesse sua solicitacao para ver o motivo. Protocolo: {protocolo}.</td>");
-    expect(screen({ config: { ...integrated, municipalityName: "" } })).toContain("Municipio: recebemos um pedido para redefinir sua senha.");
+    expect(html).toContain("Até 70 caracteres por SMS. Textos maiores seguem em partes de 67 caracteres, e cada parte é cobrada.");
+    expect(html.indexOf("Mensagens")).toBeLessThan(html.indexOf("Até 70 caracteres por SMS"));
+    expect(html).toContain("<td>Documentos deferidos</td><td>Test Town: um ou mais documentos foram deferidos. Acesse sua solicitação para acompanhar a análise. Protocolo: {protocolo}.</td>");
+    expect(html).toContain("<td>Documentos indeferidos</td><td>Test Town: um ou mais documentos foram indeferidos. Acesse sua solicitação para ver o motivo. Protocolo: {protocolo}.</td>");
+    expect(screen({ config: { ...integrated, municipalityName: "" } })).toContain("Município: recebemos um pedido para redefinir sua senha.");
   });
 
   it("locks every message switch while SMS is not integrated, telling why, and unlocks them with the stored state once it is", () => {

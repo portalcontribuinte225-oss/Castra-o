@@ -1,6 +1,6 @@
 import { DeliveryCode, DeliveryStatus } from "../../../shared/notification-contract.js";
 import { validateSmsToken } from "../../../shared/sms-contract.js";
-import { SMS_MAX_LENGTH } from "../../../shared/sms-messages-contract.js";
+import { isSmsText } from "../../../shared/sms-messages-contract.js";
 import { deliveryFailure } from "./notifications/delivery-result.js";
 
 const BASE_URL = "https://smsmais.com";
@@ -108,7 +108,7 @@ export async function sendSmsMessage({ token, phone, text, messageId, expiresAt 
   const to = normalizeSmsPhone(phone); const now = options.now ? options.now() : new Date();
   const remaining = expiresAt === undefined ? Infinity : new Date(expiresAt).getTime() - now.getTime();
   if (!to) return failure(DeliveryCode.INVALID_RECIPIENT);
-  if (typeof text !== "string" || !text || text.length > SMS_MAX_LENGTH || !/^[ -~]+$/.test(text) || typeof messageId !== "string"
+  if (!isSmsText(text) || typeof messageId !== "string"
     || !MESSAGE_ID_PATTERN.test(messageId) || Number.isNaN(remaining) || remaining <= 0) return failure(DeliveryCode.PREPARATION_FAILED);
   if (token?.startsWith("sbx_")) return failure(DeliveryCode.NOT_CONFIGURED);
   const result = await providerRequest("/send", token, { messages: [{ id: messageId, destinations: [{ to }], msg: text }] },
