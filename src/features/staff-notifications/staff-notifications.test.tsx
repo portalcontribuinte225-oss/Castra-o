@@ -16,7 +16,9 @@ describe("notification center", () => {
     };
     const assigned = { ...created, id: "11", type: StaffNotificationType.REQUEST_ASSIGNED, read: true };
     const html = renderToStaticMarkup(<StaffNotificationPanel {...emptyPanel} items={[created, assigned]} unreadCount={1} nextCursor="11" />);
-    expect(html).toContain('role="dialog"');
+    expect(html).toContain('data-managed-dialog=""');
+    expect(html).toMatch(/role="dialog" aria-modal="true" aria-labelledby="([^"]+)"[\s\S]*<h3[^>]*id="\1"[^>]*>Notificações<\/h3>/);
+    expect(html).toMatch(/<button[^>]*aria-label="Fechar notificações"[^>]*data-ui-close-button=""/);
     expect(html).toContain("1 notificação não lida");
     expect(html).toContain("Nova solicitação");
     expect(html).toContain("Processo atribuído a você");

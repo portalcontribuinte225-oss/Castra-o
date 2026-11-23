@@ -144,10 +144,18 @@ import { ActiveFiltersBar } from "./features/request-filters/active-filters-bar"
 import { StaffNotificationBell } from "./features/staff-notifications/staff-notification-bell";
 import { SidebarMunicipalityBrand } from "./components/sidebar-municipality-brand";
 import { REQUESTS_MENU_ITEM } from "../shared/staff-notifications-contract.js";
-import { ACCESS_REQUEST_SOURCE, getEmptyListMessage } from "./features/request-filters/request-filters";
+import { ACCESS_REQUEST_SOURCE, getEmptyListMessage, isRequestFiltersEmpty } from "./features/request-filters/request-filters";
+import type { RequestListFilters } from "./features/request-filters/request-filters";
 import { RequestFiltersDrawer } from "./features/request-filters/request-filters-drawer";
 import { RequestFiltersToolbar } from "./features/request-filters/request-filters-toolbar";
-import { useRequestFilterResults, useRequestFilters } from "./features/request-filters/use-request-filters";
+import {
+  buildRequestFilterResults,
+  requestFiltersReducer,
+  RequestFiltersActionType,
+  useRequestFilterResults,
+  useRequestFilters,
+} from "./features/request-filters/use-request-filters";
+import type { RequestFiltersAction } from "./features/request-filters/use-request-filters";
 import { BreedChecklist } from "./features/breeds/breed-checklist";
 import { AnimalAccordionCard } from "./features/request-procedures/animal-accordion-card";
 import { AnimalFields } from "./features/request-procedures/animal-fields";
@@ -3027,7 +3035,8 @@ function AdminDashboard({
   selectedMunicipalityId = "",
 }) {
   const { filters: requestFilters, actions: requestFilterActions } = useRequestFilters();
-  const [filtersDrawerOpen, setFiltersDrawerOpen] = useState(false);
+  // The filters panel edits a draft; null means the panel is closed.
+  const [filtersDraft, setFiltersDraft] = useState<RequestListFilters | null>(null);
   const [createRequestOpen, setCreateRequestOpen] = useState(false);
   // The request just made at the counter: the modal shows its last screen until it is closed.
   const [createdRequest, setCreatedRequest] = useState<AnyRecord | null>(null);
@@ -3100,8 +3109,6 @@ function AdminDashboard({
   const {
     activeRequests,
     counts: filterCounts,
-    typeOptions,
-    assigneeOptions,
     pills: filterPills,
   } = useRequestFilterResults({
     filters: requestFilters,
@@ -3110,6 +3117,13 @@ function AdminDashboard({
     users: teams.users,
     today,
   });
+  const filtersPreview = useMemo(
+    () => filtersDraft && buildRequestFilterResults({ filters: filtersDraft, normalizedRequests, listItems, users: teams.users, today }),
+    [filtersDraft, normalizedRequests, listItems, teams.users, today],
+  );
+  function editFiltersDraft(action: RequestFiltersAction) {
+    setFiltersDraft((current) => current && requestFiltersReducer(current, action));
+  }
   const emptyMessage = getEmptyListMessage(requestFilters);
   return (
     <section className="tw:grid tw:min-w-0 tw:gap-3.5">
@@ -3124,18 +3138,16 @@ function AdminDashboard({
           Criar Solicitação
         </Button>
         <RequestFiltersToolbar
-          todayOnly={requestFilters.todayOnly}
-          todayCount={filterCounts.today}
+          today={{ active: requestFilters.todayOnly, count: filterCounts.today, onToggle: requestFilterActions.toggleToday }}
           activePillCount={filterPills.length}
-          drawerOpen={filtersDrawerOpen}
-          onToggleToday={requestFilterActions.toggleToday}
-          onOpenDrawer={() => setFiltersDrawerOpen(true)}
+          drawerOpen={filtersDraft !== null}
+          onOpenDrawer={() => setFiltersDraft(requestFilters)}
         />
       </div>
       <ActiveFiltersBar
-        filters={requestFilters}
         resultCount={activeRequests.length}
         pills={filterPills}
+        canClear={!isRequestFiltersEmpty(requestFilters)}
         onClearDimension={requestFilterActions.clearDimension}
         onClearAll={requestFilterActions.clearAll}
       />
@@ -3203,18 +3215,21 @@ function AdminDashboard({
         })}
       </div>
 
-      {filtersDrawerOpen && (
+      {filtersDraft && filtersPreview && (
         <RequestFiltersDrawer
-          filters={requestFilters}
-          counts={filterCounts}
-          typeOptions={typeOptions}
-          assigneeOptions={assigneeOptions}
-          resultCount={activeRequests.length}
-          onToggleStage={requestFilterActions.toggleStage}
-          onToggleType={requestFilterActions.toggleType}
-          onToggleAssignee={requestFilterActions.toggleAssignee}
-          onClearAll={requestFilterActions.clearAll}
-          onClose={() => setFiltersDrawerOpen(false)}
+          filters={filtersDraft}
+          counts={filtersPreview.counts}
+          typeOptions={filtersPreview.typeOptions}
+          assigneeOptions={filtersPreview.assigneeOptions}
+          onToggleStage={(stage) => editFiltersDraft({ type: RequestFiltersActionType.TOGGLE_STAGE, stage })}
+          onToggleType={(value) => editFiltersDraft({ type: RequestFiltersActionType.TOGGLE_TYPE, value })}
+          onToggleAssignee={(value) => editFiltersDraft({ type: RequestFiltersActionType.TOGGLE_ASSIGNEE, value })}
+          onClearAll={() => editFiltersDraft({ type: RequestFiltersActionType.CLEAR_ALL })}
+          onClose={() => setFiltersDraft(null)}
+          onApply={() => {
+            requestFilterActions.apply(filtersDraft);
+            setFiltersDraft(null);
+          }}
         />
       )}
 

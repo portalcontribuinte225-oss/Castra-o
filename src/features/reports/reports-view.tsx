@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Download, FileText, Search } from "lucide-react";
+import { Download, FileText } from "lucide-react";
 import { Button } from "../../components/button";
 import { Card } from "../../components/card";
 import { EmptyState } from "../../components/ui";
@@ -104,24 +104,8 @@ export function ReportsView({
     <section className="tw:grid tw:min-w-0 tw:gap-4">
       <Card className="tw:grid tw:min-w-0 tw:gap-3 tw:p-4">
         <div className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
-          <RequestFiltersToolbar
-            sectionLabel="Relatórios"
-            todayOnly={activeQuery.filters.todayOnly}
-            todayCount={activeScope.counts.today}
-            activePillCount={pills.length}
-            drawerOpen={draft !== null}
-            onToggleToday={() => {
-              const query = applied || initialPreview;
-              apply({ ...query, filters: requestFiltersReducer(query.filters, { type: RequestFiltersActionType.TOGGLE_TODAY }) });
-            }}
-            onOpenDrawer={() => setDraft(applied || initialPreview)}
-          />
           <div className="tw:flex tw:min-w-0 tw:flex-wrap tw:gap-2">
-            <Button onClick={() => apply({ ...activeQuery, search })}>
-              <Search size={15} aria-hidden="true" />
-              Buscar
-            </Button>
-            <Button variant="outline" onClick={exportPdf} disabled={!applied} title={applied ? "Exportar relatório operacional" : "Faça uma busca primeiro"}>
+            <Button variant="outline" onClick={exportPdf} disabled={!applied} title={applied ? "Exportar relatório operacional" : "Ative os filtros primeiro"}>
               <Download size={15} aria-hidden="true" />
               Exportar
             </Button>
@@ -136,11 +120,17 @@ export function ReportsView({
               {prmLoading ? "Gerando..." : "Prontuário"}
             </Button>
           </div>
+          <RequestFiltersToolbar
+            sectionLabel="Relatórios"
+            activePillCount={pills.length}
+            drawerOpen={draft !== null}
+            onOpenDrawer={() => setDraft({ ...activeQuery, search })}
+          />
         </div>
         {applied && (
           <ActiveFiltersBar
-            filters={activeQuery.filters}
             pills={pills}
+            canClear={pills.length > 0}
             resultCount={report.rows.length}
             onClearDimension={(dimension: ReportDimension) => apply(clearReportFilter(activeQuery, dimension))}
             onClearAll={() => {
@@ -197,7 +187,7 @@ export function ReportsView({
         ) : (
           <EmptyState
             title={applied ? "Nenhum registro encontrado" : "Nenhum filtro aplicado"}
-            text={applied ? "Tente ajustar os filtros." : "Selecione os filtros ou clique em Buscar."}
+            text={applied ? "Tente ajustar os filtros." : "Selecione os filtros e clique em Ativar."}
           />
         )}
       </section>
@@ -208,7 +198,6 @@ export function ReportsView({
           counts={preview.counts}
           typeOptions={preview.typeOptions}
           assigneeOptions={preview.assigneeOptions}
-          resultCount={preview.activeRequests.length}
           hasAdditionalFilters={hasReportFilters(draft.report) || Boolean(draft.search)}
           additionalFilters={
             <ReportFilterFields

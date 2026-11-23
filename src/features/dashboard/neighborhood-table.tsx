@@ -1,6 +1,5 @@
 import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { Button } from "../../components/button";
 import { Card } from "../../components/card";
 import { NOT_INFORMED_LABEL } from "./dashboard-data";
 import { EMPTY_VALUE, formatDate, formatNumber, formatPercent } from "./dashboard-format";
@@ -10,20 +9,22 @@ interface ColumnSpec {
   id: NeighborhoodColumn;
   label: string;
   title: string;
-  numeric: boolean;
 }
 
 const COLUMNS: ColumnSpec[] = [
-  { id: NeighborhoodColumn.NAME, label: "Bairro", title: "Bairro do animal, ou do tutor quando o animal não tem", numeric: false },
-  { id: NeighborhoodColumn.REQUESTED, label: "Solicitadas", title: "Solicitações que entraram no período", numeric: true },
-  { id: NeighborhoodColumn.ANIMALS_SERVED, label: "Animais atendidos", title: "Animais das solicitações realizadas no período", numeric: true },
-  { id: NeighborhoodColumn.OPEN, label: "Na fila", title: "Solicitações em aberto hoje", numeric: true },
-  { id: NeighborhoodColumn.COMPLETED, label: "Realizadas", title: "Solicitações realizadas no período", numeric: true },
-  { id: NeighborhoodColumn.CANCELLED, label: "Canceladas", title: "Solicitações canceladas no período", numeric: true },
-  { id: NeighborhoodColumn.COMPLETION_RATE, label: "% concluído", title: "Realizadas ÷ (realizadas + na fila)", numeric: true },
-  { id: NeighborhoodColumn.TOP_TYPE, label: "Tipo mais pedido", title: "O tipo de solicitação mais pedido no período", numeric: false },
-  { id: NeighborhoodColumn.LAST_SERVED, label: "Último atendimento", title: "A realização mais recente, em todo o histórico", numeric: false },
+  { id: NeighborhoodColumn.NAME, label: "Bairro", title: "Bairro do animal, ou do tutor quando o animal não tem" },
+  { id: NeighborhoodColumn.REQUESTED, label: "Solicitadas", title: "Solicitações que entraram no período" },
+  { id: NeighborhoodColumn.ANIMALS_SERVED, label: "Animais atendidos", title: "Animais das solicitações realizadas no período" },
+  { id: NeighborhoodColumn.OPEN, label: "Na fila", title: "Solicitações em aberto hoje" },
+  { id: NeighborhoodColumn.COMPLETED, label: "Realizadas", title: "Solicitações realizadas no período" },
+  { id: NeighborhoodColumn.CANCELLED, label: "Canceladas", title: "Solicitações canceladas no período" },
+  { id: NeighborhoodColumn.COMPLETION_RATE, label: "% concluído", title: "Realizadas ÷ (realizadas + na fila)" },
+  { id: NeighborhoodColumn.TOP_TYPE, label: "Tipo mais pedido", title: "O tipo de solicitação mais pedido no período" },
+  { id: NeighborhoodColumn.LAST_SERVED, label: "Último atendimento", title: "A realização mais recente, em todo o histórico" },
 ];
+
+// The heading reads as plain text and still sorts. data-ui-button opts out of the legacy weight forced on plain buttons, so the text keeps the heading weight.
+const sortButtonStyle = "tw:inline-flex tw:appearance-none tw:items-center tw:gap-1 tw:border-0 tw:bg-transparent tw:p-0 tw:text-inherit tw:[text-transform:inherit] tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent";
 
 function RateCell({ value }: { value: number | null }) {
   if (value === null) return <>{EMPTY_VALUE}</>;
@@ -53,11 +54,11 @@ export function NeighborhoodTable({ rows }: { rows: NeighborhoodRow[] }) {
               const active = sort.column === column.id;
               const Arrow = sort.descending ? ArrowDown : ArrowUp;
               return (
-                <th key={column.id} scope="col" className={column.numeric ? "is-numeric" : ""} aria-sort={active ? (sort.descending ? "descending" : "ascending") : "none"}>
-                  <Button variant="custom" className="tw:border-card-border tw:bg-card-surface tw:text-xs tw:font-semibold tw:text-ui-text tw:enabled:hover:bg-card-page" title={column.title} onClick={() => sortBy(column.id)}>
+                <th key={column.id} scope="col" aria-sort={active ? (sort.descending ? "descending" : "ascending") : "none"}>
+                  <button type="button" data-ui-button="" className={sortButtonStyle} title={column.title} onClick={() => sortBy(column.id)}>
                     {column.label}
                     {active && <Arrow size={12} aria-hidden="true" />}
-                  </Button>
+                  </button>
                 </th>
               );
             })}

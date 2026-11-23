@@ -24,6 +24,7 @@ export enum RequestFiltersActionType {
   TOGGLE_ASSIGNEE = "toggleAssignee",
   CLEAR_DIMENSION = "clearDimension",
   CLEAR_ALL = "clearAll",
+  APPLY = "apply",
 }
 
 export type RequestFiltersAction =
@@ -32,9 +33,10 @@ export type RequestFiltersAction =
   | { type: RequestFiltersActionType.TOGGLE_TYPE; value: string }
   | { type: RequestFiltersActionType.TOGGLE_ASSIGNEE; value: string }
   | { type: RequestFiltersActionType.CLEAR_DIMENSION; dimension: RequestFilterDimension }
-  | { type: RequestFiltersActionType.CLEAR_ALL };
+  | { type: RequestFiltersActionType.CLEAR_ALL }
+  | { type: RequestFiltersActionType.APPLY; filters: RequestListFilters };
 
-function toggleValue<T>(values: T[], value: T): T[] {
+export function toggleValue<T>(values: T[], value: T): T[] {
   return values.includes(value) ? values.filter((current) => current !== value) : [...values, value];
 }
 
@@ -65,6 +67,8 @@ export function requestFiltersReducer(filters: RequestListFilters, action: Reque
       return clearDimension(filters, action.dimension);
     case RequestFiltersActionType.CLEAR_ALL:
       return initialRequestFilters;
+    case RequestFiltersActionType.APPLY:
+      return action.filters;
     default:
       return filters;
   }
@@ -75,12 +79,10 @@ export function useRequestFilters() {
   const actions = useMemo(
     () => ({
       toggleToday: () => dispatch({ type: RequestFiltersActionType.TOGGLE_TODAY }),
-      toggleStage: (stage: RequestStage) => dispatch({ type: RequestFiltersActionType.TOGGLE_STAGE, stage }),
-      toggleType: (value: string) => dispatch({ type: RequestFiltersActionType.TOGGLE_TYPE, value }),
-      toggleAssignee: (value: string) => dispatch({ type: RequestFiltersActionType.TOGGLE_ASSIGNEE, value }),
       clearDimension: (dimension: RequestFilterDimension) =>
         dispatch({ type: RequestFiltersActionType.CLEAR_DIMENSION, dimension }),
       clearAll: () => dispatch({ type: RequestFiltersActionType.CLEAR_ALL }),
+      apply: (filters: RequestListFilters) => dispatch({ type: RequestFiltersActionType.APPLY, filters }),
     }),
     [],
   );

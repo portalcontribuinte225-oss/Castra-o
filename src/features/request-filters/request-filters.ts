@@ -246,7 +246,7 @@ export function isRequestFiltersEmpty(filters: RequestListFilters): boolean {
     && !filters.todayOnly;
 }
 
-function summarizeLabels(labels: string[]): string {
+export function summarizeLabels(labels: string[]): string {
   const visible = labels.slice(0, MAX_PILL_VALUES).join(", ");
   const hidden = labels.length - MAX_PILL_VALUES;
   return hidden > 0 ? `${visible} +${hidden}` : visible;

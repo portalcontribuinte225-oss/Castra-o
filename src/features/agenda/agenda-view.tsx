@@ -20,6 +20,17 @@ import {
 import { ToastContainer } from "../../components/toast-container";
 import { ProcessModal } from "../process-modal/process-modal";
 import { canEditRequests, useRequestActions } from "../request-actions/request-actions";
+import { ActiveFiltersBar } from "../request-filters/active-filters-bar";
+import { RequestFiltersToolbar } from "../request-filters/request-filters-toolbar";
+import {
+  buildAgendaFilterPills,
+  clearAgendaFilter,
+  filterAgendaRequests,
+  initialAgendaFilters,
+  toggleAgendaFilter,
+} from "./agenda-filters";
+import type { AgendaFilterDimension, AgendaFilters } from "./agenda-filters";
+import { AgendaFiltersDrawer } from "./agenda-filters-drawer";
 
 
 const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -141,8 +152,9 @@ export function AgendaView({
   const [view, setView] = useState<ViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState("");
-  const [filterStatus, setFilterStatus] = useState("");
+  const [filters, setFilters] = useState<AgendaFilters>(initialAgendaFilters);
+  // The filters panel edits a draft; null means the panel is closed.
+  const [filtersDraft, setFiltersDraft] = useState<AgendaFilters | null>(null);
   const [toasts, setToasts] = useState<AnyRecord[]>([]);
   const activeViewButton = useRef<HTMLButtonElement>(null);
   const dayPanelReturnFocus = useRef<HTMLButtonElement>(null);
@@ -187,17 +199,7 @@ export function AgendaView({
 
   const normalized = useMemo(() => requests.map(normalizeRequest), [requests]);
 
-  const filtered = useMemo(() => {
-    let list = normalized;
-    if (filterType) {
-      list = list.filter((r) => requestTypeLabels(r).includes(filterType));
-    }
-    if (filterStatus === "cancelada") list = list.filter((r) => r.status === "CANCELADA");
-    else if (filterStatus === "agendada") list = list.filter((r) => r.status === "AGENDADA");
-    else if (filterStatus === "realizada") list = list.filter((r) => r.status === "REALIZADA");
-    else if (filterStatus === "analise") list = list.filter((r) => r.status === "NOVA");
-    return list;
-  }, [normalized, filterType, filterStatus]);
+  const filtered = useMemo(() => filterAgendaRequests(normalized, filters), [normalized, filters]);
 
   const scheduleDaysByDate = useMemo(() => {
     const map: Record<string, AnyRecord[]> = {};
@@ -267,11 +269,12 @@ export function AgendaView({
     return { todayReqs, weekReqs, canceladas, compareceram };
   }, [filtered, requestsByDate]);
 
-  const allTypes = useMemo(() => {
+  const typeOptions = useMemo(() => {
     const types = new Set<string>();
     for (const r of normalized) requestTypeLabels(r).forEach((label) => types.add(label));
-    return Array.from(types);
+    return Array.from(types, (type) => ({ value: type, label: type }));
   }, [normalized]);
+  const filterPills = buildAgendaFilterPills(filters, typeOptions);
 
   const viewTabs: { id: ViewMode; label: string }[] = [
     { id: "month", label: "Mês" },
@@ -296,55 +299,56 @@ export function AgendaView({
 
   return (
     <section className="ag-root">
-      <div className="page-toolbar ag-header-row">
-        <div className="ag-filter-stack">
-          <select className="ag-select ag-select--borderless" value={filterType} onChange={(e) => setFilterType(e.target.value)} aria-label="Tipo de atendimento">
-            <option value="">Todos os tipos</option>
-            {allTypes.map((t) => (
-              <option key={t} value={t}>{t}</option>
+      <div className="tw:grid tw:min-w-0 tw:gap-2.5">
+        <div className="page-toolbar ag-header-row">
+          <div className="ag-month-jump">
+            <select className="ag-select" aria-label="Mês" value={currentDate.getMonth()} onChange={(e) => goToMonth(Number(e.target.value), currentYear)}>
+              {MONTHS_FULL.map((label, index) => (
+                <option key={label} value={index}>{label}</option>
+              ))}
+            </select>
+            <select className="ag-select" aria-label="Ano" value={currentYear} onChange={(e) => goToMonth(currentDate.getMonth(), Number(e.target.value))}>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+            <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} aria-hidden="true" /></Button>
+            <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" onClick={next} aria-label="Próximo"><ChevronRight size={13} aria-hidden="true" /></Button>
+          </div>
+
+          <div className="ag-header-fill" />
+
+          <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:max-[900px]:w-full tw:max-[900px]:justify-center" role="group" aria-label="Visualização da agenda">
+            {viewTabs.map((tab) => (
+              <Button
+                key={tab.id}
+                ref={view === tab.id ? activeViewButton : undefined}
+                variant="outline"
+                className="tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong"
+                aria-pressed={view === tab.id}
+                onClick={() => setView(tab.id)}
+              >
+                {tab.label}
+              </Button>
             ))}
-          </select>
+          </div>
 
-          <select className="ag-select ag-select--borderless" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} aria-label="Status operacional">
-            <option value="">Todos os status</option>
-            <option value="analise">Nova</option>
-            <option value="agendada">Agendada</option>
-            <option value="realizada">Realizada</option>
-            <option value="cancelada">Cancelada</option>
-          </select>
+          <RequestFiltersToolbar
+            sectionLabel="Agenda"
+            activePillCount={filterPills.length}
+            drawerOpen={filtersDraft !== null}
+            onOpenDrawer={() => setFiltersDraft(filters)}
+          />
         </div>
-
-        <div className="ag-month-jump">
-          <select className="ag-select" aria-label="Mês" value={currentDate.getMonth()} onChange={(e) => goToMonth(Number(e.target.value), currentYear)}>
-            {MONTHS_FULL.map((label, index) => (
-              <option key={label} value={index}>{label}</option>
-            ))}
-          </select>
-          <select className="ag-select" aria-label="Ano" value={currentYear} onChange={(e) => goToMonth(currentDate.getMonth(), Number(e.target.value))}>
-            {yearOptions.map((year) => (
-              <option key={year} value={year}>{year}</option>
-            ))}
-          </select>
-          <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" onClick={prev} aria-label="Anterior"><ChevronLeft size={13} aria-hidden="true" /></Button>
-          <Button variant="outline" className="tw:size-10 tw:shrink-0 tw:px-0" onClick={next} aria-label="Próximo"><ChevronRight size={13} aria-hidden="true" /></Button>
-        </div>
-
-        <div className="ag-header-fill" />
-
-        <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:max-[900px]:w-full tw:max-[900px]:justify-center" role="group" aria-label="Visualização da agenda">
-          {viewTabs.map((tab) => (
-            <Button
-              key={tab.id}
-              ref={view === tab.id ? activeViewButton : undefined}
-              variant="outline"
-              className="tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong"
-              aria-pressed={view === tab.id}
-              onClick={() => setView(tab.id)}
-            >
-              {tab.label}
-            </Button>
-          ))}
-        </div>
+        {filterPills.length > 0 && (
+          <ActiveFiltersBar
+            resultCount={filtered.length}
+            pills={filterPills}
+            canClear
+            onClearDimension={(dimension: AgendaFilterDimension) => setFilters((current) => clearAgendaFilter(current, dimension))}
+            onClearAll={() => setFilters(initialAgendaFilters)}
+          />
+        )}
       </div>
 
       <div className="ag-summary-row">
@@ -395,6 +399,21 @@ export function AgendaView({
             setSelectedDay(null);
             openRequest(r);
           }}
+        />
+      )}
+
+      {filtersDraft && (
+        <AgendaFiltersDrawer
+          requests={normalized}
+          filters={filtersDraft}
+          typeOptions={typeOptions}
+          onToggle={(dimension, value) => setFiltersDraft((current) => current && toggleAgendaFilter(current, dimension, value))}
+          onClear={() => setFiltersDraft(initialAgendaFilters)}
+          onApply={() => {
+            setFilters(filtersDraft);
+            setFiltersDraft(null);
+          }}
+          onClose={() => setFiltersDraft(null)}
         />
       )}
 

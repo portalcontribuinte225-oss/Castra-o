@@ -62,7 +62,7 @@ describe("operational reports", () => {
     const query: ReportQuery = {
       today: day,
       search: "joao",
-      filters: { stages: [RequestStage.SCHEDULED, RequestStage.DONE], types: ["Castração", "Microchipagem"], assignees: ["one", "two"], todayOnly: true },
+      filters: { stages: [RequestStage.SCHEDULED, RequestStage.DONE], types: ["Castração", "Microchipagem"], assignees: ["one", "two"], todayOnly: false },
       report: { start: "2026-11-18", end: "2026-11-20", fee: "charged", agendaKind: "mutirao", tutorNeighborhood: "Sao Joao", animalNeighborhood: "centro" },
     };
     const scope = buildReportScope(requests, query, users, scheduleDays, []);
@@ -86,7 +86,6 @@ describe("operational reports", () => {
 
     const details = buildReportFilterDetails(query, scope.typeOptions, scope.assigneeOptions);
     expect(details).toContainEqual(["Etapa", "Agendadas, Realizadas"]);
-    expect(details).toContainEqual(["Agendadas para", day]);
     const printHtml = buildReportPrintHtml(report, query, details, new Date("2026-11-20T15:00:00"));
     expect(printHtml).toContain("<span>Total</span><strong>2</strong>");
     expect(printHtml).toContain("<td>A-1</td>");
@@ -142,30 +141,32 @@ describe("operational reports", () => {
     const scope = buildReportScope([], query, users, [], []);
     const noop = vi.fn();
     const chips = renderToStaticMarkup(
-      <ActiveFiltersBar filters={query.filters} pills={buildReportPills(query, scope.pills)} resultCount={0} onClearAll={noop} onClearDimension={noop} />,
+      <ActiveFiltersBar pills={buildReportPills(query, scope.pills)} canClear resultCount={0} onClearAll={noop} onClearDimension={noop} />,
     );
     expect(chips).toContain('aria-label="Remover filtro Bairro do animal: Não informado"');
     expect(chips).toContain('aria-label="Remover filtro Busca: 123"');
     const drawer = renderToStaticMarkup(
       <RequestFiltersDrawer
         sectionLabel="Relatórios" filters={query.filters} counts={scope.counts}
-        typeOptions={scope.typeOptions} assigneeOptions={scope.assigneeOptions} resultCount={0}
+        typeOptions={scope.typeOptions} assigneeOptions={scope.assigneeOptions}
         additionalFilters={<ReportFilterFields filters={query.report} tutorNeighborhoods={["Centro"]} animalNeighborhoods={["Cohab"]} onChange={noop} />}
-        onToggleStage={noop} onToggleType={noop} onToggleAssignee={noop} onClearAll={noop} onClose={noop} applyDisabled
+        onToggleStage={noop} onToggleType={noop} onToggleAssignee={noop} onClearAll={noop} onClose={noop} onApply={noop} applyDisabled
       />,
     );
     expect(drawer).toContain('aria-label="Bairro do animal"');
     expect(drawer).toContain('aria-label="Taxas"');
     expect(drawer).toContain('role="alert"');
-    expect(drawer).toMatch(/<button[^>]*disabled=""[^>]*>Ver 0 solicitações<\/button>/);
+    expect(drawer).toMatch(/<button[^>]*disabled=""[^>]*>Ativar<\/button>/);
   });
 
-  it("renders the shared filters alongside Buscar, Exportar and Prontuário on the report entry point", () => {
+  it("puts Exportar and Prontuário first and the shared Filtros last, without Hoje or Buscar", () => {
     const html = renderToStaticMarkup(<ReportsView />);
-    expect(html).toContain('aria-label="Filtros de relatórios"');
-    expect(html).toContain("Buscar");
-    expect(html).toContain("Exportar");
-    expect(html).toContain("Prontuário");
+    const filtersAt = html.indexOf('aria-label="Filtros de relatórios"');
+    expect(filtersAt).toBeGreaterThan(html.indexOf("Exportar"));
+    expect(filtersAt).toBeGreaterThan(html.indexOf("Prontuário"));
+    expect(html).not.toContain("Hoje");
+    expect(html).not.toContain("Buscar");
+    expect(html).toContain("Selecione os filtros e clique em Ativar.");
     expect(html).not.toContain("reports-filter-grid");
   });
 });

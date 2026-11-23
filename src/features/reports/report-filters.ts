@@ -207,6 +207,5 @@ export function buildReportFilterDetails(
     [requestFilterDimensionLabels[RequestFilterDimension.TYPES], filters.types.map((value) => optionLabel(types, value)).join(", ") || "Todos"],
     [requestFilterDimensionLabels[RequestFilterDimension.ASSIGNEES], filters.assignees.map((value) => optionLabel(assignees, value)).join(", ") || "Todos"],
     ...reportFilterDetails(query).map(({ title, value }): [string, string] => [title, value || "Todos"]),
-    ...(filters.todayOnly ? [["Agendadas para", query.today] as [string, string]] : []),
   ];
 }

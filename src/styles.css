@@ -4252,27 +4252,6 @@ form textarea:where(:not([data-ui-input])):focus {
 }
 
 
-.ag-filter-stack {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 0;
-  padding: 0;
-}
-
-
-.ag-filter-stack .ag-select {
-  width: auto;
-}
-
-
-.ag-select--borderless {
-  border: 0;
-  background: transparent;
-  padding: 0 20px 0 0;
-}
-
-
 .ag-select {
   width: 100%;
   min-width: 150px;
@@ -5053,13 +5032,8 @@ form textarea:where(:not([data-ui-input])):focus {
   }
 
 
-  .ag-filter-stack,
   .ag-month-jump {
     width: 100%;
-  }
-
-
-  .ag-month-jump {
     justify-content: center;
   }
 
@@ -11408,6 +11382,11 @@ small,
 .dash-table th,
 .dash-table td {
   white-space: nowrap;
+  text-align: center;
+}
+
+.dash-table :is(th, td):first-child {
+  text-align: left;
 }
 
 .dash-table thead th {
@@ -11418,7 +11397,6 @@ small,
 }
 
 .dash-table .is-numeric {
-  text-align: right;
   font-variant-numeric: tabular-nums;
 }
 

@@ -81,6 +81,16 @@ describe("requestFiltersReducer", () => {
     expect(state).toEqual({ stages: [], types: [], assignees: [], todayOnly: false });
   });
 
+  it("replaces every filter with the applied draft, the today toggle included", () => {
+    const current = apply(
+      initialRequestFilters,
+      { type: RequestFiltersActionType.TOGGLE_TODAY },
+      { type: RequestFiltersActionType.TOGGLE_TYPE, value: "Ninhada" },
+    );
+    const draft: RequestListFilters = { ...initialRequestFilters, stages: [RequestStage.DONE], assignees: ["u1"] };
+    expect(apply(current, { type: RequestFiltersActionType.APPLY, filters: draft })).toEqual(draft);
+  });
+
   it("does not mutate the previous state", () => {
     const before = JSON.stringify(initialRequestFilters);
     apply(
