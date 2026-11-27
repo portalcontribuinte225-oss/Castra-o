@@ -31,7 +31,7 @@ test("the sender accepts only a clean text within the longest length", () => {
 });
 
 test("every use has a fixed text within the longest length that starts with the municipality", () => {
-  assert.equal(smsUses.length, 13);
+  assert.equal(smsUses.length, 11);
   for (const { key } of smsUses) {
     const text = buildSmsText(key, full);
     assert.equal(isSmsText(text), true, key);
@@ -46,8 +46,6 @@ test("the texts are the agreed ones, in correct Portuguese", () => {
   assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CANCELLED, full), "Criciúma: o agendamento de 20/11/2026, às 09:00, foi cancelado. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CANCELLED, { ...full, time: "" }), "Criciúma: o agendamento de 20/11/2026 foi cancelado. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.NO_SHOW, full), "Criciúma: você não compareceu ao atendimento de 20/11/2026. Fale com nossa equipe. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.DOCUMENTS_APPROVED, full), "Criciúma: um ou mais documentos foram deferidos. Acesse sua solicitação para acompanhar a análise. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.DOCUMENTS_REJECTED, full), "Criciúma: um ou mais documentos foram indeferidos. Acesse sua solicitação para ver o motivo. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.COMPLETED, full), "Criciúma: atendimento concluído! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, full), "Criciúma: sua solicitação foi indeferida (Documentação incompleta). Fale com nossa equipe. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, { ...full, reason: "" }), "Criciúma: sua solicitação foi indeferida. Fale com nossa equipe. Protocolo: 123/2026.");

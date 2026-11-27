@@ -196,17 +196,15 @@ describe("template configuration", () => {
     expect(modal({ bodyText: "" })).toContain("Sincronize os templates para ver o texto.");
   });
 
-  it("offers each document outcome as its own notice and keeps a link and its field mapping editable", () => {
+  it("offers the notices by their titles, without document notices, and keeps a link and its field mapping editable", () => {
     const linked = modal({
-      name: "castracao_documentos_analisados", configured: true, linkedUse: NotificationEvent.DOCUMENTS_REJECTED,
-      bodyText: "Olá {{1}}, confira os documentos do protocolo {{2}}.", bodyVariables: 2, fields: ["tutor_name", "protocol"],
+      name: "castracao_aviso_concluido", configured: true, linkedUse: NotificationEvent.COMPLETED,
+      bodyText: "Olá {{1}}, o atendimento do protocolo {{2}} foi concluído.", bodyVariables: 2, fields: ["tutor_name", "protocol"],
     });
-    expect(linked).toContain('<option value="documents_approved">Documentos deferidos</option>');
-    expect(linked).toContain('<option value="documents_rejected" selected="">Documentos indeferidos</option>');
-    expect(linked).toContain("Olá Maria Silva, confira os documentos do protocolo 123/2026.");
-    const distinct = modal({ uses: [NotificationEvent.DOCUMENTS_APPROVED], bodyVariables: 2, fields: ["protocol", "notification_message"] });
-    expect(distinct).toContain('<option value="documents_approved" selected="">Documentos deferidos</option>');
-    expect(distinct).not.toContain("Documentos deferidos e indeferidos");
+    expect(linked).toContain('<option value="schedule_changed">Agendamento alterado</option>');
+    expect(linked).toContain('<option value="completed" selected="">Atendimento concluído</option>');
+    expect(linked).toContain("Olá Maria Silva, o atendimento do protocolo 123/2026 foi concluído.");
+    expect(linked).not.toContain("Documentos");
   });
 });
 

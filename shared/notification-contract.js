@@ -6,8 +6,6 @@ export const NotificationEvent = Object.freeze({
   SCHEDULE_CHANGED: "schedule_changed",
   SCHEDULE_CANCELLED: "schedule_cancelled",
   NO_SHOW: "no_show",
-  DOCUMENTS_APPROVED: "documents_approved",
-  DOCUMENTS_REJECTED: "documents_rejected",
   COMPLETED: "completed",
   REQUEST_REJECTED: "request_rejected",
 });
@@ -35,9 +33,6 @@ export function rejectionReasonText(workflow) {
   const reason = typeof workflow?.rejectionReason === "string" ? workflow.rejectionReason.replace(/\s+/g, " ").trim() : "";
   return reason && reason !== OTHER_REJECTION_REASON && reason !== REJECTED_CANCEL_REASON ? reason.slice(0, MAX_REJECTION_REASON).trim() : "";
 }
-
-// The values existing e-mail templates read from `documents_result`.
-export const DocumentsOutcome = Object.freeze({ APPROVED: "approved", REJECTED: "rejected" });
 
 export const NotificationChannel = Object.freeze({ EMAIL: "email", WHATSAPP: "whatsapp", SMS: "sms" });
 export const DeliveryStatus = Object.freeze({ SENT: "sent", FAILED: "failed", SKIPPED: "skipped" });

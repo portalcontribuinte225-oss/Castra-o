@@ -25,6 +25,8 @@ function unavailable(purpose, channel, code) {
   return { purpose, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, code) };
 }
 
+const SELECTED_CHANNEL_PURPOSES = new Set([AuthPurpose.PASSWORD_RESET, AuthPurpose.REQUEST_TRACKING]);
+
 function isVerification(purpose) {
   return purpose === AuthPurpose.VERIFY_EMAIL || purpose === AuthPurpose.VERIFY_PHONE;
 }
@@ -132,18 +134,14 @@ export async function deliverAuthMessage(input, overrides = {}) {
   const { purpose } = input;
   const globalStaffReset = purpose === AuthPurpose.PASSWORD_RESET && !input.municipalityId && isGlobalUser(input.user);
   if (!Object.values(AuthPurpose).includes(purpose) || (!input.municipalityId && !globalStaffReset)) return [];
-  if (purpose === AuthPurpose.PASSWORD_RESET) return deliverRecoveryChannel(input, dependencies, globalStaffReset);
-  const requiresCode = isVerification(purpose) || purpose === AuthPurpose.PASSWORD_RESET || purpose === AuthPurpose.REQUEST_TRACKING;
-  if (requiresCode && !/^\d{6}$/.test(input.code || "")) {
+  if (SELECTED_CHANNEL_PURPOSES.has(purpose)) return deliverSelectedChannel(input, dependencies, globalStaffReset);
+  if (isVerification(purpose) && !/^\d{6}$/.test(input.code || "")) {
     return [{ purpose, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }];
   }
-  // The request code goes to a contact the use case already matched against the request: the follow-up contact for tracking,
-  // the tutor's contact for "Acessar minha solicitação".
-  const matched = purpose === AuthPurpose.REQUEST_TRACKING;
   const emailAllowed = purpose !== AuthPurpose.VERIFY_PHONE && Boolean(input.email)
-    && (matched || purpose === AuthPurpose.VERIFY_EMAIL || input.emailVerified === true);
+    && (purpose === AuthPurpose.VERIFY_EMAIL || input.emailVerified === true);
   const phoneAllowed = !globalStaffReset && purpose !== AuthPurpose.VERIFY_EMAIL && Boolean(input.phone)
-    && (matched || purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
+    && (purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
   if (!emailAllowed && !phoneAllowed) return [];
   const results = [];
   if (phoneAllowed) {
@@ -157,7 +155,9 @@ export async function deliverAuthMessage(input, overrides = {}) {
   return results;
 }
 
-async function deliverRecoveryChannel(input, dependencies, globalStaffReset) {
+// The recovery code and the code of "Acompanhar solicitação" go only through the channel the person chose, to the destination the
+// use case resolved: there is no other channel to fall back to.
+async function deliverSelectedChannel(input, dependencies, globalStaffReset) {
   const { purpose, channel } = input;
   if (!Object.values(NotificationChannel).includes(channel)) return [];
   if (!/^\d{6}$/.test(input.code || "") || isRecoveryExpired(input)) return [unavailable(purpose, channel, DeliveryCode.PREPARATION_FAILED)];

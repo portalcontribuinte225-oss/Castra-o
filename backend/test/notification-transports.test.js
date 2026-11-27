@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createEmailSender, sendNotificationEmail } from "../src/services/email.js";
 import { sendWhatsappTemplateComponents } from "../src/services/whatsapp.js";
 import { buildBodyComponents } from "../src/services/notifications/whatsapp-template-parameters.js";
-import { DeliveryStatus, DeliveryCode, DocumentsOutcome, NotificationEvent } from "../../shared/notification-contract.js";
+import { DeliveryStatus, DeliveryCode, NotificationEvent } from "../../shared/notification-contract.js";
 import { clearServerCredentials, TEST_EMAIL_CREDENTIALS, useServerCredentials } from "./fixtures/server-credentials.js";
 
 clearServerCredentials();
@@ -23,7 +23,7 @@ test("EmailJS uses an explicit notification template and sanitizes content", asy
     assert.ok(options.signal instanceof AbortSignal);
     return { ok: true };
   } });
-  const result = await sendNotificationEmail({ toEmail: emailInput.toEmail, templateId: emailInput.templateId, event: NotificationEvent.DOCUMENTS_APPROVED,
+  const result = await sendNotificationEmail({ toEmail: emailInput.toEmail, templateId: emailInput.templateId, event: NotificationEvent.COMPLETED,
     request: { protocol: "1/2026", internal_token: "secret-key", documents: [{ message: "private reason" }] } }, sender);
   assert.equal(result.status, DeliveryStatus.SENT);
 });
@@ -87,28 +87,6 @@ test("transport failures keep finite diagnostic codes", async () => {
   }
 });
 
-test("document notifications use the event outcome even when another document has a different state", async () => {
-  const request = { protocol: "1/2026", documents: [
-    { status: "approved", fileName: "private-id.pdf" },
-    { status: "rejected", message: "sensitive rejection reason", documentId: "personal-id" },
-    { status: "attached", dataUrl: "private-content" },
-  ] };
-  for (const [event, result, subject, resultText] of [
-    [NotificationEvent.DOCUMENTS_APPROVED, DocumentsOutcome.APPROVED, "Documentos deferidos", /\bdeferidos?\./],
-    [NotificationEvent.DOCUMENTS_REJECTED, DocumentsOutcome.REJECTED, "Documentos indeferidos", /\bindeferidos?\./],
-  ]) {
-    await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: `notice_${event}`, event, request }, async ({ templateParams, templateId }) => {
-      assert.equal(templateId, `notice_${event}`);
-      assert.equal(templateParams.event, event);
-      assert.equal(templateParams.subject, subject);
-      assert.equal(templateParams.documents_result, result);
-      assert.match(templateParams.message, resultText);
-      assert.doesNotMatch(templateParams.message, /private|sensitive|personal/);
-      return { status: DeliveryStatus.SENT };
-    });
-  }
-});
-
 test("every notice carries its full text, the new subject and, for the no-show, the date of the missed visit", async () => {
   const request = { protocol: "1/2026", schedule_date: "2026-11-20", schedule_location_name: "Centro", workflow_data: { scheduleTime: "09:15" } };
   const expected = {
@@ -122,7 +100,7 @@ test("every notice carries its full text, the new subject and, for the no-show, 
     await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event, request }, async ({ templateParams }) => {
       assert.equal(templateParams.subject, subject);
       assert.equal(templateParams.message, message);
-      assert.equal("documents_result" in templateParams, false, "only the documents notice carries the outcome");
+      assert.equal("documents_result" in templateParams, false, "no notice carries the review of documents");
       return { status: DeliveryStatus.SENT };
     });
   }

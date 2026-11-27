@@ -222,8 +222,8 @@ describe("SMS settings interface", () => {
     expect(html).toContain("<th>Texto</th>"); expect(html).not.toContain("Exemplo");
     expect(html).toContain("Até 70 caracteres por SMS. Textos maiores seguem em partes de 67 caracteres, e cada parte é cobrada.");
     expect(html.indexOf("Mensagens")).toBeLessThan(html.indexOf("Até 70 caracteres por SMS"));
-    expect(html).toContain("<td>Documentos deferidos</td><td>Test Town: um ou mais documentos foram deferidos. Acesse sua solicitação para acompanhar a análise. Protocolo: {protocolo}.</td>");
-    expect(html).toContain("<td>Documentos indeferidos</td><td>Test Town: um ou mais documentos foram indeferidos. Acesse sua solicitação para ver o motivo. Protocolo: {protocolo}.</td>");
+    expect(html).toContain("<td>Acesso à solicitação</td><td>Test Town: para consultar sua solicitação, use o código {codigo}. Válido por {minutos} minutos. Não compartilhe.</td>");
+    expect(html).not.toContain("Documentos");
     expect(screen({ config: { ...integrated, municipalityName: "" } })).toContain("Município: recebemos um pedido para redefinir sua senha.");
   });
 

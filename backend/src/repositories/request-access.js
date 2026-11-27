@@ -1,23 +1,32 @@
 import { pool } from "../db/index.js";
 import { isProcedureRequest } from "../../../shared/request-contract.js";
 
-// What the access compares (the tutor's CPF and contacts) and what the request document shows. Never the history, the notes, the
-// documents or the photos. Only a request of an active municipality; the tenant scope stays explicit.
-const ACCESS_COLUMNS = `r.id, r.municipality_id, r.tutor_id, r.protocol, r.request_type, r.status, r.origin, r.created_at, r.signed_at,
+// What the access compares (the tutor's CPF and contacts), what the request document shows and the documents, only to count them.
+// Never the history, the notes or the photos. Only a request of an active municipality; the tenant scope stays explicit.
+const ACCESS_COLUMNS = `r.id, r.municipality_id, r.tutor_id, r.protocol, r.request_type, r.status, r.origin, r.created_at, r.updated_at, r.signed_at,
   r.schedule_date, r.schedule_location_name, r.schedule_address, r.schedule_address_url, r.schedule_municipality, r.municipality,
   r.responsible_unit, r.veterinarian, r.tutor_name, r.cpf, r.phone, r.tutor_email, r.cep, r.address, r.neighborhood, r.city, r.state,
-  r.animals, r.workflow_data`;
+  r.animals, r.workflow_data, r.documents`;
+const REQUEST_BATCH_SIZE = 20;
 
 // Only a request for a procedure has a tutor whose account can be born from it: a complaint, a death or a transfer never opens here.
 const accessible = (row) => (row && isProcedureRequest(row.request_type) ? row : null);
 
-export async function findAccessRequestByProtocol(municipalityId, protocol, database = pool) {
-  const { rows } = await database.query(
-    `SELECT ${ACCESS_COLUMNS} FROM requests r JOIN municipalities m ON m.id = r.municipality_id
-     WHERE r.municipality_id = $1 AND r.protocol = $2 AND m.active = TRUE`,
-    [municipalityId, protocol],
-  );
-  return accessible(rows[0]);
+// The procedure requests of a CPF in an active municipality, the most recent first. The CPF is compared by its digits, however the
+// request kept it.
+export async function* accessRequestsByCpf(municipalityId, cpf, database = pool) {
+  let offset = 0;
+  for (;;) {
+    const { rows } = await database.query(
+      `SELECT ${ACCESS_COLUMNS} FROM requests r JOIN municipalities m ON m.id = r.municipality_id
+       WHERE r.municipality_id = $1 AND regexp_replace(COALESCE(r.cpf, ''), '\\D', '', 'g') = $2 AND m.active = TRUE
+       ORDER BY r.created_at DESC, r.id DESC LIMIT $3 OFFSET $4`,
+      [municipalityId, cpf, REQUEST_BATCH_SIZE, offset],
+    );
+    yield* rows.filter(accessible);
+    if (rows.length < REQUEST_BATCH_SIZE) return;
+    offset += rows.length;
+  }
 }
 
 export async function findAccessRequest(requestId, municipalityId, database = pool, lock = false) {
@@ -55,8 +64,8 @@ export async function insertTutorAccount(client, { request, name, cpf, email, ph
   return userId;
 }
 
-// Only the request the code was confirmed for, and its animals that have no tutor yet, go to the new account; other requests of the
-// same CPF stay as they are. The tutor of each animal is recorded the way a request of a logged tutor records it.
+// A request the page showed, if it has no tutor yet, goes to the new account with its animals that have no tutor; requests of the
+// same CPF with another contact stay as they are. The tutor of each animal is recorded the way a request of a logged tutor records it.
 export async function linkAccessRequest(client, { request, userId }) {
   await client.query("UPDATE requests SET tutor_id = $1, updated_at = NOW() WHERE id = $2 AND municipality_id = $3 AND tutor_id IS NULL",
     [userId, request.id, request.municipality_id]);

@@ -3,7 +3,7 @@ import { authError } from "./auth-security.js";
 
 // Called only inside the request transaction. A logged tutor sends the request on their own account, with the CPF of their
 // profile. Anyone else sends it without an account: the tutor's account is born on the first access, with the code to create the
-// password ("Acessar minha solicitação").
+// password ("Acompanhar solicitação").
 export async function resolveRequestTutor(client, { cpf, municipalityId, user }) {
   if (user?.role !== "tutor") return null;
   const { rows } = await client.query("SELECT cpf FROM tutor_profiles WHERE user_id = $1 AND municipality_id = $2", [user.id, municipalityId]);

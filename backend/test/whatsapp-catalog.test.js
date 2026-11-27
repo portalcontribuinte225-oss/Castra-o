@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import whatsappTemplateRoutes from "../src/routes/whatsapp-templates.js";
 import { pool } from "../src/db/index.js";
+import { AuthPurpose } from "../../shared/auth-contract.js";
 import { DeliveryCode } from "../../shared/notification-contract.js";
 import { WHATSAPP_CATALOG_CONFIG_KEY, recognizeWhatsappTemplate } from "../../shared/whatsapp-templates-contract.js";
 import { describeGraphTemplate, fetchGraphTemplates } from "../src/services/whatsapp-graph-templates.js";
@@ -41,12 +42,12 @@ function fakeDatabase(initial = {}) {
 const page = (data, after = "") => ({ ok: true, status: 200, json: async () => ({ data, ...(after ? { paging: { cursors: { after }, next: "https://evil.example/next?access_token=leak" } } : {}) }) });
 
 test("a template with a numbered body, text header, footer and fixed buttons is described by its structure", () => {
-  const described = describeGraphTemplate(graph("castracao_confirmacao_agendamento", [
+  const described = describeGraphTemplate(graph("castracao_agendamento_confirmado", [
     { type: "HEADER", format: "TEXT", text: "Castração" }, body("Olá {{1}}, {{2}} às {{3}} em {{4}}. Protocolo {{5}}."), { type: "FOOTER", text: "Prefeitura" },
     { type: "BUTTONS", buttons: [{ type: "QUICK_REPLY", text: "Ok" }, { type: "URL", text: "Site", url: "https://example.com" }, { type: "PHONE_NUMBER", text: "Ligar", phone_number: "+5548000000000" }] },
   ], { parameter_format: "POSITIONAL" }));
   assert.deepEqual(described, facts({
-    name: "castracao_confirmacao_agendamento", bodyText: "Olá {{1}}, {{2}} às {{3}} em {{4}}. Protocolo {{5}}.", bodyVariables: 5, header: "TEXT", buttons: ["QUICK_REPLY", "URL", "PHONE_NUMBER"],
+    name: "castracao_agendamento_confirmado", bodyText: "Olá {{1}}, {{2}} às {{3}} em {{4}}. Protocolo {{5}}.", bodyVariables: 5, header: "TEXT", buttons: ["QUICK_REPLY", "URL", "PHONE_NUMBER"],
   }));
   assert.deepEqual(recognizeWhatsappTemplate(described).uses, ["schedule_confirmed"]);
   assert.equal(describeGraphTemplate(graph("castracao_x", [body("Texto fixo")])).bodyVariables, 0);
@@ -72,10 +73,10 @@ test("the facts expose everything the convention needs to reject a format the se
 });
 
 test("an authentication template that comes without body text is read as a single code variable", () => {
-  const described = describeGraphTemplate(graph("castracao_codigo_verificacao", [{ type: "BODY", add_security_recommendation: true }, { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE", text: "Copiar código" }] }], { category: "authentication" }));
+  const described = describeGraphTemplate(graph("castracao_codigo_acesso_solicitacao", [{ type: "BODY", add_security_recommendation: true }, { type: "BUTTONS", buttons: [{ type: "OTP", otp_type: "COPY_CODE", text: "Copiar código" }] }], { category: "authentication" }));
   assert.deepEqual({ category: described.category, hasBody: described.hasBody, variables: described.bodyVariables, sequential: described.bodySequential, buttons: described.buttons },
     { category: "AUTHENTICATION", hasBody: true, variables: 1, sequential: true, buttons: ["OTP_COPY_CODE"] });
-  assert.equal(recognizeWhatsappTemplate(described).uses.length, 3);
+  assert.deepEqual(recognizeWhatsappTemplate(described).uses, [AuthPurpose.REQUEST_TRACKING]);
   const utilityWithoutText = describeGraphTemplate(graph("castracao_x", [{ type: "BODY" }]));
   assert.equal(utilityWithoutText.hasBody, false);
   for (const invalid of [null, "text", {}, { name: "only-name" }, { name: "x".repeat(513), language: "pt_BR" }]) assert.equal(describeGraphTemplate(invalid), null);
@@ -214,12 +215,12 @@ test("the sync endpoint is the master's: it uses the credentials of the chosen m
   const sentTo = [];
   globalThis.fetch = async (url, options) => {
     sentTo.push({ url: String(url), auth: options.headers.Authorization });
-    return page([graph("castracao_cancelamento", [body("{{1}} {{2}} {{3}}")]), graph("lembrete_atendimento", [body("Oi")])]);
+    return page([graph("castracao_agendamento_cancelado", [body("{{1}} {{2}} {{3}}")]), graph("lembrete_atendimento", [body("Oi")])]);
   };
   const synced = await call("POST", "/whatsapp/templates/sync", { municipalityId });
   assert.equal(synced.status, 200);
   assert.deepEqual(synced.body.templates.map(({ name, canActivate, label }) => ({ name, canActivate, label })), [
-    { name: "castracao_cancelamento", canActivate: true, label: "Agendamento cancelado" },
+    { name: "castracao_agendamento_cancelado", canActivate: true, label: "Agendamento cancelado" },
     { name: "lembrete_atendimento", canActivate: false, label: "" },
   ]);
   assert.equal(sentTo[0].auth, "Bearer private-test-token");

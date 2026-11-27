@@ -3,11 +3,12 @@ import { createAccessHandlers, requireAccessToken } from "../services/request-ac
 
 const endpoint = (handler) => (req, res, next) => Promise.resolve(handler(req, res)).catch(next);
 
-// "Acessar minha solicitação": protocol, CPF and a code sent to the request's contact open the request document and, on the first
-// access, the creation of the tutor's password.
+// "Acompanhar solicitação": the CPF and a code sent, by the channel the person chose, to the contact of a request open the requests
+// of that CPF with the same contact, their documents and, on the first access, the creation of the tutor's password.
 export function createRequestAccessRouter(dependencies) {
   const handlers = createAccessHandlers(dependencies);
   const router = Router();
+  router.get("/channels", endpoint(handlers.channels));
   router.post("/challenges", endpoint(handlers.start));
   router.post("/challenges/:id/confirm", endpoint(handlers.confirm));
   router.get("/request", requireAccessToken, endpoint(handlers.view));

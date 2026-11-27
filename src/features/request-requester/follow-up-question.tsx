@@ -25,9 +25,12 @@ export function FollowUpQuestion({ value, onChange, reachable, phoneEnabled, loa
   const channels = reachable ? [reachable.email && "e-mail", reachable.phone && "celular"].filter(Boolean).join(" e ") : "";
   const unreachable = reachable !== null && !channels;
   const options = [
-    { value: FollowUpAnswer.YES, label: "Sim, quero", description: `Se aceitar, você fica por dentro de tudo${channels ? ` por ${channels}` : ""}: confirmação ou mudança do agendamento, análise dos documentos e o resultado da sua solicitação.`,
+    { value: FollowUpAnswer.YES, label: "Sim, quero", description: `Se aceitar, você fica por dentro de tudo${channels ? ` por ${channels}` : ""}: confirmação ou mudança do agendamento e o resultado da sua solicitação.`,
       disabled: loading || Boolean(error) || unreachable },
-    { value: FollowUpAnswer.NO, label: "Não precisa", description: "Se preferir não receber avisos, é só guardar o protocolo e consultar sua solicitação quando quiser." },
+    // Without a tutor (contacts asked only after a yes) the request has no CPF to consult it by.
+    { value: FollowUpAnswer.NO, label: "Não precisa", description: reachable === null
+      ? "Se preferir não receber avisos, é só procurar o atendimento do município para saber da sua solicitação."
+      : "Se preferir não receber avisos, é só consultar sua solicitação com seu CPF quando quiser." },
   ];
   const answer = value.enabled === null ? "" : value.enabled ? FollowUpAnswer.YES : FollowUpAnswer.NO;
   return (

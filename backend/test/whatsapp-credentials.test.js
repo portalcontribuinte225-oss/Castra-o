@@ -27,10 +27,10 @@ const clientFetch = globalThis.fetch;
 const leaks = (value) => [TOKEN, TOKEN.slice(0, 8)].some((part) => JSON.stringify(value).includes(part));
 
 const confirmation = (overrides = {}) => ({
-  name: "castracao_confirmacao_agendamento", language: "pt_BR", status: "APPROVED", category: "UTILITY", parameterFormat: "POSITIONAL", hasBody: true,
+  name: "castracao_agendamento_confirmado", language: "pt_BR", status: "APPROVED", category: "UTILITY", parameterFormat: "POSITIONAL", hasBody: true,
   bodyVariables: 5, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false, ...overrides,
 });
-const activeConfirmation = { active: { schedule_confirmed: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } } };
+const activeConfirmation = { active: { schedule_confirmed: { name: "castracao_agendamento_confirmado", language: "pt_BR" } } };
 
 async function fixture(t) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
@@ -206,7 +206,7 @@ test("the connection test sends the active confirmation template with the chosen
   const ok = await request("/whatsapp/test", { user: MASTER, method: "POST", body: phone });
   assert.equal(ok.body.status, "sent");
   assert.equal(sent[0].authorization, `Bearer ${TOKEN}`);
-  assert.equal(sent[0].body.template.name, "castracao_confirmacao_agendamento");
+  assert.equal(sent[0].body.template.name, "castracao_agendamento_confirmado");
   assert.deepEqual(sent[0].body.template.components[0].parameters.map(({ text }) => text), ["Teste", "20/11/2026", "09:00", "Unidade Veterinária Municipal", "123/2026"]);
   store.set(`${WHATSAPP_CATALOG_CONFIG_KEY}:${MUNICIPALITY_ID}`, { syncedAt: "2026-11-15T10:00:00.000Z", templates: [confirmation({ status: "PAUSED" })] });
   const blocked = await request("/whatsapp/test", { user: MASTER, method: "POST", body: phone });

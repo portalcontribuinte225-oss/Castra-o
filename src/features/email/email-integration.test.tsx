@@ -101,6 +101,7 @@ describe("e-mail tab for the master", () => {
     expect(html.match(/<tr>/g)).toHaveLength(emailUses.length + 1);
     for (const use of emailUses) expect(html).toContain(use.label);
     expect(html).not.toContain("Confirmação de telefone");
+    expect(html).not.toContain("Documentos");
     expect(html).not.toContain("Avisos da solicitação");
     expect(html).toContain("<th>ID do template</th>");
     expect(html).toContain('value="tpl_0"');

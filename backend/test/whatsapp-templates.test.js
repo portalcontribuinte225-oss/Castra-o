@@ -25,9 +25,9 @@ const entry = (name, overrides = {}) => ({
   name, language: "pt_BR", status: "APPROVED", category: "UTILITY", parameterFormat: "POSITIONAL", hasBody: true,
   bodyVariables: 5, bodySequential: true, header: "TEXT", buttons: [], extraComponents: false, ...overrides,
 });
-const confirmation = (overrides) => entry("castracao_confirmacao_agendamento", overrides);
-const cancellation = (overrides) => entry("castracao_cancelamento", { bodyVariables: 3, ...overrides });
-const authentication = (overrides) => entry("castracao_codigo_verificacao", { category: "AUTHENTICATION", bodyVariables: 1, header: "NONE", buttons: ["OTP_COPY_CODE"], ...overrides });
+const confirmation = (overrides) => entry("castracao_agendamento_confirmado", overrides);
+const cancellation = (overrides) => entry("castracao_agendamento_cancelado", { bodyVariables: 3, ...overrides });
+const authentication = (overrides) => entry("castracao_codigo_recuperacao_senha", { category: "AUTHENTICATION", bodyVariables: 1, header: "NONE", buttons: ["OTP_COPY_CODE"], ...overrides });
 const catalogOf = (...templates) => ({ syncedAt: "2026-11-15T10:00:00.000Z", templates });
 
 function fakeDatabase(initial = {}) {
@@ -62,10 +62,10 @@ test("every use has a unique key and the notice keys are the notification events
 });
 
 test("template names follow castracao_<part> with an optional version suffix", () => {
-  assert.equal(parseWhatsappTemplateName("castracao_cancelamento"), "cancelamento");
-  assert.equal(parseWhatsappTemplateName("castracao_cancelamento_v2"), "cancelamento");
+  assert.equal(parseWhatsappTemplateName("castracao_agendamento_cancelado"), "agendamento_cancelado");
+  assert.equal(parseWhatsappTemplateName("castracao_agendamento_cancelado_v2"), "agendamento_cancelado");
   assert.equal(parseWhatsappTemplateName("castracao_codigo_verificacao_v12"), "codigo_verificacao");
-  for (const name of ["cancelamento", "Castracao_cancelamento", "castracao_", "castracao_cancel-amento", "castracao_cancelamento v2", undefined, 7]) {
+  for (const name of ["cancelamento", "Castracao_cancelamento", "castracao_", "castracao_cancel-amento", "castracao_agendamento_cancelado v2", undefined, 7]) {
     assert.equal(parseWhatsappTemplateName(name), null, String(name));
   }
 });
@@ -73,25 +73,31 @@ test("template names follow castracao_<part> with an optional version suffix", (
 test("each agenda and completion notice is recognized with the number of variables it expects", () => {
   const cases = [
     [confirmation(), NotificationEvent.SCHEDULE_CONFIRMED],
-    [entry("castracao_reagendamento"), NotificationEvent.SCHEDULE_CHANGED],
+    [entry("castracao_agendamento_alterado"), NotificationEvent.SCHEDULE_CHANGED],
     [cancellation(), NotificationEvent.SCHEDULE_CANCELLED],
     [entry("castracao_nao_comparecimento", { bodyVariables: 3 }), NotificationEvent.NO_SHOW],
-    [entry("castracao_nao_compareceu", { bodyVariables: 3 }), NotificationEvent.NO_SHOW],
-    [entry("castracao_documentos_deferidos", { bodyVariables: 2 }), NotificationEvent.DOCUMENTS_APPROVED],
-    [entry("castracao_documentos_aprovados_v2", { bodyVariables: 2 }), NotificationEvent.DOCUMENTS_APPROVED],
-    [entry("castracao_documentos_indeferidos", { bodyVariables: 2 }), NotificationEvent.DOCUMENTS_REJECTED],
-    [entry("castracao_documentos_rejeitados", { bodyVariables: 2 }), NotificationEvent.DOCUMENTS_REJECTED],
     [entry("castracao_atendimento_concluido", { bodyVariables: 2 }), NotificationEvent.COMPLETED],
-    [entry("castracao_indeferimento", { bodyVariables: 2 }), NotificationEvent.REQUEST_REJECTED],
-    [cancellation({ name: "castracao_cancelamento_v2" }), NotificationEvent.SCHEDULE_CANCELLED],
+    [entry("castracao_solicitacao_indeferida", { bodyVariables: 2 }), NotificationEvent.REQUEST_REJECTED],
+    [cancellation({ name: "castracao_agendamento_cancelado_v2" }), NotificationEvent.SCHEDULE_CANCELLED],
   ];
   for (const [template, event] of cases) assert.deepEqual(recognizeWhatsappTemplate(template), { uses: [event], reason: "" }, template.name);
+});
+
+test("a template serves only the message its name names: former names and document notices are not recognized", () => {
+  const former = ["castracao_confirmacao_agendamento", "castracao_reagendamento", "castracao_cancelamento", "castracao_indeferimento",
+    "castracao_nao_compareceu", "castracao_confirmacao_cadastro", "castracao_documentos_deferidos", "castracao_documentos_indeferidos",
+    "castracao_documentos_conferidos", "castracao_documentos_analisados", "castracao_dados_tutor_alterados"];
+  for (const name of former) {
+    for (const bodyVariables of [1, 2, 3, 5]) assert.deepEqual(recognizeWhatsappTemplate(entry(name, { bodyVariables })).uses, [], name);
+    assert.match(recognizeWhatsappTemplate(entry(name)).reason, /nome não indica/, name);
+  }
+  for (const name of ["castracao_codigo", "castracao_codigo_verificacao"]) assert.deepEqual(recognizeWhatsappTemplate(authentication({ name })).uses, [], name);
 });
 
 test("a template outside the convention is not recognized and says why", () => {
   assert.match(recognizeWhatsappTemplate(entry("lembrete_atendimento")).reason, /nome não indica/);
   assert.match(recognizeWhatsappTemplate(entry("castracao_outra_coisa")).reason, /nome não indica/);
-  assert.match(recognizeWhatsappTemplate(entry("castracao_cancelamento_final")).reason, /nome não indica/);
+  assert.match(recognizeWhatsappTemplate(entry("castracao_agendamento_cancelado_final")).reason, /nome não indica/);
   assert.match(recognizeWhatsappTemplate(cancellation({ bodyVariables: 4 })).reason, /4 variável\(is\).*esperado é 3/);
   assert.match(recognizeWhatsappTemplate(cancellation({ parameterFormat: "NAMED" })).reason, /com nome/);
   assert.match(recognizeWhatsappTemplate(cancellation({ bodySequential: false })).reason, /sequência/);
@@ -104,11 +110,16 @@ test("a template outside the convention is not recognized and says why", () => {
   assert.deepEqual(recognizeWhatsappTemplate(null), { uses: [], reason: "O nome não indica um aviso do sistema." });
 });
 
-test("an authentication template with the copy-code button serves the three code uses", () => {
-  const recognized = recognizeWhatsappTemplate(authentication());
-  assert.deepEqual(recognized, { uses: [AuthPurpose.PASSWORD_RESET, AuthPurpose.VERIFY_PHONE, AuthPurpose.REQUEST_TRACKING], reason: "" });
-  assert.deepEqual(recognizeWhatsappTemplate(authentication({ name: "castracao_codigo_verificacao_v2" })).uses, recognized.uses);
-  assert.deepEqual(recognizeWhatsappTemplate(authentication({ name: "castracao_codigo" })).uses, recognized.uses);
+test("each code has its own authentication template with the copy-code button", () => {
+  const codes = [
+    ["castracao_codigo_recuperacao_senha", AuthPurpose.PASSWORD_RESET],
+    ["castracao_codigo_confirmacao_contato", AuthPurpose.VERIFY_PHONE],
+    ["castracao_codigo_acesso_solicitacao", AuthPurpose.REQUEST_TRACKING],
+  ];
+  for (const [name, use] of codes) {
+    assert.deepEqual(recognizeWhatsappTemplate(authentication({ name })), { uses: [use], reason: "" }, name);
+    assert.deepEqual(recognizeWhatsappTemplate(authentication({ name: `${name}_v2` })).uses, [use], name);
+  }
   assert.match(recognizeWhatsappTemplate(authentication({ category: "UTILITY" })).reason, /autenticação/);
   assert.match(recognizeWhatsappTemplate(authentication({ buttons: [] })).reason, /copiar código/);
   assert.match(recognizeWhatsappTemplate(authentication({ buttons: ["OTP_OTHER"] })).reason, /copiar código/);
@@ -116,11 +127,11 @@ test("an authentication template with the copy-code button serves the three code
 });
 
 test("contact-changed and registered-request templates are recognized by their own variable counts, and the initial password is gone", () => {
-  assert.deepEqual(recognizeWhatsappTemplate(entry("castracao_contato_alterado", { bodyVariables: 1 })).uses, [AuthPurpose.CONTACT_CHANGED]);
-  const tutorChanged = (overrides) => entry("castracao_dados_tutor_alterados_v2", { bodyVariables: 1, ...overrides });
-  assert.deepEqual(recognizeWhatsappTemplate(tutorChanged()).uses, [AuthPurpose.CONTACT_CHANGED]);
-  assert.match(recognizeWhatsappTemplate(tutorChanged({ bodyVariables: 2 })).reason, /esperado é 1/);
-  assert.match(recognizeWhatsappTemplate(tutorChanged({ category: "AUTHENTICATION" })).reason, /utilidade/);
+  const contactChanged = (overrides) => entry("castracao_contato_alterado", { bodyVariables: 1, ...overrides });
+  assert.deepEqual(recognizeWhatsappTemplate(contactChanged()).uses, [AuthPurpose.CONTACT_CHANGED]);
+  assert.deepEqual(recognizeWhatsappTemplate(contactChanged({ name: "castracao_contato_alterado_v2" })).uses, [AuthPurpose.CONTACT_CHANGED]);
+  assert.match(recognizeWhatsappTemplate(contactChanged({ bodyVariables: 2 })).reason, /esperado é 1/);
+  for (const category of ["AUTHENTICATION", "MARKETING"]) assert.match(recognizeWhatsappTemplate(contactChanged({ category })).reason, /utilidade/);
   assert.deepEqual(recognizeWhatsappTemplate(entry("castracao_solicitacao_registrada", { bodyVariables: 2 })).uses, [NotificationEvent.REQUEST_REGISTERED]);
   assert.deepEqual(recognizeWhatsappTemplate(entry("castracao_confirmacao_cadastro", { bodyVariables: 2 })).uses, []);
   assert.match(recognizeWhatsappTemplate(entry("castracao_solicitacao_registrada", { bodyVariables: 1 })).reason, /esperado é 2/);
@@ -138,39 +149,43 @@ test("only approved templates that keep their structure are usable for a use", (
 
 test("the active list keeps only known uses with a valid identity and turning on replaces the previous template", () => {
   const stored = normalizeActiveTemplates({ active: {
-    [NotificationEvent.SCHEDULE_CANCELLED]: { name: " castracao_cancelamento ", language: "pt_BR", extra: "x" },
+    [NotificationEvent.SCHEDULE_CANCELLED]: { name: " castracao_agendamento_cancelado ", language: "pt_BR", extra: "x" },
     [NotificationEvent.COMPLETED]: { name: "", language: "pt_BR" },
-    [NotificationEvent.SCHEDULE_CHANGED]: { name: "castracao_reagendamento" },
+    [NotificationEvent.SCHEDULE_CHANGED]: { name: "castracao_agendamento_alterado" },
     unknown_use: { name: "a", language: "pt_BR" },
     [AuthPurpose.VERIFY_EMAIL]: { name: "a", language: "pt_BR" },
   } });
-  assert.deepEqual(stored, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento", language: "pt_BR" } });
+  assert.deepEqual(stored, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_agendamento_cancelado", language: "pt_BR" } });
   assert.deepEqual(normalizeActiveTemplates(null), {});
   assert.deepEqual(normalizeActiveTemplates({ active: [] }), {});
-  const replaced = activateTemplate(stored, cancellation({ name: "castracao_cancelamento_v2" }));
-  assert.deepEqual(replaced, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento_v2", language: "pt_BR" } });
+  const replaced = activateTemplate(stored, cancellation({ name: "castracao_agendamento_cancelado_v2" }));
+  assert.deepEqual(replaced, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_agendamento_cancelado_v2", language: "pt_BR" } });
   const code = activateTemplate(replaced, authentication());
-  assert.equal(Object.keys(code).length, 4);
-  assert.deepEqual(deactivateTemplate(code, "castracao_codigo_verificacao", "pt_BR"), replaced);
+  assert.deepEqual(Object.keys(code).sort(), [AuthPurpose.PASSWORD_RESET, NotificationEvent.SCHEDULE_CANCELLED].sort());
+  const codes = activateTemplate(code, authentication({ name: "castracao_codigo_acesso_solicitacao" }));
+  assert.equal(codes[AuthPurpose.PASSWORD_RESET].name, "castracao_codigo_recuperacao_senha");
+  assert.equal(codes[AuthPurpose.REQUEST_TRACKING].name, "castracao_codigo_acesso_solicitacao");
+  assert.equal(codes[AuthPurpose.VERIFY_PHONE], undefined);
+  assert.deepEqual(deactivateTemplate(code, "castracao_codigo_recuperacao_senha", "pt_BR"), replaced);
   assert.deepEqual(deactivateTemplate(code, "other", "pt_BR"), code);
   assert.deepEqual(activateTemplate(stored, entry("lembrete")), stored);
 });
 
 test("the template list shows status, recognized use, order of variables and what can be turned on", () => {
-  const catalog = catalogOf(authentication(), cancellation(), cancellation({ name: "castracao_cancelamento_v2", status: "PENDING" }), entry("lembrete_atendimento"), confirmation());
-  const active = { [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } };
+  const catalog = catalogOf(authentication(), cancellation(), cancellation({ name: "castracao_agendamento_cancelado_v2", status: "PENDING" }), entry("lembrete_atendimento"), confirmation());
+  const active = { [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_agendamento_confirmado", language: "pt_BR" } };
   const rows = Object.fromEntries(buildTemplateRows(catalog, active).map((row) => [row.name, row]));
-  assert.equal(rows.castracao_confirmacao_agendamento.active, true);
-  assert.equal(rows.castracao_confirmacao_agendamento.canActivate, true);
-  assert.equal(rows.castracao_confirmacao_agendamento.label, "Agendamento confirmado");
-  assert.deepEqual(rows.castracao_confirmacao_agendamento.variables, ["Nome do tutor", "Data do agendamento", "Horário do agendamento", "Local do atendimento", "Protocolo"]);
-  assert.equal(rows.castracao_cancelamento.active, false);
-  assert.equal(rows.castracao_cancelamento.canActivate, true);
-  assert.equal(rows.castracao_cancelamento_v2.canActivate, false);
-  assert.equal(rows.castracao_cancelamento_v2.status, "PENDING");
-  assert.equal(rows.castracao_codigo_verificacao.label, "Códigos de acesso");
-  assert.equal(rows.castracao_codigo_verificacao.uses.length, 3);
-  assert.deepEqual(rows.castracao_codigo_verificacao.variables, ["Código de verificação"]);
+  assert.equal(rows.castracao_agendamento_confirmado.active, true);
+  assert.equal(rows.castracao_agendamento_confirmado.canActivate, true);
+  assert.equal(rows.castracao_agendamento_confirmado.label, "Agendamento confirmado");
+  assert.deepEqual(rows.castracao_agendamento_confirmado.variables, ["Nome do tutor", "Data do agendamento", "Horário do agendamento", "Local do atendimento", "Protocolo"]);
+  assert.equal(rows.castracao_agendamento_cancelado.active, false);
+  assert.equal(rows.castracao_agendamento_cancelado.canActivate, true);
+  assert.equal(rows.castracao_agendamento_cancelado_v2.canActivate, false);
+  assert.equal(rows.castracao_agendamento_cancelado_v2.status, "PENDING");
+  assert.equal(rows.castracao_codigo_recuperacao_senha.label, "Recuperação de senha");
+  assert.deepEqual(rows.castracao_codigo_recuperacao_senha.uses, [AuthPurpose.PASSWORD_RESET]);
+  assert.deepEqual(rows.castracao_codigo_recuperacao_senha.variables, ["Código de verificação"]);
   assert.equal(rows.lembrete_atendimento.label, "");
   assert.match(rows.lembrete_atendimento.reason, /nome não indica/);
   assert.equal(rows.lembrete_atendimento.canActivate, false);
@@ -179,45 +194,45 @@ test("the template list shows status, recognized use, order of variables and wha
 
 test("an active template that disappeared from Meta or lost its structure stays visible so it can be turned off", () => {
   const active = {
-    [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento", language: "pt_BR" },
-    [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_confirmacao_agendamento", language: "pt_BR" },
+    [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_agendamento_cancelado", language: "pt_BR" },
+    [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_agendamento_confirmado", language: "pt_BR" },
   };
   const rows = buildTemplateRows(catalogOf(confirmation({ bodyVariables: 2 })), active);
-  const changed = rows.find((row) => row.name === "castracao_confirmacao_agendamento");
+  const changed = rows.find((row) => row.name === "castracao_agendamento_confirmado");
   assert.equal(changed.active, true);
   assert.equal(changed.canActivate, false);
   assert.match(changed.reason, /esperado é 5/);
-  const removed = rows.find((row) => row.name === "castracao_cancelamento");
+  const removed = rows.find((row) => row.name === "castracao_agendamento_cancelado");
   assert.deepEqual({ status: removed.status, active: removed.active, canActivate: removed.canActivate, label: removed.label }, { status: "NOT_FOUND", active: true, canActivate: false, label: "Agendamento cancelado" });
 });
 
 test("turning a template on requires it in the catalog, recognized and approved, and replaces the previous version", async () => {
-  const database = fakeDatabase(withCatalog("municipality-a", [cancellation(), cancellation({ name: "castracao_cancelamento_v2" }), cancellation({ name: "castracao_cancelamento_v3", status: "PAUSED" }), entry("lembrete_atendimento")]));
+  const database = fakeDatabase(withCatalog("municipality-a", [cancellation(), cancellation({ name: "castracao_agendamento_cancelado_v2" }), cancellation({ name: "castracao_agendamento_cancelado_v3", status: "PAUSED" }), entry("lembrete_atendimento")]));
   const turn = (name, active = true, extra = {}) => setWhatsappTemplateActive({ municipalityId: "municipality-a", name, language: "pt_BR", active, database, ...extra });
   await assert.rejects(turn("castracao_inexistente"), { status: 400, message: /Sincronize/ });
   await assert.rejects(turn("lembrete_atendimento"), { status: 400, message: /nome não indica/ });
-  await assert.rejects(turn("castracao_cancelamento_v3"), { status: 400, message: /aprovados/ });
-  await assert.rejects(turn("castracao_cancelamento", "yes"), { status: 400 });
+  await assert.rejects(turn("castracao_agendamento_cancelado_v3"), { status: 400, message: /aprovados/ });
+  await assert.rejects(turn("castracao_agendamento_cancelado", "yes"), { status: 400 });
   await assert.rejects(turn("", true), { status: 400 });
   assert.equal(database.store.has(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`), false);
-  const first = await turn("castracao_cancelamento", true, { audit: { userId: "user", userEmail: "staff@example.test" } });
-  assert.equal(first.templates.find((row) => row.name === "castracao_cancelamento").active, true);
+  const first = await turn("castracao_agendamento_cancelado", true, { audit: { userId: "user", userEmail: "staff@example.test" } });
+  assert.equal(first.templates.find((row) => row.name === "castracao_agendamento_cancelado").active, true);
   const auditCall = database.calls.find(({ sql }) => sql.includes("INSERT INTO audit_logs"));
   assert.equal(auditCall.values[3], "WHATSAPP_TEMPLATE_UPDATE");
-  const second = await turn("castracao_cancelamento_v2");
-  assert.deepEqual(second.templates.filter((row) => row.active).map((row) => row.name), ["castracao_cancelamento_v2"]);
-  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`), { active: { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento_v2", language: "pt_BR" } } });
-  const off = await turn("castracao_cancelamento_v2", false);
+  const second = await turn("castracao_agendamento_cancelado_v2");
+  assert.deepEqual(second.templates.filter((row) => row.active).map((row) => row.name), ["castracao_agendamento_cancelado_v2"]);
+  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`), { active: { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_agendamento_cancelado_v2", language: "pt_BR" } } });
+  const off = await turn("castracao_agendamento_cancelado_v2", false);
   assert.equal(off.templates.some((row) => row.active), false);
   assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`), { active: {} });
   await turn("castracao_nunca_ligado", false);
 });
 
 test("resolving a use answers not configured, unavailable or ready, per municipality", async () => {
-  const active = { [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } };
+  const active = { [NotificationEvent.SCHEDULE_CONFIRMED]: { name: "castracao_agendamento_confirmado", language: "pt_BR" } };
   const database = fakeDatabase({ ...withCatalog("municipality-a", [confirmation()], active), ...withCatalog("municipality-b", [confirmation({ status: "PAUSED" })], active), ...withCatalog("municipality-c", [], active) });
   const resolve = (municipality, use = NotificationEvent.SCHEDULE_CONFIRMED) => resolveActiveTemplate(municipality, use, database);
-  assert.deepEqual(await resolve("municipality-a"), { ok: true, template: { name: "castracao_confirmacao_agendamento", language: "pt_BR", fields: getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields } });
+  assert.deepEqual(await resolve("municipality-a"), { ok: true, template: { name: "castracao_agendamento_confirmado", language: "pt_BR", fields: getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields } });
   assert.deepEqual(await resolve("municipality-a", NotificationEvent.NO_SHOW), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
   assert.deepEqual(await resolve("municipality-a", "unknown_use"), { ok: false, code: DeliveryCode.NOT_CONFIGURED });
   assert.deepEqual(await resolve("municipality-b"), { ok: false, code: DeliveryCode.TEMPLATE_UNAVAILABLE });
@@ -256,7 +271,7 @@ test("a linked template sends the notice of its link whatever its name, while it
   assert.match(recognizeWhatsappTemplate(noShowByOwnName({ buttons: ["URL_VARIABLE"] }), noShowLink).reason, /Botão/);
   assert.equal(isWhatsappTemplateUsable(noShowByOwnName(), NotificationEvent.NO_SHOW, noShowLink), true);
   assert.equal(isWhatsappTemplateUsable(noShowByOwnName({ status: "PAUSED" }), NotificationEvent.NO_SHOW, noShowLink), false);
-  const renamed = { ...noShowLink, name: "castracao_cancelamento", use: NotificationEvent.REQUEST_REJECTED };
+  const renamed = { ...noShowLink, name: "castracao_agendamento_cancelado", use: NotificationEvent.REQUEST_REJECTED };
   assert.equal(isWhatsappTemplateUsable(cancellation(), NotificationEvent.NO_SHOW, renamed), false, "a link replaces what the name says");
   assert.equal(templateLinkIssue(noShowByOwnName(), NotificationEvent.NO_SHOW, linkFields), "");
   assert.match(templateLinkIssue(noShowByOwnName(), AuthPurpose.PASSWORD_RESET, linkFields), /aviso/);
@@ -275,9 +290,9 @@ test("the list shows a configured template with its notice, fields and text, and
   );
   assert.deepEqual(configured.variables, ["Data do agendamento", "Nome do tutor", "Horário do agendamento"]);
   assert.deepEqual([configured.bodyText, configured.bodyVariables, configured.configurable, configured.structureReason], ["Olá {{1}}, sentimos sua falta em {{2}} às {{3}}.", 3, true, ""]);
-  const byName = rows.castracao_confirmacao_agendamento;
+  const byName = rows.castracao_agendamento_confirmado;
   assert.deepEqual([byName.configured, byName.linkedUse, byName.fields], [false, "", getWhatsappUse(NotificationEvent.SCHEDULE_CONFIRMED).fields]);
-  assert.equal(rows.castracao_codigo_verificacao.configurable, false);
+  assert.equal(rows.castracao_codigo_recuperacao_senha.configurable, false);
   const outdated = buildTemplateRows(catalogOf(noShowByOwnName({ bodyVariables: 4 })), {}, [noShowLink])[0];
   assert.deepEqual([outdated.label, outdated.linkedUse, outdated.fields, outdated.canActivate], ["", NotificationEvent.NO_SHOW, linkFields, false]);
   assert.match(outdated.reason, /Configure o template de novo/);
@@ -314,16 +329,16 @@ test("saving a link stores it per municipality, turns the template off only when
 
 test("going back to the name keeps on a template whose name sends the same notice", async () => {
   const database = fakeDatabase(withCatalog("municipality-a", [cancellation()]));
-  const save = (use, fields) => setWhatsappTemplateLink({ municipalityId: "municipality-a", name: "castracao_cancelamento", language: "pt_BR", use, fields, database });
+  const save = (use, fields) => setWhatsappTemplateLink({ municipalityId: "municipality-a", name: "castracao_agendamento_cancelado", language: "pt_BR", use, fields, database });
   await save(NotificationEvent.SCHEDULE_CANCELLED, linkFields);
-  await setWhatsappTemplateActive({ municipalityId: "municipality-a", name: "castracao_cancelamento", language: "pt_BR", active: true, database });
+  await setWhatsappTemplateActive({ municipalityId: "municipality-a", name: "castracao_agendamento_cancelado", language: "pt_BR", active: true, database });
   await save("", []);
-  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`).active, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_cancelamento", language: "pt_BR" } });
+  assert.deepEqual(database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:municipality-a`).active, { [NotificationEvent.SCHEDULE_CANCELLED]: { name: "castracao_agendamento_cancelado", language: "pt_BR" } });
 });
 
 test("legacy cancellation links retain their field order but need a separate activation for cancellation", async () => {
   const municipalityId = "municipality-a";
-  const identity = { name: "castracao_cancelamento", language: "pt_BR" };
+  const identity = { name: "castracao_agendamento_cancelado", language: "pt_BR" };
   const database = fakeDatabase({
     ...withCatalog(municipalityId, [cancellation(), noShowByOwnName()]),
     [`${LINKS_KEY}:${municipalityId}`]: { links: [{ ...identity, use: NotificationEvent.NO_SHOW, fields: linkFields }] },
@@ -350,29 +365,26 @@ test("a configured template resolves with its own fields, and the name supplies 
   });
 });
 
-test("the generic document template serves both outcomes until each is replaced or disabled", async () => {
-  const genericTemplate = entry("castracao_documentos_conferidos", { bodyVariables: 2 });
-  const rejectedTemplate = entry("castracao_documentos_indeferidos", { bodyVariables: 2 });
-  const generic = { name: genericTemplate.name, language: genericTemplate.language };
-  const rejected = { name: rejectedTemplate.name, language: rejectedTemplate.language };
+test("each code template turns on and resolves only its own code", async () => {
+  const resetTemplate = authentication();
+  const accessTemplate = authentication({ name: "castracao_codigo_acesso_solicitacao" });
+  const reset = { name: resetTemplate.name, language: resetTemplate.language };
+  const access = { name: accessTemplate.name, language: accessTemplate.language };
   const municipalityId = "municipality-a";
-  const database = fakeDatabase(withCatalog(municipalityId, [genericTemplate, rejectedTemplate]));
-  const resolve = (event) => resolveActiveTemplate(municipalityId, event, database);
+  const database = fakeDatabase(withCatalog(municipalityId, [resetTemplate, accessTemplate]));
+  const resolve = (use) => resolveActiveTemplate(municipalityId, use, database);
   const setActive = (template, active) => setWhatsappTemplateActive({ ...template, municipalityId, active, database });
   const current = () => database.store.get(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:${municipalityId}`).active;
 
-  assert.deepEqual(recognizeWhatsappTemplate(genericTemplate).uses, [NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.DOCUMENTS_REJECTED]);
-  assert.equal(buildTemplateRows(catalogOf(genericTemplate), {})[0].label, "Documentos deferidos e indeferidos");
-  await setActive(generic, true);
-  for (const event of [NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.DOCUMENTS_REJECTED]) {
-    assert.equal((await resolve(event)).template.name, generic.name);
-  }
-  await setActive(rejected, true);
-  assert.deepEqual(current(), { [NotificationEvent.DOCUMENTS_APPROVED]: generic, [NotificationEvent.DOCUMENTS_REJECTED]: rejected });
-  await setActive(generic, false);
-  assert.deepEqual(current(), { [NotificationEvent.DOCUMENTS_REJECTED]: rejected });
-  assert.equal((await resolve(NotificationEvent.DOCUMENTS_APPROVED)).code, DeliveryCode.NOT_CONFIGURED);
-  assert.equal((await resolve(NotificationEvent.DOCUMENTS_REJECTED)).template.name, rejected.name);
+  assert.equal(buildTemplateRows(catalogOf(accessTemplate), {})[0].label, "Acesso à solicitação");
+  await setActive(access, true);
+  assert.deepEqual(current(), { [AuthPurpose.REQUEST_TRACKING]: access });
+  assert.equal((await resolve(AuthPurpose.REQUEST_TRACKING)).template.name, access.name);
+  for (const use of [AuthPurpose.PASSWORD_RESET, AuthPurpose.VERIFY_PHONE]) assert.equal((await resolve(use)).code, DeliveryCode.NOT_CONFIGURED);
+  await setActive(reset, true);
+  assert.deepEqual(current(), { [AuthPurpose.REQUEST_TRACKING]: access, [AuthPurpose.PASSWORD_RESET]: reset });
+  await setActive(access, false);
+  assert.deepEqual(current(), { [AuthPurpose.PASSWORD_RESET]: reset });
 });
 
 async function routeFixture(t, initial = {}) {
@@ -416,7 +428,7 @@ test("template endpoints need a session and the WhatsApp permission, and syncing
     assert.equal((await request(path, { method, user: STAFF, body })).status, 403, `no group: ${method} ${path}`);
   }
   assert.equal((await request("/whatsapp/templates", { user: PERMITTED })).status, 200);
-  assert.equal((await request("/whatsapp/templates/active", { method: "PUT", user: PERMITTED, body: { name: "castracao_confirmacao_agendamento", language: "pt_BR", active: true } })).status, 200);
+  assert.equal((await request("/whatsapp/templates/active", { method: "PUT", user: PERMITTED, body: { name: "castracao_agendamento_confirmado", language: "pt_BR", active: true } })).status, 200);
   for (const user of [PERMITTED, ADMIN, { ...ADMIN, role: "suporte", municipalityId: undefined }]) {
     assert.equal((await request("/whatsapp/templates/sync", { method: "POST", user, body: { municipalityId: MUNICIPALITY_ID } })).status, 403, `sync is the master's: ${user.role}`);
   }
@@ -430,23 +442,23 @@ test("the list endpoint returns the municipal catalog with its states and ignore
   });
   const listed = await request(`/whatsapp/templates?municipalityId=${OTHER_MUNICIPALITY_ID}`, { user: ADMIN });
   assert.equal(listed.status, 200);
-  assert.deepEqual(listed.body.templates.map((row) => row.name), ["castracao_confirmacao_agendamento", "lembrete_atendimento"]);
+  assert.deepEqual(listed.body.templates.map((row) => row.name), ["castracao_agendamento_confirmado", "lembrete_atendimento"]);
   assert.equal(listed.body.syncedAt, "2026-11-15T10:00:00.000Z");
   assert.equal(database.calls.every(({ values }) => values[1] === MUNICIPALITY_ID), true);
 });
 
 test("the active endpoint turns templates on and off, validates the body and audits the change", async (t) => {
-  const { request, database } = await routeFixture(t, withCatalog(MUNICIPALITY_ID, [confirmation(), confirmation({ name: "castracao_reagendamento", status: "PENDING" })]));
+  const { request, database } = await routeFixture(t, withCatalog(MUNICIPALITY_ID, [confirmation(), confirmation({ name: "castracao_agendamento_alterado", status: "PENDING" })]));
   const url = "/whatsapp/templates/active";
-  assert.equal((await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_confirmacao_agendamento", language: "pt_BR" } })).status, 400);
-  assert.equal((await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_reagendamento", language: "pt_BR", active: true } })).status, 400);
+  assert.equal((await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_agendamento_confirmado", language: "pt_BR" } })).status, 400);
+  assert.equal((await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_agendamento_alterado", language: "pt_BR", active: true } })).status, 400);
   assert.equal((await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_inexistente", language: "pt_BR", active: true } })).status, 400);
-  const on = await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_confirmacao_agendamento", language: "pt_BR", active: true, municipalityId: OTHER_MUNICIPALITY_ID } });
+  const on = await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_agendamento_confirmado", language: "pt_BR", active: true, municipalityId: OTHER_MUNICIPALITY_ID } });
   assert.equal(on.status, 200);
-  assert.equal(on.body.templates.find((row) => row.name === "castracao_confirmacao_agendamento").active, true);
+  assert.equal(on.body.templates.find((row) => row.name === "castracao_agendamento_confirmado").active, true);
   assert.equal(database.store.has(`${WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY}:${OTHER_MUNICIPALITY_ID}`), false);
   assert.equal(database.calls.some(({ sql, values }) => sql.includes("INSERT INTO audit_logs") && values[3] === "WHATSAPP_TEMPLATE_UPDATE"), true);
-  const off = await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_confirmacao_agendamento", language: "pt_BR", active: false } });
+  const off = await request(url, { user: ADMIN, method: "PUT", body: { name: "castracao_agendamento_confirmado", language: "pt_BR", active: false } });
   assert.equal(off.body.templates.some((row) => row.active), false);
 });
 

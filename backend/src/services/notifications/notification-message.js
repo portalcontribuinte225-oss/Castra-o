@@ -6,8 +6,6 @@ export const notificationEventLabels = Object.freeze({
   [NotificationEvent.SCHEDULE_CHANGED]: "Agendamento alterado",
   [NotificationEvent.SCHEDULE_CANCELLED]: "Agendamento cancelado",
   [NotificationEvent.NO_SHOW]: "Não comparecimento",
-  [NotificationEvent.DOCUMENTS_APPROVED]: "Documentos deferidos",
-  [NotificationEvent.DOCUMENTS_REJECTED]: "Documentos indeferidos",
   [NotificationEvent.COMPLETED]: "Atendimento concluído",
   [NotificationEvent.REQUEST_REJECTED]: "Solicitação indeferida",
 });
@@ -33,15 +31,6 @@ export function registeredNoticeText(request) {
 export function buildNotificationMessage(event, request) {
   if (event === NotificationEvent.REQUEST_REGISTERED) return { subject: notificationEventLabels[event], message: registeredNoticeText(request) };
   const protocol = String(request.protocol || "");
-  if (event === NotificationEvent.DOCUMENTS_APPROVED || event === NotificationEvent.DOCUMENTS_REJECTED) {
-    const approved = event === NotificationEvent.DOCUMENTS_APPROVED;
-    const outcome = approved ? "deferidos" : "indeferidos";
-    const guidance = approved ? "acompanhar o andamento" : "verificar o que precisa corrigir";
-    return {
-      subject: notificationEventLabels[event],
-      message: `Protocolo ${protocol}. Um ou mais documentos da sua solicitação foram ${outcome}. Consulte a solicitação para ${guidance}.`,
-    };
-  }
   const workflow = request.workflow_data || request.workflowData || {};
   const date = formatScheduleDate(request.schedule_date || "");
   const time = workflow.scheduleSlotTime || workflow.scheduleTime || "";

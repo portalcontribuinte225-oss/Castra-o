@@ -1,5 +1,5 @@
-import { DocumentsOutcome, NotificationEvent, rejectionReasonText } from "../../../../shared/notification-contract.js";
-import { EmailVariable, getEmailUse } from "../../../../shared/email-uses-contract.js";
+import { NotificationEvent, rejectionReasonText } from "../../../../shared/notification-contract.js";
+import { getEmailUse } from "../../../../shared/email-uses-contract.js";
 import { formatScheduleDate, registeredNoticeText } from "./notification-message.js";
 
 // "20/11/2026, às 09:00, na Unidade": the time and the place come only when the request has them.
@@ -10,19 +10,12 @@ function visit(request) {
   return `${formatScheduleDate(request.schedule_date || "")}${time ? `, às ${time}` : ""}${place ? `, na ${place}` : ""}`;
 }
 
-const documentsResults = Object.freeze({
-  [NotificationEvent.DOCUMENTS_APPROVED]: DocumentsOutcome.APPROVED,
-  [NotificationEvent.DOCUMENTS_REJECTED]: DocumentsOutcome.REJECTED,
-});
-
 const texts = Object.freeze({
   [NotificationEvent.REQUEST_REGISTERED]: (request) => registeredNoticeText(request),
   [NotificationEvent.SCHEDULE_CONFIRMED]: (request, protocol) => `Seu agendamento foi confirmado! Esperamos você no dia ${visit(request)}. Protocolo: ${protocol}.`,
   [NotificationEvent.SCHEDULE_CHANGED]: (request, protocol) => `Seu atendimento foi reagendado para o dia ${visit(request)}. Protocolo: ${protocol}.`,
   [NotificationEvent.SCHEDULE_CANCELLED]: (request, protocol) => `O agendamento do dia ${visit(request)} foi cancelado. Protocolo ${protocol}.`,
   [NotificationEvent.NO_SHOW]: (request, protocol) => `Identificamos que você não compareceu ao atendimento agendado para o dia ${formatScheduleDate(request.schedule_date || "")}. Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`,
-  [NotificationEvent.DOCUMENTS_APPROVED]: (_request, protocol) => `Um ou mais documentos da sua solicitação foram deferidos. Acesse a solicitação para acompanhar a análise. Protocolo: ${protocol}.`,
-  [NotificationEvent.DOCUMENTS_REJECTED]: (_request, protocol) => `Um ou mais documentos da sua solicitação foram indeferidos. Acesse a solicitação para consultar o motivo e as orientações. Protocolo: ${protocol}.`,
   [NotificationEvent.REQUEST_REJECTED]: (request, protocol) => {
     const reason = rejectionReasonText(request.workflow_data || request.workflowData);
     const outcome = request.procedure_name ? `O procedimento ${request.procedure_name} foi indeferido.` : "Sua solicitação foi indeferida.";
@@ -31,15 +24,13 @@ const texts = Object.freeze({
   [NotificationEvent.COMPLETED]: (_request, protocol) => `Seu atendimento foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: ${protocol}.`,
 });
 
-// The subject, the full text and the variables that depend on the outcome, for the e-mail of one notice. The text is the
-// complete message, so a template that only prints {{message}} is already right.
+// The subject and the full text of the e-mail of one notice. The text is the complete message, so a template that only prints
+// {{message}} is already right.
 export function buildEmailNotice(event, request) {
   const protocol = String(request.protocol || "");
-  const documentsResult = documentsResults[event];
   return {
     subject: event === NotificationEvent.REQUEST_REJECTED && request.procedure_name
       ? "Procedimento indeferido" : getEmailUse(event)?.label || "Atualização da solicitação",
     message: texts[event]?.(request, protocol) || `Solicitação ${protocol}: há uma atualização.`,
-    ...(documentsResult ? { [EmailVariable.DOCUMENTS_RESULT]: documentsResult } : {}),
   };
 }

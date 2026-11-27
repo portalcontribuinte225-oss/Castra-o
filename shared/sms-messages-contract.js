@@ -44,8 +44,6 @@ const templates = Object.freeze({
   [NotificationEvent.SCHEDULE_CHANGED]: (d) => `${d.town}: seu atendimento foi reagendado para ${d.date}, às ${d.time}${d.place}. Protocolo: ${d.protocol}.`,
   [NotificationEvent.SCHEDULE_CANCELLED]: (d) => `${d.town}: o agendamento de ${d.date}${d.time ? `, às ${d.time},` : ""} foi cancelado. Protocolo: ${d.protocol}.`,
   [NotificationEvent.NO_SHOW]: (d) => `${d.town}: você não compareceu ao atendimento de ${d.date}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.DOCUMENTS_APPROVED]: (d) => `${d.town}: um ou mais documentos foram deferidos. Acesse sua solicitação para acompanhar a análise. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.DOCUMENTS_REJECTED]: (d) => `${d.town}: um ou mais documentos foram indeferidos. Acesse sua solicitação para ver o motivo. Protocolo: ${d.protocol}.`,
   [NotificationEvent.COMPLETED]: (d) => `${d.town}: atendimento concluído! Obrigado pelo cuidado com seu animal. Protocolo: ${d.protocol}.`,
   [NotificationEvent.REQUEST_REJECTED]: (d) => d.procedure ? `${d.town}: o procedimento ${d.procedure} foi indeferido${d.cause}. Protocolo: ${d.protocol}.`
     : `${d.town}: sua solicitação foi indeferida${d.cause}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,

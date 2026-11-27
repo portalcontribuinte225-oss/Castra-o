@@ -1,33 +1,33 @@
-import { ContactKind } from "../../../../shared/auth-contract.js";
 import { NotificationChannel } from "../../../../shared/notification-contract.js";
-import { normalizeTrackingProtocol } from "../../../../shared/request-tracking-contract.js";
 import { isUuid } from "../../repositories/request-tracking.js";
 import { isValidCpf, normalizeCpf } from "../../utils.js";
 import { normalizeAuthEmail, normalizeAuthPhone } from "../auth/auth-contacts.js";
 import { authError, authenticatedDigest, safeDigestEqual } from "../auth/auth-security.js";
 
-// The kind of contact the person chose decides the channel of the code: an e-mail by e-mail, the mobile phone through the phone
-// chain (WhatsApp, then SMS). The channel kept with the code only tells an e-mail from a phone.
-const channels = Object.freeze({ [ContactKind.EMAIL]: NotificationChannel.EMAIL, [ContactKind.PHONE]: NotificationChannel.WHATSAPP });
+const CODE_CHANNELS = new Set(Object.values(NotificationChannel));
 
 export function readAccessCpf(value) {
   const cpf = typeof value === "string" && value.length <= 20 ? normalizeCpf(value) : "";
   return isValidCpf(cpf) ? cpf : "";
 }
 
+// The person types only the CPF and chooses the channel of the code: e-mail, WhatsApp or SMS.
 export function readAccessStartInput(body) {
   const input = body && typeof body === "object" ? body : {};
   if (!isUuid(input.municipalityId)) throw authError(400, "Selecione um município válido.");
-  const protocol = normalizeTrackingProtocol(input.protocol);
-  if (!protocol) throw authError(400, "Informe o protocolo no formato 000123/2026.");
   const cpf = readAccessCpf(input.cpf);
   if (!cpf) throw authError(400, "Informe um CPF válido.");
-  const channel = Object.hasOwn(channels, input.channel) ? channels[input.channel] : "";
-  if (!channel) throw authError(400, "Escolha receber o código por e-mail ou pelo celular.");
-  return { municipalityId: input.municipalityId, protocol, cpf, channel };
+  if (!CODE_CHANNELS.has(input.channel)) throw authError(400, "Escolha receber o código por e-mail, WhatsApp ou SMS.");
+  return { municipalityId: input.municipalityId, cpf, channel: input.channel };
 }
 
-// The code only goes to a contact the request already has: the e-mail or the mobile phone of its tutor.
+// The code goes by the channel the person chose, but what is kept with it is the kind of contact that received it: an e-mail, or a
+// phone (kept as WhatsApp whether the code went by WhatsApp or by SMS). Only that contact is compared and confirmed afterwards.
+export function contactChannel(channel) {
+  return channel === NotificationChannel.EMAIL ? NotificationChannel.EMAIL : NotificationChannel.WHATSAPP;
+}
+
+// The code only goes to a contact the request already has: the e-mail of its tutor, or the mobile phone for WhatsApp and SMS.
 export function accessDestination(request, channel) {
   if (!request) return "";
   return channel === NotificationChannel.EMAIL ? normalizeAuthEmail(request.tutor_email) : normalizeAuthPhone(request.phone);
@@ -36,10 +36,18 @@ export function accessDestination(request, channel) {
 // Digests are compared in constant time, so a near match leaks nothing through timing.
 export function sameCpf(stored, given) {
   const cpf = normalizeCpf(stored);
-  return Boolean(cpf && given) && safeDigestEqual(authenticatedDigest("request-access-cpf", cpf), authenticatedDigest("request-access-cpf", given));
+  return Boolean(cpf && given) && safeDigestEqual(accessCpfDigest(cpf), accessCpfDigest(given));
 }
 
-// What the access token remembers of the contact that received the code: a digest, never the contact.
+export const accessCpfDigest = (cpf) => authenticatedDigest("request-access-cpf", cpf);
+
+// The access token stores a digest of the contact that received the code.
 export function accessContactDigest(channel, value) {
   return value ? authenticatedDigest("request-access-contact", channel, value) : "";
+}
+
+export function matchesAccess(request, { channel, contact, cpfDigest }) {
+  const cpf = readAccessCpf(request?.cpf);
+  const current = accessContactDigest(channel, accessDestination(request, channel));
+  return Boolean(cpf && current) && safeDigestEqual(accessCpfDigest(cpf), cpfDigest) && safeDigestEqual(current, contact);
 }

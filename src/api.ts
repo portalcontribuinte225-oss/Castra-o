@@ -3,8 +3,7 @@ import { readSubmittedRequest } from "./features/tutor-access/submission-envelop
 import type { AuthChallenge, AuthRequestOptions, RecoveryContext, SessionUser } from "./features/tutor-access/auth-types";
 import type { PreviousAnimalCandidate, ReusedDocumentReference } from "./features/registered-animals/registered-animal-types";
 import type { AnimalDeathPayload, AnimalRecord, AnimalTransferPayload, CreatedAnimalRequest } from "./features/animal-services/animal-service-types";
-import type { TrackedRequest, TrackingSession, TrackingStartBody } from "./features/request-tracking/tracking-types";
-import type { AccessSession, AccessStartBody, AccessView } from "./features/request-access/access-types";
+import type { AccessChannel, AccessSession, AccessStartBody, AccessView } from "./features/request-access/access-types";
 import type { MessageQuotaInput, MessageQuotaStatus } from "./features/message-contract/message-contract-types";
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
 import type { EmailSettings } from "./features/email/email-integration-types";
@@ -180,11 +179,9 @@ export const api = {
   createAnimalDeathRequest: (animalId: string, body: AnimalDeathPayload): Promise<CreatedAnimalRequest> => request("POST", `/animals/${encodeURIComponent(animalId)}/death`, body),
   createAnimalTransferRequest: (animalId: string, body: AnimalTransferPayload): Promise<CreatedAnimalRequest> => request("POST", `/animals/${encodeURIComponent(animalId)}/transfer`, body),
 
-  startRequestTracking: (body: TrackingStartBody, options?: AuthRequestOptions): Promise<AuthChallenge> => request("POST", "/request-tracking/challenges", body, "json", options),
-  confirmRequestTracking: (challengeId: string, code: string, options?: AuthRequestOptions): Promise<TrackingSession> => request("POST", `/request-tracking/challenges/${encodeURIComponent(challengeId)}/confirm`, { code }, "json", options),
-  getTrackedRequest: (token: string, options?: AuthRequestOptions): Promise<{ request: TrackedRequest }> => request("GET", "/request-tracking/request", undefined, "json", { ...options, bearerToken: token }),
-
   requestAccess: {
+    // The channels that can carry the code in the municipality; they depend on its configuration only.
+    channels: (municipalityId: string): Promise<{ channels: AccessChannel[] }> => request("GET", `/request-access/channels?municipalityId=${encodeURIComponent(municipalityId)}`),
     start: (body: AccessStartBody, options?: AuthRequestOptions): Promise<AuthChallenge> => request("POST", "/request-access/challenges", body, "json", options),
     confirm: (challengeId: string, body: { code: string; cpf: string }, options?: AuthRequestOptions): Promise<AccessSession> => request("POST", `/request-access/challenges/${encodeURIComponent(challengeId)}/confirm`, body, "json", options),
     view: (token: string, options?: AuthRequestOptions): Promise<AccessView> => request("GET", "/request-access/request", undefined, "json", { ...options, bearerToken: token }),

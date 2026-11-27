@@ -22,9 +22,9 @@ function fixture() {
     schedule_location_name: "Unidade Municipal", workflow_data: { scheduleTime: "09:00", followUp: { enabled: true, email: "citizen@example.com", phone: "48999999999" } },
   };
   const active = {
-    [NotificationEvent.SCHEDULE_CONFIRMED]: "castracao_confirmacao_agendamento",
-    [NotificationEvent.SCHEDULE_CHANGED]: "castracao_reagendamento",
-    [NotificationEvent.SCHEDULE_CANCELLED]: "castracao_cancelamento",
+    [NotificationEvent.SCHEDULE_CONFIRMED]: "castracao_agendamento_confirmado",
+    [NotificationEvent.SCHEDULE_CHANGED]: "castracao_agendamento_alterado",
+    [NotificationEvent.SCHEDULE_CANCELLED]: "castracao_agendamento_cancelado",
     [NotificationEvent.NO_SHOW]: "castracao_nao_comparecimento",
   };
   const dependencies = {
@@ -178,9 +178,9 @@ test("an e-mail use turned on without its template is reported, while the other 
 
 test("confirmation, reschedule and cancellation send the parameters their Meta templates expect", async () => {
   const expected = [
-    [NotificationEvent.SCHEDULE_CONFIRMED, "castracao_confirmacao_agendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
-    [NotificationEvent.SCHEDULE_CHANGED, "castracao_reagendamento", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
-    [NotificationEvent.SCHEDULE_CANCELLED, "castracao_cancelamento", ["Maria", "20/11/2026", "09:00"]],
+    [NotificationEvent.SCHEDULE_CONFIRMED, "castracao_agendamento_confirmado", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
+    [NotificationEvent.SCHEDULE_CHANGED, "castracao_agendamento_alterado", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
+    [NotificationEvent.SCHEDULE_CANCELLED, "castracao_agendamento_cancelado", ["Maria", "20/11/2026", "09:00"]],
     [NotificationEvent.NO_SHOW, "castracao_nao_comparecimento", ["Maria", "20/11/2026", "09:00"]],
   ];
   for (const [event, templateName, parameters] of expected) {
@@ -204,11 +204,10 @@ test("a template configured on screen gets each number from the field chosen for
   assert.deepEqual(texts(components), ["123/2026", "Maria", "Unidade Municipal", "Maria"]);
 });
 
-test("each document outcome and completion use a distinct template and send only their own content", async () => {
+test("completion and rejection use their own template and send only their own content, never the review of documents", async () => {
   for (const [event, sentence] of [
-    [NotificationEvent.DOCUMENTS_APPROVED, /foram deferidos/],
-    [NotificationEvent.DOCUMENTS_REJECTED, /foram indeferidos/],
     [NotificationEvent.COMPLETED, /Atendimento concluído/],
+    [NotificationEvent.REQUEST_REJECTED, /indeferida/],
   ]) {
     const f = fixture();
     f.active[event] = `castracao_${event}`;
@@ -294,7 +293,7 @@ test("a provider template error is reported safely and updates the cached status
   assert.equal(results[0].status, DeliveryStatus.SENT);
   assert.equal(results[1].code, DeliveryCode.TEMPLATE_UNAVAILABLE);
   assert.equal(results[2].status, DeliveryStatus.SENT);
-  assert.deepEqual(f.calls.find(([kind]) => kind === "mark"), ["mark", "municipality-a", "castracao_confirmacao_agendamento", "pt_BR", "PAUSED"]);
+  assert.deepEqual(f.calls.find(([kind]) => kind === "mark"), ["mark", "municipality-a", "castracao_agendamento_confirmado", "pt_BR", "PAUSED"]);
   assert.equal(JSON.stringify(results).includes("secret"), false);
   f.dependencies.markTemplateStatus = async () => { throw new Error("cache secret"); };
   const again = await dispatchNotification({ event: SCHEDULE_CONFIRMED, request: f.request }, f.dependencies);
@@ -340,12 +339,12 @@ test("dispatcher preserves only known finite transport codes and replaces unsafe
 test("a rejection reaches every channel in use with its reason, and never the staff's internal note", async () => {
   const f = fixture();
   const event = NotificationEvent.REQUEST_REJECTED;
-  f.active[event] = "castracao_indeferimento";
+  f.active[event] = "castracao_solicitacao_indeferida";
   f.request.workflow_data = { ...f.request.workflow_data, rejectionReason: "Tutor não localizado", rejectionNote: "private staff note" };
   const results = await dispatchNotification({ event, request: f.request }, f.dependencies);
   assert.deepEqual(results, [sent(event, NotificationChannel.EMAIL), sent(event, NotificationChannel.WHATSAPP), sent(event, NotificationChannel.SMS)]);
   const whatsapp = f.calls.find(([kind]) => kind === "whatsapp");
-  assert.equal(whatsapp[1].templateName, "castracao_indeferimento");
+  assert.equal(whatsapp[1].templateName, "castracao_solicitacao_indeferida");
   assert.deepEqual(texts(whatsapp[3]), ["123/2026", "Solicitação 123/2026: indeferida. Motivo: Tutor não localizado. Para mais informações, procure o atendimento do município."]);
   const sms = f.calls.find(([kind]) => kind === "sms")[1];
   assert.deepEqual([sms.use, sms.phone, sms.data.reason, sms.data.protocol], [event, "48999999999", "Tutor não localizado", "123/2026"]);

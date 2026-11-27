@@ -1,4 +1,3 @@
-import { ContactKind } from "../../../shared/auth-contract.js";
 import type { AuthChallenge } from "../tutor-access/auth-types";
 import type { AccessChannel, AccessView } from "./access-types";
 
@@ -13,9 +12,9 @@ const CONFLICT = 409;
 
 export interface AccessState {
   step: AccessStep;
-  protocol: string;
   cpf: string;
-  channel: AccessChannel;
+  // The channel the person chose; empty until they choose, while the first channel offered stands for it.
+  channel: AccessChannel | "";
   challenge: AuthChallenge | null;
   code: string;
   token: string;
@@ -25,12 +24,11 @@ export interface AccessState {
   retryUntil: number;
 }
 
-export type AccessFields = Partial<Pick<AccessState, "protocol" | "cpf" | "channel" | "code">>;
+export type AccessFields = Partial<Pick<AccessState, "cpf" | "channel" | "code">>;
 
-// The link fills the protocol, and the last screen of a request the protocol and the CPF; the code is always asked.
-export function initialAccessState(prefill: { protocol?: string; cpf?: string } = {}): AccessState {
-  return { step: AccessStep.IDENTIFY, protocol: prefill.protocol || "", cpf: prefill.cpf || "", channel: ContactKind.EMAIL, challenge: null, code: "",
-    token: "", view: null, loading: false, error: "", retryUntil: 0 };
+// The last screen of a request fills the CPF; the code is always asked.
+export function initialAccessState(prefill: { cpf?: string } = {}): AccessState {
+  return { step: AccessStep.IDENTIFY, cpf: prefill.cpf || "", channel: "", challenge: null, code: "", token: "", view: null, loading: false, error: "", retryUntil: 0 };
 }
 
 export type AccessAction =
@@ -52,7 +50,7 @@ export function accessReducer(state: AccessState, action: AccessAction): AccessS
     // The CPF got an account meanwhile: the page offers to sign in instead of creating it again.
     case AccessActionType.ACCOUNT_FOUND:
       return { ...state, loading: false, error: action.error, view: state.view ? { ...state.view, account: { exists: true } } : state.view };
-    case AccessActionType.EXPIRED: return { ...initialAccessState({ protocol: state.protocol, cpf: state.cpf }), channel: state.channel, error: ACCESS_EXPIRED_MESSAGE };
+    case AccessActionType.EXPIRED: return { ...initialAccessState({ cpf: state.cpf }), channel: state.channel, error: ACCESS_EXPIRED_MESSAGE };
     case AccessActionType.CORRECT: return { ...state, step: AccessStep.IDENTIFY, challenge: null, code: "", error: "" };
   }
 }

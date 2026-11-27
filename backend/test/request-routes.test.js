@@ -7,7 +7,7 @@ import { pool } from "../src/db/index.js";
 import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
 import { DocumentSequence, documentNumberYear } from "../../shared/document-number-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
-import { REQUEST_CONTACT_CPF_KEY, RequestKind } from "../../shared/request-contract.js";
+import { REQUEST_CONTACT_CPF_KEY, RequestKind, RequestOrigin } from "../../shared/request-contract.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { EMAIL_ACTIVE_USES_CONFIG_KEY } from "../../shared/email-contract.js";
 import { StaffNotificationType } from "../../shared/staff-notifications-contract.js";
@@ -389,6 +389,17 @@ test("the registered notice goes after the answer to whoever accepted the notice
   assert.deepEqual(row().history.map(({ notification }) => [notification.event, notification.channel, notification.status, notification.code]),
     [[NotificationEvent.REQUEST_REGISTERED, "email", "skipped", "not_configured"]]);
   assert.match(row().history[0].notes, /^Solicitação registrada — E-mail: não enviado\./);
+});
+
+test("a request registered by the staff keeps the notices accepted and sends the registered notice like a public one", async (t) => {
+  const { request, row } = await fixture(t, { registeredNotice: true });
+  const followUp = { enabled: true, email: "tutor@example.test", phone: "" };
+  const response = await request({ user: ADMIN, body: procedureBody({ workflow_data: { tutorship: AnimalTutorship.WITHOUT_TUTOR, followUp } }) });
+  assert.equal(response.status, 201);
+  assert.equal(row().origin, RequestOrigin.INTERNAL);
+  assert.deepEqual(row().workflow_data.followUp, followUp);
+  await until(() => row().history.length > 0);
+  assert.deepEqual(row().history.map(({ notification }) => [notification.event, notification.channel]), [[NotificationEvent.REQUEST_REGISTERED, "email"]]);
 });
 
 test("without the notices accepted the registered notice reads no channel and leaves no history", async (t) => {

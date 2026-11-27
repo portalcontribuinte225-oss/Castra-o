@@ -278,7 +278,7 @@ test("reviewing an attachment without a valid receipt keeps its id and signs it 
   assert.equal(reviewed.receivedAt, null);
   assert.equal(hasValidDocumentReceipt(reviewed, row(reviewed)), true);
   const afterReview = decorateRequestDocuments({ ...previous, documents: [reviewed] }, settingsFor());
-  assert.deepEqual(selectNotificationEvents(beforeReview, afterReview), [NotificationEvent.DOCUMENTS_APPROVED]);
+  assert.deepEqual(selectNotificationEvents(beforeReview, afterReview), []);
 });
 
 test("catalog is metadata only, source scoped, and shared multi-animal photos are ineligible", async () => {

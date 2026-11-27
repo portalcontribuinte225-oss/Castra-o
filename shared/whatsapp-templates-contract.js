@@ -8,8 +8,6 @@ export const WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY = "whatsapp_template_links";
 export const WHATSAPP_APPROVED_STATUS = "APPROVED";
 // Reason for a template whose name is simply not one of the system's notices (not a defect of the template).
 export const WHATSAPP_NOT_A_NOTICE_REASON = "O nome não indica um aviso do sistema.";
-// The label of a template that serves both document outcomes, as the generic `documentos_conferidos` name does.
-export const WHATSAPP_DOCUMENT_OUTCOMES_LABEL = "Documentos deferidos e indeferidos";
 export const WHATSAPP_MAX_VARIABLES = 20;
 // The longest body text kept from Meta; a longer body is treated as missing.
 export const WHATSAPP_MAX_BODY_LENGTH = 1100;
@@ -49,41 +47,34 @@ export const WhatsappAccessLayout = Object.freeze({ CODE: "code", CONTACT: "cont
 const field = WhatsappTemplateField;
 const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.PROTOCOL];
 const scheduleOutcomeFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME];
-const documentFields = [field.PROTOCOL, field.NOTIFICATION_MESSAGE];
-const templateAliases = Object.freeze({
-  [NotificationEvent.NO_SHOW]: ["nao_compareceu"],
-  [NotificationEvent.DOCUMENTS_APPROVED]: ["documentos_aprovados", "documentos_conferidos"],
-  [NotificationEvent.DOCUMENTS_REJECTED]: ["documentos_rejeitados", "documentos_conferidos"],
-  [AuthPurpose.CONTACT_CHANGED]: ["dados_tutor_alterados"],
-});
+const codeVariables = ["Código de verificação"];
 
 function notice(key, label, namePart, fields) {
   return Object.freeze({
-    key, kind: WhatsappUseKind.NOTICE, label, groupLabel: label, namePart,
+    key, kind: WhatsappUseKind.NOTICE, label, namePart,
     fields: Object.freeze([...fields]), variables: Object.freeze(fields.map((item) => whatsappFieldLabels[item])),
   });
 }
 
-function access(key, label, groupLabel, namePart, layout, variables, nameSuffix = false) {
-  return Object.freeze({ key, kind: WhatsappUseKind.ACCESS, label, groupLabel, namePart, layout, nameSuffix, variables: Object.freeze([...variables]) });
+function access(key, label, namePart, layout, variables) {
+  return Object.freeze({ key, kind: WhatsappUseKind.ACCESS, label, namePart, layout, variables: Object.freeze([...variables]) });
 }
 
-// A use is something a template can serve: a notice sent about a request or an access message.
-// Notice keys are NotificationEvent values and access keys are AuthPurpose values, so they never collide.
+// A use is something a template can serve: a notice sent about a request or an access message. Each use has one template,
+// named `castracao_<namePart>`, and the titles and their order are the same in every channel. Notice keys are NotificationEvent
+// values and access keys are AuthPurpose values, so they never collide.
 export const whatsappUses = Object.freeze([
   notice(NotificationEvent.REQUEST_REGISTERED, "Solicitação registrada", "solicitacao_registrada", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
-  notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "confirmacao_agendamento", scheduleFields),
-  notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "reagendamento", scheduleFields),
-  notice(NotificationEvent.SCHEDULE_CANCELLED, "Agendamento cancelado", "cancelamento", scheduleOutcomeFields),
+  notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "agendamento_confirmado", scheduleFields),
+  notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "agendamento_alterado", scheduleFields),
+  notice(NotificationEvent.SCHEDULE_CANCELLED, "Agendamento cancelado", "agendamento_cancelado", scheduleOutcomeFields),
   notice(NotificationEvent.NO_SHOW, "Não comparecimento", "nao_comparecimento", scheduleOutcomeFields),
-  notice(NotificationEvent.DOCUMENTS_APPROVED, "Documentos deferidos", "documentos_deferidos", documentFields),
-  notice(NotificationEvent.DOCUMENTS_REJECTED, "Documentos indeferidos", "documentos_indeferidos", documentFields),
   notice(NotificationEvent.COMPLETED, "Atendimento concluído", "atendimento_concluido", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
-  notice(NotificationEvent.REQUEST_REJECTED, "Solicitação indeferida", "indeferimento", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
-  access(AuthPurpose.PASSWORD_RESET, "Recuperação de senha", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
-  access(AuthPurpose.VERIFY_PHONE, "Confirmação de telefone", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
-  access(AuthPurpose.REQUEST_TRACKING, "Acompanhamento de solicitação", "Códigos de acesso", "codigo", WhatsappAccessLayout.CODE, ["Código de verificação"], true),
-  access(AuthPurpose.CONTACT_CHANGED, "Contato alterado", "Contato alterado", "contato_alterado", WhatsappAccessLayout.CONTACT, [whatsappFieldLabels[field.TUTOR_NAME]]),
+  notice(NotificationEvent.REQUEST_REJECTED, "Solicitação indeferida", "solicitacao_indeferida", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
+  access(AuthPurpose.PASSWORD_RESET, "Recuperação de senha", "codigo_recuperacao_senha", WhatsappAccessLayout.CODE, codeVariables),
+  access(AuthPurpose.VERIFY_PHONE, "Confirmação de contato", "codigo_confirmacao_contato", WhatsappAccessLayout.CODE, codeVariables),
+  access(AuthPurpose.REQUEST_TRACKING, "Acesso à solicitação", "codigo_acesso_solicitacao", WhatsappAccessLayout.CODE, codeVariables),
+  access(AuthPurpose.CONTACT_CHANGED, "Contato alterado", "contato_alterado", WhatsappAccessLayout.CONTACT, [whatsappFieldLabels[field.TUTOR_NAME]]),
 ]);
 
 export function getWhatsappUse(key) {
@@ -97,10 +88,8 @@ export function parseWhatsappTemplateName(name) {
   return /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(part) ? part : null;
 }
 
-function matchesUse(part, use) {
-  return part === use.namePart || templateAliases[use.key]?.includes(part)
-    || (use.nameSuffix === true && part.startsWith(`${use.namePart}_`));
-}
+// A name serves only the use it names: no other name, prefix or former name stands for it.
+const matchesUse = (part, use) => part === use.namePart;
 
 function scheduleOutcomeLinkIssue(name, use) {
   const part = parseWhatsappTemplateName(name);
@@ -129,8 +118,7 @@ function useReason(entry, use) {
     if (entry.category !== "AUTHENTICATION") return "Códigos de acesso precisam ser um template de autenticação.";
     return entry.buttons.length === 1 && entry.buttons[0] === "OTP_COPY_CODE" ? "" : "O template de código precisa do botão de copiar código.";
   }
-  if (use.key === AuthPurpose.CONTACT_CHANGED && parseWhatsappTemplateName(entry.name) === "dados_tutor_alterados"
-    && entry.category !== "UTILITY") return "O aviso de contato alterado precisa ser um template de utilidade.";
+  if (use.key === AuthPurpose.CONTACT_CHANGED && entry.category !== "UTILITY") return "O aviso de contato alterado precisa ser um template de utilidade.";
   return noticeButtonsReason(entry);
 }
 

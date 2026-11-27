@@ -90,7 +90,7 @@ test("availability inside a transaction uses the supplied client for every read 
   const queried = [];
   const database = { query: async (_sql, values) => {
     assert.ok([MUNICIPALITY, null].includes(values[1]), "reads are either municipal or the platform rows"); queried.push(values[0]);
-    const authTemplate = { name: "castracao_codigo_verificacao", language: "pt_BR", status: "APPROVED", category: "AUTHENTICATION", parameterFormat: "POSITIONAL",
+    const authTemplate = { name: "castracao_codigo_recuperacao_senha", language: "pt_BR", status: "APPROVED", category: "AUTHENTICATION", parameterFormat: "POSITIONAL",
       hasBody: true, bodyVariables: 1, bodySequential: true, header: "NONE", buttons: ["OTP_COPY_CODE"], extraComponents: false };
     const valuesByKey = { "whatsapp": { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "test" }, "whatsapp_quota": { plan: 10 },
       "whatsapp_active_templates": { active: { password_reset: { name: authTemplate.name, language: "pt_BR" } } },

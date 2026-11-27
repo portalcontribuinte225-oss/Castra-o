@@ -104,8 +104,8 @@ test("new phone verification cannot fall back to e-mail when WhatsApp is off and
   assert.equal(f.calls.some(([type]) => type === "email" || type === "quota"), false);
 });
 
-const PHONE_CODES = [AuthPurpose.VERIFY_PHONE, AuthPurpose.REQUEST_TRACKING];
-const phoneInput = (f, purpose) => ({ ...f.input, purpose, phoneVerified: false, challengeId: "challenge", channel: undefined, ...(purpose === AuthPurpose.REQUEST_TRACKING ? { email: "", user: {} } : {}) });
+const PHONE_CODES = [AuthPurpose.VERIFY_PHONE];
+const phoneInput = (f, purpose) => ({ ...f.input, purpose, phoneVerified: false, challengeId: "challenge", channel: undefined });
 const smsSent = (f) => { const sent = []; f.dependencies.sendSms = async (value) => { sent.push(value); return { status: DeliveryStatus.SENT }; }; return sent; };
 
 test("a phone code goes by WhatsApp and, when WhatsApp does not send, by SMS to the same phone", async () => {
@@ -282,47 +282,57 @@ test("email admission delay cannot release a recovery code that expired while wa
   assert.equal(sends, 1);
 });
 
-test("request tracking codes go only to the destination the use case matched, without verified flags", async () => {
+const accessCode = (overrides = {}) => ({ purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: "municipality-a", user: {}, code: "123456",
+  challengeId: "challenge", expiresAt: new Date(Date.now() + 600000), email: "", phone: "", ...overrides });
+
+test("the access code goes only by the chosen channel, to the destination the use case resolved, without verified flags", async () => {
   const f = fixture();
-  const base = { purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: "municipality-a", user: {}, code: "123456" };
-  const email = await deliverAuthMessage({ ...base, email: "citizen@example.test", phone: "" }, f.dependencies);
+  const email = await deliverAuthMessage(accessCode({ channel: NotificationChannel.EMAIL, email: "citizen@example.test" }), f.dependencies);
   assert.deepEqual(email, [{ purpose: AuthPurpose.REQUEST_TRACKING, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }]);
   const sent = f.calls.find(([type]) => type === "email")[1];
   assert.equal(sent.toEmail, "citizen@example.test");
   assert.equal(sent.templateId, "email_request_tracking");
   assert.equal(sent.templateParams.code, "123456");
-  assert.equal(f.calls.some(([type, channel]) => type === "whatsapp" || (type === "quota" && channel !== NotificationChannel.EMAIL)), false);
+  assert.equal(f.calls.some(([type, channel]) => type === "whatsapp" || type === "sms" || (type === "quota" && channel !== NotificationChannel.EMAIL)), false);
 
-  const phone = await deliverAuthMessage({ ...base, email: "", phone: "48999991234" }, f.dependencies);
+  const whatsapp = fixture();
+  const phone = await deliverAuthMessage(accessCode({ channel: NotificationChannel.WHATSAPP, phone: "48999991234" }), whatsapp.dependencies);
   assert.deepEqual(phone, [{ purpose: AuthPurpose.REQUEST_TRACKING, channel: NotificationChannel.WHATSAPP, status: DeliveryStatus.SENT }]);
-  const whatsapp = f.calls.find(([type]) => type === "whatsapp");
-  assert.equal(whatsapp[1].templateName, "whatsapp_request_tracking");
-  assert.equal(whatsapp[3][0].parameters[0].text, "123456");
-  assert.equal(JSON.stringify([email, phone]).includes("123456"), false);
+  const call = whatsapp.calls.find(([type]) => type === "whatsapp");
+  assert.equal(call[1].templateName, "whatsapp_request_tracking");
+  assert.equal(call[3][0].parameters[0].text, "123456");
+  assert.equal(whatsapp.calls.some(([type]) => type === "sms" || type === "email"), false);
+
+  const sms = fixture(); const smsCalls = smsSent(sms);
+  const text = await deliverAuthMessage(accessCode({ channel: NotificationChannel.SMS, phone: "48999991234" }), sms.dependencies);
+  assert.deepEqual(text.map(({ channel, status }) => [channel, status]), [[NotificationChannel.SMS, DeliveryStatus.SENT]]);
+  assert.deepEqual([smsCalls[0].use, smsCalls[0].phone, smsCalls[0].data.code, smsCalls[0].messageId], [AuthPurpose.REQUEST_TRACKING, "48999991234", "123456", "challenge"]);
+  assert.equal(sms.calls.some(([type]) => type === "whatsapp" || type === "email"), false);
+  assert.equal(JSON.stringify([email, phone, text]).includes("123456"), false);
 });
 
-test("request tracking needs a six digit code, a destination and a configured template", async () => {
+test("the access code needs a six digit code, a chosen channel and a configured template", async () => {
   const f = fixture();
-  const base = { purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: "municipality-a", user: {}, email: "citizen@example.test", phone: "" };
   for (const code of [undefined, "", "12345", "1234567", "12ab56"]) {
-    const [result] = await deliverAuthMessage({ ...base, code }, f.dependencies);
+    const [result] = await deliverAuthMessage(accessCode({ channel: NotificationChannel.EMAIL, email: "citizen@example.test", code }), f.dependencies);
     assert.equal(result.code, DeliveryCode.PREPARATION_FAILED);
   }
-  assert.deepEqual(await deliverAuthMessage({ ...base, code: "123456", email: "" }, f.dependencies), []);
-  assert.equal(f.calls.some(([type]) => type === "email" || type === "whatsapp"), false);
+  assert.deepEqual(await deliverAuthMessage(accessCode({ channel: undefined, email: "citizen@example.test" }), f.dependencies), []);
+  assert.equal(f.calls.some(([type]) => type === "email" || type === "whatsapp" || type === "sms"), false);
 
   f.emailTemplates[AuthPurpose.REQUEST_TRACKING] = "";
-  const [missing] = await deliverAuthMessage({ ...base, code: "123456" }, f.dependencies);
+  const [missing] = await deliverAuthMessage(accessCode({ channel: NotificationChannel.EMAIL, email: "citizen@example.test" }), f.dependencies);
   assert.equal(missing.code, DeliveryCode.NOT_CONFIGURED);
   assert.equal(f.calls.some(([type]) => type === "email"), false);
 });
 
-test("request tracking never falls back to e-mail when WhatsApp is off and SMS is not used, nor reads the request follow-up", async () => {
-  const f = fixture();
+test("an access code whose WhatsApp is off never falls back to SMS or e-mail, nor reads the request follow-up", async () => {
+  const f = fixture(); const smsCalls = smsSent(f);
   f.dependencies.loadWhatsappConfig = async () => ({ active: false });
-  const results = await deliverAuthMessage({ purpose: AuthPurpose.REQUEST_TRACKING, municipalityId: "municipality-a", user: {}, code: "123456",
-    email: "", phone: "48999991234", followUp: { enabled: true, email: "attacker@example.test" } }, f.dependencies);
+  const results = await deliverAuthMessage(accessCode({ channel: NotificationChannel.WHATSAPP, phone: "48999991234",
+    followUp: { enabled: true, email: "attacker@example.test" } }), f.dependencies);
   assert.equal(results.length, 1);
-  assert.equal(results[0].code, DeliveryCode.CHANNEL_DISABLED);
+  assert.deepEqual([results[0].channel, results[0].code], [NotificationChannel.WHATSAPP, DeliveryCode.CHANNEL_DISABLED]);
+  assert.equal(smsCalls.length, 0);
   assert.equal(f.calls.some(([type]) => type === "email"), false);
 });

@@ -6,42 +6,50 @@ import express from "express";
 import { pool } from "../src/db/index.js";
 import { trackingChallengeDigest } from "../src/repositories/request-tracking.js";
 import { createRequestAccessRouter } from "../src/routes/request-access.js";
-import { accessContactDigest, readAccessStartInput } from "../src/services/request-access/access-input.js";
+import { accessContactDigest, accessCpfDigest, readAccessStartInput } from "../src/services/request-access/access-input.js";
 import { createAccessToken, readAccessToken } from "../src/services/request-access/access-token.js";
-import { createTrackingToken, readTrackingToken } from "../src/services/request-tracking/tracking-token.js";
-import { AuthPurpose, AUTH_CHALLENGE_SECONDS, AUTH_RETRY_SECONDS, ContactKind } from "../../shared/auth-contract.js";
+import { AuthPurpose, AUTH_CHALLENGE_SECONDS, AUTH_RETRY_SECONDS } from "../../shared/auth-contract.js";
 import { NotificationChannel } from "../../shared/notification-contract.js";
 import { REQUEST_ACCESS_TOKEN_SECONDS } from "../../shared/request-access-contract.js";
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
 const OTHER_MUNICIPALITY = "22222222-2222-4222-8222-222222222222";
 const REQUEST_ID = "33333333-3333-4333-8333-333333333333";
+const LATER_ID = "44444444-4444-4444-8444-444444444444";
 const PROTOCOL = "000123/2026";
 const CPF = "52998224725";
 const OTHER_CPF = "16899535009";
 const EMAIL = "citizen@example.com";
 const PHONE = "48999991234";
-const START = { municipalityId: MUNICIPALITY, protocol: PROTOCOL, cpf: "529.982.247-25", channel: ContactKind.EMAIL };
+const ALL_CHANNELS = [NotificationChannel.EMAIL, NotificationChannel.WHATSAPP, NotificationChannel.SMS];
+const START = { municipalityId: MUNICIPALITY, cpf: "529.982.247-25", channel: NotificationChannel.EMAIL };
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const clientFetch = globalThis.fetch;
 
 function accessRow(overrides = {}) {
   return {
     id: REQUEST_ID, municipality_id: MUNICIPALITY, municipality_active: true, tutor_id: null, protocol: PROTOCOL,
-    request_type: "Castração", status: "NOVA", origin: "PUBLICA", created_at: new Date("2026-11-01T10:00:00Z"), signed_at: new Date("2026-11-01T10:00:00Z"),
+    request_type: "Castração", status: "NOVA", origin: "PUBLICA", created_at: new Date("2026-11-01T10:00:00Z"), updated_at: new Date("2026-11-02T10:00:00Z"),
+    signed_at: new Date("2026-11-01T10:00:00Z"),
     schedule_date: "20/11/2026", schedule_location_name: "Unidade Municipal", schedule_address: "Rua das Flores, 10", schedule_address_url: "",
     schedule_municipality: "Test Town", municipality: "Test Town", responsible_unit: "", veterinarian: "",
     tutor_name: "Tutor Example", cpf: CPF, phone: PHONE, tutor_email: EMAIL, cep: "88000000", address: "Rua A, 1", neighborhood: "Centro", city: "Test Town", state: "SC",
     animals: [{ id: "animal-1", name: "Rex", species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida", photo: "data:PRIVATE_PHOTO", requestTypeIds: ["castration"] }],
     workflow_data: { scheduleSlotTime: "09:00", requestTypeIds: ["castration"], requestTypeNames: ["Castração"], followUp: { enabled: true, email: EMAIL, phone: PHONE },
       internalNote: "PRIVATE_NOTE", assignedUserId: "PRIVATE_ASSIGNEE" },
+    documents: [{ documentId: "identity", status: "attached", dataUrl: "data:PRIVATE_DOCUMENT", fileName: "PRIVATE_FILE.pdf", review: { note: "PRIVATE_REVIEW" } }],
     // Columns that must never reach the access view.
-    notes: "PRIVATE_NOTES", history: [{ notes: "PRIVATE_HISTORY" }], documents: [{ dataUrl: "data:PRIVATE_DOCUMENT" }],
+    notes: "PRIVATE_NOTES", history: [{ notes: "PRIVATE_HISTORY" }],
     ...overrides,
   };
 }
 
-async function fixture(t, { rows = [accessRow()], profiles = [] } = {}) {
+// A later request of the same CPF, with the same contacts and reviewed documents.
+const laterRow = (overrides = {}) => accessRow({ id: LATER_ID, protocol: "000140/2026", status: "AGENDADA", created_at: new Date("2026-11-05T10:00:00Z"),
+  documents: [{ documentId: "identity", status: "approved" }, { documentId: "address", status: "rejected" }, { documentId: "other", status: "attached" }],
+  ...overrides });
+
+async function fixture(t, { rows = [accessRow()], profiles = [], channels = ALL_CHANNELS } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET };
   process.env.JWT_SECRET = "request-access-tests-only";
   const requests = new Map(rows.map((row) => [row.id, row]));
@@ -74,9 +82,12 @@ async function fixture(t, { rows = [accessRow()], profiles = [] } = {}) {
       animalLinks.push(values);
       return { rows: [], rowCount: (requests.get(values[1])?.animals || []).length };
     }
-    if (sql.includes("WHERE r.municipality_id = $1 AND r.protocol = $2")) {
-      const row = [...requests.values()].find((item) => item.municipality_id === values[0] && item.protocol === values[1] && item.municipality_active);
-      return { rows: row ? [project(row, sql)] : [] };
+    if (sql.includes("regexp_replace(COALESCE(r.cpf, '')")) {
+      const [municipalityId, cpf, limit, offset] = values;
+      const found = [...requests.values()]
+        .filter((item) => item.municipality_id === municipalityId && String(item.cpf || "").replace(/\D/g, "") === cpf && item.municipality_active)
+        .sort((a, b) => b.created_at - a.created_at || b.id.localeCompare(a.id)).slice(offset, offset + limit);
+      return { rows: found.map((row) => project(row, sql)) };
     }
     if (sql.includes("WHERE r.id = $1 AND r.municipality_id = $2")) {
       const row = requests.get(values[0]);
@@ -133,9 +144,11 @@ async function fixture(t, { rows = [accessRow()], profiles = [] } = {}) {
   };
   pool.query = query;
   pool.connect = async () => ({ query, release() {} });
+  const channelReads = [];
   const router = createRequestAccessRouter({
-    deliver: async (input) => { deliveries.push(input); return [{ purpose: input.purpose, channel: NotificationChannel.EMAIL, status: "sent" }]; },
+    deliver: async (input) => { deliveries.push(input); return [{ purpose: input.purpose, channel: input.channel, status: "sent" }]; },
     schedule: (task) => { scheduled.push(task); },
+    listChannels: async (municipalityId) => { channelReads.push(municipalityId); return channels; },
   });
   const app = express();
   app.use(express.json());
@@ -158,7 +171,8 @@ async function fixture(t, { rows = [accessRow()], profiles = [] } = {}) {
     return { status: response.status, headers: response.headers, body: await response.json().catch(() => null) };
   }
   return {
-    request, calls, challenges, deliveries, audits, users, profiles, animalLinks, requests,
+    request, calls, challenges, deliveries, audits, users, profiles, animalLinks, requests, channelReads,
+    channels: (municipalityId) => request(`/channels?municipalityId=${encodeURIComponent(municipalityId)}`),
     start: (body) => request("/challenges", { method: "POST", body }),
     confirm: (id, body) => request(`/challenges/${id}/confirm`, { method: "POST", body }),
     view: (token) => request("/request", { token }),
@@ -168,36 +182,36 @@ async function fixture(t, { rows = [accessRow()], profiles = [] } = {}) {
 }
 
 const accessToken = (overrides = {}) => createAccessToken({ requestId: REQUEST_ID, municipalityId: MUNICIPALITY, channel: NotificationChannel.EMAIL,
-  contact: accessContactDigest(NotificationChannel.EMAIL, EMAIL), ...overrides });
+  contact: accessContactDigest(NotificationChannel.EMAIL, EMAIL), cpfDigest: accessCpfDigest(CPF), ...overrides });
 
-// A challenge as the follow-up of a request makes it, with a known code: it asks for no CPF.
-function trackingChallenge(f, code = "123456") {
+// A code sent for the request, with a known value.
+function accessChallenge(f, code = "123456") {
   const challenge = { id: randomUUID(), request_id: REQUEST_ID, municipality_id: MUNICIPALITY, channel: NotificationChannel.EMAIL,
     expires_at: new Date(Date.now() + 600_000), attempts: 0, consumed_at: null, delivery: null };
-  challenge.digest = trackingChallengeDigest(challenge, code);
+  challenge.digest = trackingChallengeDigest(challenge, code, CPF, accessContactDigest(NotificationChannel.EMAIL, EMAIL));
   f.challenges.set(challenge.id, challenge);
   return challenge;
 }
 
-test("only the CPF of the request's tutor, with a contact the request has, gets a code, and every other case answers alike", async (t) => {
+test("the channels offered depend only on the municipality, and a malformed municipality is refused", async (t) => {
+  const f = await fixture(t, { channels: [NotificationChannel.SMS] });
+  const response = await f.channels(MUNICIPALITY);
+  assert.deepEqual([response.status, response.body], [200, { channels: [NotificationChannel.SMS] }]);
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.equal((await f.channels("not-a-uuid")).status, 400);
+  assert.deepEqual(f.channelReads, [MUNICIPALITY]);
+  assert.equal(f.calls.length, 0);
+});
+
+test("only a CPF with a procedure request that has a contact of the chosen kind gets a code, and every other case answers alike", async (t) => {
   const rows = [
     accessRow(),
-    accessRow({ id: randomUUID(), protocol: "000124/2026", cpf: null }),
-    accessRow({ id: randomUUID(), protocol: "000125/2026", tutor_email: "" }),
+    accessRow({ id: randomUUID(), protocol: "000124/2026", cpf: OTHER_CPF, tutor_email: "" }),
     accessRow({ id: randomUUID(), protocol: "000126/2026", municipality_id: OTHER_MUNICIPALITY, municipality_active: false }),
-    accessRow({ id: randomUUID(), protocol: "000128/2026", request_type: "DENUNCIA" }),
+    accessRow({ id: randomUUID(), protocol: "000128/2026", cpf: "111.444.777-35", request_type: "DENUNCIA" }),
   ];
   const f = await fixture(t, { rows });
-  const bodies = [
-    START,
-    { ...START, cpf: OTHER_CPF },
-    { ...START, protocol: "999999/2026" },
-    { ...START, municipalityId: OTHER_MUNICIPALITY },
-    { ...START, protocol: "000124/2026" },
-    { ...START, protocol: "000125/2026" },
-    { ...START, municipalityId: OTHER_MUNICIPALITY, protocol: "000126/2026" },
-    { ...START, protocol: "000128/2026" },
-  ];
+  const bodies = [START, { ...START, cpf: OTHER_CPF }, { ...START, cpf: "11144477735" }, { ...START, cpf: "39053344705" }, { ...START, municipalityId: OTHER_MUNICIPALITY }];
   const responses = [];
   for (const body of bodies) responses.push(await f.start(body));
   for (const response of responses) {
@@ -212,35 +226,49 @@ test("only the CPF of the request's tutor, with a contact the request has, gets 
   await f.flush();
   assert.equal(f.deliveries.length, 1);
   const [delivery] = f.deliveries;
-  assert.equal(delivery.purpose, AuthPurpose.REQUEST_TRACKING, "the code is the message the follow-up already sends");
-  assert.deepEqual([delivery.municipalityId, delivery.email, delivery.phone], [MUNICIPALITY, EMAIL, ""]);
+  assert.equal(delivery.purpose, AuthPurpose.REQUEST_TRACKING, "the code is the message \"Acesso à solicitação\"");
+  assert.deepEqual([delivery.municipalityId, delivery.channel, delivery.email, delivery.phone], [MUNICIPALITY, NotificationChannel.EMAIL, EMAIL, ""]);
   assert.match(delivery.code, /^\d{6}$/);
   for (const response of responses) assert.doesNotMatch(JSON.stringify(response.body), new RegExp(`${delivery.code}|${CPF}`));
 });
 
-test("the phone channel sends the code to the tutor's mobile only, through the phone chain", async (t) => {
-  const f = await fixture(t, { rows: [accessRow({ workflow_data: { followUp: { enabled: false, email: "", phone: "" } } })] });
-  assert.equal((await f.start({ ...START, channel: ContactKind.PHONE })).status, 200);
+test("the code goes to the most recent request of the CPF with a contact of the chosen kind, only by the chosen channel", async (t) => {
+  const f = await fixture(t, { rows: [accessRow({ phone: "" }), laterRow({ tutor_email: "" })] });
+  assert.equal((await f.start(START)).status, 200);
+  assert.equal((await f.start({ ...START, channel: NotificationChannel.SMS })).status, 200);
   await f.flush();
-  assert.equal(f.deliveries.length, 1, "the tutor's own contact works even without the notices accepted");
-  assert.deepEqual([f.deliveries[0].phone, f.deliveries[0].email], [PHONE, ""]);
-  assert.equal([...f.challenges.values()][0].channel, NotificationChannel.WHATSAPP);
+  const [byEmail, bySms] = [...f.challenges.values()];
+  assert.deepEqual([byEmail.request_id, byEmail.channel], [REQUEST_ID, NotificationChannel.EMAIL]);
+  assert.deepEqual([bySms.request_id, bySms.channel], [LATER_ID, NotificationChannel.WHATSAPP], "the phone is kept as the kind of contact");
+  assert.deepEqual(f.deliveries.map(({ channel, email, phone, challengeId }) => [channel, email, phone, challengeId]),
+    [[NotificationChannel.EMAIL, EMAIL, "", byEmail.id], [NotificationChannel.SMS, "", PHONE, bySms.id]]);
+});
+
+test("a channel the municipality does not offer is refused and sends nothing", async (t) => {
+  const f = await fixture(t, { channels: [NotificationChannel.EMAIL] });
+  for (const channel of [NotificationChannel.WHATSAPP, NotificationChannel.SMS]) {
+    const response = await f.start({ ...START, channel });
+    assert.deepEqual([response.status, response.body.error], [400, "Escolha um canal disponível para receber o código."]);
+  }
+  assert.equal(f.challenges.size, 0);
+  assert.equal((await f.start(START)).status, 200);
 });
 
 test("malformed start input is refused before any database operation", async (t) => {
   const f = await fixture(t);
   const invalid = [
-    {}, { ...START, municipalityId: "not-a-uuid" }, { ...START, protocol: "123" }, { ...START, cpf: "11111111111" }, { ...START, cpf: "123" },
-    { ...START, cpf: 52998224725 }, { ...START, cpf: `${CPF}${"0".repeat(20)}` }, { ...START, channel: "sms" }, { ...START, channel: undefined },
+    {}, { ...START, municipalityId: "not-a-uuid" }, { ...START, cpf: "11111111111" }, { ...START, cpf: "123" },
+    { ...START, cpf: 52998224725 }, { ...START, cpf: `${CPF}${"0".repeat(20)}` }, { ...START, channel: "phone" }, { ...START, channel: undefined },
   ];
   for (const body of invalid) assert.equal((await f.start(body)).status, 400, JSON.stringify(body));
   assert.equal(f.calls.length, 0);
   assert.throws(() => readAccessStartInput({ ...START, channel: "__proto__" }), { status: 400 });
+  assert.deepEqual(readAccessStartInput({ ...START, protocol: PROTOCOL }), { municipalityId: MUNICIPALITY, cpf: CPF, channel: NotificationChannel.EMAIL });
 });
 
-test("the resend cooldown answers a known and an unknown request alike", async (t) => {
+test("the resend cooldown answers a known and an unknown CPF alike", async (t) => {
   const f = await fixture(t);
-  const unknown = { ...START, protocol: "999999/2026" };
+  const unknown = { ...START, cpf: OTHER_CPF };
   assert.equal((await f.start(START)).status, 200);
   const known = await f.start(START);
   assert.equal((await f.start(unknown)).status, 200);
@@ -250,9 +278,9 @@ test("the resend cooldown answers a known and an unknown request alike", async (
   assert.deepEqual([invented.status, invented.body], [429, known.body]);
 });
 
-test("the code opens the request only with the CPF again: a code that asks no CPF never opens it, and a wrong CPF spends an attempt", async (t) => {
+test("the code opens the requests only with the CPF again, and a wrong CPF spends an attempt", async (t) => {
   const f = await fixture(t);
-  const challenge = trackingChallenge(f);
+  const challenge = accessChallenge(f);
   for (const cpf of [undefined, "", "123"]) assert.equal((await f.confirm(challenge.id, { code: "123456", cpf })).status, 400, String(cpf));
   assert.equal(f.challenges.get(challenge.id).attempts, 0, "a malformed CPF is refused before the code is looked at");
   const wrong = await f.confirm(challenge.id, { code: "123456", cpf: OTHER_CPF });
@@ -264,7 +292,7 @@ test("the code opens the request only with the CPF again: a code that asks no CP
   assert.equal(opened.headers.get("cache-control"), "no-store");
   assert.equal(opened.body.expiresIn, REQUEST_ACCESS_TOKEN_SECONDS);
   assert.deepEqual(readAccessToken(opened.body.token), { requestId: REQUEST_ID, municipalityId: MUNICIPALITY, channel: NotificationChannel.EMAIL,
-    contact: accessContactDigest(NotificationChannel.EMAIL, EMAIL), expiresAt: readAccessToken(opened.body.token).expiresAt });
+    contact: accessContactDigest(NotificationChannel.EMAIL, EMAIL), cpfDigest: accessCpfDigest(CPF), expiresAt: readAccessToken(opened.body.token).expiresAt });
   assert.equal(opened.body.token.includes(EMAIL), false);
   assert.equal((await f.confirm(challenge.id, { code: "123456", cpf: CPF })).status, 400, "a code is used once");
   assert.deepEqual(f.audits.map(({ action, entityType, entityId }) => [action, entityType, entityId]), [["REQUEST_ACCESS_GRANTED", "request", REQUEST_ID]]);
@@ -272,51 +300,73 @@ test("the code opens the request only with the CPF again: a code that asks no CP
 
 test("a wrong code and five failed attempts lock the challenge, even for the right CPF", async (t) => {
   const f = await fixture(t);
-  const challenge = trackingChallenge(f);
+  const challenge = accessChallenge(f);
   for (let attempt = 0; attempt < 5; attempt += 1) assert.equal((await f.confirm(challenge.id, { code: "000000", cpf: CPF })).status, 400);
   assert.equal((await f.confirm(challenge.id, { code: "123456", cpf: CPF })).status, 400);
   assert.equal((await f.confirm(randomUUID(), { code: "123456", cpf: CPF })).status, 400);
 });
 
-test("a token of one flow never opens the other, and an expired or forged access token is refused", async (t) => {
+test("an expired or forged access token is refused", async (t) => {
   const f = await fixture(t);
-  const tracking = createTrackingToken({ requestId: REQUEST_ID, municipalityId: MUNICIPALITY });
   const access = accessToken();
-  assert.equal(readTrackingToken(access), null);
-  assert.equal(readAccessToken(tracking), null);
-  const old = createAccessToken({ requestId: REQUEST_ID, municipalityId: MUNICIPALITY, channel: NotificationChannel.EMAIL, contact: "" }, Date.now() - (REQUEST_ACCESS_TOKEN_SECONDS + 1) * 1000);
-  for (const token of [tracking, old, `${access}x`, access.replace(/^./, "A"), "", undefined]) {
+  const old = createAccessToken({ requestId: REQUEST_ID, municipalityId: MUNICIPALITY, channel: NotificationChannel.EMAIL, contact: "",
+    cpfDigest: accessCpfDigest(CPF) }, Date.now() - (REQUEST_ACCESS_TOKEN_SECONDS + 1) * 1000);
+  const sms = accessToken({ channel: NotificationChannel.SMS });
+  const legacy = accessToken({ cpfDigest: undefined });
+  for (const token of [old, sms, legacy, `${access}x`, access.replace(/^./, "A"), "", undefined]) {
     const response = await f.view(token);
     assert.deepEqual([response.status, response.body.error], [401, "Acesso expirado. Solicite um novo código."]);
   }
   assert.equal((await f.view(access)).status, 200);
-  assert.equal((await f.createPassword(tracking, "senha segura")).status, 401);
 });
 
-test("the request document view carries only what the document prints, and whether the CPF already has an account", async (t) => {
-  const f = await fixture(t);
+test("the view lists the requests of the CPF that share the contact of the code, the most recent first, with where each stands", async (t) => {
+  const rows = [
+    accessRow(), laterRow(),
+    accessRow({ id: randomUUID(), protocol: "000150/2026", tutor_email: "someone@example.com", created_at: new Date("2026-11-07T10:00:00Z") }),
+    accessRow({ id: randomUUID(), protocol: "000151/2026", cpf: OTHER_CPF }),
+    accessRow({ id: randomUUID(), protocol: "000152/2026", request_type: "DENUNCIA" }),
+    accessRow({ id: randomUUID(), protocol: "000153/2026", municipality_id: OTHER_MUNICIPALITY }),
+  ];
+  const f = await fixture(t, { rows });
   const response = await f.view(accessToken());
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(response.body.account, { exists: false });
-  const { request } = response.body;
-  assert.deepEqual([request.protocol, request.cpf, request.tutor_name, request.tutor_email, request.phone, request.origin], [PROTOCOL, CPF, "Tutor Example", EMAIL, PHONE, "PUBLICA"]);
-  assert.equal(request.signed_at, "2026-11-01T10:00:00.000Z");
-  assert.deepEqual(request.animals, [{ name: "Rex", species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida", breedDescription: "", coat: "", birthDate: "",
+  assert.deepEqual(response.body.requests.map(({ protocol }) => protocol), ["000140/2026", PROTOCOL]);
+  const [later, first] = response.body.requests;
+  assert.deepEqual([later.status, later.documents], ["AGENDADA", { total: 3, approved: 1, needsCorrection: 1, pending: 1 }]);
+  assert.deepEqual(first.documents, { total: 1, approved: 0, needsCorrection: 0, pending: 1 });
+  assert.equal(first.updated_at, "2026-11-02T10:00:00.000Z");
+  assert.deepEqual([first.cpf, first.tutor_name, first.tutor_email, first.phone, first.origin], [CPF, "Tutor Example", EMAIL, PHONE, "PUBLICA"]);
+  assert.equal(first.signed_at, "2026-11-01T10:00:00.000Z");
+  assert.deepEqual(first.animals, [{ name: "Rex", species: "Cão", sex: "Macho", size: "Pequeno", breedType: "Indefinida", breedDescription: "", coat: "", birthDate: "",
     age: "", weight: "", dewormed: "", vaccinated: "", illnessHistory: "", food: "", hasChip: "", microchip: "", requestTypeIds: ["castration"] }]);
-  assert.deepEqual(request.workflow_data, { scheduleSlotTime: "09:00", requestTypeIds: ["castration"], requestTypeNames: ["Castração"] });
-  assert.doesNotMatch(JSON.stringify(response.body), /PRIVATE|followUp|animal-1|history|documents|notes/);
+  assert.deepEqual(first.workflow_data, { scheduleSlotTime: "09:00", requestTypeIds: ["castration"], requestTypeNames: ["Castração"] });
+  assert.doesNotMatch(JSON.stringify(response.body), /PRIVATE|followUp|animal-1|history|notes|dataUrl|someone@/);
 });
 
-test("the view says when the CPF already has an account, or the request already has its tutor", async (t) => {
+test("the view says when the CPF already has an account, or the request of the code already has its tutor", async (t) => {
   const f = await fixture(t, { rows: [accessRow(), accessRow({ id: "55555555-5555-4555-8555-555555555555", protocol: "000127/2026", cpf: OTHER_CPF, tutor_id: randomUUID() })],
     profiles: [{ user_id: randomUUID(), municipality_id: MUNICIPALITY, cpf: CPF }] });
   assert.deepEqual((await f.view(accessToken())).body.account, { exists: true });
-  assert.deepEqual((await f.view(accessToken({ requestId: "55555555-5555-4555-8555-555555555555" }))).body.account, { exists: true });
+  assert.deepEqual((await f.view(accessToken({ requestId: "55555555-5555-4555-8555-555555555555", cpfDigest: accessCpfDigest(OTHER_CPF) }))).body.account, { exists: true });
 });
 
-test("the password creates the tutor's account from the request, confirms only the contact of the code, links the request and its animals and signs in", async (t) => {
-  const f = await fixture(t);
+test("the latest 20 matching requests are returned even when more recent requests have a different contact", async (t) => {
+  const rows = [accessRow(), ...Array.from({ length: 72 }, (_, index) => accessRow({
+    id: randomUUID(), protocol: String(index), created_at: new Date(Date.UTC(2026, 10, index + 3)),
+    tutor_email: index < 21 ? EMAIL : "other@example.com",
+  }))];
+  const f = await fixture(t, { rows });
+  const response = await f.view(accessToken());
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body.requests.map(({ protocol }) => protocol), Array.from({ length: 20 }, (_, index) => String(20 - index)));
+});
+
+test("the password creates the account from the request of the code, confirms only its contact, links the requests shown and signs in", async (t) => {
+  const otherContact = accessRow({ id: randomUUID(), protocol: "000150/2026", tutor_email: "someone@example.com" });
+  const f = await fixture(t, { rows: [accessRow(), laterRow(), otherContact] });
   assert.equal((await f.createPassword(accessToken(), "curta")).status, 400);
   assert.equal(f.users.size, 0);
   const response = await f.createPassword(accessToken(), "senha do tutor");
@@ -331,20 +381,29 @@ test("the password creates the tutor's account from the request, confirms only t
   const [profile] = f.profiles;
   assert.deepEqual([profile.cpf, profile.email, profile.phone, profile.emailVerified, profile.phoneVerified], [CPF, EMAIL, PHONE, true, false]);
   assert.deepEqual([profile.address, profile.neighborhood, profile.city, profile.state, profile.cep], ["Rua A, 1", "Centro", "Test Town", "SC", "88000000"]);
-  assert.equal(f.requests.get(REQUEST_ID).tutor_id, user.id);
-  assert.deepEqual(f.animalLinks.map((values) => values.slice(0, 3)), [[user.id, REQUEST_ID, MUNICIPALITY]]);
+  assert.deepEqual([f.requests.get(REQUEST_ID).tutor_id, f.requests.get(LATER_ID).tutor_id, otherContact.tutor_id], [user.id, user.id, null]);
+  assert.deepEqual(f.animalLinks.map((values) => values.slice(0, 3)), [[user.id, LATER_ID, MUNICIPALITY], [user.id, REQUEST_ID, MUNICIPALITY]]);
   assert.deepEqual(f.audits.at(-1), { action: "TUTOR_ACCOUNT_CREATED", entityType: "user", entityId: user.id,
-    changes: { requestId: REQUEST_ID, confirmedChannel: NotificationChannel.EMAIL, linkedAnimals: 1 } });
+    changes: { requestId: REQUEST_ID, linkedRequests: [LATER_ID, REQUEST_ID], confirmedChannel: NotificationChannel.EMAIL, linkedAnimals: 2 } });
   assert.doesNotMatch(JSON.stringify(f.audits), /senha|citizen@|52998224725/);
   const again = await f.createPassword(accessToken(), "outra senha");
   assert.deepEqual([again.status, again.body.error], [409, "Este CPF já tem acesso. Entre com seu CPF e sua senha."]);
   assert.equal(f.users.size, 1);
 });
 
-test("a contact changed after the code is not confirmed", async (t) => {
-  const f = await fixture(t, { rows: [accessRow({ tutor_email: "new@example.com" })] });
-  assert.equal((await f.createPassword(accessToken(), "senha do tutor")).status, 201);
-  assert.deepEqual([f.profiles[0].email, f.profiles[0].emailVerified, f.profiles[0].phoneVerified], ["new@example.com", false, false]);
+test("a changed contact or CPF invalidates the pending code and blocks an open access token", async (t) => {
+  const f = await fixture(t);
+  const request = f.requests.get(REQUEST_ID);
+  const token = accessToken();
+  for (const change of [{ tutor_email: "new@example.com" }, { cpf: OTHER_CPF }]) {
+    const challenge = accessChallenge(f);
+    Object.assign(request, { tutor_email: EMAIL, cpf: CPF }, change);
+    assert.equal((await f.confirm(challenge.id, { code: "123456", cpf: request.cpf })).status, 400);
+    assert.equal((await f.view(token)).status, 404);
+    assert.equal((await f.createPassword(token, "senha do tutor")).status, 404);
+  }
+  assert.equal(f.users.size, 0);
+  assert.equal(request.tutor_id, null);
 });
 
 test("a code sent to the phone confirms only the phone", async (t) => {
@@ -367,13 +426,16 @@ test("a request that already has its tutor is never taken over by a new account"
   assert.equal(f.users.size, 0);
 });
 
-test("the whole first access: code by e-mail, CPF and code, the document, then the password", async (t) => {
+test("the whole first access: code by SMS, CPF and code, the requests, then the password", async (t) => {
   const f = await fixture(t);
-  const started = await f.start(START);
+  const started = await f.start({ ...START, channel: NotificationChannel.SMS });
   await f.flush();
+  assert.deepEqual([f.deliveries[0].channel, f.deliveries[0].phone], [NotificationChannel.SMS, PHONE]);
   const confirmed = await f.confirm(started.body.challengeId, { code: f.deliveries[0].code, cpf: START.cpf });
   assert.equal(confirmed.status, 200);
-  assert.equal((await f.view(confirmed.body.token)).body.account.exists, false);
+  const opened = await f.view(confirmed.body.token);
+  assert.deepEqual([opened.body.requests.map(({ protocol }) => protocol), opened.body.account.exists], [[PROTOCOL], false]);
   assert.equal((await f.createPassword(confirmed.body.token, "senha do tutor")).status, 201);
+  assert.deepEqual([f.profiles[0].emailVerified, f.profiles[0].phoneVerified], [false, true]);
   assert.equal((await f.view(confirmed.body.token)).body.account.exists, true);
 });

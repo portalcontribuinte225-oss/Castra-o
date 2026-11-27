@@ -204,7 +204,6 @@ import { SmsSettings } from "./features/sms/sms-settings";
 import { EmailIntegrationTab } from "./features/email/email-integration-tab";
 import { IntegrationConfigItem } from "../shared/config-permission-contract.js";
 import { canUseIntegration, integrationTabItems } from "./features/integrations/integration-access";
-import { RequestTracking } from "./features/request-tracking/request-tracking";
 import { RequestAccess } from "./features/request-access/request-access";
 import { PublicReportPanel } from "./features/complaint/public-report-panel";
 import { registrationContactIssues } from "./features/tutor-access/registration-contact-fields";
@@ -1283,12 +1282,13 @@ function canManagePublicAnimalFlows(role = "") {
   ].includes(normalizeText(role));
 }
 
-// Opened by the link of the notice "Solicitação registrada" or by "Criar minha senha" on the last screen of a request.
+// "Acompanhar solicitação": opened by its button, by the link of the notice "Solicitação registrada" and by "Criar minha senha" on
+// the last screen of a request.
 const REQUEST_ACCESS_SERVICE = "request_access";
 
 const publicHomeServices = [
   { id: "procedure_form", label: "Solicitar procedimento", icon: ClipboardCheck },
-  { id: "tracking", label: "Acompanhar solicitação", icon: Search },
+  { id: REQUEST_ACCESS_SERVICE, label: "Acompanhar solicitação", icon: Search },
   { id: "credential", label: "Credenciamento", icon: Shield },
   { id: "report", label: "Denunciar", icon: AlertCircle, danger: true },
 ];
@@ -1666,8 +1666,8 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
   const [authEntry, setAuthEntry] = useState<AuthEntryContext | null>(null);
   const [authEntryError, setAuthEntryError] = useState("");
   const [activePublicService, setActivePublicService] = useState<string | null>(accessLink ? REQUEST_ACCESS_SERVICE : null);
-  // What "Acessar minha solicitação" opens with: the protocol of the link, or the protocol and the CPF of the request just sent.
-  const [accessPrefill, setAccessPrefill] = useState<{ protocol: string; cpf: string } | null>(accessLink ? { protocol: accessLink.protocol, cpf: "" } : null);
+  // What "Acompanhar solicitação" opens with: the CPF of the request just sent.
+  const [accessPrefill, setAccessPrefill] = useState<{ cpf: string } | null>(null);
   const [procedurePrefill, setProcedurePrefill] = useState<AnyRecord | null>(null);
   const [publicServiceDone, setPublicServiceDone] = useState<AnyRecord | null>(null);
   const [publicServiceScheduleDays, setPublicServiceScheduleDays] = useState(scheduleDays);
@@ -1758,7 +1758,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
     scrollPublicPageToTop();
   }
 
-  function openRequestAccess(prefill: { protocol: string; cpf: string }) {
+  function openRequestAccess(prefill: { cpf: string }) {
     setAccessPrefill(prefill);
     setPublicServiceDone(null);
     setActivePublicService(REQUEST_ACCESS_SERVICE);
@@ -1852,7 +1852,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
           <section className={`public-service-panel${publicServiceDone ? " public-service-panel--success" : ""}`}>
             {(!procedureService || !selectedMunicipalityId || !neighborhoodCatalog.ready) && (
               <div className="public-service-panel-header">
-                <h2>{activePublicService === REQUEST_ACCESS_SERVICE ? "Acessar minha solicitação" : activePublicServiceDetails?.label || "Serviço"}</h2>
+                <h2>{activePublicServiceDetails?.label || "Serviço"}</h2>
                 {!publicServiceDone && <Button variant="outline" className="tw:shrink-0" onClick={closePublicService}>Voltar ao início</Button>}
               </div>
             )}
@@ -1865,7 +1865,7 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
                 closeLabel="Voltar ao início"
                 onClose={closePublicService}
                 onCreatePassword={publicServiceDone.cpf && isProcedureRequest(publicServiceDone.request_type)
-                  ? () => openRequestAccess({ protocol: publicServiceDone.protocol, cpf: onlyDigits(String(publicServiceDone.cpf)) }) : undefined}
+                  ? () => openRequestAccess({ cpf: onlyDigits(String(publicServiceDone.cpf)) }) : undefined}
               />
             ) : (procedureService || activePublicService === "report") && !selectedMunicipalityId ? (
               <p role="status">Selecione o município na página para continuar.</p>
@@ -1904,13 +1904,10 @@ function LoginView({ onLogin, accessLink = null, onProcedureIntent, onAccessRequ
               />
             ) : activePublicService === "credential" ? (
               <PublicAccessRequestForm onSubmit={onAccessRequest} municipalityId={selectedMunicipalityId} neighborhoods={neighborhoodCatalog.items} />
-            ) : activePublicService === "tracking" ? (
-              <RequestTracking key={selectedMunicipalityId} municipalityId={selectedMunicipalityId} />
             ) : activePublicService === REQUEST_ACCESS_SERVICE ? (
               <RequestAccess
-                key={`${selectedMunicipalityId}:${accessPrefill?.protocol || ""}`}
+                key={`${selectedMunicipalityId}:${accessPrefill?.cpf || ""}`}
                 municipalityId={selectedMunicipalityId}
-                initialProtocol={accessPrefill?.protocol}
                 initialCpf={accessPrefill?.cpf}
                 createRequirement={(request) => createRequestDocumentDataUrl(request, activeMunicipality)}
                 onSession={onLogin}

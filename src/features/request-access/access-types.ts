@@ -1,14 +1,23 @@
-import { ContactKind } from "../../../shared/auth-contract.js";
+import { NotificationChannel } from "../../../shared/notification-contract.js";
 
-export type AccessChannel = typeof ContactKind[keyof typeof ContactKind];
+export type AccessChannel = typeof NotificationChannel[keyof typeof NotificationChannel];
 
-// What the request document needs of the tutor's own request, as the server projects it.
+// How many documents of the request were approved, need correction or are still under review.
+export interface AccessDocumentsSummary {
+  total: number;
+  approved: number;
+  needsCorrection: number;
+  pending: number;
+}
+
+// What the page shows of each of the tutor's own requests and what its request document needs, as the server projects it.
 export interface AccessedRequest {
   protocol: string;
   request_type: string;
   status: string;
   origin: string;
   created_at: string | null;
+  updated_at: string | null;
   signed_at: string | null;
   schedule_date: string;
   schedule_location_name: string;
@@ -29,10 +38,11 @@ export interface AccessedRequest {
   state: string;
   animals: Array<Record<string, unknown>>;
   workflow_data: Record<string, unknown>;
+  documents: AccessDocumentsSummary;
 }
 
 export interface AccessView {
-  request: AccessedRequest;
+  requests: AccessedRequest[];
   account: { exists: boolean };
 }
 
@@ -43,7 +53,6 @@ export interface AccessSession {
 
 export interface AccessStartBody {
   municipalityId: string;
-  protocol: string;
   cpf: string;
   channel: AccessChannel;
 }

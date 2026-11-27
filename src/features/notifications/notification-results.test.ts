@@ -31,16 +31,16 @@ describe("notification action notices", () => {
     expect(getNotificationNotice([{ event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SKIPPED }])?.type).toBe("warning");
     const notice = getNotificationNotice([
       { event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT },
-      { event: NotificationEvent.DOCUMENTS_APPROVED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED },
+      { event: NotificationEvent.COMPLETED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED },
     ]);
     expect(notice?.type).toBe("warning");
     expect(notice?.message).toContain("alguns avisos");
   });
 
-  it("preserves document-notification failure when the following agenda update sends successfully", () => {
-    const documentResults = [{ event: NotificationEvent.DOCUMENTS_REJECTED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED }];
+  it("preserves an earlier notice failure when the following agenda update sends successfully", () => {
+    const earlierResults = [{ event: NotificationEvent.REQUEST_REJECTED, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED }];
     const agendaResults = [{ event, channel: NotificationChannel.WHATSAPP, status: DeliveryStatus.SENT }];
-    const notice = getNotificationNotice(agendaResults, documentResults);
+    const notice = getNotificationNotice(agendaResults, earlierResults);
     expect(notice?.type).toBe("warning");
     expect(notice?.message).toContain("alguns avisos");
   });

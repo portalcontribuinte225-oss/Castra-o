@@ -7,7 +7,7 @@ import { buildNotificationMessage, registeredNoticeText } from "../src/services/
 import { loadAccessLink, notifyRequestRegistered } from "../src/services/notify-request-registered.js";
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
-const URL = "https://castracao.example.com/?m=test-town&acessar=000123/2026";
+const URL = "https://castracao.example.com/?m=test-town&acessar";
 const EVENT = NotificationEvent.REQUEST_REGISTERED;
 
 function registeredRequest(overrides = {}) {
@@ -18,18 +18,17 @@ function registeredRequest(overrides = {}) {
   };
 }
 
-test("the access link is the public address with the municipality and the protocol, and a bad one opens the page empty", () => {
-  assert.equal(buildAccessPath({ slug: "test-town", protocol: "123/2026" }), "/?m=test-town&acessar=000123/2026");
-  assert.equal(buildAccessUrl({ publicUrl: "https://castracao.example.com", slug: "test-town", protocol: "000123/2026" }), URL);
-  assert.equal(buildAccessUrl({ publicUrl: "https://castracao.example.com/painel/", slug: "test-town", protocol: "000123/2026" }), URL, "only the origin is used");
+test("the access link is the public address with the municipality, never the protocol, and an old or bad one still opens the page", () => {
+  assert.equal(buildAccessPath({ slug: "test-town" }), "/?m=test-town&acessar");
+  assert.equal(buildAccessUrl({ publicUrl: "https://castracao.example.com", slug: "test-town" }), URL);
+  assert.equal(buildAccessUrl({ publicUrl: "https://castracao.example.com/painel/", slug: "test-town" }), URL, "only the origin is used");
   for (const publicUrl of ["", undefined, "castracao.example.com", "javascript:alert(1)", "ftp://castracao.example.com"]) {
-    assert.equal(buildAccessUrl({ publicUrl, slug: "test-town", protocol: "000123/2026" }), "", String(publicUrl));
+    assert.equal(buildAccessUrl({ publicUrl, slug: "test-town" }), "", String(publicUrl));
   }
-  for (const slug of ["", "Test Town", "../x", "a".repeat(81), undefined]) assert.equal(buildAccessPath({ slug, protocol: "000123/2026" }), "", String(slug));
-  assert.equal(buildAccessPath({ slug: "test-town", protocol: "abc" }), "");
-  assert.deepEqual(readAccessLink("?m=test-town&acessar=000123/2026"), { slug: "test-town", protocol: "000123/2026" });
-  assert.deepEqual(readAccessLink("?m=test-town&acessar=000123%2F2026"), { slug: "test-town", protocol: "000123/2026" });
-  assert.deepEqual(readAccessLink("?m=Bad Slug&acessar=xyz"), { slug: "", protocol: "" });
+  for (const slug of ["", "Test Town", "../x", "a".repeat(81), undefined]) assert.equal(buildAccessPath({ slug }), "", String(slug));
+  assert.deepEqual(readAccessLink("?m=test-town&acessar"), { slug: "test-town" });
+  assert.deepEqual(readAccessLink("?m=test-town&acessar=000123/2026"), { slug: "test-town" }, "a link sent with the protocol still opens the page");
+  assert.deepEqual(readAccessLink("?m=Bad Slug&acessar=xyz"), { slug: "" });
   assert.equal(readAccessLink("?m=test-town"), null);
   assert.equal(readAccessLink(""), null);
   assert.equal(readAccessLink(undefined), null);

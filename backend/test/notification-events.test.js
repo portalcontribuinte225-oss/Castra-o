@@ -42,37 +42,18 @@ test("real schedule changes include date, time and place, but not assignment or 
 const attachment = (attachmentId, documentId = "identity", fields = {}) => ({ attachmentId, documentId, status: "attached", ...fields });
 const decision = (document, status) => ({ ...document, status, review: { decision: status } });
 
-test("a mixed review emits only one notice for each new result, even with repeated document types", () => {
+test("reviewing documents notifies nobody, whatever the decisions", () => {
   const documents = [attachment("identity-a"), attachment("identity-b"), attachment("address", "address"), attachment("other", "other")];
   const reviewed = documents.map((document, index) => decision(document, index < 2 ? "approved" : "rejected"));
-  assert.deepEqual(selectNotificationEvents({ documents }, { documents: reviewed }), [NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.DOCUMENTS_REJECTED]);
-  assert.deepEqual(selectNotificationEvents({ documents: reviewed }, { documents: reviewed.toReversed() }), []);
+  assert.deepEqual(selectNotificationEvents({ documents }, { documents: reviewed }), []);
+  assert.deepEqual(selectNotificationEvents({ documents: reviewed }, { documents: reviewed.map((document) => decision(document, "approved")) }), []);
 });
 
-test("deciding one attachment does not send notices about existing decisions on other attachments", () => {
-  const approved = decision(attachment("previous-approval"), "approved");
-  const rejected = decision(attachment("previous-rejection"), "rejected");
-  const pending = attachment("pending");
-  const before = { documents: [approved, pending, rejected] };
-  assert.deepEqual(selectNotificationEvents(before, { documents: [rejected, decision(pending, "approved"), approved] }), [NotificationEvent.DOCUMENTS_APPROVED]);
-  assert.deepEqual(selectNotificationEvents(before, { documents: [approved, decision(pending, "rejected"), rejected] }), [NotificationEvent.DOCUMENTS_REJECTED]);
-});
-
-test("uploads, statuses without a recorded decision, evidence and photos send no document notice", () => {
-  const pending = attachment("old-file");
-  const ignored = [attachment("evidence", "another-type", { internalEvidence: true }), attachment("animal-photo", "animal_photo"),
-    attachment("complaint-photo", "complaint_photo_1"), attachment("system", "requerimento-pedido")];
-  assert.deepEqual(selectNotificationEvents({ documents: [pending, ...ignored] }, { documents: [
-    { ...pending, status: "approved" }, decision(attachment("another-file"), "approved"),
-    ...ignored.map((document) => decision(document, "rejected")),
-  ] }), []);
-});
-
-test("a review and an attendance transition remain distinct events", () => {
+test("a review together with an attendance transition sends only the attendance notice", () => {
   const document = decision(attachment("same-file"), "rejected");
   assert.deepEqual(selectNotificationEvents({ status: "AGENDADA", documents: [document] }, {
     status: "REALIZADA", documents: [decision(document, "approved")],
-  }), [NotificationEvent.DOCUMENTS_APPROVED, NotificationEvent.COMPLETED]);
+  }), [NotificationEvent.COMPLETED]);
 });
 
 test("malformed document entries do not suppress an agenda event", () => {

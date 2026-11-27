@@ -1,3 +1,7 @@
+import { isComplaintPhotoId } from "../../../../shared/complaint-photo-contract.js";
+import { DocumentReviewStatus } from "../../../../shared/document-reuse-contract.js";
+import { isExcludedDocument } from "../documents/document-policy.js";
+
 const toIso = (value) => {
   if (!value) return null;
   const date = new Date(value);
@@ -27,8 +31,17 @@ function workflowView(workflow) {
   };
 }
 
-// Allow-list projection: only what the request document prints about the tutor's own request. No history, notes, documents,
-// assignment, internal data or other requests ever leave through this view.
+// How many documents of the request were approved, need correction or are still under review: never their names, files or reasons.
+function documentsSummary(value) {
+  const documents = (Array.isArray(value) ? value : []).filter((document) => !isExcludedDocument(document) && !isComplaintPhotoId(document.documentId));
+  const count = (status) => documents.filter((document) => document.status === status).length;
+  const approved = count(DocumentReviewStatus.APPROVED);
+  const needsCorrection = count(DocumentReviewStatus.REJECTED);
+  return { total: documents.length, approved, needsCorrection, pending: documents.length - approved - needsCorrection };
+}
+
+// Allow-list projection: what the request document prints about the tutor's own request, when it was last updated and how many of
+// its documents were reviewed. No history, notes, document files, assignment or internal data ever leave through this view.
 export function buildAccessView(row) {
   return {
     protocol: row.protocol,
@@ -36,6 +49,8 @@ export function buildAccessView(row) {
     status: row.status,
     origin: row.origin,
     created_at: toIso(row.created_at),
+    updated_at: toIso(row.updated_at),
+    documents: documentsSummary(row.documents),
     signed_at: toIso(row.signed_at),
     schedule_date: row.schedule_date ? String(row.schedule_date) : "",
     schedule_location_name: text(row.schedule_location_name),

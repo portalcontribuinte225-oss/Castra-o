@@ -21,7 +21,6 @@ import smsRoutes from "./routes/sms.js";
 import emailRoutes from "./routes/email.js";
 import messageQuotaRoutes from "./routes/message-quota.js";
 import municipalityImageRoutes from "./routes/municipality-images.js";
-import requestTrackingRoutes from "./routes/request-tracking.js";
 import requestAccessRoutes from "./routes/request-access.js";
 import { createAdoptionShareRouter } from "./routes/adoption-share.js";
 
@@ -51,7 +50,6 @@ app.use("/api/sms", smsRoutes);
 app.use("/api/email", emailRoutes);
 app.use("/api/message-quota", messageQuotaRoutes);
 app.use("/api/public/municipalities", municipalityImageRoutes);
-app.use("/api/request-tracking", requestTrackingRoutes);
 app.use("/api/request-access", requestAccessRoutes);
 app.use(createAdoptionShareRouter({ indexHtmlPath: path.join(distPath, "index.html") }));
 

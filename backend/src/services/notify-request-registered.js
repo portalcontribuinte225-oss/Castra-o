@@ -6,12 +6,12 @@ import { dispatchNotification } from "./notifications/dispatch-notification.js";
 import { readPublicUrl } from "./public-url.js";
 import { recordNotificationResults } from "./request-change-notifications.js";
 
-// The link to "Acessar minha solicitação" exists only when the request has a tutor (a CPF) and the system has its public
-// address. It also says whether that tutor still has to create the password.
+// The link to "Acompanhar solicitação" exists only when the request has a tutor (a CPF) and the system has its public address. It
+// also says whether that tutor still has to create the password.
 export async function loadAccessLink(request, database = pool, env = process.env) {
   if (!request.cpf) return null;
   const municipality = await database.query("SELECT slug FROM municipalities WHERE id = $1", [request.municipality_id]);
-  const url = buildAccessUrl({ publicUrl: readPublicUrl(env).url, slug: municipality.rows[0]?.slug, protocol: request.protocol });
+  const url = buildAccessUrl({ publicUrl: readPublicUrl(env).url, slug: municipality.rows[0]?.slug });
   if (!url) return null;
   return { url, accountExists: Boolean(request.tutor_id) || await tutorAccountExists(request.municipality_id, request.cpf, database) };
 }

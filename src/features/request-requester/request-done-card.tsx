@@ -11,7 +11,7 @@ interface RequestDoneCardProps {
   createRequirement: () => Promise<string>;
   closeLabel: string;
   onClose: () => void;
-  // Only where the tutor has no password yet (the public form with a tutor): opens "Acessar minha solicitação".
+  // Only where the tutor has no password yet (the public form with a tutor): opens "Acompanhar solicitação".
   onCreatePassword?: () => void;
 }
 

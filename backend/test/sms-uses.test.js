@@ -26,11 +26,11 @@ function fixture(t, { integrated = true } = {}) {
   return { database: smsSettingsDatabase() };
 }
 
-test("there are thirteen uses: nine notices and four access messages, without the initial password or e-mail confirmation", () => {
-  assert.equal(smsUses.length, 13);
-  assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.NOTICE).length, 9);
+test("there are eleven uses: seven notices and four access messages, without the initial password or e-mail confirmation", () => {
+  assert.equal(smsUses.length, 11);
+  assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.NOTICE).length, 7);
   assert.equal(smsUses.filter(({ kind }) => kind === SmsUseKind.ACCESS).length, 4);
-  assert.equal(new Set(smsUses.map(({ key }) => key)).size, 13);
+  assert.equal(new Set(smsUses.map(({ key }) => key)).size, 11);
   for (const event of Object.values(NotificationEvent)) assert.equal(getSmsUse(event)?.kind, SmsUseKind.NOTICE, event);
   for (const purpose of [RESET, AuthPurpose.VERIFY_PHONE, AuthPurpose.REQUEST_TRACKING, AuthPurpose.CONTACT_CHANGED]) assert.equal(getSmsUse(purpose)?.kind, SmsUseKind.ACCESS, purpose);
   for (const purpose of ["initial_password", AuthPurpose.VERIFY_EMAIL, "unknown", undefined]) assert.equal(getSmsUse(purpose), null, String(purpose));
