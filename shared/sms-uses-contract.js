@@ -13,6 +13,7 @@ function smsUse(key, kind, label, defaultActive = false) {
 export const smsUses = Object.freeze([
   smsUse(NotificationEvent.REQUEST_REGISTERED, SmsUseKind.NOTICE, "Solicitação registrada"),
   smsUse(NotificationEvent.SCHEDULE_CONFIRMED, SmsUseKind.NOTICE, "Agendamento confirmado"),
+  smsUse(NotificationEvent.SCHEDULE_REMINDER, SmsUseKind.NOTICE, "Lembrete de procedimento"),
   smsUse(NotificationEvent.SCHEDULE_CHANGED, SmsUseKind.NOTICE, "Agendamento alterado"),
   smsUse(NotificationEvent.SCHEDULE_CANCELLED, SmsUseKind.NOTICE, "Agendamento cancelado"),
   smsUse(NotificationEvent.NO_SHOW, SmsUseKind.NOTICE, "Não comparecimento"),

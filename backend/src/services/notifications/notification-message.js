@@ -3,6 +3,7 @@ import { NotificationEvent, rejectionReasonText } from "../../../../shared/notif
 export const notificationEventLabels = Object.freeze({
   [NotificationEvent.REQUEST_REGISTERED]: "Solicitação registrada",
   [NotificationEvent.SCHEDULE_CONFIRMED]: "Agendamento confirmado",
+  [NotificationEvent.SCHEDULE_REMINDER]: "Lembrete de procedimento",
   [NotificationEvent.SCHEDULE_CHANGED]: "Agendamento alterado",
   [NotificationEvent.SCHEDULE_CANCELLED]: "Agendamento cancelado",
   [NotificationEvent.NO_SHOW]: "Não comparecimento",
@@ -35,7 +36,7 @@ export function buildNotificationMessage(event, request) {
   const date = formatScheduleDate(request.schedule_date || "");
   const time = workflow.scheduleSlotTime || workflow.scheduleTime || "";
   const location = [request.schedule_location_name, request.schedule_address].filter(Boolean).join(" — ");
-  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.SCHEDULE_CANCELLED, NotificationEvent.NO_SHOW].includes(event);
+  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_REMINDER, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.SCHEDULE_CANCELLED, NotificationEvent.NO_SHOW].includes(event);
   const reason = rejectionReasonText(workflow);
   const isRejection = event === NotificationEvent.REQUEST_REJECTED;
   const procedureRejection = isRejection && request.procedure_name;

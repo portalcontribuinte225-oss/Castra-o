@@ -90,6 +90,21 @@ test("a notice goes out by every channel the municipality uses, each on its own,
   assert.deepEqual(f.calls.find(([kind]) => kind === "template"), ["template", "municipality-a", SCHEDULE_CONFIRMED]);
 });
 
+test("the reminder uses the existing Meta template order and sends tomorrow's visit details to all three channels", async () => {
+  const f = fixture();
+  const event = NotificationEvent.SCHEDULE_REMINDER;
+  f.active[event] = "lembrete_agendamento_procedimento";
+  const results = await dispatchNotification({ event, request: f.request }, f.dependencies);
+  assert.deepEqual(results, Object.values(NotificationChannel).map((channel) => sent(event, channel)));
+  const [, settings, , components] = f.calls.find(([name]) => name === "whatsapp");
+  assert.equal(settings.templateName, "lembrete_agendamento_procedimento");
+  assert.deepEqual(texts(components), ["Maria", "123/2026", "20/11/2026", "09:00", "Unidade Municipal"]);
+  const [, email] = f.calls.find(([name]) => name === "email");
+  assert.match(buildEmailNotice(event, email.request).message, /amanhã, 20\/11\/2026, às 09:00/);
+  const [, sms] = f.calls.find(([name]) => name === "sms");
+  assert.match(buildSmsText(sms.use, sms.data), /amanhã \(20\/11\/2026\), às 09:00/);
+});
+
 test("a pending e-mail does not delay WhatsApp or SMS", async () => {
   const f = fixture();
   let releaseEmail;

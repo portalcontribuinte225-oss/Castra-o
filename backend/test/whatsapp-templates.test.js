@@ -73,6 +73,8 @@ test("template names follow castracao_<part> with an optional version suffix", (
 test("each agenda and completion notice is recognized with the number of variables it expects", () => {
   const cases = [
     [confirmation(), NotificationEvent.SCHEDULE_CONFIRMED],
+    [entry("lembrete_agendamento_procedimento"), NotificationEvent.SCHEDULE_REMINDER],
+    [entry("castracao_lembrete_agendamento_procedimento"), NotificationEvent.SCHEDULE_REMINDER],
     [entry("castracao_agendamento_alterado"), NotificationEvent.SCHEDULE_CHANGED],
     [cancellation(), NotificationEvent.SCHEDULE_CANCELLED],
     [entry("castracao_nao_comparecimento", { bodyVariables: 3 }), NotificationEvent.NO_SHOW],
@@ -81,6 +83,7 @@ test("each agenda and completion notice is recognized with the number of variabl
     [cancellation({ name: "castracao_agendamento_cancelado_v2" }), NotificationEvent.SCHEDULE_CANCELLED],
   ];
   for (const [template, event] of cases) assert.deepEqual(recognizeWhatsappTemplate(template), { uses: [event], reason: "" }, template.name);
+  assert.equal(isWhatsappTemplateUsable(entry("lembrete_agendamento_procedimento", { status: "PENDING" }), NotificationEvent.SCHEDULE_REMINDER), false);
 });
 
 test("a template serves only the message its name names: former names and document notices are not recognized", () => {

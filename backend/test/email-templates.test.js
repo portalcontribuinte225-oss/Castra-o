@@ -26,12 +26,12 @@ function configured(extra = {}) {
   } });
 }
 
-test("there are eleven uses, seven notices and four access messages; neither phone confirmation nor the initial password is one of them", () => {
-  assert.equal(emailUses.length, 11);
-  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 7);
+test("there are twelve uses, eight notices and four access messages; neither phone confirmation nor the initial password is one of them", () => {
+  assert.equal(emailUses.length, 12);
+  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 8);
   assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.ACCESS).length, 4);
   assert.equal(getEmailUse("initial_password"), null);
-  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 11);
+  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 12);
   for (const event of Object.values(NotificationEvent)) assert.ok(getEmailUse(event), event);
   assert.equal(getEmailUse(AuthPurpose.VERIFY_PHONE), null);
   assert.deepEqual(emailUses.filter(({ defaultActive }) => defaultActive).map(({ key }) => key), [RESET]);
@@ -43,11 +43,13 @@ test("every use carries the recipient and the municipality identity, and only ag
       assert.ok(use.variables.includes(name), `${use.key} must carry ${name}`);
     }
   }
-  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.SCHEDULE_CANCELLED, NotificationEvent.NO_SHOW];
+  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_REMINDER, NotificationEvent.SCHEDULE_CHANGED,
+    NotificationEvent.SCHEDULE_CANCELLED, NotificationEvent.NO_SHOW];
   for (const use of emailUses) assert.equal(use.variables.includes("schedule_date"), schedule.includes(use.key), use.key);
   assert.equal(emailUses.some(({ variables }) => variables.includes("documents_result")), false);
   assert.ok(getEmailUse(AuthPurpose.CONTACT_CHANGED).variables.includes("changed_fields"));
-  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 7), ["Solicitação registrada", "Agendamento confirmado", "Agendamento alterado", "Agendamento cancelado", "Não comparecimento", "Atendimento concluído", "Solicitação indeferida"]);
+  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 8), ["Solicitação registrada", "Agendamento confirmado",
+    "Lembrete de procedimento", "Agendamento alterado", "Agendamento cancelado", "Não comparecimento", "Atendimento concluído", "Solicitação indeferida"]);
   assert.ok(getEmailUse(RESET).variables.includes("codigo_recuperacao"));
   assert.equal(emailUses.some(({ variables }) => variables.includes("temporary_password")), false);
 });

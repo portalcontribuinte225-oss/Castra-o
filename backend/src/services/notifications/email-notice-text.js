@@ -13,6 +13,7 @@ function visit(request) {
 const texts = Object.freeze({
   [NotificationEvent.REQUEST_REGISTERED]: (request) => registeredNoticeText(request),
   [NotificationEvent.SCHEDULE_CONFIRMED]: (request, protocol) => `Seu agendamento foi confirmado! Esperamos você no dia ${visit(request)}. Protocolo: ${protocol}.`,
+  [NotificationEvent.SCHEDULE_REMINDER]: (request, protocol) => `O procedimento do seu animal está agendado para amanhã, ${visit(request)}. Siga as orientações da equipe responsável. Protocolo: ${protocol}.`,
   [NotificationEvent.SCHEDULE_CHANGED]: (request, protocol) => `Seu atendimento foi reagendado para o dia ${visit(request)}. Protocolo: ${protocol}.`,
   [NotificationEvent.SCHEDULE_CANCELLED]: (request, protocol) => `O agendamento do dia ${visit(request)} foi cancelado. Protocolo ${protocol}.`,
   [NotificationEvent.NO_SHOW]: (request, protocol) => `Identificamos que você não compareceu ao atendimento agendado para o dia ${formatScheduleDate(request.schedule_date || "")}. Para mais informações, entre em contato com nossa equipe. Protocolo: ${protocol}.`,

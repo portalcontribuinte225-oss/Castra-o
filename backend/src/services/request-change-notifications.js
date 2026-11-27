@@ -41,7 +41,7 @@ function procedureEvents(events, { action, procedure, previousSchedule }) {
   return otherEvents;
 }
 
-function requestForProcedure(request, event, { procedure, animal, previousSchedule }) {
+export function requestForProcedure(request, event, { procedure, animal, previousSchedule }) {
   const schedule = event === NotificationEvent.SCHEDULE_CANCELLED ? previousSchedule : procedure.schedule;
   const workflow = { ...request.workflow_data, scheduleSlotTime: schedule?.slotTime || "", scheduleTime: schedule?.slotTime || "" };
   if (event === NotificationEvent.REQUEST_REJECTED) workflow.rejectionReason = procedure.rejection?.reason || "";

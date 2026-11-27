@@ -31,7 +31,7 @@ test("the sender accepts only a clean text within the longest length", () => {
 });
 
 test("every use has a fixed text within the longest length that starts with the municipality", () => {
-  assert.equal(smsUses.length, 11);
+  assert.equal(smsUses.length, 12);
   for (const { key } of smsUses) {
     const text = buildSmsText(key, full);
     assert.equal(isSmsText(text), true, key);

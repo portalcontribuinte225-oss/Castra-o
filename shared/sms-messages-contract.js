@@ -41,6 +41,7 @@ const clip = (value, max) => toSmsText(value).slice(0, max).trim();
 const templates = Object.freeze({
   [NotificationEvent.REQUEST_REGISTERED]: (d) => `${d.town}: solicitação registrada! Protocolo: ${d.protocol}. Aguardando aprovação!`,
   [NotificationEvent.SCHEDULE_CONFIRMED]: (d) => `${d.town}: agendamento confirmado! Esperamos você em ${d.date}, às ${d.time}${d.place}. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.SCHEDULE_REMINDER]: (d) => `${d.town}: o procedimento do seu animal é amanhã (${d.date})${d.time ? `, às ${d.time}` : ""}${d.place}. Protocolo: ${d.protocol}.`,
   [NotificationEvent.SCHEDULE_CHANGED]: (d) => `${d.town}: seu atendimento foi reagendado para ${d.date}, às ${d.time}${d.place}. Protocolo: ${d.protocol}.`,
   [NotificationEvent.SCHEDULE_CANCELLED]: (d) => `${d.town}: o agendamento de ${d.date}${d.time ? `, às ${d.time},` : ""} foi cancelado. Protocolo: ${d.protocol}.`,
   [NotificationEvent.NO_SHOW]: (d) => `${d.town}: você não compareceu ao atendimento de ${d.date}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,

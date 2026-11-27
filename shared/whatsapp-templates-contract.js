@@ -48,6 +48,7 @@ const field = WhatsappTemplateField;
 const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.PROTOCOL];
 const scheduleOutcomeFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME];
 const codeVariables = ["Código de verificação"];
+const reminderTemplateName = "lembrete_agendamento_procedimento";
 
 function notice(key, label, namePart, fields) {
   return Object.freeze({
@@ -60,12 +61,13 @@ function access(key, label, namePart, layout, variables) {
   return Object.freeze({ key, kind: WhatsappUseKind.ACCESS, label, namePart, layout, variables: Object.freeze([...variables]) });
 }
 
-// A use is something a template can serve: a notice sent about a request or an access message. Each use has one template,
-// named `castracao_<namePart>`, and the titles and their order are the same in every channel. Notice keys are NotificationEvent
-// values and access keys are AuthPurpose values, so they never collide.
+// The titles and their order are the same in every channel. Notice keys are NotificationEvent values and access keys are
+// AuthPurpose values, so they never collide.
 export const whatsappUses = Object.freeze([
   notice(NotificationEvent.REQUEST_REGISTERED, "Solicitação registrada", "solicitacao_registrada", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
   notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "agendamento_confirmado", scheduleFields),
+  notice(NotificationEvent.SCHEDULE_REMINDER, "Lembrete de procedimento", reminderTemplateName,
+    [field.TUTOR_NAME, field.PROTOCOL, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME]),
   notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "agendamento_alterado", scheduleFields),
   notice(NotificationEvent.SCHEDULE_CANCELLED, "Agendamento cancelado", "agendamento_cancelado", scheduleOutcomeFields),
   notice(NotificationEvent.NO_SHOW, "Não comparecimento", "nao_comparecimento", scheduleOutcomeFields),
@@ -81,8 +83,9 @@ export function getWhatsappUse(key) {
   return whatsappUses.find((use) => use.key === key) || null;
 }
 
-// Returns the part of a `castracao_<part>[_v<n>]` name, or null when the name does not follow the convention.
+// Recognizes the municipality's existing reminder name and the convention for new templates.
 export function parseWhatsappTemplateName(name) {
+  if (name === reminderTemplateName) return name;
   if (typeof name !== "string" || !name.startsWith(WHATSAPP_TEMPLATE_PREFIX)) return null;
   const part = name.slice(WHATSAPP_TEMPLATE_PREFIX.length).replace(/_v\d+$/, "");
   return /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(part) ? part : null;

@@ -91,7 +91,7 @@ function smsNoticeData(event, request) {
   return {
     protocol: request.protocol,
     date: field(WhatsappTemplateField.SCHEDULE_DATE),
-    time: event === NotificationEvent.SCHEDULE_CANCELLED
+    time: event === NotificationEvent.SCHEDULE_CANCELLED || event === NotificationEvent.SCHEDULE_REMINDER
       ? workflow.scheduleSlotTime || workflow.scheduleTime || request.schedule_time : field(WhatsappTemplateField.SCHEDULE_TIME),
     location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
     ...rejection,

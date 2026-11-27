@@ -3,6 +3,7 @@ import { MOBILE_PHONE_MESSAGE, isMobilePhone, onlyPhoneDigits } from "./phone-co
 export const NotificationEvent = Object.freeze({
   REQUEST_REGISTERED: "request_registered",
   SCHEDULE_CONFIRMED: "schedule_confirmed",
+  SCHEDULE_REMINDER: "schedule_reminder",
   SCHEDULE_CHANGED: "schedule_changed",
   SCHEDULE_CANCELLED: "schedule_cancelled",
   NO_SHOW: "no_show",

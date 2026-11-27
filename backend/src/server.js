@@ -23,6 +23,7 @@ import messageQuotaRoutes from "./routes/message-quota.js";
 import municipalityImageRoutes from "./routes/municipality-images.js";
 import requestAccessRoutes from "./routes/request-access.js";
 import { createAdoptionShareRouter } from "./routes/adoption-share.js";
+import { startProcedureReminders } from "./services/notifications/procedure-reminders.js";
 
 const app = express();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -71,5 +72,8 @@ app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
 const PORT = process.env.PORT || 3002;
 
 runMigrations()
-  .then(() => app.listen(PORT, () => console.log(`App rodando em http://localhost:${PORT}`)))
+  .then(() => app.listen(PORT, () => {
+    console.log(`App rodando em http://localhost:${PORT}`);
+    startProcedureReminders();
+  }))
   .catch((err) => { console.error("Erro ao iniciar:", err); process.exit(1); });

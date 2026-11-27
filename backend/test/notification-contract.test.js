@@ -45,7 +45,7 @@ test("the request events distinguish cancellation, a no-show and a rejection, an
   assert.equal(NotificationEvent.REQUEST_REGISTERED, "request_registered");
   assert.equal(NotificationEvent.SCHEDULE_CANCELLED, "schedule_cancelled");
   assert.equal(Object.values(NotificationEvent).some((event) => event.startsWith("documents_")), false);
-  assert.equal(Object.values(NotificationEvent).length, 7);
+  assert.equal(Object.values(NotificationEvent).length, 8);
 });
 
 test("the tutor is told the reason the staff chose, never the internal note, and nothing when the reason says nothing", () => {
