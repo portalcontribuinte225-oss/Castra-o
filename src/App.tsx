@@ -3250,7 +3250,7 @@ function AdminDashboard({
               key={request.id}
               aria-label={`Abrir solicitação #${request.protocol}`}
               onClick={openCard}
-              className="tw:grid tw:min-h-[76px] tw:min-w-0 tw:w-full tw:items-center tw:gap-3 tw:px-4 tw:py-3.5 tw:text-left tw:touch-manipulation tw:hover:border-ui-accent tw:hover:bg-card-page tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent tw:min-[761px]:grid-cols-2 tw:min-[1101px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,0.75fr)_minmax(0,auto)]"
+              className="tw:grid tw:min-h-[76px] tw:min-w-0 tw:w-full tw:items-center tw:gap-3 tw:px-4 tw:py-3.5 tw:text-left tw:touch-manipulation tw:hover:border-ui-accent tw:hover:bg-card-page tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-ui-accent tw:min-[761px]:grid-cols-2 tw:min-[1101px]:items-start tw:min-[1101px]:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)_minmax(0,0.9fr)_minmax(0,0.85fr)_minmax(0,1fr)_minmax(0,0.75fr)_8rem]"
             >
               {fields.map(({ label, value }) => (
                 <span key={label} className="tw:grid tw:min-w-0 tw:gap-1">
