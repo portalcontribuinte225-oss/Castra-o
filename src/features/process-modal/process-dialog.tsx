@@ -17,16 +17,16 @@ export function ProcessDialog({ title, children, actions, onClose, busy, classNa
   const titleId = useId();
   useModalFocus(overlay);
   return (
-    <div className="assign-modal-overlay" ref={overlay} data-managed-dialog="" onClick={(event) => {
+    <div className="prm-dialog-overlay" ref={overlay} data-managed-dialog="" onClick={(event) => {
       if (!busy && event.target === event.currentTarget) onClose();
     }}>
-      <div className={`assign-modal prm-dialog ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy}>
-        <div className="assign-modal-header">
-          <strong id={titleId}>{title}</strong>
+      <div className={`prm-dialog ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy}>
+        <div className="prm-dialog-head">
+          <h3 id={titleId}>{title}</h3>
           <CloseButton disabled={busy} onClick={onClose} />
         </div>
         {children}
-        <div className="assign-modal-actions">{actions}</div>
+        {actions && <div className="prm-dialog-actions">{actions}</div>}
       </div>
     </div>
   );

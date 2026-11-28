@@ -130,6 +130,19 @@ it("keeps the removed procedure out of the active list and shows health for the 
   expect(html).toMatch(/Doenças preexistentes[\s\S]*Displasia[\s\S]*Alergias conhecidas[\s\S]*Penicilina/);
 });
 
+it("keeps the group checkboxes clear when a procedure was missed", () => {
+  const withAbsence = [{ ...animals[0], procedures: [{ ...castration, status: ProcedureStatus.NO_SHOW }, microchip] }];
+  const html = renderToStaticMarkup(<ProceduresTab animals={withAbsence} animalIndex={0} selectedType="chip" marked={new Set([procedureTargetKey(chipTarget)])}
+    scheduled={[chipTarget]} health={{ doencas: "", alergias: "", microchip: "" }} readOnly={false} busy={false}
+    onAnimal={noop} onHealth={noop} onMark={noop} onRemove={noop} onPrescriptions={noop} />);
+  const checkboxes = html.match(/<input type="checkbox"[^>]*>/g) || [];
+  expect(checkboxes).toHaveLength(4);
+  expect(checkboxes[0]).not.toContain('checked=""');
+  expect(checkboxes[1]).not.toContain('checked=""');
+  expect(checkboxes[3]).toContain('checked=""');
+  expect(html).toContain("1 não realizado");
+});
+
 it("groups dated actions newest first and shows a closure with no recorded date", () => {
   const html = renderToStaticMarkup(<ProcessHistoryTimeline events={[
     { kind: "start", at: "2026-11-20T12:00:00.000Z", label: "Solicitação registrada", actor: "Formulário público" },

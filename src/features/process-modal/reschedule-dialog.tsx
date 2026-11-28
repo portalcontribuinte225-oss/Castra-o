@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { displayScheduleDate, scheduleDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
-import { configFieldStyle, configTextareaStyle } from "../../components/ui";
+import { configTextareaStyle } from "../../components/ui";
 import { isPastScheduleDay } from "../../domain";
 import { useScheduleAvailability } from "../registered-animals/use-schedule-availability";
 import { buildMonthCalendarDays, formatMonthYear, getCurrentScheduleMonthKey } from "../schedule-picker/schedule-months";
@@ -62,14 +62,14 @@ export function ProcessScheduleDialog({ requestId, municipalityId, schedules, an
 
   return (
     <ProcessDialog title={reschedule ? "Reagendar solicitação" : "Agendar solicitação"} className="prm-calendar-dialog" busy={busy} onClose={onClose}
-      actions={<>
-        <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
+      actions={
         <Button disabled={busy || !availability.ready || !selected} onClick={() => onConfirm({ date, occurrenceKey: location, time }, reason.trim())}>
           {busy ? "Salvando..." : reschedule ? "Confirmar reagendamento" : "Confirmar agendamento"}
         </Button>
-      </>}>
+      }>
       <div className="prm-calendar-meta">
-        <span>{schedules.length ? `Agendamento atual: ${schedules.map((slot) => [displayScheduleDate(slot.date), slot.slotTime, slot.locationName].filter(Boolean).join(" · ")).join(" / ")}` : "Selecione uma data e horário"}</span>
+        <span>{schedules.length ? <>Agendamento atual: <b>{schedules.map((slot) =>
+          [displayScheduleDate(slot.date), slot.slotTime && `às ${slot.slotTime}`, slot.locationName].filter(Boolean).join(" ")).join(" / ")}</b></> : "Selecione uma data e horário"}</span>
         <strong>{animalCount} {animalCount === 1 ? "vaga necessária" : "vagas necessárias"}</strong>
       </div>
       {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
@@ -86,11 +86,13 @@ export function ProcessScheduleDialog({ requestId, municipalityId, schedules, an
             if (offset) return <span key={index} />;
             const configured = availability.days.filter((entry) => entry.date === value);
             const offered = configured.flatMap((entry) => entry.slots.filter((slot) => eligible(entry, slot)));
-            const label = isPastScheduleDay(value) ? "Já passou" : offered.length ? offered.length === 1 ? offered[0].time : `${offered.length} horários`
+            const label = isPastScheduleDay(value) ? "Já passou" : offered.length ? `${offered.length} ${offered.length === 1 ? "horário" : "horários"}`
               : configured.length ? "Indisponível" : "Sem atendimento";
-            return <button type="button" key={value} aria-label={`${value} · ${label}`} aria-pressed={date === value}
+            const vacancies = offered.reduce((count, slot) => count + slot.remaining, 0);
+            const vacancyLabel = vacancies ? `${vacancies} ${vacancies === 1 ? "vaga" : "vagas"}` : "";
+            return <button type="button" key={value} aria-label={[value, label, vacancyLabel].filter(Boolean).join(" · ")} aria-pressed={date === value}
               disabled={busy || !availability.ready || !offered.length} onClick={() => chooseDay(value)}>
-              <strong>{String(day).padStart(2, "0")}</strong><small>{label}</small>
+              <strong>{String(day).padStart(2, "0")}</strong><small>{label}</small>{vacancyLabel && <small>{vacancyLabel}</small>}
             </button>;
           })}
         </div>
@@ -104,7 +106,7 @@ export function ProcessScheduleDialog({ requestId, municipalityId, schedules, an
           ))) : <span className="prm-muted-note">Selecione uma data disponível.</span>}
         </div>
       </section>
-      {reschedule && <label className={configFieldStyle}>
+      {reschedule && <label className="prm-field">
         <span>Motivo do reagendamento (opcional)</span>
         <textarea data-ui-input="" className={configTextareaStyle} value={reason} disabled={busy} maxLength={1000} rows={2} placeholder="Se houver" onChange={(event) => setReason(event.target.value)} />
       </label>}

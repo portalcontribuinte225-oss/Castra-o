@@ -115,5 +115,5 @@ export function attachmentDescription(row: AttachmentRow): string {
   if (row.state === AttachmentState.MISSING) return row.required ? "Documento obrigatório não enviado" : "Documento não enviado";
   if (row.state === AttachmentState.REJECTED) return row.document?.review?.note || "Indeferido na conferência";
   if (row.state === AttachmentState.APPROVED) return row.document?.review ? "Deferido na conferência" : row.document?.provider ? "Aprovado pela análise automática" : "Documento disponível";
-  return row.required ? "Conferência obrigatória para o agendamento" : "Documento complementar";
+  return row.fileName;
 }

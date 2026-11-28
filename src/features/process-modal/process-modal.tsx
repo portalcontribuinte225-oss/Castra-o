@@ -68,15 +68,15 @@ function slotLabel(slot: AppointmentSlot) {
   return [dateTime, slot.locationName].filter(Boolean).join(" · ");
 }
 
-function AppointmentSummary({ requested, current, status }: { requested: AppointmentSlot | null; current: AppointmentSlot[]; status: string }) {
+function AppointmentSummary({ requested, current, status, tone }: { requested: AppointmentSlot | null; current: AppointmentSlot[]; status: string; tone: string }) {
   const changed = current.length !== 1 || scheduleDate(current[0].date) !== scheduleDate(requested?.date) || current[0].slotTime !== requested?.slotTime
     || (current[0].occurrenceKey || "") !== (requested?.occurrenceKey || "")
     || (current[0].locationName || "") !== (requested?.locationName || "");
   return <div className="prm-appointment-summary">
-    <CalendarDays size={15} aria-hidden="true" />
+    <CalendarDays size={14} aria-hidden="true" />
     {requested && <span>Solicitado: {slotLabel(requested)}</span>}
-    {changed && current.length > 0 && <span>Agendamento atual: {current.map(slotLabel).join(" / ")}</span>}
-    <strong>{status}</strong>
+    {changed && current.length > 0 && <span>· Agendamento atual: {current.map(slotLabel).join(" / ")}</span>}
+    <span className="prm-appointment-status" data-tone={tone}>· {status}</span>
   </div>;
 }
 
@@ -186,45 +186,48 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const specialTitle = SpecialSection ? requestTypeLabel(normalized) : "Atendimento de animais";
 
   return (
-    <div className="modal-backdrop" data-managed-dialog="" ref={overlay}>
-      <div className="prm-modal tw:[--ui-action:#087a54] tw:[--ui-action-hover:#056344]" role="dialog" aria-modal="true" aria-labelledby={`${panelId}-title`}>
-        <ProcessHeader protocol={normalized.protocol} title={specialTitle} subtitle={`Tutor: ${displayText(normalized.tutor)}`}
-          appointment={SpecialSection ? <StatusBadge status={normalized.status} /> : <AppointmentSummary requested={requested} current={retainedSchedules}
-            status={closed ? normalized.status === RequestStatus.COMPLETED ? POSITIVE_CLOSURE : CLOSED_WITHOUT_ATTENDANCE : confirmed ? "Confirmado" : "Aguardando confirmação"} />}
-          tabs={[{ id: ProcessTab.ATTACHMENTS, label: "Análise de documentos" },
-            { id: ProcessTab.PROCEDURES, label: SpecialSection ? specialTitle : "Procedimento e saúde" },
-            { id: ProcessTab.TUTOR, label: "Dados do tutor" },
-            ...(!readOnly ? [{ id: ProcessTab.HISTORY, label: "Histórico", count: historyCount ?? (normalized.rawHistory.length + 1), icon: <History size={15} aria-hidden="true" /> }] : [])]}
-          activeTab={tab} panelId={panelId} busy={pending} reportLoading={reportLoading} onTab={changeTab} onReport={downloadReport}
-          onClose={() => procedures.dirty ? setDialog({ kind: DialogKind.UNSAVED }) : onClose()} />
-        <div ref={body} className="prm-body" role="tabpanel" id={panelId} aria-labelledby={`${panelId}-${tab}`}>
-          {reportError && <p className="form-error" role="alert">{reportError}</p>}
-          {tab === ProcessTab.ATTACHMENTS && <AttachmentsTab rows={rows} canReview={editable} canAttach={editable} busy={pending}
-            uploadingEvidence={attachments.uploadingEvidence} error={attachments.error}
-            onPreview={(row, trigger) => { attachmentTrigger.current = trigger; void attachments.open(row); }} onDownload={attachments.save}
-            onApprove={attachments.approve} onReject={(row) => setDialog({ kind: DialogKind.REJECT_DOCUMENT, row })} onEvidence={attachments.attachEvidence} />}
-          {tab === ProcessTab.PROCEDURES && (SpecialSection ? <SpecialSection request={normalized} /> :
-            <ProceduresTab animals={animals} animalIndex={procedures.animalIndex} selectedType={procedures.selectedProcedure?.requestTypeId || ""}
-              health={procedures.health} marked={marked} scheduled={scheduled} readOnly={!editable} busy={pending}
-              onAnimal={procedures.selectAnimal} onHealth={procedures.changeHealth} onMark={procedures.toggleResults}
-              onRemove={(target) => setDialog({ kind: DialogKind.REMOVE, target })} onPrescriptions={() => setDialog({ kind: DialogKind.PRESCRIPTION })} />)}
-          {tutorVisited && <div hidden={tab !== ProcessTab.TUTOR}>
-            <TutorDataTab requestId={normalized.id} municipalityId={normalized.municipalityId} neighborhoodNames={neighborhoodNames(neighborhoods.filter(local))}
-              readOnly={!editable} busy={busy} onBusy={setTutorBusy} onSaved={async (tutor) => { await onTutorSaved?.(tutor); setHistoryCount(undefined); }} actionsSlot={tutorSlot} />
-          </div>}
-          {tab === ProcessTab.HISTORY && !readOnly && <ProcessHistoryTab requestId={normalized.id} onCount={setHistoryCount} />}
+    <>
+      <div className="modal-backdrop prm-backdrop" data-managed-dialog="" ref={overlay}>
+        <div className="prm-modal" role="dialog" aria-modal="true" aria-labelledby={`${panelId}-title`}>
+          <ProcessHeader protocol={normalized.protocol} title={specialTitle} subtitle={`Tutor: ${displayText(normalized.tutor)}`}
+            appointment={SpecialSection ? <StatusBadge status={normalized.status} /> : <AppointmentSummary requested={requested} current={retainedSchedules}
+              tone={normalized.status === RequestStatus.CANCELLED ? "negative" : confirmed || closed ? "positive" : "neutral"}
+              status={closed ? normalized.status === RequestStatus.COMPLETED ? POSITIVE_CLOSURE : CLOSED_WITHOUT_ATTENDANCE : confirmed ? "Confirmado" : "Aguardando confirmação"} />}
+            tabs={[{ id: ProcessTab.ATTACHMENTS, label: "Análise de documentos" },
+              { id: ProcessTab.PROCEDURES, label: SpecialSection ? specialTitle : "Procedimento e saúde" },
+              { id: ProcessTab.TUTOR, label: "Dados do tutor" },
+              ...(!readOnly ? [{ id: ProcessTab.HISTORY, label: "Histórico", count: historyCount ?? (normalized.rawHistory.length + 1), icon: <History size={15} aria-hidden="true" /> }] : [])]}
+            activeTab={tab} panelId={panelId} busy={pending} reportLoading={reportLoading} onTab={changeTab} onReport={downloadReport}
+            onClose={() => procedures.dirty ? setDialog({ kind: DialogKind.UNSAVED }) : onClose()} />
+          <div ref={body} className="prm-body" role="tabpanel" id={panelId} aria-labelledby={`${panelId}-${tab}`}>
+            {reportError && <p className="form-error" role="alert">{reportError}</p>}
+            {tab === ProcessTab.ATTACHMENTS && <AttachmentsTab rows={rows} canReview={editable} canAttach={editable} busy={pending}
+              uploadingEvidence={attachments.uploadingEvidence} error={attachments.error}
+              onPreview={(row, trigger) => { attachmentTrigger.current = trigger; void attachments.open(row); }} onDownload={attachments.save}
+              onApprove={attachments.approve} onReject={(row) => setDialog({ kind: DialogKind.REJECT_DOCUMENT, row })} onEvidence={attachments.attachEvidence} />}
+            {tab === ProcessTab.PROCEDURES && (SpecialSection ? <SpecialSection request={normalized} /> :
+              <ProceduresTab animals={animals} animalIndex={procedures.animalIndex} selectedType={procedures.selectedProcedure?.requestTypeId || ""}
+                health={procedures.health} marked={marked} scheduled={scheduled} readOnly={!editable} busy={pending}
+                onAnimal={procedures.selectAnimal} onHealth={procedures.changeHealth} onMark={procedures.toggleResults}
+                onRemove={(target) => setDialog({ kind: DialogKind.REMOVE, target })} onPrescriptions={() => setDialog({ kind: DialogKind.PRESCRIPTION })} />)}
+            {tutorVisited && <div hidden={tab !== ProcessTab.TUTOR}>
+              <TutorDataTab requestId={normalized.id} municipalityId={normalized.municipalityId} neighborhoodNames={neighborhoodNames(neighborhoods.filter(local))}
+                readOnly={!editable} busy={busy} onBusy={setTutorBusy} onSaved={async (tutor) => { await onTutorSaved?.(tutor); setHistoryCount(undefined); }} actionsSlot={tutorSlot} />
+            </div>}
+            {tab === ProcessTab.HISTORY && !readOnly && <ProcessHistoryTab requestId={normalized.id} onCount={setHistoryCount} />}
+          </div>
+          <ProcessFooter tab={tab} busy={pending} readOnly={readOnly} closed={closed}
+            responsible={`Setor: ${normalized.assignedSectorName || "Não definido"} · Responsável: ${normalized.responsible || "Não atribuído"}`}
+            dirty={procedures.dirty} confirmed={confirmed} canClose={canClose} canSchedule={!scheduleBlocked && appointmentNumberOfAnimals(animals) > 0}
+            canMarkAbsent={scheduled.length > 0 && batch.results.length === 0} scheduleBlocked={scheduleBlocked} actionsSlot={setTutorSlot}
+            onAssign={() => setDialog({ kind: DialogKind.ASSIGN })} onSave={save} onSchedule={() => setDialog({ kind: DialogKind.SCHEDULE })}
+            onAbsent={() => setDialog({ kind: DialogKind.ABSENCE })} onFinish={() => setDialog({ kind: DialogKind.FINISH })}
+            specialActions={SpecialSection ? (editable ? <>
+              <Button variant="danger" disabled={pending || assignmentRequired} onClick={() => setDialog({ kind: DialogKind.SPECIAL_REJECT })}>Indeferir</Button>
+              <Button disabled={pending || assignmentRequired} onClick={() => kind === RequestType.COMPLAINT ? setDialog({ kind: DialogKind.COMPLAINT })
+                : void perform(() => onConfirmSpecial?.(request))}>{specialRequestConfirmLabel(normalized)}</Button>
+            </> : false) : undefined} />
         </div>
-        <ProcessFooter tab={tab} busy={pending} readOnly={readOnly} closed={closed}
-          responsible={`Setor: ${normalized.assignedSectorName || "Não definido"} · Responsável: ${normalized.responsible || "Não atribuído"}`}
-          dirty={procedures.dirty} confirmed={confirmed} canClose={canClose} canSchedule={!scheduleBlocked && appointmentNumberOfAnimals(animals) > 0}
-          canMarkAbsent={scheduled.length > 0 && batch.results.length === 0} scheduleBlocked={scheduleBlocked} actionsSlot={setTutorSlot}
-          onAssign={() => setDialog({ kind: DialogKind.ASSIGN })} onSave={save} onSchedule={() => setDialog({ kind: DialogKind.SCHEDULE })}
-          onAbsent={() => setDialog({ kind: DialogKind.ABSENCE })} onFinish={() => setDialog({ kind: DialogKind.FINISH })}
-          specialActions={SpecialSection ? (editable ? <>
-            <Button variant="danger" disabled={pending || assignmentRequired} onClick={() => setDialog({ kind: DialogKind.SPECIAL_REJECT })}>Indeferir</Button>
-            <Button disabled={pending || assignmentRequired} onClick={() => kind === RequestType.COMPLAINT ? setDialog({ kind: DialogKind.COMPLAINT })
-              : void perform(() => onConfirmSpecial?.(request))}>{specialRequestConfirmLabel(normalized)}</Button>
-          </> : false) : undefined} />
       </div>
 
       {attachments.preview && <DocumentPreviewModal document={attachments.preview} onClose={attachments.closePreview} returnFocus={attachmentTrigger.current} />}
@@ -240,7 +243,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
         onClose={closeDialog} onConfirm={(results) => act({ action: ProcedureAction.NO_SHOW, data: { results } }, "Não comparecimento registrado")} />}
       {dialog?.kind === DialogKind.REMOVE && removal && <NoteDialog title="Remover procedimento"
         description={`${processAnimalLabel(animals[removal.animalIndex], removal.animalIndex)} · ${removal.procedure.name}. O procedimento será preservado no histórico.`}
-        label="Motivo da remoção *" placeholder="Informe o motivo" confirmLabel="Confirmar remoção" busy={pending} maxLength={1000}
+        label="Motivo da remoção *" placeholder="Informe o motivo" confirmLabel="Confirmar remoção" busy={pending} maxLength={1000} showCancel={false}
         onClose={closeDialog} onConfirm={(reason) => act({ action: ProcedureAction.REMOVE, data: { target: dialog.target, reason } }, "Procedimento removido")} />}
       {dialog?.kind === DialogKind.FINISH && <FinishAttendanceDialog animals={animals} marked={marked} title={anyDone ? POSITIVE_CLOSURE : CLOSED_WITHOUT_ATTENDANCE}
         busy={pending} onClose={closeDialog} onConfirm={() => act({ action: ProcedureAction.CLOSE, data: batch }, "Atendimento encerrado")} />}
@@ -253,6 +256,6 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
         confirmLabel="Confirmar deferimento" busy={pending} maxLength={2000} onClose={closeDialog} onConfirm={(note) => perform(() => onConfirmSpecial?.(request, { note }))} />}
       {dialog?.kind === DialogKind.UNSAVED && <UnsavedChangesDialog busy={pending} onClose={closeDialog} onDiscard={onClose}
         onSave={async () => { if (await save()) onClose(); }} />}
-    </div>
+    </>
   );
 }

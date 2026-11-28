@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { CalendarDays, FileText, HeartPulse, History, User } from "lucide-react";
+import { CalendarDays, Check, FileText, HeartPulse, History, User } from "lucide-react";
 import { RequestHistoryCategory } from "../../../shared/request-history-contract.js";
 import { api } from "../../api";
 import { Button } from "../../components/button";
@@ -32,7 +32,8 @@ export function ProcessHistoryTimeline({ events }: { events: ProcessHistoryEvent
           <h4>{day}</h4>
           <ol className="prm-history" role="list">
             {entries.map(({ kind, at, label, actor, detail, category }, index) => {
-              const { icon: Icon, label: categoryLabel } = categories[category || RequestHistoryCategory.PROCESS] || categories.process;
+              const { icon, label: categoryLabel } = categories[category || RequestHistoryCategory.PROCESS] || categories.process;
+              const Icon = kind === "start" ? Check : icon;
               return <li key={index} className="prm-history-event" data-kind={kind} data-category={category}>
                 <span className="prm-history-icon"><Icon size={16} aria-hidden="true" /></span>
                 <div className="prm-history-entry">
@@ -41,7 +42,10 @@ export function ProcessHistoryTimeline({ events }: { events: ProcessHistoryEvent
                     {at && <time dateTime={at}>{timeFormat.format(new Date(at))}</time>}
                   </div>
                   {detail && <p>{detail}</p>}
-                  <span className="prm-muted-note">{[actor, categoryLabel].filter(Boolean).join(" · ")}</span>
+                  <div className="prm-history-meta">
+                    {actor && <><User size={13} aria-hidden="true" /><span>{actor}</span><span aria-hidden="true">·</span></>}
+                    <span>{categoryLabel}</span>
+                  </div>
                 </div>
               </li>;
             })}

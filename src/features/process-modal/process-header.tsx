@@ -45,7 +45,6 @@ export function ProcessHeader({ protocol, title, subtitle, appointment, tabs, ac
         {tabs.map((tab) => (
           <Button key={tab.id} variant="custom" role="tab" id={`${panelId}-${tab.id}`} aria-controls={panelId} aria-selected={activeTab === tab.id}
             tabIndex={activeTab === tab.id ? 0 : -1} disabled={busy}
-            className="tw:border-card-border tw:bg-card-surface tw:text-left tw:font-semibold tw:text-ui-text tw:max-[760px]:px-2.5 tw:max-[760px]:text-xs"
             onClick={() => onTab(tab.id)}>
             {tab.icon}{tab.label}
             {Boolean(tab.count) && <span className="prm-tab-count">{tab.count}</span>}

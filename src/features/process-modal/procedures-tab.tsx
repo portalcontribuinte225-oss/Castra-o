@@ -1,7 +1,7 @@
 import { FileText, Trash2 } from "lucide-react";
 import { MAX_HEALTH_TEXT, ProcedureStatus, animalPrescriptionRecords, isOpenProcedure } from "../../../shared/request-procedure-contract.js";
 import { Button } from "../../components/button";
-import { ConfigField, configFieldStyle, configTextareaStyle } from "../../components/ui";
+import { ConfigField, configTextareaStyle } from "../../components/ui";
 import { displayText } from "../../domain";
 import { procedureStatusLabels } from "./process-labels";
 import { procedureTargetKey } from "./process-types";
@@ -36,22 +36,27 @@ export function ProceduresTab({ animals, animalIndex, selectedType, health, mark
     marked.has(procedureTargetKey({ animalIndex: index, requestTypeId })) ? ProcedureStatus.DONE : status;
   const total = animals.reduce((count, item) => count + active(item).length, 0);
   const completed = animals.reduce((count, item, index) => count + active(item).filter((procedure) => result(index, procedure.requestTypeId, procedure.status) === ProcedureStatus.DONE).length, 0);
+  const notCompleted = animals.reduce((count, item) => count + active(item).filter((procedure) =>
+    procedure.status === ProcedureStatus.NO_SHOW || procedure.status === ProcedureStatus.REJECTED).length, 0);
   const editable = !busy && !readOnly && animal.procedures.some(isOpenProcedure);
   const hasPrescriptions = animals.some((item) => animalPrescriptionRecords(item).length);
-  const hasPending = active(animal).some((procedure) => isOpenProcedure(procedure) && result(animalIndex, procedure.requestTypeId, procedure.status) !== ProcedureStatus.DONE);
+  const selectedProcedures = active(animal);
+  const allDone = selectedProcedures.length > 0 && selectedProcedures.every((item) => result(animalIndex, item.requestTypeId, item.status) === ProcedureStatus.DONE);
+  const classified = selectedProcedures.filter((item) => !isOpenProcedure({ status: result(animalIndex, item.requestTypeId, item.status) })).length;
 
   return (
     <div className="prm-procedure-layout">
       <aside className="prm-procedure-list" aria-label="Animais e procedimentos">
         <div className="prm-clinical-list-heading">
           <strong>Animais e procedimentos</strong>
-          <span>{animals.length} {animals.length === 1 ? "animal" : "animais"} · <strong>{completed}/{total} realizados</strong></span>
+          <span>{animals.length} {animals.length === 1 ? "animal" : "animais"} · <strong>{completed}/{total} realizados</strong>
+            {notCompleted > 0 && ` · ${notCompleted} ${notCompleted === 1 ? "não realizado" : "não realizados"}`}</span>
         </div>
         <div className="prm-clinical-all">
-          <label><input type="checkbox" checked={scheduled.length ? scheduled.every((item) => marked.has(procedureTargetKey(item))) : total > 0 && total === completed} disabled={readOnly || busy || scheduled.length === 0}
+          <label><input type="checkbox" checked={total > 0 && total === completed} disabled={readOnly || busy || scheduled.length === 0}
             onChange={(event) => onMark(scheduled, event.target.checked)} /> Todos realizados</label>
-          <Button variant="outline" className="prm-icon-button" title="Receita unificada" aria-label="Receita unificada"
-            disabled={busy || (readOnly && !hasPrescriptions)} onClick={onPrescriptions}><FileText size={16} aria-hidden="true" /></Button>
+          <Button variant="outline" className="prm-icon-button prm-recipe-button" data-issued={hasPrescriptions} title="Receita unificada" aria-label="Receita unificada"
+            disabled={busy || (readOnly && !hasPrescriptions)} onClick={onPrescriptions}><FileText size={15} aria-hidden="true" /></Button>
         </div>
         {animals.map((item, index) => {
           const label = processAnimalLabel(item, index);
@@ -59,15 +64,15 @@ export function ProceduresTab({ animals, animalIndex, selectedType, health, mark
           const eligible = scheduled.filter((target) => target.animalIndex === index);
           const done = procedures.filter((procedure) => result(index, procedure.requestTypeId, procedure.status) === ProcedureStatus.DONE).length;
           return (
-            <div key={item.id || index} className="prm-clinical-animal" data-selected={index === animalIndex}>
+            <div key={item.id || index} className="prm-clinical-animal">
               <div className="prm-clinical-animal-heading">
-                <input type="checkbox" aria-label={`Todos os procedimentos de ${label}`} checked={eligible.length ? eligible.every((target) => marked.has(procedureTargetKey(target))) : procedures.length > 0 && done === procedures.length}
+                <input type="checkbox" aria-label={`Todos os procedimentos de ${label}`} checked={procedures.length > 0 && done === procedures.length}
                   disabled={readOnly || busy || eligible.length === 0} onChange={(event) => onMark(eligible, event.target.checked)} />
                 <button type="button" className="prm-animal-identity" onClick={() => onAnimal(index)}>
                   <strong>{[displayText(item.species), displayText(item.sex)].filter(Boolean).join(" · ") || label}</strong>
                   {item.name && (item.species || item.sex) && <span> · {displayText(item.name)}</span>}
                 </button>
-                <span>{done}/{procedures.length} realizados</span>
+                <span data-complete={procedures.length > 0 && done === procedures.length}>{done}/{procedures.length} realizados</span>
               </div>
               {procedures.map((procedure) => {
                 const target = { animalIndex: index, requestTypeId: procedure.requestTypeId };
@@ -90,20 +95,19 @@ export function ProceduresTab({ animals, animalIndex, selectedType, health, mark
         })}
       </aside>
       <section className="prm-procedure-detail">
-        <div className="prm-section-head">
+        <div className="prm-animal-detail-heading">
           <div><strong>{[displayText(animal.species), displayText(animal.sex)].filter(Boolean).join(" · ") || processAnimalLabel(animal, animalIndex)}</strong>
             {animal.name && (animal.species || animal.sex) && <span> · {displayText(animal.name)}</span>}</div>
-          <span className="attachment-status attachment-status--generated">{!active(animal).length ? "Sem procedimentos ativos"
-            : active(animal).every((item) => result(animalIndex, item.requestTypeId, item.status) === ProcedureStatus.DONE) ? "Realizado"
-            : !hasPending ? "Resultados definidos" : active(animal).some((item) => !isOpenProcedure(item) || marked.has(procedureTargetKey({ animalIndex, requestTypeId: item.requestTypeId }))) ? "Parcialmente registrado" : "Pendente"}</span>
+          <span className="prm-animal-status" data-complete={allDone}>{!selectedProcedures.length ? "Sem procedimentos ativos"
+            : allDone ? "Realizado" : classified === selectedProcedures.length ? "Resultados definidos" : classified > 0 ? "Parcialmente registrado" : "Pendente"}</span>
         </div>
         <h3 className="prm-section-title">Saúde do animal</h3>
-        <ConfigField label="Número do microchip" value={health.microchip} maxLength={32} placeholder="Informe o número do microchip"
+        <ConfigField className="prm-field" label="Número do microchip" value={health.microchip} maxLength={32} placeholder="Informe o número do microchip"
           readOnly={!editable || !editableMicrochip(animal)} onChange={(value) => onHealth({ microchip: value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} />
         {(["doencas", "alergias"] as const).map((key) => (
-          <label className={configFieldStyle} key={key}>
+          <label className="prm-field" key={key}>
             <span>{key === "doencas" ? "Doenças preexistentes" : "Alergias conhecidas"}</span>
-            <textarea data-ui-input="" className={configTextareaStyle} value={health[key]} maxLength={MAX_HEALTH_TEXT} rows={3} readOnly={!editable}
+            <textarea data-ui-input="" className={configTextareaStyle} value={health[key]} maxLength={MAX_HEALTH_TEXT} rows={2} readOnly={!editable}
               placeholder="Se houver" onChange={(event) => onHealth({ [key]: event.target.value })} />
           </label>
         ))}

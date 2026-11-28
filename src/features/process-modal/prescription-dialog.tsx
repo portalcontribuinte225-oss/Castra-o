@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { MAX_PRESCRIPTION_TEXT, MAX_PROFESSIONAL_TEXT, ProcedureStatus, animalPrescriptionRecords } from "../../../shared/request-procedure-contract.js";
 import { Button } from "../../components/button";
-import { ConfigField, configFieldStyle, configTextareaStyle } from "../../components/ui";
+import { ConfigField, configTextareaStyle } from "../../components/ui";
+import { displayText } from "../../domain";
 import type { AnyRecord } from "../../types";
 import { issuedPrescriptions } from "../process-report/process-report";
 import { downloadProcessFile } from "./process-document-preview";
@@ -22,6 +23,7 @@ interface PrescriptionDialogProps {
 }
 
 export function PrescriptionDialog({ request, animals, municipality, defaultProfessionalName, readOnly, busy, onSave, onClose }: PrescriptionDialogProps) {
+  const animalHeadingId = useId();
   const [initial] = useState(() => animals.map((animal, animalIndex): PrescriptionDraft => {
     const active = animalPrescriptionRecords(animal).findLast((record) => !record.archived);
     return { animalIndex, requestTypeId: active?.requestTypeId || "", text: active?.text || "",
@@ -54,28 +56,32 @@ export function PrescriptionDialog({ request, animals, municipality, defaultProf
   }
 
   return (
-    <ProcessDialog title="Receita unificada" className="prm-recipe-dialog" busy={disabled} onClose={onClose}
+    <ProcessDialog title="Receita unificada" busy={disabled} onClose={onClose}
       actions={!readOnly && <Button disabled={disabled || !valid} onClick={() => onSave(changed)}>{busy ? "Salvando..." : "Salvar receitas"}</Button>}>
+      {!readOnly && <p className="prm-dialog-description">Edite as orientações de cada animal em uma única janela.</p>}
       {animals.map((animal, index) => {
         const draft = drafts[index];
         const choices = animal.procedures.filter((item) => item.status !== ProcedureStatus.REMOVED || item.requestTypeId === draft.requestTypeId);
         return (
-          <fieldset className="prm-result-group" key={index} disabled={disabled}>
-            <legend>{processAnimalLabel(animal, index)}</legend>
-            <label className="field"><span>Procedimento (opcional)</span>
-              <select value={draft.requestTypeId} disabled={readOnly} onChange={(event) => change(index, { requestTypeId: event.target.value })}>
+          <fieldset className="prm-recipe-animal" key={index} disabled={disabled} aria-labelledby={`${animalHeadingId}-${index}`}>
+            <h4 id={`${animalHeadingId}-${index}`}>
+              {[animal.species, animal.sex, animal.name].map(displayText).filter(Boolean).join(" · ") || processAnimalLabel(animal, index)}
+            </h4>
+            <label className="prm-field"><span>Procedimento (opcional)</span>
+              <select value={draft.requestTypeId} disabled={readOnly} data-dialog-initial-focus={!readOnly && index === 0 ? "" : undefined}
+                onChange={(event) => change(index, { requestTypeId: event.target.value })}>
                 <option value="">Geral do animal</option>
                 {choices.map((item) => <option key={item.requestTypeId} value={item.requestTypeId}>{item.name}</option>)}
               </select>
             </label>
-            <label className={configFieldStyle}><span>Orientações</span>
+            <label className="prm-field"><span>Orientações</span>
               <textarea data-ui-input="" className={configTextareaStyle} value={draft.text} readOnly={readOnly}
-                maxLength={MAX_PRESCRIPTION_TEXT} rows={3} placeholder="Preencha quando houver receita para este animal" onChange={(event) => change(index, { text: event.target.value })} />
+                maxLength={MAX_PRESCRIPTION_TEXT} rows={2} placeholder="Preencha quando houver receita para este animal" onChange={(event) => change(index, { text: event.target.value })} />
             </label>
             {(draft.text || initial[index].text) && <div className="two-column-fields">
-              <ConfigField label="Profissional responsável" value={draft.professionalName} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={readOnly}
+              <ConfigField className="prm-field" label="Profissional responsável" value={draft.professionalName} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={readOnly}
                 onChange={(value) => change(index, { professionalName: value })} />
-              <ConfigField label="Registro profissional" value={draft.professionalRegistry} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={readOnly}
+              <ConfigField className="prm-field" label="Registro profissional" value={draft.professionalRegistry} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={readOnly}
                 onChange={(value) => change(index, { professionalRegistry: value })} />
             </div>}
           </fieldset>

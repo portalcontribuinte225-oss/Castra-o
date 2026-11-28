@@ -35,10 +35,10 @@ function ScheduleMenu({ closed, confirmed, busy, canClose, canSchedule, canMarkA
   const open = Boolean(position);
   const managed = confirmed || canClose;
   const items = managed ? [
-    { label: "Reagendar", icon: CalendarDays, disabled: !canSchedule, run: onSchedule, title: scheduleBlocked },
-    { label: "Atendimento Encerrado", icon: Check, disabled: !canClose, run: onFinish, title: "Classifique todos os procedimentos antes de concluir" },
-    { label: "Não compareceu", icon: UserX, disabled: !canMarkAbsent, run: onAbsent, title: "" },
-  ] : [{ label: "Agendar", icon: CalendarDays, disabled: !canSchedule, run: onSchedule, title: scheduleBlocked }];
+    { label: "Reagendar", icon: CalendarDays, disabled: !canSchedule, run: onSchedule, title: scheduleBlocked, tone: "neutral" },
+    { label: "Atendimento Encerrado", icon: Check, disabled: !canClose, run: onFinish, title: "Classifique todos os procedimentos antes de concluir", tone: "positive" },
+    { label: "Não compareceu", icon: UserX, disabled: !canMarkAbsent, run: onAbsent, title: "", tone: "negative" },
+  ] : [{ label: "Agendar", icon: CalendarDays, disabled: !canSchedule, run: onSchedule, title: scheduleBlocked, tone: "neutral" }];
 
   function show(focus = false) {
     clearTimeout(timer.current);
@@ -98,8 +98,8 @@ function ScheduleMenu({ closed, confirmed, busy, canClose, canSchedule, canMarkA
         const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
         buttons[(index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
       }}>
-      {items.map(({ label, icon: Icon, disabled, run, title }) => (
-        <button type="button" role="menuitem" key={label} title={disabled ? title : undefined} disabled={disabled || busy}
+      {items.map(({ label, icon: Icon, disabled, run, title, tone }) => (
+        <button type="button" role="menuitem" key={label} title={disabled ? title : undefined} disabled={disabled || busy} data-tone={tone}
           onClick={() => { setPosition(null); trigger.current?.focus(); run(); }}><Icon size={16} aria-hidden="true" /> {label}</button>
       ))}
     </div>}

@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { CheckCircle2, Download, Eye, FileText, Paperclip, X } from "lucide-react";
+import { Check, CircleAlert, Download, Eye, FileText, Paperclip } from "lucide-react";
 import { AiAnalysisDetails } from "../document-analysis/ai-analysis-details";
 import { Button } from "../../components/button";
 import { Card } from "../../components/card";
@@ -29,6 +29,7 @@ export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvid
 
   function rowView(row: AttachmentRow, isComplementary = false) {
     const stateClass = attachmentStateClasses[row.state];
+    const fileButtonClass = row.kind === AttachmentKind.REQUEST_DOCUMENT ? "prm-icon-button" : undefined;
     const reviewable = row.kind === AttachmentKind.MISSING || row.kind === AttachmentKind.ATTACHMENT && row.state !== AttachmentState.INFO;
     const decisionDisabled = busy || !canReview || !canReviewAttachment(row);
     return (
@@ -51,17 +52,17 @@ export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvid
         </div>
         <div className="process-attachment-actions">
           {row.available && <div className="process-attachment-file-actions" aria-label={`Arquivo de ${row.title}`}>
-            <Button variant="outline" className="prm-icon-button" aria-label={`Visualizar ${row.fileName || row.title}`} title="Visualizar" disabled={busy}
+            <Button variant="outline" className={fileButtonClass} aria-label={`Visualizar ${row.fileName || row.title}`} title="Visualizar" disabled={busy}
               onClick={(event) => onPreview(row, event.currentTarget)}><Eye size={16} aria-hidden="true" /></Button>
-            <Button variant="outline" className="prm-icon-button" aria-label={`Baixar ${row.fileName || row.title}`} title="Baixar" disabled={busy}
+            <Button variant="outline" className={fileButtonClass} aria-label={`Baixar ${row.fileName || row.title}`} title="Baixar" disabled={busy}
               onClick={() => onDownload(row)}><Download size={16} aria-hidden="true" /></Button>
           </div>}
           {reviewable && canReview && <div className="process-attachment-review-actions">
             <Button variant="outline" className="prm-approve-document" aria-label={`Deferir ${row.title}`} disabled={decisionDisabled} onClick={() => onApprove(row)}>
-              <CheckCircle2 size={15} aria-hidden="true" /> Deferir
+              <Check size={15} aria-hidden="true" /> Deferir
             </Button>
-            <Button variant="danger" aria-label={`Indeferir ${row.title}`} disabled={decisionDisabled} onClick={() => onReject(row)}>
-              <X size={15} aria-hidden="true" /> Indeferir
+            <Button variant="outline" className="prm-reject-document" aria-label={`Indeferir ${row.title}`} disabled={decisionDisabled} onClick={() => onReject(row)}>
+              <CircleAlert size={15} aria-hidden="true" /> Indeferir
             </Button>
           </div>}
         </div>
@@ -70,11 +71,14 @@ export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvid
   }
 
   return (
-    <div className="prm-section">
+    <div className="prm-attachments">
       {error && <p className="form-error" role="alert">{error}</p>}
       <h3 className="prm-section-title">Conferência de documentos</h3>
       <div className="process-attachments-list">
         {regular.map((row) => rowView(row))}
+      </div>
+      {blocking.length > 0 && <p className="prm-documents-warning"><strong>Pendência documental.</strong> A confirmação de agendamentos fica disponível após o deferimento de: {blocking.map((row) => row.title).join(", ")}.</p>}
+      {(canAttach || complementary.length > 0) && <div className="process-attachments-list prm-complementary">
         {complementary.map((row) => rowView(row, true))}
         {canAttach && <>
           <input ref={evidenceInput} type="file" hidden multiple accept="application/pdf,image/jpeg,image/png" disabled={busy} onChange={(event) => {
@@ -94,8 +98,7 @@ export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvid
             <strong>{uploadingEvidence ? "Anexando..." : "Documentos complementares"}</strong>
           </Card>
         </>}
-      </div>
-      {blocking.length > 0 && <p className="prm-documents-warning"><strong>Pendência documental.</strong> A confirmação de agendamentos fica disponível após o deferimento de: {blocking.map((row) => row.title).join(", ")}.</p>}
+      </div>}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { REJECTION_REASONS } from "../../../shared/notification-contract.js";
 import { Button } from "../../components/button";
-import { configFieldStyle, configTextareaStyle } from "../../components/ui";
+import { configTextareaStyle } from "../../components/ui";
 import type { AnyRecord } from "../../types";
 import { userBelongsToSector } from "../teams/user-sectors";
 import { ProcessDialog } from "./process-dialog";
@@ -23,14 +23,15 @@ export function AssignDialog({ sectors, users, initial, currentUserId, busy, onC
           || Boolean(assignment.userId && !sectorUsers.some((user) => user.id === assignment.userId))} onClick={() => onConfirm(assignment)}>{busy ? "Atribuindo..." : "Confirmar"}</Button>
       </>}
     >
-      <label className="field">
+      <p className="prm-dialog-description">Selecione o setor de destino e, se desejar, indique um responsável do setor.</p>
+      <label className="prm-field">
         <span>Setor *</span>
         <select value={assignment.sectorId} disabled={busy} onChange={(event) => setAssignment({ sectorId: event.target.value, userId: "" })}>
           <option value="">Selecione o setor</option>
           {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
         </select>
       </label>
-      <label className="field">
+      <label className="prm-field">
         <span>Responsável</span>
         <select value={assignment.userId} disabled={busy || !assignment.sectorId} onChange={(event) => setAssignment((current) => ({ ...current, userId: event.target.value }))}>
           <option value="">{assignment.sectorId ? "Sem responsável — fila do setor" : "Selecione primeiro o setor"}</option>
@@ -59,14 +60,14 @@ export function RejectDialog({ title, subject, busy, onConfirm, onClose }: { tit
       </>}
     >
       {subject && <p className="prm-muted-note">{subject}</p>}
-      <label className="field">
+      <label className="prm-field">
         <span>Motivo</span>
         <select value={reason} onChange={(event) => setReason(event.target.value)}>
           <option value="">Selecione o motivo...</option>
           {REJECTION_REASONS.map((item: string) => <option key={item} value={item}>{item}</option>)}
         </select>
       </label>
-      <label className={configFieldStyle}>
+      <label className="prm-field">
         <span>Justificativa</span>
         <textarea data-ui-input="" className={`${configTextareaStyle} tw:resize-y`} value={note} maxLength={1000} onChange={(event) => setNote(event.target.value)} placeholder="Explique o motivo do indeferimento" />
       </label>
@@ -75,9 +76,9 @@ export function RejectDialog({ title, subject, busy, onConfirm, onClose }: { tit
 }
 
 // A short text the action needs: what has to be corrected in a document, or what the investigation of a complaint concluded.
-export function NoteDialog({ title, description, label, placeholder, confirmLabel, busy, maxLength, onConfirm, onClose }: {
+export function NoteDialog({ title, description, label, placeholder, confirmLabel, busy, maxLength, onConfirm, onClose, showCancel = true }: {
   title: string; description?: string; label: string; placeholder: string; confirmLabel: string; busy: boolean;
-  maxLength: number; onConfirm: (note: string) => void; onClose: () => void;
+  maxLength: number; onConfirm: (note: string) => void; onClose: () => void; showCancel?: boolean;
 }) {
   const [note, setNote] = useState("");
   return (
@@ -86,12 +87,12 @@ export function NoteDialog({ title, description, label, placeholder, confirmLabe
       onClose={onClose}
       busy={busy}
       actions={<>
-        <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
+        {showCancel && <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>}
         <Button disabled={busy || !note.trim()} onClick={() => onConfirm(note.trim())}>{busy ? "Salvando..." : confirmLabel}</Button>
       </>}
     >
-      {description && <p className="prm-muted-note">{description}</p>}
-      <label className={configFieldStyle}>
+      {description && <p className="prm-dialog-description">{description}</p>}
+      <label className="prm-field">
         <span>{label}</span>
         <textarea data-ui-input="" data-dialog-initial-focus="" className={`${configTextareaStyle} tw:resize-y`} value={note} maxLength={maxLength} onChange={(event) => setNote(event.target.value)} placeholder={placeholder} />
       </label>
