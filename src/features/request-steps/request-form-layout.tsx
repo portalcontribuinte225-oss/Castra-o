@@ -54,7 +54,7 @@ export function RequestFormLayout({
       <div className="nr-body" key={current.step} role="region" aria-label={current.label} tabIndex={0}>
         <div className="single-request-form clean-form">{children}</div>
       </div>
-      {error && <p className="tw:mx-2.5 tw:my-0 tw:rounded-[var(--ui-radius-md)] tw:bg-ui-danger-soft tw:px-3 tw:py-2 tw:text-sm tw:text-ui-danger" role="alert">{error}</p>}
+      {error && <p className="form-error-msg" role="alert">{error}</p>}
       <div aria-label="Navegação da solicitação" role="group" className={internal ? navigationStyle : `${navigationStyle} ${phoneStickyNavigation}`}>
         {previous && <Button variant="outline" onClick={() => onNavigate(previous.step)}>Voltar</Button>}
         {actions && <div className={actionsStyle}>{actions}</div>}

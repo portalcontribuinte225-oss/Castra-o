@@ -25,11 +25,12 @@ import { AssignDialog, NoteDialog, RejectDialog, UnsavedChangesDialog } from "./
 import { downloadProcessFile } from "./process-document-preview";
 import { requestDocumentTypes } from "./process-documents";
 import { ProcessFooter } from "./process-footer";
+import { ProcessDialogErrorContext } from "./process-dialog";
 import { ProcessHeader } from "./process-header";
 import { ProcessHistoryTab } from "./process-history-tab";
 import { ProcessTab } from "./process-labels";
 import { procedureTargetKey } from "./process-types";
-import type { AppointmentSlot, ProcedureActionResult, ProcedureOperation, ProcedureTarget } from "./process-types";
+import type { AppointmentSlot, ProcessActionResult, ProcedureOperation, ProcedureTarget } from "./process-types";
 import { PrescriptionDialog } from "./prescription-dialog";
 import { processAnimalLabel, ProceduresTab } from "./procedures-tab";
 import { RescheduleDialog } from "./reschedule-dialog";
@@ -56,11 +57,11 @@ interface ProcessModalProps {
   returnFocus?: HTMLElement | null;
   onClose: () => void;
   onTutorSaved?: (tutor: TutorData) => void | Promise<void>;
-  onAssign?: (request: AnyRecord, assignment: Assignment) => Promise<boolean | undefined>;
-  onRejectProcess?: (request: AnyRecord, data: { category: string; note: string }) => Promise<boolean | undefined>;
-  onConfirmSpecial?: (request: AnyRecord, data?: { note: string }) => Promise<boolean | undefined>;
-  onProcedureAction?: (request: AnyRecord, operation: ProcedureOperation, message: string) => Promise<ProcedureActionResult | null>;
-  onUpdateDocuments?: (request: AnyRecord, patch: AnyRecord, note: string) => Promise<boolean>;
+  onAssign?: (request: AnyRecord, assignment: Assignment) => Promise<ProcessActionResult>;
+  onRejectProcess?: (request: AnyRecord, data: { category: string; note: string }) => Promise<ProcessActionResult>;
+  onConfirmSpecial?: (request: AnyRecord, data?: { note: string }) => Promise<ProcessActionResult>;
+  onProcedureAction?: (request: AnyRecord, operation: ProcedureOperation, title: string, detail?: string) => Promise<ProcessActionResult>;
+  onUpdateDocuments?: (request: AnyRecord, patch: AnyRecord, note: string) => Promise<ProcessActionResult>;
 }
 
 function slotLabel(slot: AppointmentSlot) {
@@ -96,6 +97,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const [tab, setTab] = useState(SpecialSection ? ProcessTab.PROCEDURES : ProcessTab.ATTACHMENTS);
   const [tutorVisited, setTutorVisited] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [actionError, setActionError] = useState<{ dialog: Dialog | null; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [tutorBusy, setTutorBusy] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
@@ -150,13 +152,15 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
     : documentsBlocked ? "Aprove os documentos obrigatórios do processo."
       : assignmentRequired ? "Defina o setor e o responsável pelo processo." : "";
 
-  async function perform(action: () => Promise<unknown> | undefined) {
+  async function perform(action: () => Promise<ProcessActionResult | null> | undefined) {
     if (pending || !editable || writing.current) return false;
     writing.current = true;
     setBusy(true);
+    setActionError(null);
     try {
       const result = await action();
-      if (!result) return false;
+      if (result?.ok === false) setActionError({ dialog, message: result.message });
+      if (!result?.ok) return false;
       setDialog(null);
       setHistoryCount(undefined);
       return true;
@@ -166,18 +170,21 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
     }
   }
 
-  async function act(operation: ProcedureOperation, message: string) {
+  async function act(operation: ProcedureOperation, title: string, detail?: string) {
     const saved = await perform(async () => {
-      const result = await onProcedureAction?.(request, operation, message);
+      const result = await onProcedureAction?.(request, operation, title, detail);
       if (result?.ok === false) {
         if (result.code === ProcedureActionErrorCode.RESERVATION_UNAVAILABLE) {
           setReservationFailure({ version: requestVersion, message: result.message });
+          return null;
         } else if (result.code === ProcedureActionErrorCode.RESERVATION_AVAILABLE) {
           setReservationFailure(undefined);
           setDialog(null);
+          setActionError({ dialog: null, message: result.message });
+          return null;
         }
       }
-      return result?.ok;
+      return result ?? null;
     });
     if (saved && (operation.action === ProcedureAction.SAVE || operation.action === ProcedureAction.CLOSE)) procedures.clearDrafts();
     return saved;
@@ -199,19 +206,27 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   function changeTab(next: ProcessTab) {
     if (next === ProcessTab.TUTOR) setTutorVisited(true);
     if (body.current) body.current.scrollTop = 0;
+    setActionError(null);
     setTab(next);
   }
 
-  const closeDialog = () => { if (!pending) setDialog(null); };
+  const closeDialog = () => {
+    if (pending) return;
+    if (dialog?.kind === DialogKind.REJECT_DOCUMENT) attachments.clearError();
+    setDialog(null);
+    setActionError(null);
+  };
   const save = () => act({ action: ProcedureAction.SAVE, data: batch }, "Alterações salvas");
   const selectedForAbsence = scheduled.find((item) => item.animalIndex === procedures.animalIndex
     && item.requestTypeId === procedures.selectedProcedure?.requestTypeId) || scheduled[0];
   const removal = dialog?.kind === DialogKind.REMOVE ? all.find(({ animalIndex, procedure }) =>
     animalIndex === dialog.target.animalIndex && procedure.requestTypeId === dialog.target.requestTypeId) : undefined;
   const specialTitle = SpecialSection ? requestTypeLabel(normalized) : "Atendimento de animais";
+  const currentError = actionError?.dialog === dialog ? actionError.message : "";
+  const reviewingDocument = dialog?.kind === DialogKind.REJECT_DOCUMENT;
 
   return (
-    <>
+    <ProcessDialogErrorContext.Provider value={reviewingDocument ? attachments.error : dialog ? currentError : ""}>
       <div className="modal-backdrop prm-backdrop" data-managed-dialog="" ref={overlay}>
         <div className="prm-modal" role="dialog" aria-modal="true" aria-labelledby={`${panelId}-title`}>
           <ProcessHeader protocol={normalized.protocol} title={specialTitle} subtitle={`Tutor: ${displayText(normalized.tutor)}`}
@@ -225,12 +240,16 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
             activeTab={tab} panelId={panelId} busy={pending} reportLoading={reportLoading} onTab={changeTab} onReport={downloadReport}
             onClose={() => procedures.dirty ? setDialog({ kind: DialogKind.UNSAVED }) : onClose()} />
           <div ref={body} className="prm-body" role="tabpanel" id={panelId} aria-labelledby={`${panelId}-${tab}`}>
-            {reportError && <p className="form-error" role="alert">{reportError}</p>}
+            {reportError && <p className="form-error-msg" role="alert">{reportError}</p>}
+            {!dialog && currentError && <p className="form-error-msg" role="alert">{currentError}</p>}
             {tab === ProcessTab.ATTACHMENTS && <AttachmentsTab rows={rows} reviewRequired={!internal} canReview={editable}
               hasAssignedUser={Boolean(normalized.assignedUserId)} canAttach={editable} busy={pending}
-              uploadingEvidence={attachments.uploadingEvidence} error={attachments.error}
+              uploadingEvidence={attachments.uploadingEvidence} error={reviewingDocument ? "" : attachments.error}
               onPreview={(row, trigger) => { attachmentTrigger.current = trigger; void attachments.open(row); }} onDownload={attachments.save}
-              onApprove={attachments.approve} onReject={(row) => setDialog({ kind: DialogKind.REJECT_DOCUMENT, row })} onEvidence={attachments.attachEvidence} />}
+              onApprove={attachments.approve} onReject={(row) => {
+                attachments.clearError();
+                setDialog({ kind: DialogKind.REJECT_DOCUMENT, row });
+              }} onEvidence={attachments.attachEvidence} />}
             {tab === ProcessTab.PROCEDURES && (SpecialSection ? <SpecialSection request={normalized} /> :
               <ProceduresTab animals={animals} animalIndex={procedures.animalIndex} selectedType={procedures.selectedProcedure?.requestTypeId || ""}
                 health={procedures.health} marked={marked} scheduled={scheduled} readOnly={!editable} busy={pending}
@@ -268,7 +287,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
       {dialog?.kind === DialogKind.RESCHEDULE && <RescheduleDialog requestId={normalized.id} municipalityId={normalized.municipalityId} schedules={current}
         animalCount={animalCount} busy={pending} onClose={closeDialog}
         onConfirm={(schedule, reason) => act({ action: ProcedureAction.RESCHEDULE, data: { schedule, reason } },
-          confirmed ? "Agendamento atualizado" : "Reserva atualizada. Aguardando confirmação.")} />}
+          confirmed ? "Reagendamento salvo" : "Reserva atualizada", confirmed ? undefined : "Aguardando confirmação da agenda.")} />}
       {dialog?.kind === DialogKind.ABSENCE && selectedForAbsence && <AbsenceDialog animals={animals} scheduled={scheduled} initial={selectedForAbsence} busy={pending}
         onClose={closeDialog} onConfirm={(results) => act({ action: ProcedureAction.NO_SHOW, data: { results } }, "Não comparecimento registrado")} />}
       {dialog?.kind === DialogKind.REMOVE && removal && <NoteDialog title="Remover procedimento"
@@ -286,6 +305,6 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
         confirmLabel="Confirmar deferimento" busy={pending} maxLength={2000} onClose={closeDialog} onConfirm={(note) => perform(() => onConfirmSpecial?.(request, { note }))} />}
       {dialog?.kind === DialogKind.UNSAVED && <UnsavedChangesDialog busy={pending} onClose={closeDialog} onDiscard={onClose}
         onSave={async () => { if (await save()) onClose(); }} />}
-    </>
+    </ProcessDialogErrorContext.Provider>
   );
 }

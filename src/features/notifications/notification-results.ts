@@ -1,29 +1,50 @@
-import { DeliveryStatus, NotificationChannel, NotificationEvent } from "../../../shared/notification-contract.js";
+import { DeliveryStatus, NotificationChannel } from "../../../shared/notification-contract.js";
+import type { ToastNotice } from "../../components/toast-container";
 
 export interface NotificationResult {
-  event?: typeof NotificationEvent[keyof typeof NotificationEvent];
   channel?: typeof NotificationChannel[keyof typeof NotificationChannel];
   status: typeof DeliveryStatus[keyof typeof DeliveryStatus];
-  reason?: string;
 }
 
-export function getNotificationNotice(currentResults: NotificationResult[] = [], precedingResults: NotificationResult[] = []) {
-  const results = [...precedingResults, ...(Array.isArray(currentResults) ? currentResults : [])];
-  if (!results.length) return null;
-  const sent = results.filter((result) => result.status === DeliveryStatus.SENT);
-  const events = [...new Set(results.map((result) => result.event))];
-  const hasUnsentEvent = events.some((event) => !sent.some((result) => result.event === event));
-  if (hasUnsentEvent) {
-    return { message: sent.length ? "A alteração foi salva, mas alguns avisos não puderam ser enviados. Verifique as configurações dos canais." : "A alteração foi salva, mas não foi possível enviar o aviso. Verifique as configurações dos canais.", type: "warning" as const };
-  }
-  if (sent.length) {
-    const channelLabels = { [NotificationChannel.WHATSAPP]: "WhatsApp", [NotificationChannel.EMAIL]: "e-mail", [NotificationChannel.SMS]: "SMS" };
-    const channels = [...new Set(sent.map((result) => channelLabels[result.channel]))];
-    const accepted = `Aviso aceito para envio por ${channels.join(" e ")}.`;
-    if (sent.length !== results.length) {
-      return { message: `${accepted} Alguns canais não enviaram o aviso. Consulte o histórico.`, type: "warning" as const };
-    }
-    return { message: accepted, type: "success" as const };
-  }
-  return null;
+interface NotificationFeedback {
+  notificationResults?: NotificationResult[];
+  notificationDispatchFailed?: boolean;
+  notificationHistoryFailed?: boolean;
+}
+
+const channelLabels = {
+  [NotificationChannel.EMAIL]: "e-mail",
+  [NotificationChannel.WHATSAPP]: "WhatsApp",
+  [NotificationChannel.SMS]: "SMS",
+};
+const channelList = new Intl.ListFormat("pt-BR");
+
+function channelsWithStatus(results: NotificationResult[], status: NotificationResult["status"]) {
+  const labels = results.filter((result) => result.status === status && result.channel)
+    .map(({ channel }) => channel && channelLabels[channel]).filter(Boolean);
+  return channelList.format([...new Set(labels)]);
+}
+
+export function buildActionNotice(title: string, feedback: NotificationFeedback = {}, detail?: string): ToastNotice {
+  const results = Array.isArray(feedback.notificationResults) ? feedback.notificationResults : [];
+  const failed = channelsWithStatus(results, DeliveryStatus.FAILED);
+  const unavailable = channelsWithStatus(results, DeliveryStatus.SKIPPED);
+  const dispatchFailed = feedback.notificationDispatchFailed || results.some((result) =>
+    result.status !== DeliveryStatus.SENT && !Object.values(NotificationChannel).includes(result.channel));
+  const sendIssue = Boolean(failed || unavailable || dispatchFailed);
+  const accepted = sendIssue ? channelsWithStatus(results, DeliveryStatus.SENT) : "";
+  const details = [
+    detail,
+    accepted && `Envio aceito por ${accepted}.`,
+    unavailable && `Envio indisponível por ${unavailable}.`,
+    failed && `Falha no envio por ${failed}.`,
+    dispatchFailed && "Não foi possível concluir todos os avisos.",
+    feedback.notificationHistoryFailed && "Não foi possível gravar o histórico do envio.",
+  ].filter(Boolean);
+
+  return {
+    title,
+    tone: sendIssue || feedback.notificationHistoryFailed ? "warning" : "success",
+    ...(details.length && { detail: details.join(" ") }),
+  };
 }

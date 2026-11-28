@@ -7,6 +7,7 @@ import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
 import { AttachmentsTab } from "./attachments-tab";
 import { buildAttachmentRows } from "./attachment-rows";
 import { ProcessModal } from "./process-modal";
+import { ProcessDialog, ProcessDialogErrorContext } from "./process-dialog";
 import { ProcessFooter } from "./process-footer";
 import { ProcessHistoryTimeline } from "./process-history-tab";
 import { ProcessTab } from "./process-labels";
@@ -32,6 +33,17 @@ const pendingRequest = {
 const buttonMarkup = (html: string, label: string) => html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g)?.find((button) => button.endsWith(`${label}</button>`));
 const scheduleTrigger = (html: string) => html.match(/<button\b[^>]*aria-haspopup="menu"[^>]*>[\s\S]*?<\/button>/)?.[0];
 const scheduleActions = ["Confirmar Agenda", "Reagendar", "Atendimento Encerrado", "Não compareceu"];
+
+it("announces an action failure inside the open dialog", () => {
+  const html = renderToStaticMarkup(
+    <ProcessDialogErrorContext.Provider value="Escolha um horário disponível.">
+      <ProcessDialog title="Reagendar solicitação" busy={false} onClose={noop} actions={<button type="button">Confirmar</button>}>
+        <p>Horário</p>
+      </ProcessDialog>
+    </ProcessDialogErrorContext.Provider>,
+  );
+  expect(html).toMatch(/role="dialog"[\s\S]*?role="alert">Escolha um horário disponível\.<\/p>[\s\S]*?Confirmar/);
+});
 
 describe("ProcessModal", () => {
   it("opens in document analysis and preserves the four tabs and the header actions", () => {

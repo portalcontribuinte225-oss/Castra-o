@@ -70,12 +70,12 @@ test("the notice goes only with the notices accepted, carries the link and is ke
   const appendHistory = async (entries, id, municipalityId) => { history.push({ entries, id, municipalityId }); };
   const dispatch = async (input) => { dispatched.push(input); return [{ event: input.event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }]; };
   for (const followUp of [undefined, { enabled: false, email: "", phone: "" }]) {
-    assert.deepEqual(await notifyRequestRegistered(registeredRequest({ workflow_data: { followUp } }), { appendHistory, dispatch, accessLink: async () => ({ url: URL }) }), []);
+    assert.deepEqual(await notifyRequestRegistered(registeredRequest({ workflow_data: { followUp } }), { appendHistory, dispatch, accessLink: async () => ({ url: URL }) }), { notificationResults: [] });
   }
   assert.equal(dispatched.length + history.length, 0);
   const request = registeredRequest();
   const results = await notifyRequestRegistered(request, { appendHistory, dispatch, accessLink: async () => ({ url: URL, accountExists: false }) });
-  assert.deepEqual(results, [{ event: EVENT, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }]);
+  assert.deepEqual(results.notificationResults, [{ event: EVENT, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }]);
   assert.equal(dispatched[0].event, EVENT);
   assert.deepEqual(dispatched[0].request.access_link, { url: URL, accountExists: false });
   assert.equal(request.access_link, undefined, "the link is never saved with the request");
@@ -94,10 +94,14 @@ test("without a link the notice still goes, and a channel that fails or a histor
   assert.equal(dispatched[0].request.access_link, null);
   assert.equal(history.length, 0, "no channel in use leaves no history");
   const failed = await notifyRequestRegistered(registeredRequest(), { appendHistory, accessLink: async () => null, dispatch: async () => { throw new Error("private provider body"); } });
-  assert.deepEqual(failed, [{ event: EVENT, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED, reason: "Não foi possível preparar a notificação." }]);
+  assert.deepEqual(failed, { notificationResults: [], notificationDispatchFailed: true });
   assert.equal(history.length, 1);
+  assert.equal(history[0].notification.channel, undefined);
   assert.doesNotMatch(JSON.stringify(history), /private/);
   const unsaved = await notifyRequestRegistered(registeredRequest(), { appendHistory: async () => { throw new Error("down"); }, accessLink: async () => null,
     dispatch: async () => [{ event: EVENT, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }] });
-  assert.equal(unsaved.at(-1).reason, "Operação salva; histórico do envio indisponível.");
+  assert.deepEqual(unsaved, {
+    notificationHistoryFailed: true,
+    notificationResults: [{ event: EVENT, channel: NotificationChannel.EMAIL, status: DeliveryStatus.SENT }],
+  });
 });

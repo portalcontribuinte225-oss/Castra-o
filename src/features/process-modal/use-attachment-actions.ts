@@ -5,8 +5,9 @@ import type { AnyRecord } from "../../types";
 import { readFileAsDataUrl } from "../../utils";
 import { buildDocumentReviewDecision } from "../registered-animals/document-review-decisions";
 import type { AttachmentRow } from "./attachment-rows";
+import type { ProcessActionResult } from "./process-types";
 
-type UpdateDocuments = (request: AnyRecord, patch: AnyRecord, note: string) => Promise<boolean>;
+type UpdateDocuments = (request: AnyRecord, patch: AnyRecord, note: string) => Promise<ProcessActionResult>;
 
 // What the attachments tab does with a document: open it, download it, approve it, send it back for correction, attach evidence.
 export function useAttachmentActions(request: AnyRecord, municipality: AnyRecord | null, updateDocuments?: UpdateDocuments) {
@@ -40,11 +41,26 @@ export function useAttachmentActions(request: AnyRecord, municipality: AnyRecord
     }
   });
 
-  const approve = (row: AttachmentRow) => run(row, async () => updateDocuments?.(request,
-    { documentReviews: [buildDocumentReviewDecision(row.document?.attachmentId, DocumentReviewStatus.APPROVED)] }, `Documento deferido: ${row.title}`));
+  async function saveDocuments(patch: AnyRecord, note: string, fallback: string) {
+    const result = await updateDocuments?.(request, patch, note);
+    if (result?.ok === true) return true;
+    setError(result?.message || fallback);
+    return false;
+  }
 
-  const reject = (row: AttachmentRow, note: string) => run(row, async () => updateDocuments?.(request,
-    { documentReviews: [buildDocumentReviewDecision(row.document?.attachmentId, DocumentReviewStatus.REJECTED, note)] }, `Documento indeferido (${row.title}). ${note}`));
+  function review(row: AttachmentRow, decision: typeof DocumentReviewStatus.APPROVED | typeof DocumentReviewStatus.REJECTED, note = "") {
+    return run(row, async () => {
+      try {
+        const historyNote = decision === DocumentReviewStatus.APPROVED
+          ? `Documento deferido: ${row.title}` : `Documento indeferido (${row.title}). ${note}`;
+        const documentReviews = [buildDocumentReviewDecision(row.document?.attachmentId, decision, note)];
+        return await saveDocuments({ documentReviews }, historyNote, "Não foi possível salvar a decisão sobre o documento.");
+      } catch (failure) {
+        setError(failure instanceof Error ? failure.message : "Não foi possível salvar a decisão sobre o documento.");
+        return false;
+      }
+    });
+  }
 
   async function attachEvidence(files: File[]) {
     if (busyId || uploadingEvidence) return;
@@ -58,9 +74,8 @@ export function useAttachmentActions(request: AnyRecord, municipality: AnyRecord
     try {
       const evidence = await Promise.all(files.map(async (file) => ({ documentId: `evidencia-${crypto.randomUUID()}`,
         fileName: file.name, fileType: file.type, dataUrl: await readFileAsDataUrl(file) })));
-      if (!(await updateDocuments?.(request, { documentEvidence: evidence }, `Documentos complementares anexados: ${files.map((file) => file.name).join(", ")}`))) {
-        setError("Não foi possível anexar os arquivos. Tente novamente.");
-      }
+      await saveDocuments({ documentEvidence: evidence }, `Documentos complementares anexados: ${files.map((file) => file.name).join(", ")}`,
+        "Não foi possível anexar os arquivos. Tente novamente.");
     } catch {
       setError("Não foi possível ler os arquivos escolhidos.");
     } finally {
@@ -68,5 +83,9 @@ export function useAttachmentActions(request: AnyRecord, municipality: AnyRecord
     }
   }
 
-  return { preview, closePreview: () => setPreview(null), busyId, uploadingEvidence, error, open, save, approve, reject, attachEvidence };
+  return { preview, closePreview: () => setPreview(null), busyId, uploadingEvidence, error, clearError: () => setError(""), open, save,
+    approve: (row: AttachmentRow) => review(row, DocumentReviewStatus.APPROVED),
+    reject: (row: AttachmentRow, note: string) => review(row, DocumentReviewStatus.REJECTED, note),
+    attachEvidence,
+  };
 }

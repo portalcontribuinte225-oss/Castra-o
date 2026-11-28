@@ -26,11 +26,11 @@ export function WhatsappTemplatesPanel({ municipalityId, master, readOnly, canSy
       {templates.loading && <p role="status">Carregando templates...</p>}
       {templates.error && (
         <div role="alert">
-          <p className="form-error">{templates.error}</p>
+          <p className="form-error-msg">{templates.error}</p>
           {!templates.ready && <Button variant="outline" onClick={templates.retry}>Carregar novamente</Button>}
         </div>
       )}
-      {templates.notice && <p role="status">{templates.notice}</p>}
+      {templates.notice && <p className="form-success-msg" role="status">{templates.notice}</p>}
       {templates.ready && (
         <WhatsappTemplatesTable
           list={templates.list}

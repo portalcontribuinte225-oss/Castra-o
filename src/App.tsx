@@ -115,6 +115,7 @@ import { useMediaQuery } from "./components/use-media-query";
 import { WorkspaceMobileNavigation } from "./components/workspace-mobile-navigation";
 import { DocumentPreviewModal } from "./components/document-preview-modal";
 import { ToastContainer } from "./components/toast-container";
+import { useToastQueue } from "./features/notifications/use-toast-queue";
 import { PublicSchedulePicker } from "./features/schedule-picker/public-schedule-picker";
 import { getUserSectorIds, userBelongsToSector } from "./features/teams/user-sectors";
 import { createRequestDocumentDataUrl } from "./features/municipal-documents/request-document-pdf";
@@ -419,6 +420,8 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
   const [selectedMunicipalityId, setSelectedMunicipalityId] = useState(localStorage.getItem("castragestao:municipalityId") || "");
   const [accessLink, setAccessLink] = useState(() => readAccessLink(window.location.search));
   const [globalMunicipalityFilterId, setGlobalMunicipalityFilterId] = useState(localStorage.getItem(GLOBAL_MUNICIPALITY_FILTER_KEY) || "");
+  const activeMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : currentUser?.municipalityId || "";
+  const { toasts, showToast, dismissToast } = useToastQueue(JSON.stringify([currentUser?.id, activeMunicipalityId]));
   const geoTriedRef = useRef(false);
   const [globalSearch, setGlobalSearch] = useState("");
   const [configMenuOpen, setConfigMenuOpen] = useState(false);
@@ -841,7 +844,6 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
       if (item.id === "integrations") return visibleIntegrationsTabs.length > 0;
       return currentPermissionGroup.allowedConfigItems?.includes(item.id);
     });
-  const activeMunicipalityId = isGlobalRole(currentUser?.role) ? globalMunicipalityFilterId : currentUser?.municipalityId || "";
   const sidebarMunicipality = municipalities.find((municipality) => municipality.id === activeMunicipalityId);
   const scopedMunicipalityId = activeMunicipalityId;
   const scopedRequests = filterByMunicipalityScope(requests, scopedMunicipalityId);
@@ -1127,6 +1129,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
             metrics={scopedMetrics}
             patchRequest={patchRequest}
             runProcedureAction={runProcedureAction}
+            showToast={showToast}
             createRequest={createRequest}
             adoptionAnimals={scopedAdoptionAnimals}
             setAdoptionAnimals={setAdoptionAnimals}
@@ -1182,6 +1185,7 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
       <WorkspaceMobileNavigation items={visibleMenu} active={active} menuOpen={mobileDialogOpen} onNavigate={navigateWorkspace} onOpenMenu={openMobileMenu} />
 
       {sidebarResetOpen && <PasswordChangeForm modal returnFocus={accountButton.current} onChanged={(user) => { setCurrentUser(user); closeSidebarReset(); }} onCancel={closeSidebarReset} />}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }
@@ -3088,6 +3092,7 @@ function AdminDashboard({
   currentUser,
   patchRequest,
   runProcedureAction,
+  showToast,
   createRequest,
   requestTypes = initialRequestTypes,
   documentTypes = initialDocumentTypes,
@@ -3114,15 +3119,9 @@ function AdminDashboard({
     setCreateRequestOpen(false);
     setCreatedRequest(null);
   }
-  const [toasts, setToasts] = useState<AnyRecord[]>([]);
   // A global user without a municipality chosen sees the requests of every municipality together.
   const mixedMunicipalities = isGlobalRole(currentUser?.role) && !selectedMunicipalityId;
 
-  function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
-    const id = Date.now() + Math.random();
-    setToasts((current) => [...current, { id, message, type }]);
-    setTimeout(() => setToasts((current) => current.filter((t) => t.id !== id)), type === "error" ? 6000 : 4000);
-  }
 
   const {
     previewRequest,
@@ -3196,7 +3195,6 @@ function AdminDashboard({
   const emptyMessage = getEmptyListMessage(requestFilters);
   return (
     <section className="tw:grid tw:min-w-0 tw:gap-3.5">
-      <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t) => t.id !== id))} />
       <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
         <Button
           variant="custom"
@@ -4148,7 +4146,7 @@ function AdoptionView({
                 </label>
               </div>
             </div>
-            {formError && <p className="form-error" role="alert">{formError}</p>}
+            {formError && <p className="form-error-msg" role="alert">{formError}</p>}
             <div className="form-actions">
               <Button variant="outline" onClick={() => closeAnimalForm()} disabled={isSavingAnimal}>
                 Cancelar

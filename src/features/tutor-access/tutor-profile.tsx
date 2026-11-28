@@ -48,7 +48,7 @@ export function TutorProfileView() {
         <Button variant="outline" onClick={() => { state.cancel(); setCode(""); setCurrentPassword(""); }} disabled={state.saving || clock.retryIn > 0}>{clock.retryIn > 0 ? `Novo envio disponível em ${clock.retryIn}s` : "Solicitar outro código"}</Button>
       </>}
       {state.error && <p className={authErrorStyle} role="alert">{state.error}</p>}
-      {success && <p role="status">Contato confirmado e atualizado. Os avisos autorizados das solicitações em andamento usarão esse contato.</p>}
+      {success && <p className="form-success-msg" role="status">Contato confirmado e atualizado. Os avisos autorizados das solicitações em andamento usarão esse contato.</p>}
       <Button type="submit" disabled={state.saving || (Boolean(state.challenge) && (clock.expiresIn === 0 || code.length !== 6))}>{state.saving ? "Aguarde..." : state.challenge ? "Confirmar contato" : "Enviar código ao contato"}</Button>
     </form>
   </Card>;

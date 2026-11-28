@@ -554,7 +554,8 @@ test("post-commit history failure keeps PATCH successful and preserves the saved
   const response = await request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { status: "AGENDADA" } });
   assert.equal(response.status, 200);
   assert.equal(row().status, "AGENDADA");
-  assert.equal(response.body.notificationResults.some(({ reason }) => reason?.includes("histórico")), true);
+  assert.equal(response.body.notificationHistoryFailed, true);
+  assert.deepEqual(response.body.notificationResults.map(({ channel, status, code }) => [channel, status, code]), [["email", "skipped", "not_configured"]]);
   assert.equal(stats.calls.some(({ sql }) => sql === "ROLLBACK"), false);
 });
 

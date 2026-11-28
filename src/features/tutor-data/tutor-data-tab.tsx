@@ -92,8 +92,8 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
           {issues.password && <small className="field-error-message">{issues.password}</small>}
         </div>
       )}
-      {saveError && <p className="form-error" role="alert">{saveError}</p>}
-      {notice && <p className="prm-muted-note" role="status">{notice}</p>}
+      {saveError && <p className="form-error-msg" role="alert">{saveError}</p>}
+      {notice && <p className="form-success-msg" role="status">{notice}</p>}
       {!readOnly && actionsSlot && createPortal(editing
         ? <Button type="submit" form={formId} disabled={!canSave}><Save size={15} aria-hidden="true" /> {saving ? "Salvando..." : "Salvar alterações"}</Button>
         : <Button disabled={busy} onClick={() => setEditing(true)}><Pencil size={15} aria-hidden="true" /> Editar dados</Button>, actionsSlot)}

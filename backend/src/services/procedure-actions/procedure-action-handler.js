@@ -1,6 +1,5 @@
 import { pool } from "../../db/index.js";
 import { isInternalUser } from "../../tenant.js";
-import { DeliveryStatus } from "../../../../shared/notification-contract.js";
 import {
   CLOSED_WITHOUT_ATTENDANCE, POSITIVE_CLOSURE, ProcedureAction, ProcedureActionErrorCode, REQUESTED_SCHEDULE_KEY, isClosedRequest, resolveRequestProcedures, scheduleFromRequest,
 } from "../../../../shared/request-procedure-contract.js";
@@ -85,13 +84,13 @@ export async function handleProcedureAction(req, res) {
     committed = true;
     client.release();
     client = null;
-    saved.notificationResults = await notifyRequestChanges(request, saved, {
+    const notificationFeedback = await notifyRequestChanges(request, saved, {
       appendHistory: appendRequestHistory, procedureAction: input.action, outcomes: result.outcomes,
     });
-    res.json(decorateRequestDocuments({ ...saved, workflow_data: withoutRequestContactCpf(saved.workflow_data) }, settings));
+    res.json(decorateRequestDocuments({ ...saved, ...notificationFeedback, workflow_data: withoutRequestContactCpf(saved.workflow_data) }, settings));
   } catch (err) {
     if (committed) return res.json({ ...saved, workflow_data: withoutRequestContactCpf(saved.workflow_data),
-      notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
+      notificationResults: [], notificationDispatchFailed: true });
     if (client) await client.query("ROLLBACK").catch(() => {});
     const code = Object.values(ProcedureActionErrorCode).includes(err.code) ? err.code : undefined;
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível atualizar o procedimento.", code });

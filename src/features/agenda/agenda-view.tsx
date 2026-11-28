@@ -17,7 +17,6 @@ import {
   requestTypeLabel,
   requestTypeLabels,
 } from "../../domain";
-import { ToastContainer } from "../../components/toast-container";
 import { ProcessModal } from "../process-modal/process-modal";
 import { canEditRequests, useRequestActions } from "../request-actions/request-actions";
 import { ActiveFiltersBar } from "../request-filters/active-filters-bar";
@@ -143,6 +142,7 @@ export function AgendaView({
   setSelectedId,
   patchRequest,
   runProcedureAction,
+  showToast,
   currentUser,
   teams = { sectors: [], users: [] },
   municipalities = [],
@@ -155,16 +155,10 @@ export function AgendaView({
   const [filters, setFilters] = useState<AgendaFilters>(initialAgendaFilters);
   // The filters panel edits a draft; null means the panel is closed.
   const [filtersDraft, setFiltersDraft] = useState<AgendaFilters | null>(null);
-  const [toasts, setToasts] = useState<AnyRecord[]>([]);
   const activeViewButton = useRef<HTMLButtonElement>(null);
   const dayPanelReturnFocus = useRef<HTMLButtonElement>(null);
   const processReturnFocus = useRef<HTMLButtonElement>(null);
 
-  function showToast(message: string, type: "success" | "error" | "info" | "warning" = "success") {
-    const id = Date.now() + Math.random();
-    setToasts((current) => [...current, { id, message, type }]);
-    setTimeout(() => setToasts((current) => current.filter((t) => t.id !== id)), type === "error" ? 6000 : 4000);
-  }
 
   const {
     previewRequest,
@@ -440,7 +434,6 @@ export function AgendaView({
         />
       )}
 
-      <ToastContainer toasts={toasts} onDismiss={(id) => setToasts((current) => current.filter((t: AnyRecord) => t.id !== id))} />
     </section>
   );
 }

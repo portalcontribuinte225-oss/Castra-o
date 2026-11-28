@@ -3,7 +3,6 @@ import crypto from "crypto";
 import { pool } from "../db/index.js";
 import { auth, optionalAuth, requireInternalUser } from "../middleware/auth.js";
 import { isGlobalUser, isInternalUser, requireMunicipality } from "../tenant.js";
-import { DeliveryStatus } from "../../../shared/notification-contract.js";
 import { loadRequestSettings, loadDocumentReviewSettings } from "../repositories/request-settings.js";
 import { prepareRequestSubmission, mergeProtectedWorkflow } from "../services/request-submission.js";
 import { updateRequestProcedures } from "../services/request-procedures.js";
@@ -450,11 +449,11 @@ router.patch("/:id", auth, async (req, res) => {
     released = true;
     const requestWithDocuments = decorateRequestDocuments(savedRequest, settings);
     const beforeNotice = body.documentReviews?.length ? decorateRequestDocuments(existingRows[0], settings) : existingRows[0];
-    requestWithDocuments.notificationResults = await notifyRequestChanges(beforeNotice, requestWithDocuments, { appendHistory: appendRequestHistory });
-    res.json({ ...requestWithDocuments, workflow_data: withoutRequestContactCpf(requestWithDocuments.workflow_data) });
+    const notificationFeedback = await notifyRequestChanges(beforeNotice, requestWithDocuments, { appendHistory: appendRequestHistory });
+    res.json({ ...requestWithDocuments, ...notificationFeedback, workflow_data: withoutRequestContactCpf(requestWithDocuments.workflow_data) });
   } catch (err) {
     if (committed) return res.json({ ...savedRequest, workflow_data: withoutRequestContactCpf(savedRequest.workflow_data),
-      notificationResults: [{ status: DeliveryStatus.FAILED, reason: "Operação salva; não foi possível concluir os avisos." }] });
+      notificationResults: [], notificationDispatchFailed: true });
     if (client && !committed) await client.query("ROLLBACK").catch(() => {});
     res.status(err.status || 500).json({ error: err.status ? err.message : "Não foi possível atualizar a solicitação." });
   } finally {

@@ -162,7 +162,7 @@ export function AuthEntry({ municipalityId, audience, onLogin, onClose }: AuthEn
                 </button>
               </div>
             </div>
-            {notice && <p role="status" className="tw:m-0 tw:text-sm tw:text-ui-text">{notice}</p>}
+            {notice && <p className="form-success-msg" role="status">{notice}</p>}
             {login.error && <p role="alert" className={authErrorStyle}>{login.error}</p>}
             <Button type="submit" disabled={login.loading || !login.identifier.trim() || !login.password}>
               {login.loading ? "Entrando..." : "Entrar"}

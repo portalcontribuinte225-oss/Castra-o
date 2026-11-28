@@ -1,19 +1,31 @@
 import { useCallback, useState } from "react";
-import { RequestStatus, RequestTag } from "../../../shared/request-contract.js";
-import { ProcedureActionErrorCode } from "../../../shared/request-procedure-contract.js";
+import { RequestKind, RequestStatus, RequestTag } from "../../../shared/request-contract.js";
 import { ApiError } from "../../api";
 import type { AnyRecord } from "../../types";
 import { mergeTags, normalizeRequest } from "../../domain";
-import { getNotificationNotice } from "../notifications/notification-results";
+import { buildActionNotice } from "../notifications/notification-results";
 import { normalizeText } from "../../utils";
 import { REJECTED_CANCEL_REASON } from "../../../shared/notification-contract.js";
-import type { ProcedureActionResult, ProcedureOperation } from "../process-modal/process-types";
+import type { ProcessActionResult, ProcedureOperation } from "../process-modal/process-types";
+import type { ToastNotice } from "../../components/toast-container";
 
 export function canEditRequests(role = ""): boolean {
   return ["master", "suporte", "admin_municipal", "analista", "servidor_publico"].includes(normalizeText(role));
 }
 
-type ShowToast = (message: string, type?: "success" | "error" | "info" | "warning") => void;
+function actionFailure(fallback: string, failure?: unknown): ProcessActionResult {
+  return {
+    ok: false,
+    message: failure instanceof ApiError ? failure.message : fallback,
+    code: failure instanceof ApiError ? failure.code : undefined,
+  };
+}
+
+const specialConfirmTitles = {
+  [RequestKind.DEATH]: "Óbito confirmado",
+  [RequestKind.TRANSFER]: "Troca de tutor concluída",
+  [RequestKind.COMPLAINT]: "Denúncia deferida",
+};
 
 export function useRequestActions({
   patchRequest,
@@ -27,18 +39,13 @@ export function useRequestActions({
   runProcedureAction?: (id: string, action: AnyRecord) => Promise<AnyRecord>;
   currentUser: AnyRecord;
   teams?: AnyRecord;
-  showToast: ShowToast;
+  showToast?: (notice: ToastNotice) => void;
   setSelectedId?: (id: string) => void;
 }) {
   const [previewRequest, setPreviewRequest] = useState<AnyRecord | null>(null);
 
   const activeUsers = teams.users?.filter((user: AnyRecord) => user.active !== false) || [];
   const activeSectors = teams.sectors?.filter((sector: AnyRecord) => sector.active !== false) || [];
-
-  function showNotificationNotice(updated: AnyRecord) {
-    const notice = getNotificationNotice(updated?.notificationResults);
-    if (notice) showToast(notice.message, notice.type);
-  }
 
   const openRequest = useCallback((request: AnyRecord) => {
     setSelectedId?.(request.id);
@@ -58,39 +65,36 @@ export function useRequestActions({
     if (refreshed) setPreviewRequest((current) => current?.id === id ? refreshed : current);
   }
 
-  async function applyProcedureAction(request: AnyRecord, action: ProcedureOperation, successMessage: string): Promise<ProcedureActionResult | null> {
+  async function applyProcedureAction(request: AnyRecord, action: ProcedureOperation, title: string, detail?: string): Promise<ProcessActionResult> {
+    const fallback = "Não foi possível atualizar o procedimento.";
     try {
       const updated = await runProcedureAction?.(request.id, { ...action, expectedUpdatedAt: request.updated_at || request.updatedAt || "" });
-      if (!updated) return null;
-      if (successMessage) showToast(successMessage, "success");
-      showNotificationNotice(updated);
+      if (!updated) return actionFailure(fallback);
       const normalized = normalizeRequest(updated);
       setPreviewRequest((current) => current?.id === request.id ? normalized : current);
+      showToast?.(buildActionNotice(title, updated, detail));
       return { ok: true };
     } catch (failure) {
-      const message = failure?.message || "Não foi possível atualizar o procedimento.";
-      const code = failure instanceof ApiError ? failure.code : undefined;
-      if (code !== ProcedureActionErrorCode.RESERVATION_UNAVAILABLE) showToast(message, "error");
-      return { ok: false, message, code };
+      return actionFailure(fallback, failure);
     }
   }
 
   // The attachments tab saves each document decision and each evidence as soon as it is made.
-  async function updateDocuments(request: AnyRecord, patch: AnyRecord, note: string) {
+  async function updateDocuments(request: AnyRecord, patch: AnyRecord, note: string): Promise<ProcessActionResult> {
+    const fallback = "Não foi possível salvar a conferência do documento.";
     try {
       const updated = await patchRequest?.(request.id, patch, note);
-      if (!updated) return false;
-      showNotificationNotice(updated);
+      if (!updated) return actionFailure(fallback);
       setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
-      return true;
-    } catch (failure) { showToast(failure?.message || "Não foi possível salvar a conferência do documento.", "error"); return false; }
+      return { ok: true };
+    } catch (failure) { return actionFailure(fallback, failure); }
   }
 
-  async function assignFromPreview(request: AnyRecord, assignment: AnyRecord = {}) {
-    if (!request) return;
+  async function assignFromPreview(request: AnyRecord, assignment: AnyRecord = {}): Promise<ProcessActionResult> {
+    const fallback = "Não foi possível atribuir o processo.";
     const sector = activeSectors.find((item: AnyRecord) => item.id === assignment.sectorId);
     const user = activeUsers.find((item: AnyRecord) => item.id === assignment.userId);
-    if (!sector || (assignment.userId && !user)) return false;
+    if (!sector || (assignment.userId && !user)) return actionFailure("Selecione um setor e um responsável válidos.");
     const patch = {
       assignedSectorId: sector.id,
       assignedUserId: user?.id || "",
@@ -99,16 +103,18 @@ export function useRequestActions({
     };
     try {
       const label = [sector.name, user?.name || "Fila do setor"].join(" · ");
-      const updated = await patchRequest?.(request.id, patch, user?.id === currentUser?.id ? `Atendimento assumido · ${label}` : `Atendimento atribuído · ${label}`);
-      if (!updated) return false;
+      const assumed = Boolean(user && user.id === currentUser?.id);
+      const updated = await patchRequest?.(request.id, patch, assumed ? `Atendimento assumido · ${label}` : `Atendimento atribuído · ${label}`);
+      if (!updated) return actionFailure(fallback);
       setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
-      showToast("Setor e responsável atualizados.", "success");
-      return true;
-    } catch (failure) { showToast(failure?.message || "Erro ao atribuir processo", "error"); return false; }
+      const title = assumed ? "Processo assumido" : user ? "Responsável definido" : "Processo enviado à fila do setor";
+      showToast?.(buildActionNotice(title, updated));
+      return { ok: true };
+    } catch (failure) { return actionFailure(fallback, failure); }
   }
 
-  async function rejectRequestFromProcess(request: AnyRecord, data: AnyRecord = {}) {
-    if (!request) return;
+  async function rejectRequestFromProcess(request: AnyRecord, data: AnyRecord = {}): Promise<ProcessActionResult> {
+    const fallback = "Não foi possível indeferir a solicitação.";
     const note = String(data.note || "").trim();
     const patch = {
       status: RequestStatus.CANCELLED,
@@ -118,27 +124,26 @@ export function useRequestActions({
     };
     try {
       const updated = await patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
-      if (!updated) return false;
-      showToast("Processo indeferido", "warning");
-      showNotificationNotice(updated);
+      if (!updated) return actionFailure(fallback);
       setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
-      return true;
-    } catch (failure) { showToast(failure?.message || "Erro ao indeferir processo", "error"); return false; }
+      showToast?.(buildActionNotice("Solicitação indeferida", updated));
+      return { ok: true };
+    } catch (failure) { return actionFailure(fallback, failure); }
   }
 
-  async function confirmSpecialRequest(request: AnyRecord, data: AnyRecord = {}) {
-    if (!request) return;
+  async function confirmSpecialRequest(request: AnyRecord, data: AnyRecord = {}): Promise<ProcessActionResult> {
+    const fallback = "Não foi possível confirmar o processo.";
     const note = String(data.note || "").trim();
     const patch: AnyRecord = { status: RequestStatus.COMPLETED };
     if (note) patch.workflow_data = { complaintResolutionNote: note };
     try {
       const updated = await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}${note ? `. Conclusão: ${note}` : ""}`);
-      if (!updated) return false;
-      showToast("Processo confirmado com sucesso", "success");
-      showNotificationNotice(updated);
+      if (!updated) return actionFailure(fallback);
       setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
-      return true;
-    } catch (failure) { showToast(failure?.message || "Erro ao confirmar processo", "error"); return false; }
+      const title = specialConfirmTitles[request.request_type || request.type] || "Processo confirmado";
+      showToast?.(buildActionNotice(title, updated));
+      return { ok: true };
+    } catch (failure) { return actionFailure(fallback, failure); }
   }
 
   return {

@@ -33,11 +33,11 @@ export function EmailIntegrationTab({ municipalityId, master, canManage }: { mun
           {email.loading && <p role="status">Carregando a integração de e-mail...</p>}
           {email.error && (
             <div role="alert">
-              <p className="form-error">{email.error}</p>
+              <p className="form-error-msg">{email.error}</p>
               {!email.ready && <Button variant="outline" onClick={email.retry}>Carregar novamente</Button>}
             </div>
           )}
-          {email.notice && <p role="status">{email.notice}</p>}
+          {email.notice && <p className="form-success-msg" role="status">{email.notice}</p>}
           {identity && (
             <p className="tw:m-0">
               Identificação nos e-mails: <strong>{identity.name}</strong>{identity.departmentName ? ` · ${identity.departmentName}` : ""}

@@ -81,7 +81,7 @@ export function AttachmentsTab({ rows, reviewRequired, canReview, hasAssignedUse
 
   return (
     <div className="prm-attachments">
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {error && <p className="form-error-msg" role="alert">{error}</p>}
       <h3 className="prm-section-title">Conferência de documentos</h3>
       {showAssignmentNote && <p className="prm-muted-note" id={assignmentNoteId}>Atribua um usuário ao processo antes de deferir documentos.</p>}
       <div className="process-attachments-list">

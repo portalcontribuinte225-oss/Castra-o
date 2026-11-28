@@ -1,4 +1,4 @@
-import { DeliveryStatus, NotificationChannel, NotificationEvent } from "../../../shared/notification-contract.js";
+import { NotificationEvent } from "../../../shared/notification-contract.js";
 import { buildAccessUrl } from "../../../shared/request-access-contract.js";
 import { pool } from "../db/index.js";
 import { tutorAccountExists } from "../repositories/request-access.js";
@@ -19,14 +19,15 @@ export async function loadAccessLink(request, database = pool, env = process.env
 // "Solicitação registrada": sent once the request is saved and answered, public or at the counter, with or without a tutor, to
 // whoever accepted the notices. Without the link the notice still goes; a channel that fails never touches the request.
 export async function notifyRequestRegistered(request, { appendHistory, dispatch = dispatchNotification, accessLink = loadAccessLink }) {
-  if (request.workflow_data?.followUp?.enabled !== true) return [];
+  if (request.workflow_data?.followUp?.enabled !== true) return { notificationResults: [] };
   const event = NotificationEvent.REQUEST_REGISTERED;
-  let results;
+  let results = [];
+  const failedEvents = [];
   try {
     const link = await accessLink(request).catch(() => null);
     results = await dispatch({ event, request: { ...request, access_link: link } });
   } catch {
-    results = [{ event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED, reason: "Não foi possível preparar a notificação." }];
+    failedEvents.push(event);
   }
-  return recordNotificationResults(results, request, { appendHistory });
+  return recordNotificationResults(results, request, { appendHistory, failedEvents });
 }

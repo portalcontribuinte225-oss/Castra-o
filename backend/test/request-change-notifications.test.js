@@ -24,7 +24,7 @@ test("notifications persist structured results and only append history within th
     assert.equal(entries[0].notification.event, NotificationEvent.SCHEDULE_CONFIRMED);
     assert.doesNotMatch(JSON.stringify(entries), /private@example.com/);
   } }));
-  assert.equal(result[0].status, DeliveryStatus.SENT);
+  assert.equal(result.notificationResults[0].status, DeliveryStatus.SENT);
   assert.equal(request.history.length, 1);
   assert.deepEqual(dispatched.map(({ event, request: sent }) => [event, sent === request]), [[NotificationEvent.SCHEDULE_CONFIRMED, true]]);
   assert.deepEqual(Object.keys(dispatched[0]).sort(), ["event", "request"], "the dispatcher reads the channels itself and gets no settings");
@@ -34,10 +34,15 @@ test("a notice that cannot be prepared is recorded as failed without exposing th
   let recorded = false;
   const result = await notifyRequestChanges(before, after(), dependencies({
     dispatch: async () => { throw new Error("secret DB URL"); },
-    appendHistory: async (entries) => { recorded = true; assert.equal(entries[0].notification.status, DeliveryStatus.FAILED); },
+    appendHistory: async (entries) => {
+      recorded = true;
+      assert.equal(entries[0].notification.status, DeliveryStatus.FAILED);
+      assert.equal(entries[0].notification.channel, undefined);
+      assert.doesNotMatch(entries[0].notes, /E-mail|secret DB/);
+    },
   }));
   assert.equal(recorded, true);
-  assert.equal(result[0].channel, NotificationChannel.EMAIL);
+  assert.deepEqual(result, { notificationResults: [], notificationDispatchFailed: true });
   assert.doesNotMatch(JSON.stringify(result), /secret DB/);
 });
 
@@ -45,11 +50,11 @@ test("a result for each channel in use is recorded, and a notice no channel uses
   const entries = [];
   const dispatch = async ({ event }) => [NotificationChannel.EMAIL, NotificationChannel.WHATSAPP, NotificationChannel.SMS].map((channel) => ({ event, channel, status: DeliveryStatus.SENT }));
   const result = await notifyRequestChanges(before, after(), dependencies({ dispatch, appendHistory: async (recorded) => { entries.push(...recorded); } }));
-  assert.deepEqual(result.map(({ channel }) => channel), [NotificationChannel.EMAIL, NotificationChannel.WHATSAPP, NotificationChannel.SMS]);
+  assert.deepEqual(result.notificationResults.map(({ channel }) => channel), [NotificationChannel.EMAIL, NotificationChannel.WHATSAPP, NotificationChannel.SMS]);
   assert.match(entries.map(({ notes }) => notes).join("|"), /E-mail.*WhatsApp.*SMS/);
   let appended = false;
   const none = await notifyRequestChanges(before, after(), dependencies({ dispatch: async () => [], appendHistory: async () => { appended = true; } }));
-  assert.deepEqual(none, []);
+  assert.deepEqual(none, { notificationResults: [] });
   assert.equal(appended, false);
 });
 
@@ -58,15 +63,14 @@ test("provider exceptions and history failure cannot reject an already committed
     dispatch: async () => { throw new Error("sensitive provider error"); },
     appendHistory: async () => { throw new Error("database unavailable"); },
   }));
-  assert.equal(result.length, 2);
-  assert.equal(result[0].status, DeliveryStatus.FAILED);
+  assert.deepEqual(result, { notificationResults: [], notificationDispatchFailed: true, notificationHistoryFailed: true });
   assert.doesNotMatch(JSON.stringify(result), /sensitive|database unavailable/);
 });
 
 test("refusal bypasses every channel even if other contact fields exist", async () => {
   const request = { ...after(), tutor_email: "private@example.com", phone: "48999991234", workflow_data: { followUp: { enabled: false } } };
   const result = await notifyRequestChanges(before, request, dependencies({ dispatch: async () => assert.fail("no dispatch after refusal") }));
-  assert.deepEqual(result, []);
+  assert.deepEqual(result, { notificationResults: [] });
 });
 
 test("a request without follow-up sends no notice", async () => {
@@ -74,13 +78,13 @@ test("a request without follow-up sends no notice", async () => {
   for (const status of ["AGENDADA", "REALIZADA"]) {
     const result = await notifyRequestChanges(withoutFollowUp, { ...withoutFollowUp, status },
       dependencies({ dispatch: async () => assert.fail("no notice without follow-up") }));
-    assert.deepEqual(result, []);
+    assert.deepEqual(result, { notificationResults: [] });
   }
 });
 
 test("unchanged state never sends a repeated notification", async () => {
   const result = await notifyRequestChanges(after(), after(), dependencies({ dispatch: async () => assert.fail("no repeated send") }));
-  assert.deepEqual(result, []);
+  assert.deepEqual(result, { notificationResults: [] });
 });
 
 test("group confirmation and rescheduling each send one notice with the saved appointment", async () => {
@@ -94,7 +98,7 @@ test("group confirmation and rescheduling each send one notice with the saved ap
       assert.equal(notice.request.workflow_data.scheduleSlotTime, "09:15");
       return [{ event, channel: NotificationChannel.SMS, status: DeliveryStatus.SENT }];
     } }));
-    assert.equal(results.length, 1);
+    assert.equal(results.notificationResults.length, 1);
   }
 });
 
@@ -103,7 +107,7 @@ test("replacing an unavailable reservation before confirmation sends no agenda n
   const results = await notifyRequestChanges(before, pending, dependencies({ procedureAction: ProcedureAction.RESCHEDULE,
     dispatch: async () => assert.fail("the new reservation still needs confirmation"),
   }));
-  assert.deepEqual(results, []);
+  assert.deepEqual(results, { notificationResults: [] });
 });
 
 test("saving a result never sends an agenda notice when the nearest remaining appointment changes", async () => {
@@ -112,7 +116,7 @@ test("saving a result never sends an agenda notice when the nearest remaining ap
   const results = await notifyRequestChanges(scheduled, next, dependencies({
     procedureAction: ProcedureAction.SAVE, dispatch: async () => assert.fail("no notice"),
   }));
-  assert.deepEqual(results, []);
+  assert.deepEqual(results, { notificationResults: [] });
 });
 
 test("an absence sends one notice per appointment and preserves the animals in that group", async () => {
@@ -133,9 +137,9 @@ test("an absence sends one notice per appointment and preserves the animals in t
 test("only an explicit successful closure sends the completion notice", async () => {
   const scheduled = after();
   const completed = { ...scheduled, status: "REALIZADA" };
-  assert.equal((await notifyRequestChanges(scheduled, completed, dependencies({ procedureAction: ProcedureAction.SAVE }))).length, 0);
+  assert.equal((await notifyRequestChanges(scheduled, completed, dependencies({ procedureAction: ProcedureAction.SAVE }))).notificationResults.length, 0);
   const results = await notifyRequestChanges(scheduled, completed, dependencies({ procedureAction: ProcedureAction.CLOSE }));
-  assert.equal(results[0].event, NotificationEvent.COMPLETED);
+  assert.equal(results.notificationResults[0].event, NotificationEvent.COMPLETED);
   const absent = { ...scheduled, status: "CANCELADA", workflow_data: { ...scheduled.workflow_data, cancelReason: "Não compareceu" } };
-  assert.equal((await notifyRequestChanges(scheduled, absent, dependencies({ procedureAction: ProcedureAction.CLOSE }))).length, 0);
+  assert.equal((await notifyRequestChanges(scheduled, absent, dependencies({ procedureAction: ProcedureAction.CLOSE }))).notificationResults.length, 0);
 });

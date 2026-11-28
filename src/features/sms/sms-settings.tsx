@@ -21,7 +21,7 @@ export function SmsSettings({ municipalityId, master, canManage }: { municipalit
     <div className="config-panel wide">
       <PanelHeader title="SMS" aside={state.ready && <IntegrationStatusBadge integrated={state.config.integrated} />} />
       {state.loading && <p role="status">Carregando configuração de SMS...</p>}
-      {state.error && <p role="alert" className="form-error">{state.error}</p>}
+      {state.error && <p role="alert" className="form-error-msg">{state.error}</p>}
       {!state.ready && !state.loading && <Button variant="outline" onClick={state.retry}>Carregar novamente</Button>}
       {state.ready && (
         <div className="tw:grid tw:gap-3">

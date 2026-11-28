@@ -102,6 +102,8 @@ Referências do contrato: [API SMSMais](https://smsmais.com/api-sms) e [OpenAPI]
 
 ## Segurança e operação
 
+Nas ações de processo, a resposta traz `notificationResults` com o resultado de cada canal. `notificationDispatchFailed` informa uma falha geral de envio e `notificationHistoryFailed` informa uma falha ao registrar os resultados. A interface mostra o resultado da ação e as ocorrências do envio no mesmo aviso. O aceite do provedor indica que a mensagem foi recebida para envio.
+
 - O tutor não recebe senha: cria a própria no primeiro acesso, depois de provar CPF e código. A resposta de `POST /requests` traz só a solicitação.
 - O código de acompanhamento fica vinculado ao CPF e ao contato da solicitação usada no envio. Se um desses dados mudar, é preciso solicitar um novo código. Quem estiver com um acesso em andamento na troca de versão também precisa pedir um novo código.
 - CPF repetido anonimamente não redefine senha nem associa solicitações existentes; o primeiro acesso liga só as solicitações do CPF com o contato que recebeu o código. O acesso usa a identidade autenticada no município.

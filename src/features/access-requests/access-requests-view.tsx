@@ -41,6 +41,26 @@ const FILTERS = [
   { id: "TODOS", label: "Todos" },
 ];
 
+export function AccreditationFeedback({ approved, temporaryPassword, dismiss }: {
+  approved: boolean; temporaryPassword?: string; dismiss: () => void;
+}) {
+  const title = approved ? "Credenciamento aprovado" : "Credenciamento recusado";
+  return (
+    <div className="tw:grid tw:gap-2">
+      <div className="form-success-msg tw:flex tw:items-center tw:gap-2.5">
+        <CheckCircle2 size={17} aria-hidden="true" className="tw:shrink-0" />
+        <strong role="status">{title}</strong>
+        <div className="tw:ml-auto"><CloseButton onClick={dismiss} aria-label="Dispensar resultado do credenciamento" /></div>
+      </div>
+      {approved && temporaryPassword && <Card className="tw:grid tw:gap-1 tw:px-4 tw:py-3">
+        <strong>Senha inicial</strong>
+        <p className="tw:m-0 tw:text-sm tw:text-ui-muted">Anote a senha exibida nesta etapa.</p>
+        <code className="tw:break-all">{temporaryPassword}</code>
+      </Card>}
+    </div>
+  );
+}
+
 export function AccessRequestsView({
   accessRequests = [],
   reviewAccessRequest,
@@ -49,7 +69,7 @@ export function AccessRequestsView({
   const [filter, setFilter] = useState("PENDENTE");
   const [reviewing, setReviewing] = useState<AnyRecord | null>(null);
   const [reviewNote, setReviewNote] = useState("");
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback] = useState<{ approved: boolean; temporaryPassword?: string } | null>(null);
   const [reviewError, setReviewError] = useState("");
   const [deciding, setDeciding] = useState(false);
   const reviewTrigger = useRef<HTMLButtonElement>(null);
@@ -73,18 +93,16 @@ export function AccessRequestsView({
   async function decide(decision: string) {
     if (!reviewing || deciding) return;
     setDeciding(true);
-    setFeedback("");
+    setFeedback(null);
     setReviewError("");
     try {
       const updated = await reviewAccessRequest?.(reviewing.id, {
         status: decision,
         review_note: reviewNote,
       });
-      const msg =
-        decision === "APROVADO" && updated?.credential?.temporaryPassword
-          ? `Acesso aprovado. Anote a senha inicial exibida somente agora: ${updated.credential.temporaryPassword}`
-          : "Decisão registrada com sucesso.";
-      setFeedback(msg);
+      if (!updated) throw new Error("Não foi possível revisar o credenciamento.");
+      const approved = updated.status === "APROVADO";
+      setFeedback({ approved, temporaryPassword: approved ? updated.credential?.temporaryPassword : undefined });
       setReviewing(null);
       setReviewNote("");
     } catch (error) {
@@ -110,13 +128,7 @@ export function AccessRequestsView({
 
   return (
     <section className="tw:grid tw:min-w-0 tw:gap-3.5">
-      {feedback && (
-        <Card className="tw:flex tw:items-center tw:gap-2.5 tw:border-green-200 tw:bg-green-50 tw:px-4 tw:py-2 tw:text-green-800">
-          <CheckCircle2 size={17} aria-hidden="true" className="tw:shrink-0" />
-          <span>{feedback}</span>
-          <div className="tw:ml-auto"><CloseButton onClick={() => setFeedback("")} aria-label="Dispensar mensagem" /></div>
-        </Card>
-      )}
+      {feedback && <AccreditationFeedback {...feedback} dismiss={() => setFeedback(null)} />}
 
         <div className="tw:flex tw:flex-wrap tw:gap-2" role="group" aria-label="Filtros de credenciamento">
             {FILTERS.map((item) => {
@@ -132,7 +144,7 @@ export function AccessRequestsView({
                   variant="custom"
                   aria-pressed={filter === item.id}
                   className="tw:border-card-border tw:bg-card-surface tw:font-medium tw:text-ui-text tw:hover:bg-card-page tw:aria-pressed:border-ui-accent tw:aria-pressed:bg-ui-accent-soft tw:aria-pressed:text-ui-accent-strong"
-                  onClick={() => { setFeedback(""); setFilter(item.id); }}
+                  onClick={() => { setFeedback(null); setFilter(item.id); }}
                 >
                   {item.label}
                   <span className="tw:rounded-full tw:bg-card-page tw:px-2 tw:py-0.5 tw:text-xs tw:tabular-nums">{count}</span>

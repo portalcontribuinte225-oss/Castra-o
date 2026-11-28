@@ -52,12 +52,16 @@ function deliveries(before, after, action, outcomes) {
   }));
 }
 
-// The operation was committed before the notices were sent. Return a delivery warning if recording the results fails.
-export async function recordNotificationResults(results, request, { appendHistory }) {
-  const entries = results.map((result) => ({
+// Notification feedback is returned after the operation has already been committed.
+export async function recordNotificationResults(notificationResults, request, { appendHistory, failedEvents = [] }) {
+  const feedback = { notificationResults };
+  if (failedEvents.length) feedback.notificationDispatchFailed = true;
+  const generalFailures = failedEvents.map((event) => ({ event, status: DeliveryStatus.FAILED,
+    reason: "Não foi possível preparar a notificação." }));
+  const entries = [...notificationResults, ...generalFailures].map((result) => ({
     status: request.status, by: "sistema", at: new Date(), category: RequestHistoryCategory.PROCESS,
     title: NotificationLabel[result.event],
-    notes: `${channelLabels[result.channel]}: ${deliveryLabels[result.status]}.${result.reason ? ` ${result.reason}` : ""}`,
+    notes: result.channel ? `${channelLabels[result.channel]}: ${deliveryLabels[result.status]}.${result.reason ? ` ${result.reason}` : ""}` : result.reason,
     notification: result,
   }));
   if (entries.length) {
@@ -65,21 +69,22 @@ export async function recordNotificationResults(results, request, { appendHistor
       await appendHistory(entries, request.id, request.municipality_id);
       request.history = [...(Array.isArray(request.history) ? request.history : []), ...entries];
     } catch {
-      results.push({ channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED, reason: "Operação salva; histórico do envio indisponível." });
+      feedback.notificationHistoryFailed = true;
     }
   }
-  return results;
+  return feedback;
 }
 
 export async function notifyRequestChanges(before, after, { appendHistory, dispatch = dispatchNotification, procedureAction, outcomes = [] }) {
-  if (after.workflow_data?.followUp?.enabled !== true) return [];
+  if (after.workflow_data?.followUp?.enabled !== true) return { notificationResults: [] };
   const results = [];
+  const failedEvents = [];
   for (const { event, request } of deliveries(before, after, procedureAction, outcomes)) {
     try {
       results.push(...await dispatch({ event, request }));
     } catch {
-      results.push({ event, channel: NotificationChannel.EMAIL, status: DeliveryStatus.FAILED, reason: "Não foi possível preparar a notificação." });
+      failedEvents.push(event);
     }
   }
-  return recordNotificationResults(results, after, { appendHistory });
+  return recordNotificationResults(results, after, { appendHistory, failedEvents });
 }

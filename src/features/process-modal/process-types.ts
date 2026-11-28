@@ -47,7 +47,7 @@ export type ProcedureOperation =
   | { action: typeof ProcedureAction.REMOVE; data: { target: ProcedureTarget; reason: string } }
   | { action: typeof ProcedureAction.PRESCRIPTION; data: { prescriptions: PrescriptionDraft[] } };
 
-export type ProcedureActionResult = { ok: true } | { ok: false; message: string; code?: string };
+export type ProcessActionResult = { ok: true } | { ok: false; message: string; code?: string };
 
 export type ProcessProcedure = AnyRecord & { requestTypeId: string; status: string; name: string; schedule?: AppointmentSlot | null };
 export type ProcessAnimal = AnyRecord & { procedures: ProcessProcedure[] };
