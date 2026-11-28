@@ -52,7 +52,7 @@ function emailParameters(input) {
   }
   const minutes = codeMinutes(input.expiresAt);
   const validity = `${minutes} ${minutes === "1" ? "minuto" : "minutos"}`;
-  return { ...common, [EmailVariable.CODE]: input.code, [EmailVariable.CODE_PT]: input.code, [EmailVariable.RECOVERY_CODE]: input.code,
+  return { ...common, [EmailVariable.CODE]: input.code,
     [EmailVariable.VALIDITY]: validity, [EmailVariable.VALIDITY_MINUTES]: minutes,
     [EmailVariable.MESSAGE]: `Use o código ${input.code} para ${AuthCodeAction[input.purpose]}. Válido por ${validity}. Não compartilhe este código.` };
 }

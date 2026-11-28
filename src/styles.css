@@ -7883,6 +7883,8 @@ main {
   box-shadow: 0 12px 30px #17263d26;
 }
 
+.prm-schedule-menu[hidden] { display: none; }
+
 .prm-schedule-menu button {
   display: flex;
   align-items: center;

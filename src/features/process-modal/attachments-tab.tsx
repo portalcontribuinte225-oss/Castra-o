@@ -8,6 +8,7 @@ import { attachmentDescription, attachmentStateClasses, attachmentStateLabels, c
 
 interface AttachmentsTabProps {
   rows: AttachmentRow[];
+  reviewRequired: boolean;
   canReview: boolean;
   canAttach: boolean;
   busy: boolean;
@@ -20,7 +21,7 @@ interface AttachmentsTabProps {
   onEvidence: (files: File[]) => void;
 }
 
-export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvidence, error, onPreview, onDownload, onApprove, onReject, onEvidence }: AttachmentsTabProps) {
+export function AttachmentsTab({ rows, reviewRequired, canReview, canAttach, busy, uploadingEvidence, error, onPreview, onDownload, onApprove, onReject, onEvidence }: AttachmentsTabProps) {
   const blocking = rows.filter(isBlockingAttachment);
   const evidenceInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -28,10 +29,11 @@ export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvid
   const regular = rows.filter((row) => !complementary.includes(row));
 
   function rowView(row: AttachmentRow, isComplementary = false) {
-    const stateClass = attachmentStateClasses[row.state];
+    const state = !reviewRequired && row.state === AttachmentState.PENDING ? AttachmentState.INFO : row.state;
+    const stateClass = attachmentStateClasses[state];
     const fileButtonClass = row.kind === AttachmentKind.REQUEST_DOCUMENT ? "prm-icon-button" : undefined;
     const reviewable = row.kind === AttachmentKind.MISSING || row.kind === AttachmentKind.ATTACHMENT && row.state !== AttachmentState.INFO;
-    const decisionDisabled = busy || !canReview || !canReviewAttachment(row);
+    const decisionDisabled = busy || !canReviewAttachment(row);
     return (
       <Card as="article" key={`${row.kind}-${row.id}`} className={`process-attachment-row process-attachment-row--${stateClass}`}>
         <div className="process-attachment-main">
@@ -39,7 +41,7 @@ export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvid
           <div className="process-attachment-info">
             <div className="process-attachment-heading">
               <strong>{isComplementary ? row.fileName : row.title}</strong>
-              {!isComplementary && <span className={`attachment-status attachment-status--${stateClass}`}>{attachmentStateLabels[row.state]}</span>}
+              {!isComplementary && <span className={`attachment-status attachment-status--${stateClass}`}>{attachmentStateLabels[state]}</span>}
             </div>
             <p className="attachment-ai-message">{isComplementary ? "Documento complementar" : attachmentDescription(row)}</p>
             {!!row.document?.provider && !row.document.error && (
@@ -57,7 +59,7 @@ export function AttachmentsTab({ rows, canReview, canAttach, busy, uploadingEvid
             <Button variant="outline" className={fileButtonClass} aria-label={`Baixar ${row.fileName || row.title}`} title="Baixar" disabled={busy}
               onClick={() => onDownload(row)}><Download size={16} aria-hidden="true" /></Button>
           </div>}
-          {reviewable && canReview && <div className="process-attachment-review-actions">
+          {reviewable && reviewRequired && canReview && <div className="process-attachment-review-actions">
             <Button variant="outline" className="prm-approve-document" aria-label={`Deferir ${row.title}`} disabled={decisionDisabled} onClick={() => onApprove(row)}>
               <Check size={15} aria-hidden="true" /> Deferir
             </Button>

@@ -48,7 +48,7 @@ test("every use carries the recipient and the municipality identity, and only ag
   assert.equal(emailUses.some(({ variables }) => variables.includes("documents_result")), false);
   assert.ok(getEmailUse(AuthPurpose.CONTACT_CHANGED).variables.includes("changed_fields"));
   for (const use of [RESET, AuthPurpose.VERIFY_EMAIL, AuthPurpose.REQUEST_TRACKING]) {
-    for (const name of ["subject", "message", "code", "codigo", "codigo_recuperacao", "validade", "validity_minutes"]) {
+    for (const name of ["subject", "message", "code", "validade", "validity_minutes"]) {
       assert.ok(getEmailUse(use).variables.includes(name), `${use} must carry ${name}`);
     }
   }

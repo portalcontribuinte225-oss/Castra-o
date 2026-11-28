@@ -119,8 +119,6 @@ test("discovery sends nothing; explicit choice sends one code, enforces cooldown
   const code = f.messages[0].template_params.code;
   const params = f.messages[0].template_params;
   assert.match(code, /^\d{6}$/);
-  assert.equal(params.codigo, code);
-  assert.equal(params.codigo_recuperacao, code);
   assert.equal(params.subject, "Recuperação de senha");
   assert.match(params.message, new RegExp(`Use o código ${code} para redefinir sua senha`));
   assert.deepEqual(sent.body.delivery, [{ channel: NotificationChannel.EMAIL, status: "sent" }]);

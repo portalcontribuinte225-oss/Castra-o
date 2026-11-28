@@ -91,8 +91,9 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const localSectors = sectors.filter(local);
   const localUsers = users.filter(local);
   const SpecialSection = getSpecialRequestSection(normalized);
+  const internal = normalized.origin === RequestOrigin.INTERNAL;
   const kind = normalizeRequestType(normalized.request_type || normalized.type);
-  const [tab, setTab] = useState(ProcessTab.PROCEDURES);
+  const [tab, setTab] = useState(SpecialSection ? ProcessTab.PROCEDURES : ProcessTab.ATTACHMENTS);
   const [tutorVisited, setTutorVisited] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [busy, setBusy] = useState(false);
@@ -138,10 +139,12 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const pendingDocumentIds = new Set(requestDocumentTypes({ created_at: request.created_at, animals: openProcedureSelections(animals) },
     localTypes, localDocumentTypes).filter((document) => document.required !== false).map((document) => document.id));
   const rows = buildAttachmentRows({ uploads: getUserUploadedProcessDocuments(request.documents),
-    documentTypes: SpecialSection ? documentDefinitions : documentDefinitions.map((document) => ({ ...document, required: pendingDocumentIds.has(document.id) })),
+    documentTypes: documentDefinitions.map((document) => ({
+      ...document, required: !internal && (SpecialSection ? document.required !== false : pendingDocumentIds.has(document.id)),
+    })),
     requestDocument: { label: SpecialSection ? requestTypeDomainLabels[kind] || "Requerimento municipal" : "Procedimento", protocol: normalized.protocol },
   });
-  const assignmentRequired = normalized.origin !== RequestOrigin.INTERNAL && !(normalized.assignedSectorId && normalized.assignedUserId);
+  const assignmentRequired = !internal && !(normalized.assignedSectorId && normalized.assignedUserId);
   const documentsBlocked = rows.some(isBlockingAttachment);
   const scheduleBlocked = batch.results.length ? "Salve os procedimentos marcados antes de alterar a agenda."
     : documentsBlocked ? "Aprove os documentos obrigatórios do processo."
@@ -223,7 +226,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
             onClose={() => procedures.dirty ? setDialog({ kind: DialogKind.UNSAVED }) : onClose()} />
           <div ref={body} className="prm-body" role="tabpanel" id={panelId} aria-labelledby={`${panelId}-${tab}`}>
             {reportError && <p className="form-error" role="alert">{reportError}</p>}
-            {tab === ProcessTab.ATTACHMENTS && <AttachmentsTab rows={rows} canReview={editable} canAttach={editable} busy={pending}
+            {tab === ProcessTab.ATTACHMENTS && <AttachmentsTab rows={rows} reviewRequired={!internal} canReview={editable} canAttach={editable} busy={pending}
               uploadingEvidence={attachments.uploadingEvidence} error={attachments.error}
               onPreview={(row, trigger) => { attachmentTrigger.current = trigger; void attachments.open(row); }} onDownload={attachments.save}
               onApprove={attachments.approve} onReject={(row) => setDialog({ kind: DialogKind.REJECT_DOCUMENT, row })} onEvidence={attachments.attachEvidence} />}

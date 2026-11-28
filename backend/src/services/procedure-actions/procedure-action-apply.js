@@ -38,8 +38,10 @@ async function applySchedule(client, { request, animals, input, settings, now, s
   const confirmed = request.status === RequestStatus.SCHEDULED || open.some(({ status }) => status === ProcedureStatus.SCHEDULED);
   if (confirmed && !reschedule) fail("A situação do agendamento mudou. Atualize o processo.");
   requireAssignment(request);
-  const pending = pendingRequiredDocuments(settings, request, animals);
-  if (pending.length) fail(`Resolva os documentos obrigatórios antes de confirmar a agenda: ${pending.join(", ")}.`);
+  if (request.origin !== RequestOrigin.INTERNAL) {
+    const pending = pendingRequiredDocuments(settings, request, animals);
+    if (pending.length) fail(`Resolva os documentos obrigatórios antes de confirmar a agenda: ${pending.join(", ")}.`);
+  }
   const previous = distinctProcedureSchedules(animals);
   const booking = { request, animals, now };
   const reservation = confirmed ? null : await checkProcedureSchedule(client, { ...booking, selection: procedureGroupScheduleSelection(previous) });

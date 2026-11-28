@@ -18,7 +18,7 @@ test("EmailJS uses an explicit notification template and sanitizes content", asy
     assert.equal(body.template_id, "notice-template");
     assert.equal(body.template_params.protocol, "1/2026");
     assert.equal(body.template_params.to_email, "citizen@example.com");
-    assert.equal(body.template_params.codigo_recuperacao, undefined);
+    assert.equal(body.template_params.code, undefined);
     assert.equal(JSON.stringify(body.template_params).includes("secret-key"), false);
     assert.ok(options.signal instanceof AbortSignal);
     return { ok: true };

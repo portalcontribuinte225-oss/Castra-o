@@ -25,7 +25,7 @@ Os templates de e-mail são globais: a conta do EmailJS vem das variáveis do se
 E-mail usa a conta global do EmailJS e o mesmo controle de admissão do envio operacional. Parâmetros:
 
 - Comuns: `to_email`, `to_name`, `purpose` e a identidade do município (`municipality_name`, `municipality_brasao_url`, `department_name`, `municipality_contact`, `municipality_email`, `municipality_address`). O brasão sai por uma rota pública (`/api/public/municipalities/:id/brasao`) e depende do endereço público do sistema (`APP_PUBLIC_URL`, nas variáveis do servidor).
-- Para e-mails com código, `{{subject}}` traz o assunto e `{{message}}` traz a mensagem completa com o código e a validade. Os templates que montam o próprio texto podem usar `{{code}}`, `{{codigo}}` ou `{{codigo_recuperacao}}` para o mesmo código, além de `{{validade}}` e `{{validity_minutes}}`.
+- Para e-mails com código, `{{subject}}` traz o assunto e `{{message}}` traz a mensagem completa com o código e a validade. Use `{{code}}` para inserir o código em um texto próprio. A validade está disponível em `{{validade}}` e `{{validity_minutes}}`. Antes de publicar esta alteração, atualize os templates do EmailJS que usam `{{codigo}}` ou `{{codigo_recuperacao}}` para usar `{{code}}`.
 - O aviso de contato alterado fornece `subject`, `message` e `changed_fields`.
 
 A recuperação de senha de equipe global (sem município) usa o template global de `password_reset`, sem interruptor. Sem a conta ou o template, o e-mail fica indisponível. Não editar `.env` para esta configuração.

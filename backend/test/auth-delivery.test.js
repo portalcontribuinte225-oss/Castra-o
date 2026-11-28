@@ -185,10 +185,11 @@ test("the reset e-mail carries the municipality identity and keeps the variable 
   assert.deepEqual(f.calls.find(([type]) => type === "emailTemplate"), ["emailTemplate", "municipality-a", AuthPurpose.PASSWORD_RESET]);
   assert.deepEqual(f.calls.find(([type]) => type === "identity"), ["identity", "municipality-a"]);
   const { templateParams } = sent;
-  assert.deepEqual([templateParams.code, templateParams.codigo_recuperacao, templateParams.validade, templateParams.validity_minutes],
-    ["012345", "012345", "10 minutos", "10"]);
+  assert.deepEqual([templateParams.code, templateParams.validade, templateParams.validity_minutes],
+    ["012345", "10 minutos", "10"]);
+  assert.equal(Object.hasOwn(templateParams, "codigo"), false);
+  assert.equal(Object.hasOwn(templateParams, "codigo_recuperacao"), false);
   assert.deepEqual([templateParams.to_name, templateParams.purpose, templateParams.municipality_name], ["Tutor", AuthPurpose.PASSWORD_RESET, "Test Town"]);
-  assert.equal(templateParams.codigo, "012345");
   assert.equal(templateParams.subject, "Recuperação de senha");
   assert.equal(templateParams.message, "Use o código 012345 para redefinir sua senha. Válido por 10 minutos. Não compartilhe este código.");
 });

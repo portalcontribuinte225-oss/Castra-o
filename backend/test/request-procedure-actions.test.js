@@ -7,7 +7,7 @@ import { CLOSED_WITHOUT_ATTENDANCE, ProcedureAction, ProcedureActionErrorCode, P
 import { DocumentSequence, documentNumberYear } from "../../shared/document-number-contract.js";
 import { allocateScheduleAvailability, buildScheduleOccurrences, requestScheduleBookings } from "../../shared/schedule-contract.js";
 import { NO_SHOW_CANCEL_REASON } from "../../shared/notification-contract.js";
-import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
+import { REQUEST_CONTACT_CPF_KEY, RequestOrigin } from "../../shared/request-contract.js";
 import { decorateRequestDocuments } from "../src/services/documents/document-reviews.js";
 import { canonicalDocumentDefinition } from "../src/services/documents/document-policy.js";
 import { createReceivedDocument } from "../src/services/documents/request-documents.js";
@@ -169,8 +169,8 @@ const reschedule = { action: ProcedureAction.RESCHEDULE, data: { schedule: atLat
 const patch = { method: "PATCH", path: `/requests/${REQUEST_ID}` };
 const close = { action: ProcedureAction.CLOSE };
 
-test("all open procedures share one appointment, then results and closure are independently recorded", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest(), { vacancies: 2 });
+test("an internal request confirms without document review and records results and closure independently", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest(), { vacancies: 2, requiredDocument: true });
   assert.equal((await call(confirm)).status, 200);
   assert.deepEqual(statusesOf(row()), [[ProcedureStatus.SCHEDULED, ProcedureStatus.SCHEDULED], [ProcedureStatus.SCHEDULED, ProcedureStatus.SCHEDULED]]);
   assert.deepEqual(requestScheduleBookings(row()), [{ date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, slotTime: "08:00", count: 2, exactSlot: true }]);
@@ -236,8 +236,8 @@ test("an invalid batch and a stale screen leave the saved operation intact", asy
   assert.equal((await call({ ...batch, data: { results: [target(0, "unknown")] } })).status, 404);
 });
 
-test("a group reschedule moves every open procedure and leaves the original request date", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }), { vacancies: 2 });
+test("an internal group reschedule moves every open procedure without document review and retains the original date", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }), { vacancies: 2, requiredDocument: true });
   assert.equal((await call(reschedule)).status, 200);
   assert.deepEqual(row().animals.flatMap((animal) => animal.procedures.map((item) => item.schedule.date)), Array(4).fill(LATER_DATE));
   assert.deepEqual(row().workflow_data.procedureScheduleDates, [LATER_DATE]);
@@ -309,7 +309,9 @@ test("too few places at the new time conserve the entire group appointment", asy
 });
 
 test("document confirmation waits for the new approved version and requires a reason to reject", async (t) => {
-  const { call, row, documentRows } = await fixture(t, twoAnimalRequest(), { requiredDocument: true });
+  const existing = twoAnimalRequest({ origin: RequestOrigin.PUBLIC });
+  Object.assign(existing.workflow_data, { assignedSectorId: "clinic", assignedUserId: STAFF.id });
+  const { call, row, documentRows } = await fixture(t, existing, { requiredDocument: true });
   const dataUrl = (text) => `data:application/pdf;base64,${Buffer.from(`%PDF-1.4\n${text}\n`).toString("base64")}`;
   row().documents = [createReceivedDocument({ documentId: "identity", fileName: "identidade.pdf", dataUrl: dataUrl("old") },
     canonicalDocumentDefinition({ id: "identity", name: "Documento de identidade", required: true }),
@@ -329,7 +331,8 @@ test("document confirmation waits for the new approved version and requires a re
 });
 
 test("a removed procedure no longer imposes its document requirements on the schedule", async (t) => {
-  const existing = twoAnimalRequest({ animals: [{ name: "Bidu", requestTypeIds: ["castration", "microchip"] }] });
+  const existing = twoAnimalRequest({ origin: RequestOrigin.PUBLIC, animals: [{ name: "Bidu", requestTypeIds: ["castration", "microchip"] }] });
+  Object.assign(existing.workflow_data, { assignedSectorId: "clinic", assignedUserId: STAFF.id });
   const { call, row } = await fixture(t, existing, { requiredDocument: true, requiredDocumentFor: "castration" });
   assert.equal((await call(confirm)).status, 409);
   assert.equal((await call({ action: ProcedureAction.REMOVE, data: { target: target(0, "castration"), reason: "Tutor solicitou a retirada" } })).status, 200);

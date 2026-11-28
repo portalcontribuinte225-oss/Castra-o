@@ -2,6 +2,7 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
+import { RequestOrigin } from "../../../shared/request-contract.js";
 import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
 import { AttachmentsTab } from "./attachments-tab";
 import { buildAttachmentRows } from "./attachment-rows";
@@ -23,15 +24,16 @@ const animals = [
 ];
 const chipTarget = { animalIndex: 0, requestTypeId: "chip" };
 const pendingRequest = {
-  id: "request-a", protocol: "123/2026", status: "NOVA", tutor_name: "Maria Silva", request_type: "Castração",
+  id: "request-a", protocol: "123/2026", status: "NOVA", origin: RequestOrigin.PUBLIC, tutor_name: "Maria Silva", request_type: "Castração",
   schedule_date: `${new Date().getFullYear() + 1}-01-12`, schedule_location_name: "Unidade Centro",
   animals: [{ name: "Bidu", requestTypeIds: ["castration"] }],
   workflow_data: { assignedSectorId: "clinic", assignedUserId: "operator", scheduleOccurrenceKey: "day:centro", scheduleSlotTime: "08:00" },
 };
 const buttonMarkup = (html: string, label: string) => html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g)?.find((button) => button.endsWith(`${label}</button>`));
+const scheduleTrigger = (html: string) => html.match(/<button\b[^>]*aria-haspopup="menu"[^>]*>[\s\S]*?<\/button>/)?.[0];
 
 describe("ProcessModal", () => {
-  it("opens in the v31 clinical tab and preserves the four tabs and the header actions", () => {
+  it("opens in document analysis and preserves the four tabs and the header actions", () => {
     const html = renderToStaticMarkup(<ProcessModal
       request={pendingRequest}
       requestTypes={[{ id: "castration", name: "Castração" }]}
@@ -40,16 +42,16 @@ describe("ProcessModal", () => {
     />);
     expect(html).toContain("Processo 123/2026");
     expect(html).toContain("Tutor: Maria Silva");
-    expect(html).toContain("Análise de documentos");
-    expect(html).toMatch(/aria-selected="true"[^>]*>Procedimento e saúde/);
+    expect(html).toMatch(/aria-selected="true"[^>]*>Análise de documentos/);
+    expect(html).toContain("Procedimento e saúde");
     expect(html).toContain("Dados do tutor");
     expect(html).toContain("Histórico");
     expect(html).toContain('aria-label="Baixar relatório"');
     expect(html).toContain('aria-label="Fechar"');
     expect(html).toContain("Definir responsável");
-    expect(html).toContain("Animais e procedimentos");
-    expect(html).toContain("Todos realizados");
-    expect(html).toContain("Receita unificada");
+    expect(html).toContain("Conferência de documentos");
+    expect(scheduleTrigger(html)).toContain("Gerir agendamento");
+    expect(buttonMarkup(html, "Confirmar Agenda")).toContain('role="menuitem"');
     expect(buttonMarkup(html, "Confirmar Agenda")).not.toContain("disabled");
     expect(html).toContain("08:00 · Unidade Centro");
     expect(html).not.toContain("Reagendar");
@@ -70,10 +72,38 @@ describe("ProcessModal", () => {
     expect(assignment).toContain("Defina o setor e o responsável pelo processo.");
   });
 
+  it("keeps internal attachments available without a review decision or a scheduling block", () => {
+    const documents = [{ documentId: "identity", documentName: "Identidade", fileName: "identidade.pdf",
+      attachmentId: "identity-upload", status: DocumentReviewStatus.ATTACHED }];
+    const requestTypes = [{ id: "castration", name: "Castração", documents: [
+      { id: "identity", name: "Identidade", required: true },
+      { id: "proof", name: "Comprovante de residência", required: true },
+    ] }];
+    const internal = renderToStaticMarkup(<ProcessModal request={{ ...pendingRequest, origin: RequestOrigin.INTERNAL, documents }}
+      requestTypes={requestTypes} readOnly={false} onClose={noop} />);
+    expect(internal).toMatch(/aria-selected="true"[^>]*>Análise de documentos/);
+    expect(internal).toContain('aria-label="Visualizar identidade.pdf"');
+    expect(internal).toContain('aria-label="Baixar identidade.pdf"');
+    expect(internal).toContain('aria-label="Adicionar documentos complementares"');
+    expect(internal).not.toContain("Deferir Identidade");
+    expect(internal).not.toContain("Indeferir Identidade");
+    expect(internal).not.toContain("Pendente de análise");
+    expect(internal).not.toContain("Pendência documental");
+    expect(buttonMarkup(internal, "Confirmar Agenda")).not.toContain("disabled");
+
+    const external = renderToStaticMarkup(<ProcessModal request={{ ...pendingRequest, documents }}
+      requestTypes={requestTypes} readOnly={false} onClose={noop} />);
+    expect(external).toContain('aria-label="Deferir Identidade"');
+    expect(external).toContain('aria-label="Indeferir Identidade"');
+    expect(buttonMarkup(external, "Confirmar Agenda")).toContain("disabled");
+  });
+
   it("offers the explicit reschedule action for an expired reservation", () => {
     const html = renderToStaticMarkup(<ProcessModal request={{ ...pendingRequest, schedule_date: "01/01/2000" }} readOnly={false} onClose={noop} />);
     expect(html).toContain("A data da reserva já passou.");
+    expect(scheduleTrigger(html)).toContain("Gerir agendamento");
     expect(buttonMarkup(html, "Confirmar Agenda")).toContain("disabled");
+    expect(buttonMarkup(html, "Reagendar")).toContain('role="menuitem"');
     expect(buttonMarkup(html, "Reagendar")).not.toContain("disabled");
     expect(html).not.toContain("Agenda de atendimento");
   });
@@ -84,7 +114,7 @@ describe("ProcessModal", () => {
     expect(html).toContain("Óbito do animal");
     expect(html).toContain("Confirmar óbito");
     expect(html).not.toContain("Todos realizados");
-    expect(html).not.toContain("Gerenciar agendamento");
+    expect(scheduleTrigger(html)).toBeUndefined();
   });
 
   it("shows distinct legacy appointments at the same time in different locations", () => {
@@ -105,22 +135,27 @@ describe("ProcessFooter", () => {
     confirmed: true, hasOpenProcedures: true, canClose: false, canMarkAbsent: true, scheduleBlocked: "", reservationUnavailable: "",
     onAssign: noop, onSave: noop, onConfirmSchedule: noop, onReschedule: noop, onAbsent: noop, onFinish: noop, actionsSlot: noop,
   };
-  it("keeps assignment in every tab and shares the appropriate booking action between the two operational tabs", () => {
+  it("keeps assignment in every tab and shares the booking menu between the two operational tabs", () => {
     for (const tab of Object.values(ProcessTab)) {
       const html = renderToStaticMarkup(<ProcessFooter {...props} tab={tab} />);
       const unconfirmed = renderToStaticMarkup(<ProcessFooter {...props} tab={tab} confirmed={false} />);
       const hasScheduleAction = tab === ProcessTab.PROCEDURES || tab === ProcessTab.ATTACHMENTS;
       expect(html).toContain("Definir responsável");
-      expect(html.includes("Gerenciar agendamento")).toBe(hasScheduleAction);
+      expect(Boolean(scheduleTrigger(html))).toBe(hasScheduleAction);
+      expect(Boolean(scheduleTrigger(unconfirmed))).toBe(hasScheduleAction);
       expect(unconfirmed.includes("Confirmar Agenda")).toBe(hasScheduleAction);
+      expect(html).not.toContain("Confirmar Agenda");
       expect(Boolean(buttonMarkup(html, "Salvar"))).toBe(tab === ProcessTab.PROCEDURES);
     }
   });
   it("disables confirmation while saving and preserves closure access when no procedure is open", () => {
     const busy = renderToStaticMarkup(<ProcessFooter {...props} confirmed={false} busy />);
+    expect(scheduleTrigger(busy)).toContain("disabled");
     expect(buttonMarkup(busy, "Confirmar Agenda")).toContain("disabled");
     const closure = renderToStaticMarkup(<ProcessFooter {...props} confirmed={false} hasOpenProcedures={false} canClose />);
-    expect(closure).toContain("Gerenciar agendamento");
+    expect(scheduleTrigger(closure)).toContain("Gerir agendamento");
+    expect(buttonMarkup(closure, "Atendimento Encerrado")).toContain('role="menuitem"');
+    expect(buttonMarkup(closure, "Atendimento Encerrado")).not.toContain("disabled");
     expect(closure).not.toContain("Confirmar Agenda");
   });
   it("blocks a closed process and busy assignments", () => {
@@ -148,7 +183,7 @@ it("shows document decisions for the pending version and disables completed revi
       { documentId: "address", documentName: "Comprovante de Residência", attachmentId: "reviewed", status: DocumentReviewStatus.REJECTED, review: { note: "Envie a página completa" } },
     ],
   });
-  const html = renderToStaticMarkup(<AttachmentsTab rows={rows} canReview canAttach busy={false} uploadingEvidence={false} error=""
+  const html = renderToStaticMarkup(<AttachmentsTab rows={rows} reviewRequired canReview canAttach busy={false} uploadingEvidence={false} error=""
     onPreview={noop} onDownload={noop} onApprove={noop} onReject={noop} onEvidence={noop} />);
   expect(html).toMatch(/<button\b(?![^>]*\bdisabled\b)[^>]*aria-label="Deferir Identidade"/);
   expect(html).toMatch(/<button\b(?=[^>]*\bdisabled\b)[^>]*aria-label="Indeferir Comprovante de Residência"/);

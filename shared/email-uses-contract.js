@@ -4,7 +4,7 @@ import { WhatsappTemplateField } from "./whatsapp-templates-contract.js";
 
 export const EmailUseKind = Object.freeze({ NOTICE: "notice", ACCESS: "access" });
 
-// Names of the variables an EmailJS template can use. Existing Portuguese names stay, so templates already built keep working.
+// Names of the variables an EmailJS template can use.
 export const EmailVariable = Object.freeze({
   TO_EMAIL: "to_email",
   TO_NAME: "to_name",
@@ -20,8 +20,6 @@ export const EmailVariable = Object.freeze({
   SUBJECT: "subject",
   MESSAGE: "message",
   CODE: "code",
-  CODE_PT: "codigo",
-  RECOVERY_CODE: "codigo_recuperacao",
   VALIDITY: "validade",
   VALIDITY_MINUTES: "validity_minutes",
   PURPOSE: "purpose",
@@ -42,7 +40,7 @@ const noticeVariables = [variable.PROTOCOL, variable.EVENT, variable.SUBJECT, va
 // Request fields the agenda notices carry; they are resolved by the same safe whitelist WhatsApp uses.
 const scheduleFields = [field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.SCHEDULE_ADDRESS];
 const noShowFields = [field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME];
-const codeVariables = [variable.SUBJECT, variable.MESSAGE, variable.CODE, variable.CODE_PT, variable.RECOVERY_CODE, variable.VALIDITY, variable.VALIDITY_MINUTES, variable.PURPOSE];
+const codeVariables = [variable.SUBJECT, variable.MESSAGE, variable.CODE, variable.VALIDITY, variable.VALIDITY_MINUTES, variable.PURPOSE];
 
 function emailUse(key, kind, { variables = [], requestFields = [], defaultActive = false } = {}) {
   return Object.freeze({
