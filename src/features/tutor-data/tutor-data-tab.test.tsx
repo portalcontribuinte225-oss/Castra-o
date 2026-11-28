@@ -16,49 +16,37 @@ const tutor: TutorData = {
 };
 const footer = {} as HTMLDivElement;
 
-describe("TutorDataTab", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(useTutorData).mockReturnValue({
-      tutor, form: { ...formFromTutor(tutor), name: "Maria Souza" }, loading: false,
-      error: "", saving: false, saveError: "", notice: "", change: vi.fn(), save: vi.fn(), retry: vi.fn(),
-    });
+function view(item: TutorData, readOnly = false) {
+  vi.mocked(useTutorData).mockReturnValue({
+    tutor: item, form: formFromTutor(item), loading: false,
+    error: "", saving: false, saveError: "", notice: "", change: vi.fn(), save: vi.fn(), retry: vi.fn(),
   });
+  return renderToStaticMarkup(<TutorDataTab requestId="request-a" municipalityId="city-a" neighborhoodNames={[]} readOnly={readOnly} actionsSlot={footer} />);
+}
 
-  it("associates the footer submit button with the tutor form", () => {
-    const html = renderToStaticMarkup(<TutorDataTab requestId="request-a" municipalityId="city-a" neighborhoodNames={[]} readOnly={false} actionsSlot={footer} />);
-    const formId = html.match(/<form\b[^>]*id="([^"]+)"/)?.[1];
-    expect(formId).toBeTruthy();
-    expect(html).not.toContain("Salvar dados do tutor");
-    expect(html).not.toContain("O tutor ainda não se identificou nesta solicitação.");
-    expect(createPortal).toHaveBeenCalledOnce();
+describe("TutorDataTab", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+
+  it("shows view-only fields by default and places Editar dados in the footer", () => {
+    const html = view(tutor);
+    expect(html).toContain('readonly=""');
+    expect(html).not.toContain("Nova senha");
     const [button, target] = vi.mocked(createPortal).mock.calls[0];
     expect(target).toBe(footer);
-    const footerHtml = renderToStaticMarkup(button);
-    expect(footerHtml).toContain(`form="${formId}"`);
-    expect(footerHtml).toContain('type="submit"');
-    expect(footerHtml).toContain("Salvar dados do tutor");
-    expect(footerHtml).not.toContain("disabled");
+    expect(renderToStaticMarkup(button)).toContain("Editar dados");
   });
 
-  it("keeps the footer free of submit actions for read-only access", () => {
-    const html = renderToStaticMarkup(<TutorDataTab requestId="request-a" municipalityId="city-a" neighborhoodNames={[]} readOnly actionsSlot={footer} />);
-    expect(html).toContain('readonly=""');
+  it("leaves the footer free of editing actions for read-only access", () => {
+    expect(view(tutor, true)).toContain('readonly=""');
     expect(createPortal).not.toHaveBeenCalled();
   });
 
-  it("shows editable contact fields and allows partial saves for a request without a tutor", () => {
+  it("shows that a contact-only request still needs to identify the tutor", () => {
     const contact = { ...tutor, id: null, hasAccess: false, contactOnly: true, name: "", cpf: "", email: "", phone: "" };
-    vi.mocked(useTutorData).mockReturnValue({
-      tutor: contact, form: { ...formFromTutor(contact), address: "Rua do contato" }, loading: false,
-      error: "", saving: false, saveError: "", notice: "", change: vi.fn(), save: vi.fn(), retry: vi.fn(),
-    });
-    const html = renderToStaticMarkup(<TutorDataTab requestId="request-a" municipalityId="city-a" neighborhoodNames={[]} readOnly={false} actionsSlot={footer} />);
+    const html = view(contact);
     expect(html).toMatch(/O tutor ainda não se identificou nesta solicitação\.[\s\S]*<span>Nome<\/span>/);
-    expect(html).toMatch(/CPF<\/span><input\b(?=[^>]*inputMode="numeric")(?=[^>]*value="")(?=[^>]*data-ui-input="")[^>]*>/);
-    expect(html).not.toContain('readonly=""');
+    expect(html).toMatch(/CPF<\/span><input\b(?=[^>]*inputMode="numeric")(?=[^>]*value="")[^>]*>/);
     expect(html).not.toContain("Nova senha");
-    const [button] = vi.mocked(createPortal).mock.calls[0];
-    expect(renderToStaticMarkup(button)).not.toContain("disabled");
+    expect(renderToStaticMarkup(vi.mocked(createPortal).mock.calls[0][0])).toContain("Editar dados");
   });
 });

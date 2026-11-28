@@ -2,179 +2,143 @@ import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
-import { RequestOrigin } from "../../../shared/request-contract.js";
 import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
-import { ProcessFooter } from "./process-footer";
-import { CancelScheduleDialog } from "./process-dialogs";
-import { ProcessTab } from "./process-labels";
+import { AttachmentsTab } from "./attachments-tab";
+import { buildAttachmentRows } from "./attachment-rows";
 import { ProcessModal } from "./process-modal";
+import { ProcessFooter } from "./process-footer";
+import { ProcessHistoryTimeline } from "./process-history-tab";
+import { ProcessTab } from "./process-labels";
 import { ProceduresTab } from "./procedures-tab";
+import { AssignDialog } from "./process-dialogs";
+import { procedureTargetKey } from "./process-types";
 
 const noop = () => {};
-
-const procedure = { requestTypeId: "castration", name: "Castração", status: ProcedureStatus.WAITING, schedule: { date: "20/11/2026", occurrenceKey: "day:visit", slotTime: "09:00" } };
-const microchip = { ...procedure, requestTypeId: "chip", name: "Microchipagem" };
+const castration = { requestTypeId: "castration", name: "Castração", status: ProcedureStatus.DONE };
+const microchip = { requestTypeId: "chip", name: "Microchipagem", status: ProcedureStatus.SCHEDULED };
+const removed = { ...castration, requestTypeId: "removed", name: "Procedimento removido", status: ProcedureStatus.REMOVED };
+const animals = [
+  { name: "Bidu", species: "Canina", sex: "Macho", procedures: [castration, microchip, removed] },
+  { name: "Mel", species: "Felina", sex: "Fêmea", procedures: [castration] },
+];
+const chipTarget = { animalIndex: 0, requestTypeId: "chip" };
 
 describe("ProcessModal", () => {
-  it("opens on attachments and shows the required documents of the procedures of the animals", () => {
+  it("opens in the v31 clinical tab and preserves the four tabs and the header actions", () => {
     const html = renderToStaticMarkup(<ProcessModal
       request={{ id: "request-a", protocol: "123/2026", status: "NOVA", tutor_name: "Maria Silva", request_type: "Castração",
-        workflow_data: { requestTypeIds: ["castration"], requestTypeNames: ["Castração"] }, animals: [{ name: "Bidu", requestTypeIds: ["castration"] }] }}
-      requestTypes={[{ id: "castration", name: "Castração", documents: [{ id: "identity", name: "Identidade" }] }]}
+        animals: [{ name: "Bidu", requestTypeIds: ["castration"] }] }}
+      requestTypes={[{ id: "castration", name: "Castração" }]}
+      readOnly={false}
       onClose={noop}
     />);
-    const tabs = [...html.matchAll(/(<button\b[^>]*role="tab"[^>]*>)([^<]+)/g)];
-    expect(tabs.map((match) => match[2])).toEqual(["Anexos", "Procedimento e saúde", "Dados do tutor"]);
-    expect(tabs[0][1]).toContain('aria-selected="true"');
-    expect(tabs.every((match) => !match[1].includes("disabled"))).toBe(true);
-    expect(html).toMatch(/<button type="button" aria-label="Fechar"[^>]*><svg\b/);
     expect(html).toContain("Processo 123/2026");
-    expect(html).toContain("Tutor: Maria Silva · 1 animal");
-    expect(html).toContain("Identidade");
-    expect(html).toContain("Pendência documental");
-    expect(html).toContain('class="prm-tab-count">1</span>');
+    expect(html).toContain("Tutor: Maria Silva");
+    expect(html).toContain("Análise de documentos");
+    expect(html).toMatch(/aria-selected="true"[^>]*>Procedimento e saúde/);
+    expect(html).toContain("Dados do tutor");
+    expect(html).toContain("Histórico");
+    expect(html).toContain('aria-label="Baixar relatório"');
+    expect(html).toContain('aria-label="Fechar"');
+    expect(html).toContain("Definir responsável");
+    expect(html).toContain("Animais e procedimentos");
+    expect(html).toContain("Todos realizados");
+    expect(html).toContain("Receita unificada");
+    expect(html).toContain("Agendar");
+    expect(html).not.toContain("Ver procedimentos");
   });
 
-  it("renders document decisions and pending review for a supplemental public upload", () => {
-    const request = {
-      id: "request-b", status: "NOVA", origin: RequestOrigin.PUBLIC, request_type: "Castração",
-      workflow_data: { assignedSectorId: "clinic", assignedUserId: "staff" },
-      documents: [{ documentId: "address", attachmentId: "address-upload", documentName: "Comprovante de Residência", status: DocumentReviewStatus.ATTACHED }],
-    };
-    const html = renderToStaticMarkup(<ProcessModal request={request} readOnly={false} onClose={noop} />);
-    expect(html).toMatch(/<button\b(?![^>]*\bdisabled\b)[^>]*aria-label="Deferir Comprovante de Residência"/);
-    expect(html).toMatch(/<button\b(?![^>]*\bdisabled\b)[^>]*aria-label="Indeferir Comprovante de Residência"/);
-    expect(html).toContain('class="prm-tab-count">1</span>');
-    expect(html).toContain("Aguardando conferência dos anexos");
-    expect(html).not.toContain("Pendência documental");
-    expect(html).toMatch(/<button\b[^>]*aria-label="Anexar evidência"/);
+  it("keeps special requests in their own flow", () => {
+    const html = renderToStaticMarkup(<ProcessModal request={{ id: "death", status: "NOVA", origin: "INTERNA", request_type: "ANIMAL_OBITO" }}
+      readOnly={false} onClose={noop} />);
+    expect(html).toContain("Óbito do animal");
+    expect(html).toContain("Confirmar óbito");
+    expect(html).not.toContain("Todos realizados");
+    expect(html).not.toContain("Gerenciar agendamento");
+  });
 
-    const viewOnly = renderToStaticMarkup(<ProcessModal request={request} readOnly onClose={noop} />);
-    expect(viewOnly).not.toMatch(/aria-label="(?:(?:Deferir|Indeferir) |Anexar evidência")/);
+  it("shows distinct legacy appointments at the same time in different locations", () => {
+    const slot = { date: "2026-12-03", slotTime: "08:00" };
+    const html = renderToStaticMarkup(<ProcessModal request={{ id: "legacy", request_type: "Castração", status: "AGENDADA",
+      animals: ["Unidade Centro", "Unidade Norte"].map((locationName, index) => ({
+        name: `Animal ${index + 1}`, requestTypeIds: ["castration"],
+        procedures: [{ ...castration, status: ProcedureStatus.SCHEDULED, schedule: { ...slot, locationName } }],
+      })),
+    }} readOnly={false} onClose={noop} />);
+    expect(html).toContain("Agendamento atual: 03/12/2026 às 08:00 · Unidade Centro / 03/12/2026 às 08:00 · Unidade Norte");
   });
 });
-
-const footerProps: ComponentProps<typeof ProcessFooter> = {
-  tab: ProcessTab.PROCEDURES,
-  readOnly: false,
-  isSpecial: false,
-  processOpen: true,
-  hasAssignment: true,
-  assignmentBlock: "",
-  documentsBlock: "",
-  hasPendingAttachments: false,
-  procedure,
-  procedureTabLabel: "Procedimento e saúde",
-  specialConfirmLabel: "Confirmar solicitação",
-  busy: false,
-  currentChanged: true,
-  canAssume: true,
-  tutorSlot: noop,
-  on: { assign: noop, assume: noop, showProcedures: noop, noShow: noop, reject: noop, save: noop, reschedule: noop, cancelSchedule: noop, prescription: noop,
-    confirmSchedule: noop, attend: noop, rejectProcess: noop, confirmSpecial: noop },
-};
-
-const footer = (overrides: Partial<ComponentProps<typeof ProcessFooter>> = {}) => renderToStaticMarkup(<ProcessFooter {...footerProps} {...overrides} />);
 
 describe("ProcessFooter", () => {
-  it("shows assignment and navigation on attachments", () => {
-    const html = footer({ tab: ProcessTab.ATTACHMENTS, hasAssignment: false, hasPendingAttachments: true });
-    expect(html).toContain("Atribuir");
-    expect(html).toContain("Assumir");
-    expect(html).toContain("Aguardando conferência dos anexos");
-    expect(html).toContain("Ver procedimentos");
-    expect(html).not.toContain("Confirmar agenda");
+  const props: ComponentProps<typeof ProcessFooter> = {
+    tab: ProcessTab.PROCEDURES, busy: false, readOnly: false, closed: false, responsible: "Setor: Clínica", dirty: true,
+    confirmed: true, canSchedule: true, canClose: false, canMarkAbsent: true, scheduleBlocked: "",
+    onAssign: noop, onSave: noop, onSchedule: noop, onAbsent: noop, onFinish: noop, actionsSlot: noop,
+  };
+  it("keeps assignment in every tab and shows agenda actions in the clinical tab", () => {
+    for (const tab of Object.values(ProcessTab)) {
+      const html = renderToStaticMarkup(<ProcessFooter {...props} tab={tab} />);
+      expect(html).toContain("Definir responsável");
+      expect(html.includes("Gerenciar agendamento")).toBe(tab === ProcessTab.PROCEDURES);
+    }
   });
-
-  it("offers confirmation of the appointment while waiting and attendance after scheduling", () => {
-    const waiting = footer();
-    expect(waiting).toContain("Confirmar agenda");
-    expect(waiting).toContain("Salvar alterações");
-    expect(waiting).toContain("Reagendar");
-    expect(waiting).toContain("Emitir receita");
-    expect(waiting).toContain("Indeferir");
-    expect(waiting).not.toContain("Não compareceu");
-    expect(waiting).not.toContain("Cancelar agendamento");
-    expect(waiting).not.toContain("Confirmar atendimento");
-
-    const scheduled = footer({ procedure: { ...procedure, status: ProcedureStatus.SCHEDULED } });
-    expect(scheduled).toContain("Confirmar atendimento");
-    expect(scheduled).toContain("Não compareceu");
-    expect(scheduled).toContain("Cancelar agendamento");
-    expect(scheduled).not.toContain("Confirmar agenda");
-  });
-
-  it("requires a complete appointment to confirm again after cancellation", () => {
-    const html = footer({ procedure: { ...procedure, schedule: null } });
-    expect(html).toContain("Agendar este procedimento");
-    expect(html).toMatch(/<button\b(?=[^>]*title="Escolha a data, o local e o horário antes de confirmar a agenda")(?=[^>]*disabled="")[^>]*>/);
+  it("blocks a closed process and busy assignments", () => {
+    const html = renderToStaticMarkup(<ProcessFooter {...props} closed busy />);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>[\s\S]*Atendimento concluído/);
     expect(html).not.toContain("Cancelar agendamento");
-  });
-
-  it("shows the appointment in the confirmation and prevents repeated submissions while saving", () => {
-    const html = renderToStaticMarkup(<CancelScheduleDialog subject="Castração de Bidu" date="2026-11-20" time="09:00" locationName="Unidade Municipal" busy onClose={noop} onConfirm={noop} />);
-    expect(html).toContain("20/11/2026 · 09:00 · Unidade Municipal");
-    expect(html).toContain("O procedimento voltará a aguardar um novo agendamento.");
-    expect(html).toMatch(/<button\b[^>]*disabled=""[^>]*>Cancelando/);
-  });
-
-  it("disables scheduling controls until required documents are cleared", () => {
-    const html = footer({ documentsBlock: "Resolva a identidade" });
-    expect(html.match(/<button\b(?=[^>]*title="Resolva a identidade")(?=[^>]*disabled="")[^>]*>/g)).toHaveLength(2);
-    expect(html).toContain("Confirmar agenda");
-    expect(html).toContain("Reagendar");
-    expect(html.match(/<button\b[^>]*title="Indeferir este procedimento"[^>]*>/)?.[0]).not.toContain("disabled");
-  });
-
-  it.each([ProcedureStatus.DONE, ProcedureStatus.NO_SHOW, ProcedureStatus.REJECTED])("keeps a recorded prescription accessible after closure (%s)", (status) => {
-    const html = footer({ procedure: { ...procedure, status, prescription: { text: "Cuidados registrados" } } });
-    expect(html).toContain("Consultar receita");
-    for (const action of ["Confirmar agenda", "Confirmar atendimento", "Salvar alterações", "Reagendar", "Indeferir"]) expect(html).not.toContain(action);
-  });
-
-  it("does not offer a new prescription for a closed procedure", () => {
-    expect(footer({ procedure: { ...procedure, status: ProcedureStatus.DONE } })).not.toContain("<button");
-  });
-
-  it("hides editing controls in read-only mode", () => {
-    expect(footer({ readOnly: true })).not.toContain("<button");
-    expect(footer({ tab: ProcessTab.ATTACHMENTS, readOnly: true })).not.toMatch(/Atribuir|Assumir/);
   });
 });
 
-const animals = [
-  { name: "Bidu", species: "Canina", sex: "Macho", procedures: [procedure, microchip] },
-  { name: "Mel", species: "Felina", sex: "Fêmea", procedures: [procedure] },
-];
+it("allows assigning only a sector and lists the current operator among eligible staff", () => {
+  const html = renderToStaticMarkup(<AssignDialog sectors={[{ id: "clinic", name: "Clínica" }]}
+    users={[{ id: "operator", name: "Equipe", sectorIds: ["clinic"] }, { id: "outside", name: "Outra equipe", sectorIds: ["other"] }]}
+    initial={{ sectorId: "clinic", userId: "" }} currentUserId="operator" busy={false} onConfirm={noop} onClose={noop} />);
+  expect(html).toContain("Sem responsável — fila do setor");
+  expect(html).toContain("Eu — assumir atendimento");
+  expect(html).not.toContain("Outra equipe");
+});
 
-function procedures(overrides: Partial<ComponentProps<typeof ProceduresTab>> = {}) {
-  return renderToStaticMarkup(<ProceduresTab animals={animals} animalIndex={0} procedure={procedure}
-    health={{ doencas: "Displasia", alergias: "Penicilina" }} microchip="ABC012"
-    readOnly={false} onAnimal={noop} onProcedure={noop} onHealth={noop} onMicrochip={noop} {...overrides} />);
-}
-
-describe("ProceduresTab", () => {
-  it("lists animals and their procedures and keeps the health inputs for the selected animal", () => {
-    const html = procedures();
-    expect(html).toContain("Bidu");
-    expect(html).toContain("Mel");
-    expect(html).toContain("2 procedimentos");
-    expect(html).toContain("Microchipagem");
-    expect(html.match(/<button\b[^>]*aria-pressed="true"/g)).toHaveLength(2);
-    expect(html).toMatch(/Doenças preexistentes.*Displasia.*Alergias conhecidas.*Penicilina/);
-    expect(html).not.toMatch(/Código do microchip aplicado ou lido|Data do agendamento|Observação do atendimento/);
-    expect(html.match(/<textarea\b/g)).toHaveLength(2);
+it("shows document decisions for the pending version and disables completed reviews", () => {
+  const rows = buildAttachmentRows({
+    documentTypes: [{ id: "identity", name: "Identidade" }],
+    requestDocument: { label: "Procedimento", protocol: "123" },
+    uploads: [
+      { documentId: "identity", documentName: "Identidade", attachmentId: "pending", status: DocumentReviewStatus.ATTACHED },
+      { documentId: "address", documentName: "Comprovante de Residência", attachmentId: "reviewed", status: DocumentReviewStatus.REJECTED, review: { note: "Envie a página completa" } },
+    ],
   });
+  const html = renderToStaticMarkup(<AttachmentsTab rows={rows} canReview canAttach busy={false} uploadingEvidence={false} error=""
+    onPreview={noop} onDownload={noop} onApprove={noop} onReject={noop} onEvidence={noop} />);
+  expect(html).toMatch(/<button\b(?![^>]*\bdisabled\b)[^>]*aria-label="Deferir Identidade"/);
+  expect(html).toMatch(/<button\b(?=[^>]*\bdisabled\b)[^>]*aria-label="Indeferir Comprovante de Residência"/);
+  expect(html).toContain("Envie a página completa");
+  expect(html).toContain("Documentos complementares");
+  expect(html).toContain("multiple");
+});
 
-  it("shows the microchip field for the microchip procedure only", () => {
-    const html = procedures({ procedure: microchip });
-    expect(html).toContain("Código do microchip aplicado ou lido");
-    expect(html).toMatch(/<input\b[^>]*value="ABC012"/);
-  });
+it("keeps the removed procedure out of the active list and shows health for the selected animal", () => {
+  const html = renderToStaticMarkup(<ProceduresTab animals={animals} animalIndex={0} selectedType="chip" marked={new Set([procedureTargetKey(chipTarget)])}
+    scheduled={[chipTarget]} health={{ doencas: "Displasia", alergias: "Penicilina", microchip: "ABC012" }} readOnly={false} busy={false}
+    onAnimal={noop} onHealth={noop} onMark={noop} onRemove={noop} onPrescriptions={noop} />);
+  expect(html).toContain("2 animais");
+  expect(html).toContain("3/3 realizados");
+  expect(html).toContain("Bidu");
+  expect(html).toContain("Mel");
+  expect(html).not.toContain("Procedimento removido");
+  expect(html).toContain("Número do microchip");
+  expect(html).toContain("ABC012");
+  expect(html).toMatch(/Doenças preexistentes[\s\S]*Displasia[\s\S]*Alergias conhecidas[\s\S]*Penicilina/);
+});
 
-  it("renders closed and read-only procedures with read-only fields", () => {
-    for (const html of [procedures({ readOnly: true }), procedures({ procedure: { ...procedure, status: ProcedureStatus.DONE } })]) {
-      expect(html.match(/<textarea\b[^>]*readonly=""/g)).toHaveLength(2);
-    }
-  });
+it("groups dated actions newest first and shows a closure with no recorded date", () => {
+  const html = renderToStaticMarkup(<ProcessHistoryTimeline events={[
+    { kind: "start", at: "2026-11-20T12:00:00.000Z", label: "Solicitação registrada", actor: "Formulário público" },
+    { kind: "event", at: "2026-11-20T13:30:00.000Z", label: "Documento deferido", actor: "Ana Silva" },
+    { kind: "end", at: null, label: "Processo concluído", actor: null },
+  ]} />);
+  expect(html.match(/<li\b/g)).toHaveLength(3);
+  expect(html).toContain('<time dateTime="2026-11-20T13:30:00.000Z">');
+  expect(html).toContain("Ana Silva");
+  expect(html.indexOf("Documento deferido")).toBeLessThan(html.indexOf("Solicitação registrada"));
+  expect(html).toContain("Data não registrada");
 });

@@ -83,18 +83,14 @@ export function isBlockingAttachment(row: AttachmentRow): boolean {
   return row.required && row.state !== AttachmentState.APPROVED;
 }
 
-export function isPendingAttachment(row: AttachmentRow): boolean {
-  return row.state === AttachmentState.PENDING || isBlockingAttachment(row);
-}
-
 export function canReviewAttachment(row: AttachmentRow): boolean {
-  return row.available && Boolean(row.document?.attachmentId) && [AttachmentState.PENDING, AttachmentState.REJECTED].includes(row.state);
+  return row.available && Boolean(row.document?.attachmentId) && row.state === AttachmentState.PENDING;
 }
 
 export const attachmentStateLabels: Record<AttachmentState, string> = {
   [AttachmentState.SYSTEM]: "Sistema",
   [AttachmentState.INFO]: "Anexado",
-  [AttachmentState.PENDING]: "Aguardando",
+  [AttachmentState.PENDING]: "Pendente de análise",
   [AttachmentState.APPROVED]: "Deferido",
   [AttachmentState.REJECTED]: "Indeferido",
   [AttachmentState.MISSING]: "Não enviado",

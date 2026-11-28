@@ -20,3 +20,9 @@ export async function prepareProcessDocumentPreview(row: AttachmentRow, request:
     dataUrl,
   };
 }
+export function downloadProcessFile(dataUrl: string, fileName: string) {
+  const anchor = window.document.createElement("a");
+  anchor.href = dataUrl;
+  anchor.download = fileName;
+  anchor.click();
+}

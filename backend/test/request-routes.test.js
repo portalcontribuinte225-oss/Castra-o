@@ -37,7 +37,7 @@ function procedureBody(overrides = {}) {
 }
 
 async function fixture(t, { existing, failHistory = false, failChannelLookup = false, failRequestInsert = false,
-  failStaffNotification = false, requiredDocument = false, registeredNotice = false, staffAccounts = [], teamUsers = [], permissionGroups = [] } = {}) {
+  failStaffNotification = false, requiredDocument = false, registeredNotice = false, staffAccounts = [], teamUsers = [], teamSectors = [], permissionGroups = [] } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = SECRET;
   const stats = { calls: [], channelReads: 0, historyAppends: 0, transports: 0, staffNotifications: [], counters: [] };
@@ -51,7 +51,7 @@ async function fixture(t, { existing, failHistory = false, failChannelLookup = f
     // as not configured, which leaves a result and a history entry without any transport.
     [EMAIL_ACTIVE_USES_CONFIG_KEY, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true, ...(registeredNotice ? { [NotificationEvent.REQUEST_REGISTERED]: true } : {}) } }],
     ["whatsapp", { active: false }],
-    ["castragestao:teams", { users: teamUsers }],
+    ["castragestao:teams", { users: teamUsers, sectors: teamSectors }],
     ["permission_groups", permissionGroups],
   ]);
   const lockTails = new Map();
@@ -388,7 +388,8 @@ test("the registered notice goes after the answer to whoever accepted the notice
   await until(() => row().history.length > 0);
   assert.deepEqual(row().history.map(({ notification }) => [notification.event, notification.channel, notification.status, notification.code]),
     [[NotificationEvent.REQUEST_REGISTERED, "email", "skipped", "not_configured"]]);
-  assert.match(row().history[0].notes, /^Solicitação registrada — E-mail: não enviado\./);
+  assert.equal(row().history[0].title, "Solicitação registrada");
+  assert.match(row().history[0].notes, /^E-mail: não enviado\./);
 });
 
 test("a request registered by the staff keeps the notices accepted and sends the registered notice like a public one", async (t) => {
@@ -465,7 +466,7 @@ test("generic PATCH preserves protected workflow data and keeps the contact CPF 
   assert.deepEqual(row().workflow_data.followUp, existing.workflow_data.followUp);
   assert.deepEqual(row().workflow_data.notificationDispatches, { previous: true });
   assert.equal(row().workflow_data.notificationResults, undefined);
-  assert.equal(row().workflow_data.assignedUserId, ADMIN.id);
+  assert.equal(row().workflow_data.assignedUserId, undefined);
   assert.equal(row().workflow_data[REQUEST_CONTACT_CPF_KEY], VALID_CPF);
   assert.equal(Object.hasOwn(response.body.workflow_data, REQUEST_CONTACT_CPF_KEY), false);
   assert.deepEqual(response.body.notificationResults, []);
@@ -491,18 +492,29 @@ test("assignment is serialized and alerts the account of an eligible reassignmen
   const remote = staff("77777777-7777-4777-8777-777777777777", "remote@example.test", { municipality_id: OTHER_MUNICIPALITY_ID });
   const inactive = staff("88888888-8888-4888-8888-888888888888", "inactive@example.test", { active: false });
   const denied = staff("99999999-9999-4999-8999-999999999999", "denied@example.test");
-  const { request, stats } = await fixture(t, {
-    existing: pendingRequest(), staffAccounts: [first, second, remote, inactive, denied],
-    teamUsers: [{ id: first.id, email: first.email }, { id: denied.id, permissionGroupId: "dashboard" }],
+  const admin = staff(ADMIN.id, "admin@example.test");
+  const clinic = "clinic";
+  const { request, row, stats } = await fixture(t, {
+    existing: pendingRequest(), staffAccounts: [first, second, remote, inactive, denied, admin],
+    teamSectors: [{ id: clinic, name: "Clínica" }, { id: "other", name: "Outro setor" }],
+    teamUsers: [first, second, remote, inactive, denied, admin].map(({ id }) => ({
+      id, sectorIds: [clinic], ...(id === denied.id ? { permissionGroupId: "dashboard" } : {}),
+    })),
     permissionGroups: [{ id: "dashboard", allowedMenuItems: ["dashboard"] }],
   });
-  const assign = (assignedUserId) => request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { assignedUserId } });
+  const assign = (assignedUserId, assignedSectorId = clinic) => request({ method: "PATCH", path: `/requests/${REQUEST_ID}`, user: ADMIN, body: { assignedUserId, assignedSectorId } });
+  assert.equal((await assign("")).status, 200);
+  assert.equal(row().workflow_data.assignedSectorName, "Clínica");
+  assert.equal(row().workflow_data.assignedUserId, "");
   const concurrent = await Promise.all([assign(first.id), assign(first.id)]);
-  assert.ok(concurrent.every(({ status }) => status === 200));
+  assert.deepEqual(concurrent.map(({ status }) => status).sort(), [200, 409]);
   assert.deepEqual(stats.staffNotifications.map((event) => event[3]), [first.id]);
-  for (const next of [first.id, second.id, first.id, ADMIN.id, remote.id, inactive.id, denied.id]) {
+  for (const next of [second.id, first.id, ADMIN.id]) {
     assert.equal((await assign(next)).status, 200);
   }
+  for (const next of [remote.id, inactive.id, denied.id]) assert.equal((await assign(next)).status, 409);
+  assert.equal((await assign(second.id, "other")).status, 409);
+  assert.equal(row().workflow_data.assignedUserId, ADMIN.id);
   assert.deepEqual(stats.staffNotifications, [first.id, second.id, first.id]
     .map((recipient) => [MUNICIPALITY_ID, REQUEST_ID, StaffNotificationType.REQUEST_ASSIGNED, recipient]));
 });
@@ -519,18 +531,19 @@ test("concurrent evidence uploads append both files to the locked request withou
   assert.equal(row().documents.filter((document) => document.internalEvidence).length, 2);
 });
 
-test("confirming a second procedure keeps the same general status and does not repeat the schedule notice", async (t) => {
+test("confirming a group marks every procedure and never repeats the schedule notice", async (t) => {
   const configured = pendingRequest({ enabled: true, email: "own@example.test" });
   const existing = { ...configured, origin: "INTERNA", request_type: "Castração, Microchipagem", schedule_date: FUTURE_DATE,
     animals: [{ name: "Luna", requestTypeIds: ["castration", "microchip"] }],
     workflow_data: { ...configured.workflow_data, scheduleSlotTime: "08:00", scheduleOccurrenceKey: `day:${SCHEDULE_DAY_ID}` } };
   const { request, row, stats } = await fixture(t, { existing });
-  const confirm = (requestTypeId) => request({ method: "POST", path: `/requests/${REQUEST_ID}/procedures/action`, user: ADMIN,
-    body: { action: "confirm_schedule", animalIndex: 0, requestTypeId },
+  const confirm = () => request({ method: "POST", path: `/requests/${REQUEST_ID}/procedures/action`, user: ADMIN,
+    body: { action: "confirm_schedule", expectedUpdatedAt: "", data: { schedule: { date: FUTURE_DATE, occurrenceKey: `day:${SCHEDULE_DAY_ID}`, time: "08:00" } } },
   });
-  assert.equal((await confirm("castration")).status, 200);
-  assert.equal((await confirm("microchip")).status, 200);
+  const results = await Promise.all([confirm(), confirm()]);
+  assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);
   assert.equal(row().status, "AGENDADA");
+  assert.ok(row().animals[0].procedures.every(({ status }) => status === "AGENDADO"));
   assert.equal(stats.historyAppends, 1);
   assert.equal(row().history.filter((item) => item.notification?.event === NotificationEvent.SCHEDULE_CONFIRMED).length, 1);
 });
@@ -608,6 +621,8 @@ test("public POST with procedures per animal stores the derived type, the animal
     [[["AGUARDANDO", FUTURE_DATE, "08:00"], ["AGUARDANDO", FUTURE_DATE, "08:00"]], [["AGUARDANDO", FUTURE_DATE, "08:00"]]]);
   assert.deepEqual(row().workflow_data.requestTypeIds, ["microchip", "castration"]);
   assert.deepEqual(row().workflow_data.requestTypeNames, ["Microchipagem", "Castração"]);
+  assert.equal(row().workflow_data.requestedSchedule.date, FUTURE_DATE);
+  assert.equal(row().workflow_data.requestedSchedule.slotTime, "08:00");
   assert.equal(Object.hasOwn(row().workflow_data, "requestTypeId"), false);
 });
 

@@ -9,9 +9,10 @@ interface ProcessDialogProps {
   actions: ReactNode;
   onClose: () => void;
   busy: boolean;
+  className?: string;
 }
 
-export function ProcessDialog({ title, children, actions, onClose, busy }: ProcessDialogProps) {
+export function ProcessDialog({ title, children, actions, onClose, busy, className = "" }: ProcessDialogProps) {
   const overlay = useRef<HTMLDivElement>(null);
   const titleId = useId();
   useModalFocus(overlay);
@@ -19,7 +20,7 @@ export function ProcessDialog({ title, children, actions, onClose, busy }: Proce
     <div className="assign-modal-overlay" ref={overlay} data-managed-dialog="" onClick={(event) => {
       if (!busy && event.target === event.currentTarget) onClose();
     }}>
-      <div className="assign-modal" role="dialog" aria-modal="true" aria-labelledby={titleId}>
+      <div className={`assign-modal prm-dialog ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={busy}>
         <div className="assign-modal-header">
           <strong id={titleId}>{title}</strong>
           <CloseButton disabled={busy} onClick={onClose} />

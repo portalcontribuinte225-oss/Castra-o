@@ -4,6 +4,7 @@
 //   animals[].requestTypeNames                       the names of each animal's procedures
 //   request_type                                     those names, whole, joined by REQUEST_TYPE_NAME_SEPARATOR
 export const MAX_REQUEST_TYPES_PER_ANIMAL = 10;
+export const MAX_REQUEST_ANIMALS = 25;
 export const REQUEST_TYPE_NAME_SEPARATOR = ", ";
 const FREE_FEE_LABEL = "Gratuito";
 

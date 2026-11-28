@@ -1,5 +1,7 @@
 import { isComplaintPhotoId } from "../../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus, MAX_REQUEST_DOCUMENTS } from "../../../../shared/document-reuse-contract.js";
+import { isProcedureRequest } from "../../../../shared/request-contract.js";
+import { isClosedRequest } from "../../../../shared/request-procedure-contract.js";
 import { isInternalUser } from "../../tenant.js";
 import { assertMaterializedRequestSize, decodeDocumentContent, documentError } from "./document-content.js";
 import { canonicalDocumentDefinition, documentCriteriaFingerprint, isExcludedDocument } from "./document-policy.js";
@@ -48,12 +50,19 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
   if (patch.documents === undefined && patch.documentReviews === undefined && patch.documentEvidence === undefined) return undefined;
   if (!isInternalUser(user) || municipalityId !== previous.municipality_id) throw documentError("Revisão não autorizada.", 403);
   const oldDocuments = Array.isArray(previous.documents) ? previous.documents : [];
-  const evidence = patch.documentEvidence;
-  if (evidence !== undefined && (patch.documents !== undefined || !evidence || typeof evidence !== "object" || Array.isArray(evidence)
-    || typeof evidence.documentId !== "string" || !/^evidencia-[a-z\d-]{1,72}$/i.test(evidence.documentId))) throw documentError("Evidência inválida.");
-  const supplied = evidence ? [...oldDocuments, evidence] : patch.documents === undefined ? oldDocuments : patch.documents;
+  const evidence = patch.documentEvidence === undefined ? [] : Array.isArray(patch.documentEvidence) ? patch.documentEvidence : [patch.documentEvidence];
+  if (evidence.length && (patch.documents !== undefined || evidence.some((item) => !item || typeof item !== "object"
+    || typeof item.documentId !== "string" || !/^evidencia-[a-z\d-]{1,72}$/i.test(item.documentId)))) throw documentError("Evidência inválida.");
+  const evidenceIds = new Set(evidence.map(({ documentId }) => documentId));
+  if (evidenceIds.size !== evidence.length || oldDocuments.some((item) => evidenceIds.has(item?.documentId))) {
+    throw documentError("O documento complementar já foi anexado.", 409);
+  }
+  const supplied = patch.documents === undefined ? [...oldDocuments, ...evidence] : patch.documents;
   const reviews = patch.documentReviews === undefined ? [] : patch.documentReviews;
   if (!Array.isArray(supplied) || !Array.isArray(reviews) || supplied.length > MAX_REQUEST_DOCUMENTS || reviews.length > MAX_REQUEST_DOCUMENTS) throw documentError("Anexos ou decisões inválidos.");
+  if (isProcedureRequest(previous.request_type) && isClosedRequest(previous) && (reviews.length || evidence.length)) {
+    throw documentError("Este atendimento já foi encerrado.", 409);
+  }
   const definitions = definitionsForRequest(settings, previous);
   const normalizedOld = oldDocuments.map((document) => {
     if (isComplaintPhotoId(document?.documentId)) return document;
@@ -87,6 +96,7 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
     if (review.decision === DocumentReviewStatus.REJECTED && (!note || note.length > MAX_REVIEW_NOTE)) throw documentError(`Informe o que precisa ser corrigido no documento (até ${MAX_REVIEW_NOTE} caracteres).`);
     const document = documents.find((item) => item.attachmentId === review.attachmentId);
     if (!document || isExcludedDocument(document) || isComplaintPhotoId(document.documentId)) throw documentError("O arquivo a revisar não está mais disponível.", 409);
+    if (document.status !== DocumentReviewStatus.ATTACHED) throw documentError("Esta versão do documento já foi analisada.", 409);
     const definition = definitionFor(document, definitions);
     const content = decodeDocumentContent(document, definition);
     document.status = review.decision;

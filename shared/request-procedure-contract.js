@@ -1,22 +1,26 @@
 import { RequestStatus, isProcedureRequest } from "./request-contract.js";
 import { NO_SHOW_CANCEL_REASON, REJECTED_CANCEL_REASON } from "./notification-contract.js";
-import { animalRequestTypeIds } from "./request-types-contract.js";
+import { MAX_REQUEST_ANIMALS, MAX_REQUEST_TYPES_PER_ANIMAL, animalRequestTypeIds } from "./request-types-contract.js";
 
 // Each procedure of each animal of a request has its own state, kept in `animals[i].procedures`:
 //   { requestTypeId, status, schedule: { date, occurrenceKey, slotTime, locationName, address, addressUrl } | null,
 //     microchip, prescription: { text, professionalName, professionalRegistry, issuedAt, issuedBy } | null,
 //     rejection: { reason, note } | null, updatedAt, updatedBy }
 // A procedure that is not stored yet is read from the request's own status and agenda.
-// The request's status is derived from its procedures (deriveRequestStatus), so lists, filters and notices keep working.
+// The request keeps its own closure, while the procedures retain their individual outcomes and agenda.
 export const ProcedureStatus = Object.freeze({
-  WAITING: "AGUARDANDO", SCHEDULED: "AGENDADO", DONE: "REALIZADO", NO_SHOW: "NAO_COMPARECEU", REJECTED: "INDEFERIDO",
+  WAITING: "AGUARDANDO", SCHEDULED: "AGENDADO", DONE: "REALIZADO", NO_SHOW: "NAO_COMPARECEU", REJECTED: "INDEFERIDO", REMOVED: "REMOVIDO",
 });
 
 export const ProcedureAction = Object.freeze({
-  SAVE: "save", CONFIRM_SCHEDULE: "confirm_schedule", ATTEND: "attend", NO_SHOW: "no_show",
-  REJECT: "reject", RESCHEDULE: "reschedule", CANCEL_SCHEDULE: "cancel_schedule", PRESCRIPTION: "prescription",
+  SAVE: "save", CONFIRM_SCHEDULE: "confirm_schedule", RESCHEDULE: "reschedule", NO_SHOW: "no_show",
+  REMOVE: "remove", CLOSE: "close", PRESCRIPTION: "prescription",
 });
 
+export const REQUESTED_SCHEDULE_KEY = "requestedSchedule";
+export const CLOSED_WITHOUT_ATTENDANCE = "Encerrado sem realização";
+export const POSITIVE_CLOSURE = "Conclusão positiva";
+export const MAX_PROCEDURE_BATCH = MAX_REQUEST_ANIMALS * MAX_REQUEST_TYPES_PER_ANIMAL;
 export const MAX_HEALTH_TEXT = 2000;
 export const MAX_PROCEDURE_NOTE = 1000;
 export const MAX_PRESCRIPTION_TEXT = 5000;
@@ -26,36 +30,15 @@ const { WAITING, SCHEDULED, DONE, NO_SHOW, REJECTED } = ProcedureStatus;
 const OPEN = [WAITING, SCHEDULED];
 const STATUSES = Object.values(ProcedureStatus);
 
-// The statuses an action can start from; the status it leads to (actions not listed keep the status).
-const ACTION_FROM = Object.freeze({
-  [ProcedureAction.SAVE]: OPEN,
-  [ProcedureAction.CONFIRM_SCHEDULE]: [WAITING],
-  [ProcedureAction.ATTEND]: [SCHEDULED],
-  [ProcedureAction.NO_SHOW]: [SCHEDULED],
-  [ProcedureAction.REJECT]: OPEN,
-  [ProcedureAction.RESCHEDULE]: OPEN,
-  [ProcedureAction.CANCEL_SCHEDULE]: [SCHEDULED],
-  [ProcedureAction.PRESCRIPTION]: OPEN,
-});
-const ACTION_RESULT = Object.freeze({
-  [ProcedureAction.CONFIRM_SCHEDULE]: SCHEDULED, [ProcedureAction.ATTEND]: DONE,
-  [ProcedureAction.NO_SHOW]: NO_SHOW, [ProcedureAction.REJECT]: REJECTED,
-  [ProcedureAction.CANCEL_SCHEDULE]: WAITING,
-});
-
-export function canApplyProcedureAction(status, action) {
-  return Boolean(ACTION_FROM[action]?.includes(status));
-}
-
-export function procedureStatusAfter(status, action) {
-  return ACTION_RESULT[action] || status;
+export function isClosedRequest(request) {
+  return [RequestStatus.COMPLETED, RequestStatus.CANCELLED].includes(request?.status);
 }
 
 export function isOpenProcedure(procedure) {
   return OPEN.includes(procedure?.status);
 }
 
-// Open procedures keep a place until they are completed, rejected or marked absent.
+// Only open procedures hold a place.
 export function holdsSchedulePlace(procedure) {
   return isOpenProcedure(procedure) && Boolean(procedure?.schedule?.date);
 }
@@ -78,7 +61,7 @@ function statusFromRequest(request) {
   return WAITING;
 }
 
-function scheduleFromRequest(request) {
+export function scheduleFromRequest(request) {
   const date = request?.schedule_date || request?.preferredSchedule || "";
   if (!date) return null;
   const workflow = workflowOf(request);
@@ -88,6 +71,37 @@ function scheduleFromRequest(request) {
     address: request.schedule_address || request.scheduleAddress || "",
     addressUrl: request.schedule_address_url || request.scheduleAddressUrl || "",
   };
+}
+
+export function distinctProcedureSchedules(animals, predicate = isOpenProcedure) {
+  const schedules = new Map();
+  for (const animal of animals) {
+    for (const procedure of animal.procedures || []) {
+      if (!predicate(procedure) || !procedure.schedule?.date) continue;
+      const { date, occurrenceKey, slotTime, locationName } = procedure.schedule;
+      schedules.set(JSON.stringify([date, occurrenceKey || "", slotTime || "", occurrenceKey ? "" : locationName || ""]), procedure.schedule);
+    }
+  }
+  return [...schedules.values()];
+}
+
+export function appointmentNumberOfAnimals(animals) {
+  return animals.filter((animal) => animal.procedures?.some(isOpenProcedure)).length;
+}
+
+export function openProcedureSelections(animals) {
+  return animals.map((animal) => ({
+    requestTypeIds: (animal.procedures || []).filter(isOpenProcedure).map((procedure) => procedure.requestTypeId),
+  }));
+}
+
+// Legacy emissions on individual procedures are projected into the same list as the per-animal records.
+export function animalPrescriptionRecords(animal) {
+  if (Array.isArray(animal.prescriptions)) return animal.prescriptions;
+  const records = (animal.procedures || []).flatMap(({ prescription, requestTypeId }) =>
+    typeof prescription?.text === "string" && prescription.text.trim() ? [{ ...prescription, requestTypeId }] : []);
+  records.sort((a, b) => String(a.issuedAt || "").localeCompare(String(b.issuedAt || "")));
+  return records.map((record, index) => ({ ...record, archived: index !== records.length - 1 }));
 }
 
 export function hasStoredProcedures(request) {
@@ -134,5 +148,7 @@ export function deriveRequestStatus(animals) {
   if (statuses.includes(SCHEDULED)) return { status: RequestStatus.SCHEDULED, cancelReason: "" };
   if (statuses.includes(WAITING)) return { status: RequestStatus.NEW, cancelReason: "" };
   if (statuses.includes(DONE)) return { status: RequestStatus.COMPLETED, cancelReason: "" };
-  return { status: RequestStatus.CANCELLED, cancelReason: statuses.every((status) => status === NO_SHOW) ? NO_SHOW_CANCEL_REASON : REJECTED_CANCEL_REASON };
+  const cancelReason = statuses.every((status) => status === NO_SHOW) ? NO_SHOW_CANCEL_REASON
+    : statuses.every((status) => status === REJECTED) ? REJECTED_CANCEL_REASON : CLOSED_WITHOUT_ATTENDANCE;
+  return { status: RequestStatus.CANCELLED, cancelReason };
 }

@@ -1,5 +1,6 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import { createPortal } from "react-dom";
+import { Pencil, Save } from "lucide-react";
 import { Button } from "../../components/button";
 import { Input } from "../../components/input";
 import { ConfigField, configFieldStyle } from "../../components/ui";
@@ -15,14 +16,17 @@ interface TutorDataTabProps {
   // The neighborhoods the municipality registered; with none the neighborhood is typed.
   neighborhoodNames: string[];
   readOnly: boolean;
-  onSaved?: (tutor: TutorData) => void;
+  busy?: boolean;
+  onBusy?: (busy: boolean) => void;
+  onSaved?: (tutor: TutorData) => void | Promise<void>;
   // Where the save button goes: the fixed footer of the process.
   actionsSlot: HTMLElement | null;
 }
 
 // The "Dados do tutor" tab of the attendance: the staff corrects the tutor's data and may set a new password for the account.
-export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, readOnly, onSaved, actionsSlot }: TutorDataTabProps) {
+export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, readOnly, busy = false, onBusy, onSaved, actionsSlot }: TutorDataTabProps) {
   const formId = useId();
+  const [editing, setEditing] = useState(false);
   const { tutor, form, loading, error, saving, saveError, notice, change, save, retry } = useTutorData(requestId, municipalityId, onSaved);
   if (loading && !tutor) return <p className="prm-muted-note" role="status">Carregando os dados do tutor...</p>;
   if (error) return <div className="prm-section"><p className="form-error" role="alert">{error}</p><Button variant="outline" onClick={retry}>Tentar novamente</Button></div>;
@@ -30,9 +34,15 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
   const contactOnly = tutor.contactOnly === true;
   const issues = tutorFormIssues(form, contactOnly);
   const invalid = Object.keys(issues).length > 0;
-  const locked = readOnly || saving;
+  const locked = readOnly || busy || saving || !editing;
+  const canSave = !locked && !invalid && hasTutorChanges(tutor, form);
+  async function submit() {
+    if (!canSave) return;
+    onBusy?.(true);
+    try { if (await save()) setEditing(false); } finally { onBusy?.(false); }
+  }
   return (
-    <form id={formId} className="prm-section prm-tutor-data" onSubmit={(event) => { event.preventDefault(); if (!invalid && !readOnly) void save(); }}>
+    <form id={formId} className="prm-section prm-tutor-data" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
       {contactOnly && <p className="prm-section-block prm-muted-note">O tutor ainda não se identificou nesta solicitação.</p>}
       <div className="prm-section-block">
         <p className="prm-section-title">Tutor</p>
@@ -56,10 +66,10 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
         {(issues.cep || issues.state) && <small className="field-error-message">{issues.cep || issues.state}</small>}
         <ConfigField label="Endereço" value={form.address} maxLength={200} readOnly={locked} onChange={(value) => change({ address: value })} />
         <div className="two-column-fields">
-          {neighborhoodNames.length > 0 && !readOnly ? (
+          {neighborhoodNames.length > 0 && !readOnly && editing ? (
             <label className="field">
               <span>Bairro</span>
-              <select value={form.neighborhood} disabled={saving} onChange={(event) => change({ neighborhood: event.target.value })}>
+              <select value={form.neighborhood} disabled={locked} onChange={(event) => change({ neighborhood: event.target.value })}>
                 <option value="">Selecione o bairro</option>
                 {neighborhoodChoices(neighborhoodNames, form.neighborhood).map((name) => <option key={name} value={name}>{name}</option>)}
               </select>
@@ -71,7 +81,7 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
         </div>
       </div>
       {!readOnly && !contactOnly && !tutor.hasAccess && <p className="prm-muted-note">Este tutor ainda não tem acesso ao sistema.</p>}
-      {!readOnly && tutor.hasAccess && (
+      {!readOnly && editing && tutor.hasAccess && (
         <div className="prm-section-block">
           <p className="prm-section-title">Acesso</p>
           <label className={configFieldStyle}>
@@ -84,10 +94,9 @@ export function TutorDataTab({ requestId, municipalityId, neighborhoodNames, rea
       )}
       {saveError && <p className="form-error" role="alert">{saveError}</p>}
       {notice && <p className="prm-muted-note" role="status">{notice}</p>}
-      {!readOnly && actionsSlot && createPortal(
-        <Button type="submit" form={formId} disabled={saving || invalid || !hasTutorChanges(tutor, form)}>{saving ? "Salvando..." : "Salvar dados do tutor"}</Button>,
-        actionsSlot,
-      )}
+      {!readOnly && actionsSlot && createPortal(editing
+        ? <Button type="submit" form={formId} disabled={!canSave}><Save size={15} aria-hidden="true" /> {saving ? "Salvando..." : "Salvar alterações"}</Button>
+        : <Button disabled={busy} onClick={() => setEditing(true)}><Pencil size={15} aria-hidden="true" /> Editar dados</Button>, actionsSlot)}
     </form>
   );
 }

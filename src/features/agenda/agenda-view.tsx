@@ -176,7 +176,6 @@ export function AgendaView({
     applyProcedureAction,
     updateDocuments,
     assignFromPreview,
-    assumeFromPreview,
     rejectRequestFromProcess,
     confirmSpecialRequest,
   } = useRequestActions({ patchRequest, runProcedureAction, currentUser, teams, showToast, setSelectedId });
@@ -423,18 +422,18 @@ export function AgendaView({
           request={previewRequest}
           readOnly={!canEditRequests(currentUser?.role)}
           neighborhoods={neighborhoods}
-          onTutorSaved={(tutor) => { updatePreviewTutor(tutor); refreshRequests?.(); }}
+          onTutorSaved={(tutor) => updatePreviewTutor(tutor, refreshRequests)}
           requestTypes={requestTypes}
           documentTypes={documentTypes}
           sectors={activeSectors}
           users={activeUsers}
           municipalities={municipalities}
           currentUserName={currentUser?.name || ""}
+          currentUserId={currentUser?.id || ""}
           returnFocus={processReturnFocus.current}
           onClose={closeProcess}
           onRejectProcess={rejectRequestFromProcess}
           onAssign={assignFromPreview}
-          onAssume={assumeFromPreview}
           onConfirmSpecial={confirmSpecialRequest}
           onProcedureAction={applyProcedureAction}
           onUpdateDocuments={updateDocuments}

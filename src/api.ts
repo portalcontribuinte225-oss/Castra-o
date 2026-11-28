@@ -8,6 +8,7 @@ import type { MessageQuotaInput, MessageQuotaStatus } from "./features/message-c
 import type { WhatsappTemplateList } from "./features/whatsapp-integration/whatsapp-integration-types";
 import type { EmailSettings } from "./features/email/email-integration-types";
 import type { OpenStaffNotification, StaffNotificationPage } from "./features/staff-notifications/staff-notification-types";
+import type { ProcessHistoryEvent } from "./features/process-modal/process-history";
 
 const BASE = import.meta.env.VITE_API_URL || "/api";
 let sessionMutationVersion = 0;
@@ -151,6 +152,9 @@ export const api = {
   },
 
   getRequests: () => request("GET", "/requests"),
+  getRequestHistory(id: string, signal: AbortSignal): Promise<{ events: ProcessHistoryEvent[] }> {
+    return request("GET", `/requests/${encodeURIComponent(id)}/history`, undefined, "json", { signal });
+  },
   listStaffNotifications(municipalityId: string, cursor = "", options?: AuthRequestOptions): Promise<StaffNotificationPage> {
     const params = new URLSearchParams();
     if (municipalityId) params.set("municipalityId", municipalityId);
@@ -209,7 +213,8 @@ export const api = {
   reviewAccessRequest: (id, body) => request("PATCH", `/access-requests/${id}/review`, body),
 
   getSchedule: (municipalityId = "") => request("GET", municipalityId ? `/schedule?municipalityId=${encodeURIComponent(municipalityId)}` : "/schedule"),
-  getScheduleAvailability: (municipalityId: string, from: string, to: string) => request("GET", `/schedule/availability?municipalityId=${encodeURIComponent(municipalityId)}&from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
+  getScheduleAvailability: (municipalityId: string, from: string, to: string, excludeRequestId = "") => request("GET",
+    `/schedule/availability?${new URLSearchParams({ municipalityId, from, to, ...(excludeRequestId ? { excludeRequestId } : {}) })}`),
   createScheduleDay: (body) => request("POST", "/schedule", body),
   bulkCreateScheduleDays: (body) => request("POST", "/schedule/bulk", body),
   updateScheduleDay: (id, body) => request("PATCH", `/schedule/${id}`, body),

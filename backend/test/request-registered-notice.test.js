@@ -84,7 +84,8 @@ test("the notice goes only with the notices accepted, carries the link and is ke
   assert.equal(request.access_link, undefined, "the link is never saved with the request");
   assert.equal(history.length, 1);
   assert.deepEqual([history[0].id, history[0].municipalityId], [request.id, MUNICIPALITY]);
-  assert.equal(history[0].entries[0].notes, "Solicitação registrada — E-mail: aceito para envio.");
+  assert.equal(history[0].entries[0].title, "Solicitação registrada");
+  assert.equal(history[0].entries[0].notes, "E-mail: aceito para envio.");
 });
 
 test("without a link the notice still goes, and a channel that fails or a history that cannot be written never breaks the request", async () => {

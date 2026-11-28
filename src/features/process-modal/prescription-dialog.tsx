@@ -1,112 +1,98 @@
-import { useId, useRef, useState } from "react";
-import { FileText } from "lucide-react";
-import { MAX_PRESCRIPTION_TEXT, MAX_PROFESSIONAL_TEXT } from "../../../shared/request-procedure-contract.js";
+import { useState } from "react";
+import { MAX_PRESCRIPTION_TEXT, MAX_PROFESSIONAL_TEXT, ProcedureStatus, animalPrescriptionRecords } from "../../../shared/request-procedure-contract.js";
 import { Button } from "../../components/button";
-import { CloseButton } from "../../components/close-button";
-import { useModalFocus } from "../../components/modal-focus";
 import { ConfigField, configFieldStyle, configTextareaStyle } from "../../components/ui";
-import { displayText } from "../../domain";
 import type { AnyRecord } from "../../types";
+import { issuedPrescriptions } from "../process-report/process-report";
+import { downloadProcessFile } from "./process-document-preview";
+import { ProcessDialog } from "./process-dialog";
 import { createPrescriptionPdfDocument } from "./prescription-pdf";
-import type { PrintablePrescription } from "./prescription-pdf";
-
-export interface Prescription {
-  text: string;
-  professionalName: string;
-  professionalRegistry: string;
-}
+import { processAnimalLabel } from "./procedures-tab";
+import type { PrescriptionDraft, ProcessAnimal } from "./process-types";
 
 interface PrescriptionDialogProps {
   request: AnyRecord;
-  animal: AnyRecord;
-  procedure: AnyRecord;
+  animals: ProcessAnimal[];
   municipality: AnyRecord | null;
   defaultProfessionalName: string;
-  // A saved prescription can still be downloaded after the procedure closes.
-  canSave: boolean;
+  readOnly: boolean;
   busy: boolean;
-  // Saves the prescription and answers it as the server keeps it, with its number, or nothing when it was not saved.
-  onSave: (prescription: Prescription) => Promise<PrintablePrescription | null>;
+  onSave: (prescriptions: PrescriptionDraft[]) => void;
   onClose: () => void;
 }
 
-// The prescription belongs to one procedure and is issued without changing its status.
-export function PrescriptionDialog({ request, animal, procedure, municipality, defaultProfessionalName, canSave, busy, onSave, onClose }: PrescriptionDialogProps) {
-  const overlay = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  useModalFocus(overlay);
-  const saved: AnyRecord = procedure.prescription || {};
-  const savedText = typeof saved.text === "string" ? saved.text : "";
-  const [form, setForm] = useState<Prescription>({
-    text: savedText, professionalName: saved.professionalName || defaultProfessionalName || "", professionalRegistry: saved.professionalRegistry || "",
-  });
-  const [generating, setGenerating] = useState(false);
-  const [pdfError, setPdfError] = useState("");
-  const complete = Boolean(form.text.trim() && form.professionalName.trim() && form.professionalRegistry.trim());
-  const unchanged = form.text === savedText && form.professionalName === (saved.professionalName || "") && form.professionalRegistry === (saved.professionalRegistry || "");
-  const canExport = unchanged ? Boolean(savedText.trim()) : canSave && complete;
-  const pending = busy || generating;
-  const animalLabel = [displayText(animal.name) || "Animal sem nome", animal.species, animal.sex].filter(Boolean).join(" · ");
+export function PrescriptionDialog({ request, animals, municipality, defaultProfessionalName, readOnly, busy, onSave, onClose }: PrescriptionDialogProps) {
+  const [initial] = useState(() => animals.map((animal, animalIndex): PrescriptionDraft => {
+    const active = animalPrescriptionRecords(animal).findLast((record) => !record.archived);
+    return { animalIndex, requestTypeId: active?.requestTypeId || "", text: active?.text || "",
+      professionalName: active?.professionalName || defaultProfessionalName, professionalRegistry: active?.professionalRegistry || "" };
+  }));
+  const [drafts, setDrafts] = useState(initial);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  const records = issuedPrescriptions(animals);
+  const changed = drafts.map((draft) => ({ ...draft, text: draft.text.trim(), professionalName: draft.professionalName.trim(), professionalRegistry: draft.professionalRegistry.trim() }))
+    .filter((draft, index) => JSON.stringify(draft) !== JSON.stringify(initial[index]) && (draft.text || initial[index].text));
+  const valid = changed.length > 0 && changed.every((draft) => !draft.text || Boolean(draft.professionalName && draft.professionalRegistry));
+  const disabled = busy || exporting;
 
-  // A changed prescription is saved first: the PDF carries the number and the date the server gave it.
-  async function saveAndDownload() {
-    if (pending || !canExport) return;
-    setPdfError("");
-    setGenerating(true);
+  function change(index: number, patch: Partial<PrescriptionDraft>) {
+    setDrafts((current) => current.map((item, position) => position === index ? { ...item, ...patch } : item));
+  }
+
+  async function download(items: typeof records) {
+    setError("");
+    setExporting(true);
     try {
-      const issued = unchanged ? saved as PrintablePrescription
-        : await onSave({ text: form.text.trim(), professionalName: form.professionalName.trim(), professionalRegistry: form.professionalRegistry.trim() });
-      if (!issued) return;
-      const { dataUrl, fileName } = await createPrescriptionPdfDocument(request, issued, municipality, animal);
-      const anchor = window.document.createElement("a");
-      anchor.href = dataUrl;
-      anchor.download = fileName;
-      anchor.click();
-      if (!unchanged) onClose();
+      const pdf = await createPrescriptionPdfDocument(request, items, municipality);
+      downloadProcessFile(pdf.dataUrl, pdf.fileName);
     } catch {
-      setPdfError(unchanged ? "Não foi possível gerar o PDF da receita. Tente novamente." : "A receita foi salva, mas o PDF não foi gerado. Tente baixar novamente.");
+      setError("Não foi possível gerar o PDF das receitas. Tente novamente.");
     } finally {
-      setGenerating(false);
+      setExporting(false);
     }
   }
 
   return (
-    <div className="modal-backdrop" ref={overlay} data-managed-dialog="">
-      <div className="prescription-modal" role="dialog" aria-modal="true" aria-labelledby={titleId} aria-busy={pending}>
-        <header className="prescription-modal-header">
-          <div className="prescription-modal-title">
-            <h2 id={titleId}>Receita veterinária</h2>
-            <p>{[procedure.name, animalLabel].filter(Boolean).join(" · ")}</p>
-          </div>
-          <CloseButton disabled={pending} onClick={onClose} />
-        </header>
-        <div className="prescription-modal-body">
-          <div className="two-column-fields">
-            <ConfigField label="Profissional responsável" value={form.professionalName} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={!canSave || pending} onChange={(value) => setForm((current) => ({ ...current, professionalName: value }))} />
-            <ConfigField label="Registro profissional" value={form.professionalRegistry} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={!canSave || pending} placeholder="Ex.: CRMV-SC 12345" onChange={(value) => setForm((current) => ({ ...current, professionalRegistry: value }))} />
-          </div>
-          <label className={configFieldStyle}>
-            <span>Prescrição e orientações</span>
-            <textarea
-              data-ui-input=""
-              className={`${configTextareaStyle} tw:min-h-[200px] tw:resize-y tw:font-mono tw:leading-relaxed`}
-              value={form.text}
-              maxLength={MAX_PRESCRIPTION_TEXT}
-              readOnly={!canSave || pending}
-              onChange={(event) => setForm((current) => ({ ...current, text: event.target.value }))}
-              placeholder="Escreva a prescrição e as orientações para o tutor."
-              rows={10}
-            />
-          </label>
-          {pdfError && <p role="alert">{pdfError}</p>}
+    <ProcessDialog title="Receita unificada" className="prm-recipe-dialog" busy={disabled} onClose={onClose}
+      actions={!readOnly && <Button disabled={disabled || !valid} onClick={() => onSave(changed)}>{busy ? "Salvando..." : "Salvar receitas"}</Button>}>
+      {animals.map((animal, index) => {
+        const draft = drafts[index];
+        const choices = animal.procedures.filter((item) => item.status !== ProcedureStatus.REMOVED || item.requestTypeId === draft.requestTypeId);
+        return (
+          <fieldset className="prm-result-group" key={index} disabled={disabled}>
+            <legend>{processAnimalLabel(animal, index)}</legend>
+            <label className="field"><span>Procedimento (opcional)</span>
+              <select value={draft.requestTypeId} disabled={readOnly} onChange={(event) => change(index, { requestTypeId: event.target.value })}>
+                <option value="">Geral do animal</option>
+                {choices.map((item) => <option key={item.requestTypeId} value={item.requestTypeId}>{item.name}</option>)}
+              </select>
+            </label>
+            <label className={configFieldStyle}><span>Orientações</span>
+              <textarea data-ui-input="" className={configTextareaStyle} value={draft.text} readOnly={readOnly}
+                maxLength={MAX_PRESCRIPTION_TEXT} rows={3} placeholder="Preencha quando houver receita para este animal" onChange={(event) => change(index, { text: event.target.value })} />
+            </label>
+            {(draft.text || initial[index].text) && <div className="two-column-fields">
+              <ConfigField label="Profissional responsável" value={draft.professionalName} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={readOnly}
+                onChange={(value) => change(index, { professionalName: value })} />
+              <ConfigField label="Registro profissional" value={draft.professionalRegistry} maxLength={MAX_PROFESSIONAL_TEXT} readOnly={readOnly}
+                onChange={(value) => change(index, { professionalRegistry: value })} />
+            </div>}
+          </fieldset>
+        );
+      })}
+      {records.length > 0 && (
+        <div className="prm-saved-recipes">
+          <Button variant="outline" disabled={disabled} onClick={() => void download(records)}>Baixar receitas salvas</Button>
+          <ul>
+            {records.map((record) => <li key={record.id}>
+              <span>{record.subtitle || "Receita registrada"}</span>
+              <Button variant="outline" disabled={disabled} onClick={() => void download([record])}>Baixar PDF</Button>
+            </li>)}
+          </ul>
         </div>
-        <footer className="prescription-modal-footer">
-          <Button variant="outline" disabled={pending} onClick={onClose}>Cancelar</Button>
-          <Button className="tw:[--ui-action:#020817] tw:[--ui-action-hover:#111827]" disabled={pending || !canExport} onClick={saveAndDownload}>
-            <FileText size={15} aria-hidden="true" /> {busy ? "Salvando..." : generating ? "Gerando PDF..." : unchanged ? "Baixar PDF" : "Salvar e baixar PDF"}
-          </Button>
-        </footer>
-      </div>
-    </div>
+      )}
+      {error && <p role="alert" className="form-error">{error}</p>}
+    </ProcessDialog>
   );
 }

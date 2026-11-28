@@ -43,7 +43,7 @@ export async function sendProcedureReminders(date, {
       const next = { date, visits: [...visits, key] };
       if (!await claim(request, previous, next)) break;
       previous = next;
-      const results = await dispatch({ event: EVENT, request: requestForProcedure(request, EVENT, visit) });
+      const results = await dispatch({ event: EVENT, request: requestForProcedure(request, visit) });
       await recordNotificationResults(results, request, { appendHistory });
     }
   }

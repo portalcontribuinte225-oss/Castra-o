@@ -375,18 +375,14 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
         },
       ];
 
-  const history = Array.isArray(request.history)
-    ? request.history.map((item) => {
-        if (typeof item === "string") return item;
-        return [item.status, item.notes, item.by ? `por ${item.by}` : "", item.at]
-          .filter(Boolean)
-          .join(" - ");
-      })
-    : [];
-
-  const rawHistory2 = Array.isArray(request.history) ? request.history : [];
-  const rescheduleCount = rawHistory2.filter(
-    (item) => typeof item === "object" && item !== null && String(item.notes || "").toLowerCase().includes("reagendad"),
+  const rawHistory = Array.isArray(request.rawHistory) ? request.rawHistory : Array.isArray(request.history) ? request.history : [];
+  const history = rawHistory.flatMap((item) => {
+    if (typeof item === "string") return [item];
+    if (!item || typeof item !== "object") return [];
+    return [[item.status, item.title, item.notes, item.by ? `por ${item.by}` : "", item.at].filter(Boolean).join(" - ")];
+  });
+  const rescheduleCount = rawHistory.filter(
+    (item) => typeof item === "object" && item !== null && !item.notification && /reagendad/i.test(`${item.title || ""} ${item.notes || ""}`),
   ).length || (tags.includes(RequestTag.RESCHEDULED) ? 1 : 0);
 
   return {
@@ -417,8 +413,8 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     updatedAt: request.updatedAt || request.updated_at || "",
     assignedSectorId: request.assignedSectorId || workflowData.assignedSectorId || "",
     assignedUserId: request.assignedUserId || workflowData.assignedUserId || "",
-    assignedSectorName: request.assignedSectorName || request.assigned_sector || workflowData.assignedSectorName || "",
-    responsible: request.responsible || workflowData.responsible || request.responsible_unit || "",
+    assignedSectorName: workflowData.assignedSectorName ?? request.assignedSectorName ?? request.assigned_sector ?? "",
+    responsible: workflowData.responsible ?? request.responsible ?? request.responsible_unit ?? "",
     scheduleLocationName: request.scheduleLocationName || request.schedule_location_name || "",
     scheduleAddress: request.scheduleAddress || request.schedule_address || "",
     scheduleAddressUrl: request.scheduleAddressUrl || request.schedule_address_url || "",
@@ -437,7 +433,7 @@ export function normalizeRequest(request: AnyRecord = {}): AnyRecord {
     attendanceNote: request.attendanceNote || workflowData.attendanceNote || "",
     isFarmer: Boolean(request.isFarmer || request.is_farmer || workflowData.isFarmer || workflowData.is_farmer),
     documents: Array.isArray(request.documents) ? request.documents : [],
-    rawHistory: Array.isArray(request.history) ? request.history : [],
+    rawHistory,
     history,
     animals,
     targetTutorName: request.targetTutorName || request.target_tutor_name || "",

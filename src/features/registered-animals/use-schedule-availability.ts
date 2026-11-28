@@ -35,21 +35,21 @@ export function selectScheduleOccurrence<T extends { date: string; occurrenceKey
   return days.find((day) => day.date === date && day.active !== false && (occurrenceKey ? day.occurrenceKey === occurrenceKey : Boolean(getAvailableScheduleSlot(day, count))));
 }
 
-export function useScheduleAvailability(municipalityId: string, preferredDate = "") {
+export function useScheduleAvailability(municipalityId: string, preferredDate = "", excludeRequestId = "") {
   const [state, setState] = useState<{ key: string; days: AvailableScheduleDay[]; error: string; loading: boolean }>({ key: "", days: [], error: "", loading: true });
   const [attempt, setAttempt] = useState(0);
   const refresh = useCallback(() => setAttempt((current) => current + 1), []);
   const { from, to } = availabilityPeriod(preferredDate);
-  const key = `${municipalityId}:${from}:${to}`;
+  const key = `${municipalityId}:${from}:${to}:${excludeRequestId}`;
   useEffect(() => {
     if (!municipalityId) return;
     let cancelled = false;
     setState({ key, days: [], error: "", loading: true });
-    api.getScheduleAvailability(municipalityId, from, to).then((result) => {
+    api.getScheduleAvailability(municipalityId, from, to, excludeRequestId).then((result) => {
       if (!cancelled) setState({ key, days: result.days || [], error: "", loading: false });
     }).catch(() => { if (!cancelled) setState({ key, days: [], error: "Não foi possível carregar as vagas. Tente novamente.", loading: false }); });
     return () => { cancelled = true; };
-  }, [municipalityId, from, to, attempt]);
+  }, [municipalityId, from, to, excludeRequestId, attempt]);
   const current = state.key === key;
   return { days: current ? state.days : [], loading: !current || state.loading, error: current ? state.error : "", ready: Boolean(municipalityId) && current && !state.loading && !state.error, refresh };
 }

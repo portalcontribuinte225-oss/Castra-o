@@ -1,132 +1,113 @@
-import { useId, useRef, useState } from "react";
-import { CalendarDays } from "lucide-react";
-import { scheduleDate } from "../../../shared/schedule-contract.js";
-import { PublicSchedulePicker } from "../schedule-picker/public-schedule-picker";
+import { useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { displayScheduleDate, scheduleDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
-import { CloseButton } from "../../components/close-button";
-import { Input } from "../../components/input";
-import { useModalFocus } from "../../components/modal-focus";
-import { configTextareaStyle } from "../../components/ui";
+import { configFieldStyle, configTextareaStyle } from "../../components/ui";
 import { isPastScheduleDay } from "../../domain";
-import { getAvailableScheduleSlot, selectScheduleOccurrence, useScheduleAvailability } from "../registered-animals/use-schedule-availability";
+import { useScheduleAvailability } from "../registered-animals/use-schedule-availability";
+import { buildMonthCalendarDays, formatMonthYear, getCurrentScheduleMonthKey } from "../schedule-picker/schedule-months";
+import { ProcessDialog } from "./process-dialog";
+import type { AppointmentSlot, ScheduleSelection } from "./process-types";
 
-export interface RescheduleSelection {
-  date: string;
-  occurrenceKey: string;
-  time: string;
-  reason: string;
-}
-
-interface RescheduleDialogProps {
+interface ProcessScheduleDialogProps {
+  requestId: string;
   municipalityId: string;
-  subject: string;
-  currentDate: string;
-  reservedSlots: { date: string; occurrenceKey?: string; slotTime?: string }[];
+  schedules: AppointmentSlot[];
+  animalCount: number;
+  reschedule: boolean;
   busy: boolean;
-  onConfirm: (selection: RescheduleSelection) => void;
+  onConfirm: (selection: ScheduleSelection, reason: string) => void;
   onClose: () => void;
 }
 
-function maskScheduleDate(value: string) {
-  const digits = String(value || "").replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
-  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-}
+const weekDays = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
-function isValidScheduleDate(value: string) {
-  if (!/^\d{2}\/\d{2}\/\d{4}$/.test(value)) return false;
-  const [day, month, year] = value.split("/").map(Number);
-  const date = new Date(year, month - 1, day);
-  return date.getFullYear() === year && date.getMonth() === month - 1 && date.getDate() === day && !isPastScheduleDay(value);
-}
-
-// The window to move one procedure to another date: one place for its animal, at a location and time with vacancy.
-export function RescheduleDialog({ municipalityId, subject, currentDate, reservedSlots, busy, onConfirm, onClose }: RescheduleDialogProps) {
-  const overlay = useRef<HTMLDivElement>(null);
-  const titleId = useId();
-  useModalFocus(overlay);
-  const [date, setDate] = useState("");
-  const [typedDate, setTypedDate] = useState("");
-  const [occurrenceKey, setOccurrenceKey] = useState("");
-  const [time, setTime] = useState("");
+export function ProcessScheduleDialog({ requestId, municipalityId, schedules, animalCount, reschedule, busy, onConfirm, onClose }: ProcessScheduleDialogProps) {
+  const current = schedules[0];
+  const sameTime = schedules.length === 1;
+  const nextDate = current?.date && !isPastScheduleDay(current.date) ? displayScheduleDate(scheduleDate(current.date)) : "";
+  const [month, setMonth] = useState(nextDate ? nextDate.slice(3) : getCurrentScheduleMonthKey());
+  const [date, setDate] = useState(reschedule ? "" : nextDate);
+  const [location, setLocation] = useState(reschedule ? "" : current?.occurrenceKey || "");
+  const [time, setTime] = useState(reschedule ? "" : current?.slotTime || "");
   const [reason, setReason] = useState("");
-  const action = currentDate ? "Reagendar" : "Agendar";
-  const availability = useScheduleAvailability(municipalityId, date);
-  const days = availability.days.map((day) => {
-    const times = reservedSlots
-      .filter((item) => scheduleDate(item.date) === scheduleDate(day.date) && item.occurrenceKey === day.occurrenceKey)
-      .map((item) => item.slotTime);
-    const slots = day.slots.map((slot) => slot.remaining < 1 && times.includes(slot.time)
-      ? { ...slot, remaining: 1, reserved: true }
-      : { ...slot, reserved: false });
-    return { ...day, slots, remaining: slots.reduce((sum, slot) => sum + slot.remaining, 0) };
-  });
-  const day = selectScheduleOccurrence(days, date, occurrenceKey, 1);
-  const slot = day?.slots?.find((item) => item.time === time && item.remaining >= 1);
+  const availability = useScheduleAvailability(municipalityId, `01/${month}`, requestId);
 
-  function chooseDate(nextDate: string, nextOccurrence: string) {
-    setDate(nextDate);
-    setTypedDate(nextDate);
-    setOccurrenceKey(nextOccurrence);
-    setTime(getAvailableScheduleSlot(selectScheduleOccurrence(days, nextDate, nextOccurrence, 1), 1)?.time || "");
+  function eligible(day: { date: string; occurrenceKey: string }, slot: { time: string; remaining: number }) {
+    return !isPastScheduleDay(day.date) && slot.remaining >= animalCount && !(reschedule && sameTime
+      && scheduleDate(day.date) === scheduleDate(current.date) && day.occurrenceKey === current.occurrenceKey && slot.time === current.slotTime);
   }
+  const locations = availability.days.filter((day) => day.date === date);
+  const selectedDay = locations.find((day) => day.occurrenceKey === location);
+  const selected = selectedDay?.slots.some((slot) => slot.time === time && eligible(selectedDay, slot));
 
-  function typeDate(value: string) {
-    const next = maskScheduleDate(value);
-    setTypedDate(next);
-    setDate(isValidScheduleDate(next) ? next : "");
-    setOccurrenceKey("");
+  function moveMonth(offset: number) {
+    const [m, year] = month.split("/").map(Number);
+    const next = new Date(year, m - 1 + offset, 1);
+    const today = new Date();
+    if (next < new Date(today.getFullYear(), today.getMonth(), 1)) return;
+    setMonth(`${String(next.getMonth() + 1).padStart(2, "0")}/${next.getFullYear()}`);
+    setDate("");
+    setLocation("");
     setTime("");
   }
 
+  function chooseDay(value: string) {
+    const choices = availability.days.filter((day) => day.date === value).flatMap((day) =>
+      day.slots.filter((slot) => eligible(day, slot)).map((slot) => ({ occurrenceKey: day.occurrenceKey, time: slot.time })));
+    setDate(value);
+    setLocation(choices.length === 1 ? choices[0].occurrenceKey : "");
+    setTime(choices.length === 1 ? choices[0].time : "");
+  }
+
   return (
-    <div className="modal-backdrop" ref={overlay} data-managed-dialog="">
-      <div className="prm-modal prm-modal--reschedule" role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <header className="prm-header">
-          <div className="prm-header-identity">
-            <div className="prm-header-identity-text">
-              <span className="prm-eyebrow" id={titleId}>{action} {subject && <span className="tw:sr-only">{subject}</span>}</span>
-              <h2 className="prm-headline-name">{subject}</h2>
-            </div>
-            <div className="prm-header-actions">
-              <CloseButton disabled={busy} onClick={onClose} />
-            </div>
-          </div>
-        </header>
-        <div className="prm-body">
-          <div className="prm-inline-panel">
-            <div className="prm-inline-panel-heading">
-              <strong className="prm-inline-panel-title"><CalendarDays size={14} /> Nova data</strong>
-              <div className="prm-reschedule-date-group">
-                {currentDate && <span className="prm-reschedule-current">Atual: {currentDate}</span>}
-                <Input className="tw:max-w-[134px]" type="text" value={typedDate} onChange={(event) => typeDate(event.target.value)} placeholder="dd/mm/aaaa" inputMode="numeric" aria-label="Data específica" />
-              </div>
-            </div>
-            {currentDate && <textarea data-ui-input="" className={`${configTextareaStyle} tw:resize-y`} value={reason} maxLength={1000} onChange={(event) => setReason(event.target.value)} placeholder="Motivo do reagendamento (opcional)" aria-label="Motivo do reagendamento" />}
-            {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
-            {availability.error && <p role="alert" className="form-error">{availability.error} <Button variant="outline" onClick={availability.refresh}>Tentar novamente</Button></p>}
-            <PublicSchedulePicker scheduleDays={days} selectedDate={date} selectedOccurrenceKey={occurrenceKey} pendingReservation={{ date, count: 1 }} onSelect={chooseDate} />
-            {occurrenceKey && day && (
-              <label className="field">
-                <span>Horário no local selecionado</span>
-                <select value={time} onChange={(event) => setTime(event.target.value)}>
-                  <option value="">Escolha o horário</option>
-                  {day.slots.map((item) => <option key={item.time} value={item.time} disabled={item.remaining < 1}>
-                    {item.time} · {item.reserved ? "Vaga reservada para este animal" : item.remaining === 1 ? "1 vaga" : `${item.remaining} vagas`}
-                  </option>)}
-                </select>
-              </label>
-            )}
-          </div>
-        </div>
-        <footer className="prm-footer">
-          <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
-          <Button disabled={busy || !availability.ready || !occurrenceKey || !slot} onClick={() => onConfirm({ date, occurrenceKey, time, reason: reason.trim() })}>
-            {busy ? "Salvando..." : currentDate ? "Confirmar reagendamento" : "Salvar horário"}
-          </Button>
-        </footer>
+    <ProcessDialog title={reschedule ? "Reagendar solicitação" : "Agendar solicitação"} className="prm-calendar-dialog" busy={busy} onClose={onClose}
+      actions={<>
+        <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
+        <Button disabled={busy || !availability.ready || !selected} onClick={() => onConfirm({ date, occurrenceKey: location, time }, reason.trim())}>
+          {busy ? "Salvando..." : reschedule ? "Confirmar reagendamento" : "Confirmar agendamento"}
+        </Button>
+      </>}>
+      <div className="prm-calendar-meta">
+        <span>{schedules.length ? `Agendamento atual: ${schedules.map((slot) => [displayScheduleDate(slot.date), slot.slotTime, slot.locationName].filter(Boolean).join(" · ")).join(" / ")}` : "Selecione uma data e horário"}</span>
+        <strong>{animalCount} {animalCount === 1 ? "vaga necessária" : "vagas necessárias"}</strong>
       </div>
-    </div>
+      {availability.loading && <p role="status">Carregando vagas disponíveis...</p>}
+      {availability.error && <p role="alert" className="form-error">{availability.error} <Button variant="outline" onClick={availability.refresh}>Tentar novamente</Button></p>}
+      <section className="prm-calendar-panel" aria-label="Agenda de atendimento">
+        <div className="prm-calendar-toolbar">
+          <Button variant="outline" className="prm-icon-button" aria-label="Mês anterior" disabled={busy || month === getCurrentScheduleMonthKey()} onClick={() => moveMonth(-1)}><ChevronLeft size={16} /></Button>
+          <strong>{formatMonthYear(month)}</strong>
+          <Button variant="outline" className="prm-icon-button" aria-label="Próximo mês" disabled={busy} onClick={() => moveMonth(1)}><ChevronRight size={16} /></Button>
+        </div>
+        <div className="prm-calendar-grid">
+          {weekDays.map((day) => <span key={day}>{day}</span>)}
+          {buildMonthCalendarDays(month).map(({ offset, day, date: value }, index) => {
+            if (offset) return <span key={index} />;
+            const configured = availability.days.filter((entry) => entry.date === value);
+            const offered = configured.flatMap((entry) => entry.slots.filter((slot) => eligible(entry, slot)));
+            const label = isPastScheduleDay(value) ? "Já passou" : offered.length ? offered.length === 1 ? offered[0].time : `${offered.length} horários`
+              : configured.length ? "Indisponível" : "Sem atendimento";
+            return <button type="button" key={value} aria-label={`${value} · ${label}`} aria-pressed={date === value}
+              disabled={busy || !availability.ready || !offered.length} onClick={() => chooseDay(value)}>
+              <strong>{String(day).padStart(2, "0")}</strong><small>{label}</small>
+            </button>;
+          })}
+        </div>
+        <div className="prm-calendar-slots">
+          {date ? locations.flatMap((day) => day.slots.map((slot) => (
+            <Button key={`${day.occurrenceKey}:${slot.time}`} variant="outline" aria-pressed={day.occurrenceKey === location && slot.time === time}
+              disabled={busy || !eligible(day, slot)} onClick={() => { setLocation(day.occurrenceKey); setTime(slot.time); }}>
+              <span>{slot.time}{day.locationName ? ` · ${day.locationName}` : ""}</span>
+              <small>{slot.remaining} {slot.remaining === 1 ? "vaga" : "vagas"}</small>
+            </Button>
+          ))) : <span className="prm-muted-note">Selecione uma data disponível.</span>}
+        </div>
+      </section>
+      {reschedule && <label className={configFieldStyle}>
+        <span>Motivo do reagendamento (opcional)</span>
+        <textarea data-ui-input="" className={configTextareaStyle} value={reason} disabled={busy} maxLength={1000} rows={2} placeholder="Se houver" onChange={(event) => setReason(event.target.value)} />
+      </label>}
+    </ProcessDialog>
   );
 }

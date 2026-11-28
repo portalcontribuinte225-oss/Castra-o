@@ -27,7 +27,7 @@ function professionalTitle(name: string): string {
 }
 
 // One prescription, on its own pages, in a PDF that may hold other documents of the process.
-export function appendPrescriptionPdf(ctx: MunicipalPdfContext, request: AnyRecord, prescription: PrintablePrescription, animal: AnyRecord) {
+export function appendPrescriptionPdf(ctx: MunicipalPdfContext, request: AnyRecord, prescription: PrintablePrescription, animal: AnyRecord, procedureName?: string) {
   const normalized = normalizeRequest(request);
   const professional = professionalTitle(String(prescription.professionalName || "").trim());
   const registry = String(prescription.professionalRegistry || "").trim();
@@ -52,6 +52,7 @@ export function appendPrescriptionPdf(ctx: MunicipalPdfContext, request: AnyReco
     { label: "PESO", value: animalWeightLabel(animal.weight) },
     { label: "MICROCHIP", value: animalMicrochipLabel(animal) },
   ], { tinted: true, weights: [1.35, 0.93, 1.07, 1.53] });
+  if (procedureName) drawFieldRow(flow, [{ label: "PROCEDIMENTO", value: procedureName }], { tinted: true });
   flow.y -= 24;
   ensureRoom(flow, 40);
   flow.page.drawText("PRESCRIÇÃO:", { x: ctx.margin, y: flow.y - 10, size: 10, font: ctx.bold, color: ctx.colors.dark });
@@ -75,12 +76,15 @@ export function appendPrescriptionPdf(ctx: MunicipalPdfContext, request: AnyReco
   drawSignature(flow, { name: professional, details: [registry, "Assinatura do profissional"].filter(Boolean).join(" · "), gap: 86 });
 }
 
-export async function createPrescriptionPdfDocument(request: AnyRecord, prescription: PrintablePrescription, municipality: AnyRecord | null, animal: AnyRecord) {
+export async function createPrescriptionPdfDocument(request: AnyRecord,
+  records: { prescription: PrintablePrescription; animal: AnyRecord; procedureName?: string }[], municipality: AnyRecord | null) {
   const { PDFDocument } = await importPdfLib();
   const pdf = await PDFDocument.create();
-  appendPrescriptionPdf(await createMunicipalPdfContext(pdf, municipality), request, prescription, animal);
+  const context = await createMunicipalPdfContext(pdf, municipality);
+  for (const { prescription, animal, procedureName } of records) appendPrescriptionPdf(context, request, prescription, animal, procedureName);
   return {
     dataUrl: await pdf.saveAsBase64({ dataUri: true }),
-    fileName: documentFileName("Receita", String(prescription.number || "")),
+    fileName: records.length === 1 ? documentFileName("Receita", String(records[0].prescription.number || ""))
+      : documentFileName("Receitas", normalizeRequest(request).protocol),
   };
 }

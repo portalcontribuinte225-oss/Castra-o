@@ -1,4 +1,5 @@
 import { DocumentReviewStatus } from "../../../../shared/document-reuse-contract.js";
+import { openProcedureSelections } from "../../../../shared/request-procedure-contract.js";
 import { isExcludedDocument, requestDocumentDefinitions } from "../documents/document-policy.js";
 import { decorateRequestDocuments } from "../documents/document-reviews.js";
 
@@ -11,8 +12,8 @@ function configuredBefore(definition, request) {
 
 // The names of the required documents of the request that are not approved yet (missing, waiting or sent back for correction).
 // Scheduling a procedure waits for them.
-export function pendingRequiredDocuments(settings, request) {
-  const definitions = requestDocumentDefinitions(settings, request)
+export function pendingRequiredDocuments(settings, request, animals) {
+  const definitions = requestDocumentDefinitions(settings, { animals: openProcedureSelections(animals) })
     .filter((definition) => definition.required && configuredBefore(definition, request));
   if (!definitions.length) return [];
   const documents = decorateRequestDocuments(request, settings).documents.filter((item) => !isExcludedDocument(item));

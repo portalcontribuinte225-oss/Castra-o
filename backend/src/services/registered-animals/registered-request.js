@@ -4,7 +4,7 @@ import { AnimalStatus } from "../../../../shared/animal-contract.js";
 import { authError } from "../auth/auth-security.js";
 import { findOwnedAnimal, insertCanonicalAnimal, recordAnimalRequest, saveRequestAnimalIds, trustedTutorSnapshot } from "../../repositories/registered-animals.js";
 import { animalView, requireLiveAnimal, registrationGap } from "./animal-data.js";
-import { animalRequestTypeIds } from "../../../../shared/request-types-contract.js";
+import { MAX_REQUEST_ANIMALS, animalRequestTypeIds } from "../../../../shared/request-types-contract.js";
 import { isAnimalTutorship } from "../../../../shared/request-tutorship-contract.js";
 import { resolveRequestProcedures } from "../../../../shared/request-procedure-contract.js";
 import { storeResolvedProcedures } from "../procedure-actions/procedure-request-state.js";
@@ -56,7 +56,7 @@ export async function prepareRegisteredRequest(client, { body, user, municipalit
 export async function registerRequestAnimals(client, { body, request, user, tutorId, municipalityId, requestTypes = [] }) {
   if (!isProcedureRequest(body)) return request;
   const input = Array.isArray(body.animals) ? body.animals : [];
-  if (!input.length || input.length > 25) throw authError(400, "Informe de 1 a 25 animais por solicitação.");
+  if (!input.length || input.length > MAX_REQUEST_ANIMALS) throw authError(400, `Informe de 1 a ${MAX_REQUEST_ANIMALS} animais por solicitação.`);
   const snapshots = [];
   const existingIds = input.map((animal) => animal?.id).filter(Boolean);
   if (new Set(existingIds).size !== existingIds.length) throw authError(400, "O mesmo animal foi informado mais de uma vez.");

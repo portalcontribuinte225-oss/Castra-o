@@ -1,56 +1,37 @@
 import { useMemo, useState } from "react";
-import { isMicrochipProcedure, isOpenProcedure, resolveRequestProcedures } from "../../../shared/request-procedure-contract.js";
+import { ProcedureStatus, isMicrochipProcedure, isOpenProcedure, resolveRequestProcedures } from "../../../shared/request-procedure-contract.js";
 import type { AnyRecord } from "../../types";
-
-export interface HealthDraft {
-  doencas: string;
-  alergias: string;
-}
-
-const chipKey = (animalIndex: number, requestTypeId: string) => `${animalIndex}:${requestTypeId}`;
+import { procedureTargetKey } from "./process-types";
+import type { HealthDraft, HealthEdit, ProcedureTarget, ProcessAnimal } from "./process-types";
 
 type HealthDrafts = Record<number, Partial<HealthDraft>>;
-type MicrochipDrafts = Record<string, string>;
-type ProcedureEdits = Partial<HealthDraft> & { microchip?: string };
-interface ProcedureDraft {
-  animalIndex: number;
-  requestTypeId: string;
-  edits: ProcedureEdits;
+
+export function editableMicrochip(animal?: ProcessAnimal) {
+  return animal?.procedures.find((item) => isOpenProcedure(item) && isMicrochipProcedure(item.name));
 }
 
-function changedHealth(draft: Partial<HealthDraft> = {}, stored: HealthDraft): Partial<HealthDraft> {
-  const edits: Partial<HealthDraft> = {};
-  if (draft.doencas !== undefined && draft.doencas !== stored.doencas) edits.doencas = draft.doencas;
-  if (draft.alergias !== undefined && draft.alergias !== stored.alergias) edits.alergias = draft.alergias;
-  return edits;
+function healthOf(animal?: ProcessAnimal): HealthDraft {
+  return { doencas: animal?.doencas || "", alergias: animal?.alergias || "", microchip: editableMicrochip(animal)?.microchip ?? animal?.confirmedMicrochip ?? animal?.microchip ?? "" };
 }
 
-function changedMicrochip(value: string | undefined, procedure: AnyRecord): ProcedureEdits {
-  if (!isMicrochipProcedure(procedure.name) || value === undefined || value === (procedure.microchip || "")) return {};
-  return { microchip: value };
-}
-
-export function getProcedureDraftEdits(animals: AnyRecord[], health: HealthDrafts, chips: MicrochipDrafts): ProcedureDraft[] {
+export function getHealthEdits(animals: ProcessAnimal[], health: HealthDrafts): HealthEdit[] {
   return animals.flatMap((animal, animalIndex) => {
-    const procedures: AnyRecord[] = animal.procedures.filter(isOpenProcedure);
-    const pending = procedures.flatMap((procedure) => {
-      const requestTypeId = procedure.requestTypeId;
-      const edits = changedMicrochip(chips[chipKey(animalIndex, requestTypeId)], procedure);
-      return edits.microchip === undefined ? [] : [{ animalIndex, requestTypeId, edits }];
-    });
-    const healthEdits = changedHealth(health[animalIndex], { doencas: animal.doencas ?? "", alergias: animal.alergias ?? "" });
-    if (Object.keys(healthEdits).length && procedures.length) {
-      if (pending.length) Object.assign(pending[0].edits, healthEdits);
-      else pending.push({ animalIndex, requestTypeId: procedures[0].requestTypeId, edits: healthEdits });
+    if (!animal.procedures.some(isOpenProcedure)) return [];
+    const draft = health[animalIndex];
+    if (!draft) return [];
+    const stored = healthOf(animal);
+    const edits: HealthEdit = { animalIndex };
+    for (const key of ["doencas", "alergias", "microchip"] as const) {
+      const value = draft[key]?.trim();
+      if (value === undefined || value === stored[key] || (key === "microchip" && !editableMicrochip(animal))) continue;
+      edits[key] = value;
     }
-    return pending;
+    return Object.keys(edits).length > 1 ? [edits] : [];
   });
 }
 
-// The animals of the request with their procedures, the one chosen on screen and what the staff typed and did not save yet. Each
-// animal keeps its own draft, so going from one animal to another never loses what was typed.
 export function useProcessProcedures(request: AnyRecord, requestTypes: AnyRecord[]) {
-  const animals: AnyRecord[] = useMemo(() => {
+  const animals: ProcessAnimal[] = useMemo(() => {
     const workflow = request.workflow_data || request.workflowData || {};
     return resolveRequestProcedures(request, requestTypes).map((animal, index) => ({
       ...animal,
@@ -59,53 +40,49 @@ export function useProcessProcedures(request: AnyRecord, requestTypes: AnyRecord
     }));
   }, [request, requestTypes]);
   const [animalIndex, setAnimalIndex] = useState(0);
-  const [chosen, setChosen] = useState<Record<number, string>>({});
+  const [selectedType, setSelectedType] = useState("");
   const [health, setHealth] = useState<HealthDrafts>({});
-  const [chips, setChips] = useState<MicrochipDrafts>({});
+  const [marked, setMarked] = useState<Set<string>>(() => new Set());
 
   const currentIndex = animals[animalIndex] ? animalIndex : 0;
   const animal = animals[currentIndex];
-  const procedures: AnyRecord[] = animal?.procedures || [];
-  const procedure = procedures.find((item) => item.requestTypeId === chosen[currentIndex]) || procedures[0] || null;
+  const currentProcedures = animal?.procedures.filter(({ status }) => status !== ProcedureStatus.REMOVED) || [];
+  const selectedProcedure = currentProcedures.find((item) => item.requestTypeId === selectedType) || currentProcedures[0] || null;
+  const scheduled = animals.flatMap(({ procedures }, index) => procedures
+    .filter((item) => item.status === ProcedureStatus.SCHEDULED)
+    .map(({ requestTypeId }) => ({ animalIndex: index, requestTypeId })));
+  const results = scheduled.filter((target) => marked.has(procedureTargetKey(target)));
+  const healthEdits = getHealthEdits(animals, health);
 
-  const storedHealth = { doencas: animal?.doencas ?? "", alergias: animal?.alergias ?? "" };
-  const currentKey = procedure ? chipKey(currentIndex, procedure.requestTypeId) : "";
-  const currentEdits = procedure && isOpenProcedure(procedure) ? {
-    ...changedHealth(health[currentIndex], storedHealth),
-    ...changedMicrochip(chips[currentKey], procedure),
-  } : {};
-  const drafts = getProcedureDraftEdits(animals, health, chips);
-
-  function selectAnimal(index: number) {
+  function selectAnimal(index: number, requestTypeId = "") {
     setAnimalIndex(index);
-  }
-
-  function selectProcedure(requestTypeId: string) {
-    setChosen((current) => ({ ...current, [currentIndex]: requestTypeId }));
+    setSelectedType(requestTypeId);
   }
 
   function changeHealth(patch: Partial<HealthDraft>) {
     setHealth((current) => ({ ...current, [currentIndex]: { ...current[currentIndex], ...patch } }));
   }
 
-  function changeMicrochip(value: string) {
-    if (!procedure) return;
-    setChips((current) => ({ ...current, [chipKey(currentIndex, procedure.requestTypeId)]: value.toUpperCase().replace(/[^A-Z0-9]/g, "") }));
+  function toggleResults(targets: ProcedureTarget[], checked: boolean) {
+    setMarked((current) => {
+      const next = new Set(current);
+      for (const target of targets) {
+        const key = procedureTargetKey(target);
+        if (checked) next.add(key);
+        else next.delete(key);
+      }
+      return next;
+    });
   }
 
-  function clearDraft({ animalIndex, requestTypeId, edits }: ProcedureDraft) {
-    if (edits.doencas !== undefined || edits.alergias !== undefined) {
-      setHealth(({ [animalIndex]: _saved, ...rest }) => rest);
-    }
-    if (edits.microchip !== undefined) {
-      setChips(({ [chipKey(animalIndex, requestTypeId)]: _saved, ...rest }) => rest);
-    }
+  function clearDrafts() {
+    setHealth({});
+    setMarked(new Set());
   }
 
   return {
-    animals, animalIndex: currentIndex, animal, procedure, selectAnimal, selectProcedure,
-    health: { ...storedHealth, ...health[currentIndex] }, changeHealth,
-    microchip: procedure ? chips[currentKey] ?? procedure.microchip ?? "" : "", changeMicrochip,
-    drafts, currentChanged: Object.keys(currentEdits).length > 0, currentEdits, clearDraft,
+    animals, animalIndex: currentIndex, selectedProcedure, selectAnimal, health: { ...healthOf(animal), ...health[currentIndex] },
+    changeHealth, marked, toggleResults, scheduled, clearDrafts, batch: { health: healthEdits, results },
+    dirty: Boolean(results.length || healthEdits.length),
   };
 }

@@ -1,10 +1,11 @@
 import { useCallback, useState } from "react";
-import { RequestTag } from "../../../shared/request-contract.js";
+import { RequestStatus, RequestTag } from "../../../shared/request-contract.js";
 import type { AnyRecord } from "../../types";
-import { getItemMunicipalityId, mergeTags, normalizeRequest } from "../../domain";
+import { mergeTags, normalizeRequest } from "../../domain";
 import { getNotificationNotice } from "../notifications/notification-results";
 import { normalizeText } from "../../utils";
 import { REJECTED_CANCEL_REASON } from "../../../shared/notification-contract.js";
+import type { ProcedureOperation } from "../process-modal/process-types";
 
 export function canEditRequests(role = ""): boolean {
   return ["master", "suporte", "admin_municipal", "analista", "servidor_publico"].includes(normalizeText(role));
@@ -12,10 +13,6 @@ export function canEditRequests(role = ""): boolean {
 
 type ShowToast = (message: string, type?: "success" | "error" | "info" | "warning") => void;
 
-function getActionUserSectorIds(user: AnyRecord = {}) {
-  const ids = Array.isArray(user.sectorIds) ? user.sectorIds : [];
-  return [...new Set([...ids, user.sectorId].filter(Boolean))];
-}
 export function useRequestActions({
   patchRequest,
   runProcedureAction,
@@ -35,7 +32,6 @@ export function useRequestActions({
 
   const activeUsers = teams.users?.filter((user: AnyRecord) => user.active !== false) || [];
   const activeSectors = teams.sectors?.filter((sector: AnyRecord) => sector.active !== false) || [];
-  const currentTeamUser = activeUsers.find((user: AnyRecord) => currentUser?.id && user.id === currentUser.id);
 
   function showNotificationNotice(updated: AnyRecord) {
     const notice = getNotificationNotice(updated?.notificationResults);
@@ -52,15 +48,17 @@ export function useRequestActions({
   }
 
   // The tutor data saved in the attendance replaces the data of the request on screen, which is a copy taken when it was opened.
-  function updatePreviewTutor(tutor: AnyRecord) {
+  async function updatePreviewTutor(tutor: AnyRecord, refresh?: () => Promise<AnyRecord[] | undefined>) {
+    const id = previewRequest?.id;
     setPreviewRequest((current) => current ? normalizeRequest({ ...current, tutor: tutor.name, tutor_name: tutor.name, email: tutor.email, tutor_email: tutor.email,
       phone: tutor.phone, address: tutor.address, neighborhood: tutor.neighborhood, city: tutor.city, state: tutor.state, cep: tutor.cep }) : current);
+    const refreshed = (await refresh?.())?.find((item) => item.id === id);
+    if (refreshed) setPreviewRequest((current) => current?.id === id ? refreshed : current);
   }
 
-  // One action on one procedure of the request; the request the server answers replaces the one on screen and is returned (or null).
-  async function applyProcedureAction(request: AnyRecord, action: AnyRecord, successMessage: string): Promise<AnyRecord | null> {
+  async function applyProcedureAction(request: AnyRecord, action: ProcedureOperation, successMessage: string): Promise<AnyRecord | null> {
     try {
-      const updated = await runProcedureAction?.(request.id, action);
+      const updated = await runProcedureAction?.(request.id, { ...action, expectedUpdatedAt: request.updated_at || request.updatedAt || "" });
       if (!updated) return null;
       if (successMessage) showToast(successMessage, "success");
       showNotificationNotice(updated);
@@ -85,78 +83,55 @@ export function useRequestActions({
     if (!request) return;
     const sector = activeSectors.find((item: AnyRecord) => item.id === assignment.sectorId);
     const user = activeUsers.find((item: AnyRecord) => item.id === assignment.userId);
-    if (!sector || !user) return;
+    if (!sector || (assignment.userId && !user)) return false;
     const patch = {
       assignedSectorId: sector.id,
-      assignedSectorName: sector.name,
-      assignedUserId: user.id,
-      responsible: user.name || sector.name || "Equipe",
+      assignedUserId: user?.id || "",
+      expectedUpdatedAt: request.updated_at || request.updatedAt || "",
       tags: mergeTags(request.tags, [RequestTag.ASSIGNED]),
     };
     try {
-      const updated = await patchRequest?.(request.id, patch, `Atribuída para ${sector.name} / ${user.name}`);
+      const label = [sector.name, user?.name || "Fila do setor"].join(" · ");
+      const updated = await patchRequest?.(request.id, patch, user?.id === currentUser?.id ? `Atendimento assumido · ${label}` : `Atendimento atribuído · ${label}`);
       if (!updated) return false;
       setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
-      showToast(`Atribuído para ${user.name} — ${sector.name}`, "success");
+      showToast("Setor e responsável atualizados.", "success");
       return true;
-    } catch { showToast("Erro ao atribuir processo", "error"); return false; }
+    } catch (failure) { showToast(failure?.message || "Erro ao atribuir processo", "error"); return false; }
   }
 
-  async function assumeFromPreview(request: AnyRecord) {
-    if (!request) return;
-    const municipalityId = getItemMunicipalityId(request);
-    const sectors = activeSectors.filter((sector: AnyRecord) => !getItemMunicipalityId(sector) || getItemMunicipalityId(sector) === municipalityId);
-    const userSectorIds = getActionUserSectorIds(currentTeamUser);
-    const sector = sectors.find((item: AnyRecord) => userSectorIds.includes(item.id))
-      || sectors.find((item: AnyRecord) => item.id === request.assignedSectorId) || sectors[0];
-    if (!sector) {
-      showToast("Nenhum setor ativo disponivel para assumir o processo", "error");
-      return;
-    }
-    const userId = currentTeamUser?.id || currentUser?.id || "";
-    const userName = currentTeamUser?.name || currentUser?.name || "Usuario atual";
-    const patch = {
-      assignedSectorId: sector.id,
-      assignedSectorName: sector.name,
-      assignedUserId: userId,
-      responsible: userName,
-      tags: mergeTags(request.tags, [RequestTag.ASSIGNED]),
-    };
-    try {
-      const updated = await patchRequest?.(request.id, patch, `Assumida por ${userName}`);
-      if (!updated) return;
-      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
-      showToast("Processo assumido com sucesso", "success");
-    } catch { showToast("Erro ao assumir processo", "error"); }
-  }
   async function rejectRequestFromProcess(request: AnyRecord, data: AnyRecord = {}) {
     if (!request) return;
     const note = String(data.note || "").trim();
     const patch = {
-      status: "CANCELADA",
+      status: RequestStatus.CANCELLED,
       rejectionReason: data.category || note || REJECTED_CANCEL_REASON,
       rejectionNote: note,
-      workflow_data: { ...((request.workflow_data || request.workflowData) || {}), cancelReason: REJECTED_CANCEL_REASON },
+      workflow_data: { cancelReason: REJECTED_CANCEL_REASON },
     };
     try {
       const updated = await patchRequest?.(request.id, patch, `Indeferida por ${currentUser.name}${note ? `. Observação: ${note}` : ""}`);
+      if (!updated) return false;
       showToast("Processo indeferido", "warning");
       showNotificationNotice(updated);
-      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch }) : current);
-    } catch (failure) { showToast(failure?.message || "Erro ao indeferir processo", "error"); }
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
+      return true;
+    } catch (failure) { showToast(failure?.message || "Erro ao indeferir processo", "error"); return false; }
   }
 
   async function confirmSpecialRequest(request: AnyRecord, data: AnyRecord = {}) {
     if (!request) return;
     const note = String(data.note || "").trim();
-    const patch: AnyRecord = { status: "REALIZADA" };
-    if (note) patch.workflow_data = { ...((request.workflow_data || request.workflowData) || {}), complaintResolutionNote: note };
+    const patch: AnyRecord = { status: RequestStatus.COMPLETED };
+    if (note) patch.workflow_data = { complaintResolutionNote: note };
     try {
       const updated = await patchRequest?.(request.id, patch, `Confirmado por ${currentUser.name}${note ? `. Conclusão: ${note}` : ""}`);
+      if (!updated) return false;
       showToast("Processo confirmado com sucesso", "success");
       showNotificationNotice(updated);
-      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest({ ...current, ...patch, ...updated }) : current);
-    } catch (failure) { showToast(failure?.message || "Erro ao confirmar processo", "error"); }
+      setPreviewRequest((current) => current?.id === request.id ? normalizeRequest(updated) : current);
+      return true;
+    } catch (failure) { showToast(failure?.message || "Erro ao confirmar processo", "error"); return false; }
   }
 
   return {
@@ -169,7 +144,6 @@ export function useRequestActions({
     applyProcedureAction,
     updateDocuments,
     assignFromPreview,
-    assumeFromPreview,
     rejectRequestFromProcess,
     confirmSpecialRequest,
   };

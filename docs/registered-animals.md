@@ -30,6 +30,13 @@ O limite final de 16 MiB inclui JSON UTF-8, expansão base64, foto e documentos 
 
 Escritores de pedidos e calendário compartilham um advisory lock municipal para manter ordem consistente entre reserva, documentos e vínculos. É um lock conservador por município; provedores de mensagem ficam fora da transação. Cancelamentos não ocupam vaga; atribuição ambígua de registros antigos consome capacidade conservadoramente.
 
+### Atendimento de animais
+
+- A equipe interna pode informar `excludeRequestId` em `GET /api/schedule/availability` para consultar a capacidade que poderá realocar em um reagendamento. A consulta usa a prefeitura autorizada.
+- `POST /api/requests/:id/procedures/action` recebe `action`, `expectedUpdatedAt` e os dados da operação. Confirmar ou reagendar aplica um único horário aos procedimentos abertos. Salvar saúde e resultados, registrar falta, encerrar e emitir receitas usam lotes validados pelo servidor. A versão desatualizada recebe HTTP 409.
+- A reserva conta uma vaga por animal na mesma data, local e horário. Salvar o último resultado libera a vaga correspondente. A situação final do processo é publicada após a confirmação explícita de encerramento.
+- A receita unificada registra emissões por animal, com vínculo opcional a um procedimento. O PDF reúne as emissões numeradas, incluindo versões anteriores em consulta.
+
 ## Verificação
 
 Testes de HTTP e transação usam dependências simuladas, sem `server.js`, banco real, mensagens ou migrations. Após o schema autorizado, uma conferência real local pode verificar primeira solicitação, troca de senha, lista de animais, novo pedido e revisão de documentos. Envio real a provedores e inspeção em navegador dependem de solicitação própria.

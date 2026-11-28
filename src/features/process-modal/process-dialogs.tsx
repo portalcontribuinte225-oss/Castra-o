@@ -1,45 +1,48 @@
 import { useState } from "react";
-import { ClipboardList } from "lucide-react";
 import { REJECTION_REASONS } from "../../../shared/notification-contract.js";
-import { displayScheduleDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
 import { configFieldStyle, configTextareaStyle } from "../../components/ui";
 import type { AnyRecord } from "../../types";
 import { userBelongsToSector } from "../teams/user-sectors";
 import { ProcessDialog } from "./process-dialog";
 
-export function AssignDialog({ sectors, users, initial, busy, onConfirm, onClose }: { sectors: AnyRecord[]; users: AnyRecord[]; initial: { sectorId: string; userId: string }; busy: boolean; onConfirm: (assignment: { sectorId: string; userId: string }) => void; onClose: () => void }) {
+export function AssignDialog({ sectors, users, initial, currentUserId, busy, onConfirm, onClose }: {
+  sectors: AnyRecord[]; users: AnyRecord[]; initial: { sectorId: string; userId: string }; currentUserId: string;
+  busy: boolean; onConfirm: (assignment: { sectorId: string; userId: string }) => void; onClose: () => void;
+}) {
   const [assignment, setAssignment] = useState(initial);
-  const sectorUsers = users.filter((user) => !assignment.sectorId || userBelongsToSector(user, assignment.sectorId));
+  const sectorUsers = users.filter((user) => userBelongsToSector(user, assignment.sectorId));
+  const unchanged = assignment.sectorId === initial.sectorId && assignment.userId === initial.userId;
   return (
     <ProcessDialog
-      title={<><ClipboardList size={15} aria-hidden="true" /> Atribuir responsável</>}
+      title="Definir responsável"
       onClose={onClose}
       busy={busy}
       actions={<>
-        <Button variant="outline" disabled={busy} onClick={onClose}>Cancelar</Button>
-        <Button disabled={busy || !assignment.sectorId || !assignment.userId} onClick={() => onConfirm(assignment)}>{busy ? "Atribuindo..." : "Confirmar"}</Button>
+        <Button disabled={busy || !assignment.sectorId || unchanged
+          || Boolean(assignment.userId && !sectorUsers.some((user) => user.id === assignment.userId))} onClick={() => onConfirm(assignment)}>{busy ? "Atribuindo..." : "Confirmar"}</Button>
       </>}
     >
       <label className="field">
-        <span>Setor</span>
+        <span>Setor *</span>
         <select value={assignment.sectorId} disabled={busy} onChange={(event) => setAssignment({ sectorId: event.target.value, userId: "" })}>
-          <option value="">Selecione o setor...</option>
+          <option value="">Selecione o setor</option>
           {sectors.map((sector) => <option key={sector.id} value={sector.id}>{sector.name}</option>)}
         </select>
       </label>
       <label className="field">
-        <span>Usuário</span>
-        <select value={assignment.userId} disabled={busy} onChange={(event) => setAssignment((current) => ({ ...current, userId: event.target.value }))}>
-          <option value="">Selecione o usuário...</option>
-          {sectorUsers.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}
+        <span>Responsável</span>
+        <select value={assignment.userId} disabled={busy || !assignment.sectorId} onChange={(event) => setAssignment((current) => ({ ...current, userId: event.target.value }))}>
+          <option value="">{assignment.sectorId ? "Sem responsável — fila do setor" : "Selecione primeiro o setor"}</option>
+          {sectorUsers.map((user) => <option key={user.id} value={user.id}>{user.id === currentUserId && initial.userId !== currentUserId ? "Eu — assumir atendimento" : user.name}</option>)}
         </select>
       </label>
+      <p className="prm-muted-note">O atendimento pode ficar na fila do setor, sem responsável individual.</p>
     </ProcessDialog>
   );
 }
 
-// Rejecting a procedure (or a whole special request) always says why: a reason from the list and a justification.
+// A special request has a category and a justification for its rejection.
 export function RejectDialog({ title, subject, busy, onConfirm, onClose }: { title: string; subject: string; busy: boolean; onConfirm: (rejection: { reason: string; note: string }) => void; onClose: () => void }) {
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
@@ -71,24 +74,11 @@ export function RejectDialog({ title, subject, busy, onConfirm, onClose }: { tit
   );
 }
 
-export function CancelScheduleDialog({ subject, date, time, locationName, busy, onConfirm, onClose }: {
-  subject: string; date: string; time: string; locationName: string; busy: boolean; onConfirm: () => void; onClose: () => void;
-}) {
-  const appointment = [displayScheduleDate(date), time, locationName].filter(Boolean).join(" · ");
-  return (
-    <ProcessDialog title="Cancelar agendamento" busy={busy} onClose={onClose} actions={<>
-      <Button variant="outline" data-dialog-initial-focus="" disabled={busy} onClick={onClose}>Manter agendamento</Button>
-      <Button variant="danger" disabled={busy} onClick={onConfirm}>{busy ? "Cancelando..." : "Confirmar cancelamento"}</Button>
-    </>}>
-      <p className="prm-muted-note">{subject}</p>
-      <p>{appointment}</p>
-      <p className="prm-muted-note">O procedimento voltará a aguardar um novo agendamento.</p>
-    </ProcessDialog>
-  );
-}
-
 // A short text the action needs: what has to be corrected in a document, or what the investigation of a complaint concluded.
-export function NoteDialog({ title, label, placeholder, confirmLabel, busy, maxLength, onConfirm, onClose }: { title: string; label: string; placeholder: string; confirmLabel: string; busy: boolean; maxLength: number; onConfirm: (note: string) => void; onClose: () => void }) {
+export function NoteDialog({ title, description, label, placeholder, confirmLabel, busy, maxLength, onConfirm, onClose }: {
+  title: string; description?: string; label: string; placeholder: string; confirmLabel: string; busy: boolean;
+  maxLength: number; onConfirm: (note: string) => void; onClose: () => void;
+}) {
   const [note, setNote] = useState("");
   return (
     <ProcessDialog
@@ -100,6 +90,7 @@ export function NoteDialog({ title, label, placeholder, confirmLabel, busy, maxL
         <Button disabled={busy || !note.trim()} onClick={() => onConfirm(note.trim())}>{busy ? "Salvando..." : confirmLabel}</Button>
       </>}
     >
+      {description && <p className="prm-muted-note">{description}</p>}
       <label className={configFieldStyle}>
         <span>{label}</span>
         <textarea data-ui-input="" data-dialog-initial-focus="" className={`${configTextareaStyle} tw:resize-y`} value={note} maxLength={maxLength} onChange={(event) => setNote(event.target.value)} placeholder={placeholder} />

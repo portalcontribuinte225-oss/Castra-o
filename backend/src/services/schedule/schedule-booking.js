@@ -1,6 +1,6 @@
-import { buildScheduleOccurrences, allocateScheduleAvailability, allocateScheduleBookings, requestScheduleBookings, scheduleDate, displayScheduleDate } from "../../../../shared/schedule-contract.js";
+import { buildScheduleOccurrences, allocateScheduleAvailability, requestScheduleBookings, scheduleDate, displayScheduleDate } from "../../../../shared/schedule-contract.js";
 import { RequestStatus, isProcedureRequest } from "../../../../shared/request-contract.js";
-import { hasStoredProcedures } from "../../../../shared/request-procedure-contract.js";
+import { appointmentNumberOfAnimals, hasStoredProcedures } from "../../../../shared/request-procedure-contract.js";
 import { loadScheduleAvailability } from "../../repositories/schedule-availability.js";
 import { isInternalUser } from "../../tenant.js";
 
@@ -49,27 +49,18 @@ export async function reserveRequestSchedule(client, { body, municipalityId, use
     schedule_municipality: body.municipality || "", workflow_data: { ...workflow, scheduleOccurrenceKey: day.occurrenceKey, scheduleSlotTime: slot.time, scheduleTime: slot.time },
   };
 }
-// Reserves the new date of one procedure (`animals` resolved, every one with its procedures). The other requests and this request's
-// other places are allocated first; the animal needs one place at the chosen time, unless it already holds one there.
-export async function reserveProcedureSchedule(client, { request, animals, animalIndex, requestTypeId, selection, municipalityId, now = new Date() }) {
+// Reallocate the whole open group under the municipal lock. Existing reservations of this request are replaced by the new group.
+export async function reserveProcedureSchedule(client, { request, animals, selection, municipalityId, now = new Date() }) {
   const date = scheduleDate(selection.date);
   if (!date || date < localToday(now)) fail("Escolha uma data disponível na agenda.", 400);
-  const source = await loadScheduleAvailability(client, { municipalityId, from: date, to: date, excludeId: request.id });
-  const occurrences = buildScheduleOccurrences(source.days, source.rules, date, date);
-  const day = occurrences.find((item) => item.occurrenceKey === selection.occurrenceKey);
+  const { days } = await getAvailability(client, { municipalityId, from: date, to: date, excludeId: request.id });
+  const day = days.find((item) => item.occurrenceKey === selection.occurrenceKey);
   if (!day) fail("A ocorrência da agenda mudou. Escolha a data e o local novamente.");
-  if (!day.slots.some((slot) => slot.time === selection.time)) fail("Esse horário não existe mais. Escolha outro horário.");
-  const schedule = { date: displayScheduleDate(date), occurrenceKey: day.occurrenceKey, slotTime: selection.time,
+  const slot = day.slots.find((item) => item.time === selection.time);
+  if (!slot) fail("Esse horário não existe mais. Escolha outro horário.");
+  if (slot.remaining < appointmentNumberOfAnimals(animals)) fail("As vagas desse horário se esgotaram. Escolha outro horário.");
+  return { date: displayScheduleDate(date), occurrenceKey: day.occurrenceKey, slotTime: selection.time,
     locationName: day.locationName, address: day.locationAddress, addressUrl: day.addressUrl };
-  const moved = animals.map((animal, index) => (index !== animalIndex ? animal : { ...animal,
-    procedures: animal.procedures.map((procedure) => (procedure.requestTypeId === requestTypeId ? { ...procedure, schedule } : procedure)) }));
-  const isTarget = (booking) => scheduleDate(booking.date) === date && booking.occurrenceKey === day.occurrenceKey && booking.slotTime === selection.time;
-  const own = requestScheduleBookings({ animals: moved });
-  const target = own.find(isTarget);
-  const allocated = allocateScheduleBookings(occurrences, [...source.requests.flatMap(requestScheduleBookings), ...own.filter((booking) => !isTarget(booking))]);
-  const slot = allocated.find((item) => item.occurrenceKey === day.occurrenceKey).slots.find((item) => item.time === selection.time);
-  if (!target || slot.remaining < target.count) fail("As vagas desse horário se esgotaram. Escolha outro horário.");
-  return schedule;
 }
 
 function procedureBookingSignature(request) {

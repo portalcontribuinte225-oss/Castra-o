@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { COMPLAINT_PHOTO_IDS } from "../../../shared/complaint-photo-contract.js";
 import { DocumentReviewStatus } from "../../../shared/document-reuse-contract.js";
-import { AttachmentKind, AttachmentState, attachmentDescription, buildAttachmentRows, canReviewAttachment, isBlockingAttachment, isPendingAttachment } from "./attachment-rows";
+import { AttachmentKind, AttachmentState, attachmentDescription, buildAttachmentRows, canReviewAttachment, isBlockingAttachment } from "./attachment-rows";
 
 const requestDocument = { label: "Requerimento municipal", protocol: "123/2026" };
 
@@ -46,8 +46,7 @@ describe("buildAttachmentRows", () => {
     });
 
     expect(rows.filter(isBlockingAttachment).map(({ title }) => title)).toEqual(["Comprovante", "Termo"]);
-    expect(rows.filter(isPendingAttachment).map(({ title }) => title)).toEqual(["Comprovante", "Termo", "Complemento"]);
-    expect(rows.filter(canReviewAttachment).map(({ id }) => id)).toEqual(["adjustment", "extra"]);
+    expect(rows.filter(canReviewAttachment).map(({ id }) => id)).toEqual(["extra"]);
     expect(attachmentDescription(rows[2])).toBe("Envie uma foto legível.");
   });
 
@@ -62,8 +61,7 @@ describe("buildAttachmentRows", () => {
       ],
     });
 
-    expect(rows.filter(canReviewAttachment).map(({ id }) => id)).toEqual(["old-address", "rejected-extra"]);
-    expect(rows.filter(isPendingAttachment).map(({ id }) => id)).toEqual(["old-address"]);
+    expect(rows.filter(canReviewAttachment).map(({ id }) => id)).toEqual(["old-address"]);
     expect(rows.some(isBlockingAttachment)).toBe(false);
   });
 
@@ -84,6 +82,6 @@ describe("buildAttachmentRows", () => {
     expect(row).toMatchObject({ document: photo, available: true, state: AttachmentState.INFO, title: photo.documentName });
     expect(attachmentDescription(row)).toBe("Foto enviada com a denúncia");
     expect(canReviewAttachment(row)).toBe(false);
-    expect(isPendingAttachment(row)).toBe(false);
+    expect(canReviewAttachment(row)).toBe(false);
   });
 });

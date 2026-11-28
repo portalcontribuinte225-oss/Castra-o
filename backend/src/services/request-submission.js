@@ -2,6 +2,7 @@ import { normalizeFollowUp } from "../../../shared/notification-contract.js";
 import { AnimalTutorship, isAnimalTutorship, tutorshipRequiresTutor } from "../../../shared/request-tutorship-contract.js";
 import { MOBILE_PHONE_MESSAGE, isMobilePhone } from "../../../shared/phone-contract.js";
 import { REQUEST_CONTACT_CPF_KEY } from "../../../shared/request-contract.js";
+import { REQUESTED_SCHEDULE_KEY } from "../../../shared/request-procedure-contract.js";
 import { isInternalUser } from "../tenant.js";
 import { normalizeCpf, isValidCpf, isValidPhone } from "../utils.js";
 import { canReachByPhone } from "./follow-up-phone.js";
@@ -29,6 +30,8 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
   delete nextWorkflow.notificationDispatches;
   delete nextWorkflow.notificationResults;
   delete nextWorkflow.procedureScheduleDates;
+  delete nextWorkflow[REQUESTED_SCHEDULE_KEY];
+  for (const key of ASSIGNMENT_WORKFLOW_KEYS) delete nextWorkflow[key];
   delete nextWorkflow[REQUEST_CONTACT_CPF_KEY];
 
   // The answer to "does the animal have a tutor?": one of the two values of AnimalTutorship, and no answer means with a tutor. It is the
@@ -74,7 +77,9 @@ export function prepareRequestSubmission({ body, user, municipalityId, workflow,
 }
 
 // The generic PATCH preserves consent, delivery metadata, contact identification and derived procedures.
-const PROTECTED_WORKFLOW_KEYS = Object.freeze(["followUp", "notificationDispatches", "notificationResults", REQUEST_CONTACT_CPF_KEY, ...DERIVED_WORKFLOW_KEYS]);
+const ASSIGNMENT_WORKFLOW_KEYS = ["assignedSectorId", "assignedUserId", "assignedSectorName", "responsible"];
+const PROTECTED_WORKFLOW_KEYS = Object.freeze(["followUp", "notificationDispatches", "notificationResults", REQUEST_CONTACT_CPF_KEY,
+  REQUESTED_SCHEDULE_KEY, ...ASSIGNMENT_WORKFLOW_KEYS, ...DERIVED_WORKFLOW_KEYS]);
 
 export function mergeProtectedWorkflow(current, patch) {
   const next = { ...current, ...patch };

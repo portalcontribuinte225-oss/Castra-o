@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
 import { pool } from "../db/index.js";
-import { auth, optionalAuth } from "../middleware/auth.js";
+import { auth, optionalAuth, requireInternalUser } from "../middleware/auth.js";
 import { isGlobalUser, isInternalUser, requireMunicipality } from "../tenant.js";
 import { DeliveryStatus } from "../../../shared/notification-contract.js";
 import { loadRequestSettings, loadDocumentReviewSettings } from "../repositories/request-settings.js";
@@ -19,8 +19,12 @@ import { visibleRequest } from "../services/request-visibility.js";
 import { lockMunicipalSchedule } from "../services/schedule/schedule-lock.js";
 import { lockRequestForUpdate } from "../services/locked-request.js";
 import { appendRequestHistory } from "../repositories/request-history.js";
+import { getRequestHistory } from "../services/request-history.js";
 import { insertRequestCreatedNotification } from "../repositories/staff-notifications.js";
 import { recordRequestAssignmentNotification } from "../services/staff-notification-events.js";
+import { resolveRequestAssignment } from "../services/request-assignment.js";
+import { REQUESTED_SCHEDULE_KEY, scheduleFromRequest } from "../../../shared/request-procedure-contract.js";
+import { RequestHistoryCategory } from "../../../shared/request-history-contract.js";
 import { handleProcedureAction } from "../services/procedure-actions/procedure-action-handler.js";
 import { assertProcedurePatchPreservesState, protectStoredProcedures, stripSuppliedProcedures } from "../services/procedure-actions/procedure-request-state.js";
 import { reserveRequestSchedule, bookingChanged } from "../services/schedule/schedule-booking.js";
@@ -86,6 +90,8 @@ router.get("/", auth, async (req, res) => {
   }
 });
 
+router.get("/:id/history", auth, requireInternalUser, getRequestHistory);
+
 router.post("/", optionalAuth, async (req, res) => {
   let body = req.body || {};
   const municipalityId = requireMunicipality(req, res);
@@ -115,7 +121,10 @@ router.post("/", optionalAuth, async (req, res) => {
     const animals = stripSuppliedProcedures(body.animals);
     const firstAnimal = animals[0] || {};
     const scheduleDate = pick(body.schedule_date, body.preferredSchedule, body.appointment);
-    if (isProcedureRequest(requestType)) workflow.procedureScheduleDates = scheduleDate ? [scheduleDate] : [];
+    if (isProcedureRequest(requestType)) {
+      workflow.procedureScheduleDates = scheduleDate ? [scheduleDate] : [];
+      workflow[REQUESTED_SCHEDULE_KEY] = scheduleDate ? scheduleFromRequest(body) : null;
+    }
 
     const { rows } = await client.query(
       `INSERT INTO requests (
@@ -331,6 +340,16 @@ router.patch("/:id", auth, async (req, res) => {
     const currentWorkflow = parseJsonObject(existingRows[0].workflow_data);
     const incomingWorkflow = { ...workflowPatch, ...parseJsonObject(new Map(dedupedEntries).get("workflow_data")) };
     let nextWorkflow = mergeProtectedWorkflow(currentWorkflow, incomingWorkflow);
+    const assignmentRequested = Object.hasOwn(workflowPatch, "assignedSectorId") || Object.hasOwn(workflowPatch, "assignedUserId");
+    if (assignmentRequested && body.expectedUpdatedAt !== undefined
+      && (typeof body.expectedUpdatedAt !== "string" || body.expectedUpdatedAt !== (existing.updated_at ? new Date(existing.updated_at).toISOString() : ""))) {
+      throw Object.assign(new Error("O processo foi atualizado. Reabra para conferir a situação atual."), { status: 409 });
+    }
+    const assignment = await resolveRequestAssignment(client, existing, workflowPatch);
+    if (assignment) Object.assign(nextWorkflow, assignment);
+    if (!assignment && assignmentRequested && Object.keys(body).every((key) => ["assignedSectorId", "assignedUserId", "expectedUpdatedAt", "tags", "history_note", "historyNote"].includes(key))) {
+      throw Object.assign(new Error("O setor e o responsável já estão definidos assim."), { status: 409 });
+    }
     const normalizedPatch = Object.fromEntries(dedupedEntries);
     if (Object.hasOwn(normalizedPatch, "schedule_date") && normalizedPatch.schedule_date !== existingRows[0].schedule_date && !incomingWorkflow.scheduleOccurrenceKey) {
       delete nextWorkflow.scheduleOccurrenceKey;
@@ -391,19 +410,22 @@ router.patch("/:id", auth, async (req, res) => {
       return [key, value];
     });
 
-    if ((Object.keys(workflowPatch).length || procedureUpdate || changesBooking) && !dedupedEntries.some(([key]) => key === "workflow_data")) {
+    if ((assignment || Object.keys(workflowPatch).length || procedureUpdate || changesBooking) && !dedupedEntries.some(([key]) => key === "workflow_data")) {
       preparedEntries.push(["workflow_data", JSON.stringify(nextWorkflow)]);
     }
 
+    const previousStatus = existing.status;
     const historyEntry = historyNote
-      ? [{ status: nextRequest.status, notes: historyNote, by: req.user.id, at: new Date() }]
+      ? [{ status: nextRequest.status, notes: historyNote, by: req.user.id, at: new Date(),
+        ...(changesDocuments ? { category: RequestHistoryCategory.DOCUMENTS } : {}),
+        ...(nextRequest.status !== previousStatus ? { previousStatus } : {}) }]
       : [];
     const keys = preparedEntries.map(([k]) => k);
     const values = preparedEntries.map(([, v]) => v);
     const setParts = keys.map((k, i) => `${k} = $${i + 1}`);
     if (historyEntry.length) {
       values.push(JSON.stringify(historyEntry));
-      setParts.push(`history = history || $${values.length}::jsonb`);
+      setParts.push(`history = COALESCE(history, '[]'::jsonb) || $${values.length}::jsonb`);
     }
     values.push(req.params.id);
     const idParam = values.length;

@@ -81,8 +81,8 @@ export async function generateProcessReportPdf(request: AnyRecord, municipality:
     appendUnavailablePage(ctx, band, attachment.documentName || "Documento anexado", attachment.fileName || "Arquivo sem prévia");
   }
   const animals = resolveRequestProcedures(request, requestTypes);
-  for (const { animal, prescription } of issuedPrescriptions(animals.length ? animals : normalized.animals)) {
-    appendPrescriptionPdf(ctx, request, prescription, animal);
+  for (const { animal, prescription, procedureName } of issuedPrescriptions(animals.length ? animals : normalized.animals)) {
+    appendPrescriptionPdf(ctx, request, prescription, animal, procedureName);
   }
   return { fileName: documentFileName("Relatório", normalized.protocol), dataUrl: uint8ArrayToDataUrl(await output.save(), "application/pdf") };
 }

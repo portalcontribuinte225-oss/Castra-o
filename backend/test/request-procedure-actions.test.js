@@ -3,10 +3,10 @@ import assert from "node:assert/strict";
 import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
-import { ProcedureAction, ProcedureStatus, deriveRequestStatus, resolveRequestProcedures } from "../../shared/request-procedure-contract.js";
+import { CLOSED_WITHOUT_ATTENDANCE, ProcedureAction, ProcedureStatus, deriveRequestStatus, resolveRequestProcedures } from "../../shared/request-procedure-contract.js";
 import { DocumentSequence, documentNumberYear } from "../../shared/document-number-contract.js";
 import { allocateScheduleAvailability, buildScheduleOccurrences, requestScheduleBookings } from "../../shared/schedule-contract.js";
-import { NO_SHOW_CANCEL_REASON, REJECTED_CANCEL_REASON } from "../../shared/notification-contract.js";
+import { NO_SHOW_CANCEL_REASON } from "../../shared/notification-contract.js";
 import { REQUEST_CONTACT_CPF_KEY } from "../../shared/request-contract.js";
 import { decorateRequestDocuments } from "../src/services/documents/document-reviews.js";
 import { canonicalDocumentDefinition } from "../src/services/documents/document-policy.js";
@@ -35,13 +35,14 @@ function twoAnimalRequest(overrides = {}) {
   };
 }
 
-async function fixture(t, existing, { requiredDocument = false, vacancies = 10 } = {}) {
+async function fixture(t, existing, { requiredDocument = false, requiredDocumentFor, vacancies = 10 } = {}) {
   const previous = { query: pool.query, connect: pool.connect, secret: process.env.JWT_SECRET, fetch: globalThis.fetch };
   process.env.JWT_SECRET = "procedure-route-tests-only";
   const sessions = new Map();
   const counters = { prescription: 0 };
   let row = clone(existing);
-  const types = requiredDocument ? REQUEST_TYPES.map((type) => ({ ...type, documents: [{ id: "identity", name: "Documento de identidade", required: true, active: true }] })) : REQUEST_TYPES;
+  const types = REQUEST_TYPES.map((type) => requiredDocument && (!requiredDocumentFor || requiredDocumentFor === type.id)
+    ? { ...type, documents: [{ id: "identity", name: "Documento de identidade", required: true, active: true }] } : type);
   const configuration = new Map([["castragestao:request-types", types], ["castragestao:document-types", []]]);
   async function query(sql, values = []) {
     const session = resolveTestSession(sql, values, sessions);
@@ -70,6 +71,7 @@ async function fixture(t, existing, { requiredDocument = false, vacancies = 10 }
       }
       const history = sql.match(/history = (?:history|COALESCE\(history, '\[\]'::jsonb\)) \|\| \$(\d+)::jsonb/);
       if (history) row.history.push(...JSON.parse(values[Number(history[1]) - 1]));
+      row.updated_at = new Date(Math.max(Date.now(), row.updated_at ? Date.parse(row.updated_at) + 1 : 0)).toISOString();
       return { rows: [clone(row)] };
     }
     throw new Error(`Unexpected test SQL: ${sql}`);
@@ -89,7 +91,8 @@ async function fixture(t, existing, { requiredDocument = false, vacancies = 10 }
   });
   async function call(body, { user = STAFF, method = "POST", path = `/requests/${REQUEST_ID}/procedures/action` } = {}) {
     const response = await clientFetch(`http://127.0.0.1:${server.address().port}${path}`, {
-      method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${registerTestSession(sessions, user)}` }, body: JSON.stringify(body),
+      method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${registerTestSession(sessions, user)}` },
+      body: JSON.stringify(method === "POST" ? { expectedUpdatedAt: row.updated_at || "", ...body } : body),
     });
     return { status: response.status, body: await response.json().catch(() => null) };
   }
@@ -116,7 +119,7 @@ test("the request status follows its procedures", () => {
   assert.equal(deriveRequestStatus(animals("AGUARDANDO", "REALIZADO")).status, "NOVA");
   assert.equal(deriveRequestStatus(animals("REALIZADO", "NAO_COMPARECEU")).status, "REALIZADA");
   assert.deepEqual(deriveRequestStatus(animals("NAO_COMPARECEU", "NAO_COMPARECEU")), { status: "CANCELADA", cancelReason: NO_SHOW_CANCEL_REASON });
-  assert.deepEqual(deriveRequestStatus(animals("NAO_COMPARECEU", "INDEFERIDO")), { status: "CANCELADA", cancelReason: REJECTED_CANCEL_REASON });
+  assert.deepEqual(deriveRequestStatus(animals("NAO_COMPARECEU", "INDEFERIDO")), { status: "CANCELADA", cancelReason: CLOSED_WITHOUT_ATTENDANCE });
   assert.equal(deriveRequestStatus([{ procedures: [] }]), null);
 });
 
@@ -152,203 +155,190 @@ test("the nearest open procedure supplies the date, location, and time even whil
   }), true);
 });
 
-test("an action changes only its procedure and the request status follows", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest());
-  const confirmed = await call({ action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 1, requestTypeId: "castration", data: { edits: { doencas: "Displasia" } } });
-  assert.equal(confirmed.status, 200);
-  assert.deepEqual(statusesOf(row()), [["AGUARDANDO", "AGUARDANDO"], ["AGENDADO", "AGUARDANDO"]]);
+const target = (animalIndex, requestTypeId) => ({ animalIndex, requestTypeId });
+const atFirst = { date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, time: "08:00" };
+const atLater = { date: LATER_DATE, occurrenceKey: "day:88888888-8888-4888-8888-888888888888", time: "09:00" };
+const confirm = { action: ProcedureAction.CONFIRM_SCHEDULE, data: { schedule: atFirst } };
+const patch = { method: "PATCH", path: `/requests/${REQUEST_ID}` };
+const close = { action: ProcedureAction.CLOSE };
+
+test("all open procedures share one appointment, then results and closure are independently recorded", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest(), { vacancies: 2 });
+  assert.equal((await call(confirm)).status, 200);
+  assert.deepEqual(statusesOf(row()), [[ProcedureStatus.SCHEDULED, ProcedureStatus.SCHEDULED], [ProcedureStatus.SCHEDULED, ProcedureStatus.SCHEDULED]]);
+  assert.equal(requestScheduleBookings(row())[0].count, 2);
+  assert.equal((await call(confirm)).status, 409);
+  const outcomes = await call({ action: ProcedureAction.SAVE, data: {
+    results: [target(0, "castration"), target(0, "microchip"), target(1, "castration"), target(1, "microchip")],
+    health: [{ animalIndex: 0, microchip: "abc1234", doencas: "Displasia" }, { animalIndex: 1, microchip: "xyz7890" }],
+  } });
+  assert.equal(outcomes.status, 200);
+  assert.deepEqual(statusesOf(row()), [[ProcedureStatus.DONE, ProcedureStatus.DONE], [ProcedureStatus.DONE, ProcedureStatus.DONE]]);
+  assert.equal(row().animals[0].confirmedMicrochip, "ABC1234");
+  assert.equal(row().animals[1].confirmedMicrochip, "XYZ7890");
   assert.equal(row().status, "AGENDADA");
-  assert.equal(row().animals[1].doencas, "Displasia");
-  assert.equal(row().animals[0].doencas, undefined);
-  assert.equal(row().animals[0].procedures[0].name, undefined, "names are never stored");
-  assert.match(row().history.at(-1).notes, /Castração de Mel: agenda confirmada/);
-  assert.equal((await call({ action: ProcedureAction.SAVE, animalIndex: 1, requestTypeId: "castration", data: { edits: { microchip: "ABC1234" } } })).status, 400);
-
-  assert.equal((await call({ action: ProcedureAction.ATTEND, animalIndex: 0, requestTypeId: "castration" })).status, 409);
-  await call({ action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 1, requestTypeId: "microchip" });
-  assert.equal((await call({ action: ProcedureAction.ATTEND, animalIndex: 1, requestTypeId: "microchip" })).status, 400);
-  const attended = await call({ action: ProcedureAction.ATTEND, animalIndex: 1, requestTypeId: "microchip", data: { edits: { microchip: "abc1234" } } });
-  assert.equal(attended.status, 200);
-  assert.equal(row().animals[1].confirmedMicrochip, "ABC1234");
-  assert.deepEqual(statusesOf(row()), [["AGUARDANDO", "AGUARDANDO"], ["AGENDADO", "REALIZADO"]]);
-
-  assert.equal((await call({ action: ProcedureAction.REJECT, animalIndex: 0, requestTypeId: "castration", data: { reason: "Animal inelegível" } })).status, 400);
-  for (const [animalIndex, requestTypeId] of [[0, "castration"], [0, "microchip"]]) {
-    await call({ action: ProcedureAction.REJECT, animalIndex, requestTypeId, data: { reason: "Animal inelegível", note: "Animal idoso." } });
-  }
-  await call({ action: ProcedureAction.NO_SHOW, animalIndex: 1, requestTypeId: "castration" });
+  assert.deepEqual(requestScheduleBookings(row()), []);
+  assert.equal((await call(close)).status, 200);
   assert.equal(row().status, "REALIZADA");
-  assert.equal(row().workflow_data.performedProcedures, "Microchipagem");
+  assert.equal(row().history.at(-1).title, "Conclusão positiva");
+  assert.equal(row().history.at(-1).previousStatus, "AGENDADA");
+  assert.equal((await call(close)).status, 409);
 });
 
-test("rejecting every procedure cancels the request with the reason of the last rejection", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest({ animals: [{ name: "Bidu", requestTypeIds: ["castration"] }] }));
-  await call({ action: ProcedureAction.REJECT, animalIndex: 0, requestTypeId: "castration", data: { reason: "Animal inelegível", note: "Animal idoso." } });
+test("finishing can save the marked procedures in the same operation", async (t) => {
+  const existing = twoAnimalRequest({ status: "AGENDADA", animals: [{ name: "Bidu", requestTypeIds: ["castration"] }] });
+  const { call, row } = await fixture(t, existing);
+  assert.equal((await call(close)).status, 409);
+  assert.equal((await call({ ...close, data: { results: [target(0, "castration")] } })).status, 200);
+  assert.equal(row().status, "REALIZADA");
+  assert.equal(row().history.at(-1).title, "Conclusão positiva");
+});
+
+test("absence and removal conserve the booking until the animal has no open procedure", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA", animals: [{ name: "Bidu", requestTypeIds: ["castration", "microchip"] }] }));
+  const absence = { action: ProcedureAction.NO_SHOW, data: { results: [target(0, "castration")] } };
+  assert.equal((await call(absence)).status, 200);
+  assert.equal(requestScheduleBookings(row())[0].count, 1);
+  assert.equal((await call(absence)).status, 409);
+  const remove = { action: ProcedureAction.REMOVE, data: { target: target(0, "microchip"), reason: "Tutor solicitou a retirada" } };
+  assert.equal((await call({ ...remove, data: { ...remove.data, reason: "" } })).status, 400);
+  assert.equal((await call(remove)).status, 200);
+  assert.deepEqual(statusesOf(row()), [[ProcedureStatus.NO_SHOW, ProcedureStatus.REMOVED]]);
+  assert.match(row().history.at(-1).notes, /Tutor solicitou a retirada/);
+  assert.deepEqual(requestScheduleBookings(row()), []);
+  assert.equal((await call(close)).status, 200);
   assert.equal(row().status, "CANCELADA");
-  assert.equal(row().workflow_data.cancelReason, REJECTED_CANCEL_REASON);
-  assert.equal(row().workflow_data.rejectionReason, "Animal inelegível");
+  assert.equal(row().workflow_data.cancelReason, CLOSED_WITHOUT_ATTENDANCE);
+  assert.equal(row().history.at(-1).title, CLOSED_WITHOUT_ATTENDANCE);
 });
 
-test("scheduling waits for the required documents", async (t) => {
-  const documents = await fixture(t, twoAnimalRequest(), { requiredDocument: true });
-  const blocked = await documents.call({ action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 0, requestTypeId: "castration" });
-  assert.equal(blocked.status, 409);
-  assert.match(blocked.body.error, /Documento de identidade/);
-  assert.equal(documents.row().animals[0].procedures, undefined);
+test("an invalid batch and a stale screen leave the saved operation intact", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({ updated_at: "2026-11-01T00:00:00.000Z" }));
+  const originalVersion = row().updated_at;
+  assert.equal((await call(confirm)).status, 200);
+  const saved = structuredClone(row());
+  const batch = { action: ProcedureAction.SAVE, data: {
+    results: [target(0, "castration"), target(1, "microchip")],
+    health: [{ animalIndex: 0, doencas: "Displasia" }],
+  } };
+  assert.equal((await call(batch)).status, 400, "microchip is required for a completed microchip procedure");
+  assert.deepEqual(row(), saved);
+  assert.equal((await call({ ...batch, expectedUpdatedAt: originalVersion })).status, 409);
+  assert.deepEqual(row(), saved);
+  assert.equal((await call({ ...batch, data: { results: [target(0, "unknown")] } })).status, 404);
 });
 
-test("a document adjustment requires a note, and the schedule is unblocked when the document is approved", async (t) => {
-  const dataUrl = `data:application/pdf;base64,${Buffer.from("%PDF-1.4\ntest document\n").toString("base64")}`;
+test("a group reschedule moves every open procedure and leaves the original request date", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }), { vacancies: 2 });
+  const reschedule = { action: ProcedureAction.RESCHEDULE, data: { schedule: atLater, reason: "Pedido do tutor" } };
+  assert.equal((await call(reschedule)).status, 200);
+  assert.deepEqual(row().animals.flatMap((animal) => animal.procedures.map((item) => item.schedule.date)), Array(4).fill(LATER_DATE));
+  assert.deepEqual(row().workflow_data.procedureScheduleDates, [LATER_DATE]);
+  assert.equal(row().workflow_data.requestedSchedule.date, FUTURE_DATE);
+  assert.equal(requestScheduleBookings(row())[0].count, 2);
+  assert.match(row().history.at(-1).notes, /Pedido do tutor/);
+  assert.equal((await call(reschedule)).status, 409);
+});
+
+test("too few places at the new time conserve the entire group appointment", async (t) => {
+  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }), { vacancies: 1 });
+  const saved = structuredClone(row());
+  assert.equal((await call({ action: ProcedureAction.RESCHEDULE, data: { schedule: atLater } })).status, 409);
+  assert.deepEqual(row(), saved);
+});
+
+test("document confirmation waits for the new approved version and requires a reason to reject", async (t) => {
   const { call, row, documentRows } = await fixture(t, twoAnimalRequest(), { requiredDocument: true });
-  // Signed after the fixture sets the secret, as the server signs what it receives.
-  row().documents = [createReceivedDocument({ documentId: "identity", fileName: "identidade.pdf", dataUrl },
+  const dataUrl = (text) => `data:application/pdf;base64,${Buffer.from(`%PDF-1.4\n${text}\n`).toString("base64")}`;
+  row().documents = [createReceivedDocument({ documentId: "identity", fileName: "identidade.pdf", dataUrl: dataUrl("old") },
     canonicalDocumentDefinition({ id: "identity", name: "Documento de identidade", required: true }),
     { requestId: REQUEST_ID, ownerUserId: null, municipalityId: MUNICIPALITY_ID, animalIds: [] })];
   const [{ attachmentId }] = documentRows();
-  const action = { action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 0, requestTypeId: "castration" };
-  const patch = { method: "PATCH", path: `/requests/${REQUEST_ID}` };
-  assert.equal((await call(action)).status, 409);
+  assert.equal((await call(confirm)).status, 409);
   assert.equal((await call({ documentReviews: [{ attachmentId, decision: "rejected" }] }, patch)).status, 400);
   assert.equal((await call({ documentReviews: [{ attachmentId, decision: "rejected", note: "  Envie uma foto legível. " }] }, patch)).status, 200);
   assert.equal(row().documents[0].review.note, "Envie uma foto legível.");
-  assert.equal((await call(action)).status, 409);
-  assert.equal((await call({ documentReviews: [{ attachmentId, decision: "approved" }] }, patch)).status, 200);
-  assert.equal((await call(action)).status, 200);
+  assert.equal((await call(confirm)).status, 409);
+  assert.equal((await call({ documentReviews: [{ attachmentId, decision: "approved" }] }, patch)).status, 409);
+  assert.equal((await call({ documents: [{ documentId: "identity", fileName: "nova.pdf", dataUrl: dataUrl("new") }] }, patch)).status, 200);
+  const [replacement] = documentRows();
+  assert.notEqual(replacement.attachmentId, attachmentId);
+  assert.equal((await call({ documentReviews: [{ attachmentId: replacement.attachmentId, decision: "approved" }] }, patch)).status, 200);
+  assert.equal((await call(confirm)).status, 200);
 });
 
-test("a public request needs an assignment before confirming", async (t) => {
-  const { call } = await fixture(t, twoAnimalRequest({ origin: "PUBLICA" }));
-  assert.equal((await call({ action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 0, requestTypeId: "castration" })).status, 409);
-  assert.equal((await call({ action: ProcedureAction.SAVE, animalIndex: 0, requestTypeId: "castration", data: { edits: { alergias: "Penicilina" } } })).status, 200);
+test("a removed procedure no longer imposes its document requirements on the schedule", async (t) => {
+  const existing = twoAnimalRequest({ animals: [{ name: "Bidu", requestTypeIds: ["castration", "microchip"] }] });
+  const { call, row } = await fixture(t, existing, { requiredDocument: true, requiredDocumentFor: "castration" });
+  assert.equal((await call(confirm)).status, 409);
+  assert.equal((await call({ action: ProcedureAction.REMOVE, data: { target: target(0, "castration"), reason: "Tutor solicitou a retirada" } })).status, 200);
+  assert.equal((await call(confirm)).status, 200);
+  assert.deepEqual(statusesOf(row()), [[ProcedureStatus.REMOVED, ProcedureStatus.SCHEDULED]]);
 });
 
-test("another municipality, a tutor and an invalid action cannot change a procedure", async (t) => {
+test("a public request in a sector queue needs a named responsible person to confirm", async (t) => {
+  const existing = twoAnimalRequest({ origin: "PUBLICA" });
+  existing.workflow_data.assignedSectorId = "clinic";
+  const { call } = await fixture(t, existing);
+  assert.equal((await call(confirm)).status, 409);
+  assert.equal((await call({ action: ProcedureAction.SAVE, data: { health: [{ animalIndex: 0, alergias: "Penicilina" }] } })).status, 200);
+});
+
+test("actions are restricted to staff of the municipality and supported operations", async (t) => {
   const { call, row } = await fixture(t, twoAnimalRequest());
-  const body = { action: ProcedureAction.CONFIRM_SCHEDULE, animalIndex: 0, requestTypeId: "castration" };
-  assert.equal((await call(body, { user: { ...STAFF, id: "55555555-5555-4555-8555-555555555555", municipalityId: OTHER_MUNICIPALITY_ID } })).status, 404);
-  assert.equal((await call(body, { user: { id: "66666666-6666-4666-8666-666666666666", role: "tutor", municipalityId: MUNICIPALITY_ID } })).status, 403);
-  assert.equal((await call({ ...body, action: "delete" })).status, 400);
-  assert.equal((await call({ ...body, requestTypeId: "unknown" })).status, 404);
+  assert.equal((await call(confirm, { user: { ...STAFF, id: "55555555-5555-4555-8555-555555555555", municipalityId: OTHER_MUNICIPALITY_ID } })).status, 404);
+  assert.equal((await call(confirm, { user: { id: "66666666-6666-4666-8666-666666666666", role: "tutor", municipalityId: MUNICIPALITY_ID } })).status, 403);
+  for (const action of ["delete", "reject", "cancel_schedule"]) assert.equal((await call({ ...confirm, action })).status, 400);
   assert.equal(row().status, "NOVA");
 });
 
-test("rescheduling moves only its procedure to a place with vacancy", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest(), { vacancies: 1 });
-  const moved = await call({ action: ProcedureAction.RESCHEDULE, animalIndex: 0, requestTypeId: "microchip",
-    data: { schedule: { date: LATER_DATE, occurrenceKey: "day:88888888-8888-4888-8888-888888888888", time: "09:00" }, reason: "Pedido do tutor" } });
-  assert.equal(moved.status, 200);
-  assert.deepEqual(row().animals[0].procedures.map((item) => item.schedule.date), [FUTURE_DATE, LATER_DATE]);
-  assert.deepEqual(row().animals[1].procedures.map((item) => item.schedule.date), [FUTURE_DATE, FUTURE_DATE]);
-  assert.deepEqual(row().workflow_data.procedureScheduleDates, [FUTURE_DATE, LATER_DATE]);
-  assert.deepEqual(row().tags, ["REAGENDADA"]);
-  const full = await call({ action: ProcedureAction.RESCHEDULE, animalIndex: 1, requestTypeId: "microchip",
-    data: { schedule: { date: LATER_DATE, occurrenceKey: "day:88888888-8888-4888-8888-888888888888", time: "09:00" } } });
-  assert.equal(full.status, 409);
-  const shared = await call({ action: ProcedureAction.RESCHEDULE, animalIndex: 0, requestTypeId: "castration",
-    data: { schedule: { date: LATER_DATE, occurrenceKey: "day:88888888-8888-4888-8888-888888888888", time: "09:00" } } });
-  assert.equal(shared.status, 200);
-  assert.equal(requestScheduleBookings(row()).find((booking) => booking.date === LATER_DATE).count, 1);
-});
-
-test("once stored, the generic PATCH keeps the procedures and cannot change the status or the agenda", async (t) => {
+test("generic updates preserve saved clinical data and the original requested slot", async (t) => {
   const { call, row } = await fixture(t, twoAnimalRequest());
-  await call({ action: ProcedureAction.SAVE, animalIndex: 0, requestTypeId: "castration" });
-  const forged = row().animals.map((animal) => ({ ...animal, procedures: animal.procedures.map((item) => ({ ...item, status: "REALIZADO" })) }));
-  const patched = await call({ animals: forged }, { method: "PATCH", path: `/requests/${REQUEST_ID}` });
-  assert.equal(patched.status, 200);
-  assert.deepEqual(statusesOf(row()), [["AGUARDANDO", "AGUARDANDO"], ["AGUARDANDO", "AGUARDANDO"]]);
-  assert.equal((await call({ status: "CANCELADA" }, { method: "PATCH", path: `/requests/${REQUEST_ID}` })).status, 409);
-  for (const body of [{ scheduleLocationName: "Outro local" }, { workflow_data: { procedureScheduleDates: [LATER_DATE] } },
+  assert.equal((await call({ action: ProcedureAction.SAVE, data: { health: [{ animalIndex: 0, alergias: "Penicilina" }] } })).status, 200);
+  const forged = row().animals.map((animal) => ({ ...animal, prescriptions: [{ text: "Forjada" }],
+    procedures: animal.procedures.map((item) => ({ ...item, status: "REALIZADO" })) }));
+  assert.equal((await call({ animals: forged, workflow_data: { requestedSchedule: atLater } }, patch)).status, 200);
+  assert.deepEqual(statusesOf(row()), [[ProcedureStatus.WAITING, ProcedureStatus.WAITING], [ProcedureStatus.WAITING, ProcedureStatus.WAITING]]);
+  assert.equal(row().workflow_data.requestedSchedule.date, FUTURE_DATE);
+  assert.equal(row().animals[0].prescriptions, undefined);
+  assert.equal((await call({ status: "CANCELADA" }, patch)).status, 409);
+  for (const update of [{ scheduleLocationName: "Outro local" }, { workflow_data: { procedureScheduleDates: [LATER_DATE] } },
     { animals: [...row().animals].reverse() }, { animals: row().animals.map((animal) => ({ ...animal, requestTypeIds: ["microchip"] })) }]) {
-    assert.equal((await call(body, { method: "PATCH", path: `/requests/${REQUEST_ID}` })).status, 409);
+    assert.equal((await call(update, patch)).status, 409);
   }
-  assert.equal(row().status, "NOVA");
 });
 
-test("a procedure action keeps the contact CPF in storage and omits it from the response", async (t) => {
+test("a procedure action keeps the contact CPF private", async (t) => {
   const request = twoAnimalRequest();
   request.workflow_data[REQUEST_CONTACT_CPF_KEY] = "52998224725";
   const { call, row } = await fixture(t, request);
-  const response = await call({ action: ProcedureAction.SAVE, animalIndex: 0, requestTypeId: "castration" });
+  const response = await call({ action: ProcedureAction.SAVE, data: { health: [{ animalIndex: 0, alergias: "Penicilina" }] } });
   assert.equal(response.status, 200);
   assert.equal(Object.hasOwn(response.body.workflow_data, REQUEST_CONTACT_CPF_KEY), false);
   assert.equal(row().workflow_data[REQUEST_CONTACT_CPF_KEY], request.workflow_data[REQUEST_CONTACT_CPF_KEY]);
 });
 
-test("cancelling releases only the places no procedure uses and a new slot is required before confirming", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA", animals: [{ name: "Bidu", requestTypeIds: ["castration", "microchip"] }] }), { vacancies: 1 });
-  const schedule = { date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, time: "08:00" };
-  const cancel = (requestTypeId, selection = schedule) => call({
-    action: ProcedureAction.CANCEL_SCHEDULE, animalIndex: 0, requestTypeId, data: { schedule: selection },
-  });
-  const castration = { animalIndex: 0, requestTypeId: "castration" };
-  assert.equal((await cancel("castration", { ...schedule, time: "09:00" })).status, 409);
-  assert.equal(requestScheduleBookings(row())[0].count, 1);
-  assert.equal((await cancel("castration")).status, 200);
-  assert.equal((await cancel("castration")).status, 409);
-  assert.deepEqual(statusesOf(row()), [[ProcedureStatus.WAITING, ProcedureStatus.SCHEDULED]]);
-  assert.equal(row().animals[0].procedures[0].schedule, null);
-  assert.equal(row().history.at(-1).cancelledSchedule.slotTime, "08:00");
-  assert.match(row().history.at(-1).notes, /08:00.*Local A.*cancelado/);
-  assert.equal(requestScheduleBookings(row())[0].count, 1);
-  assert.equal(row().status, "AGENDADA");
-  assert.equal((await cancel("microchip")).status, 200);
-  assert.deepEqual(requestScheduleBookings(row()), []);
-  assert.equal(row().schedule_date, null);
-  assert.equal(row().status, "NOVA");
-  assert.equal((await call({ ...castration, action: ProcedureAction.CONFIRM_SCHEDULE })).status, 409);
-  assert.equal((await call({ ...castration, action: ProcedureAction.RESCHEDULE, data: { schedule } })).status, 200);
-  assert.equal((await call({ ...castration, action: ProcedureAction.CONFIRM_SCHEDULE })).status, 200);
-  assert.equal((await cancel("castration")).status, 409, "the former confirmation cannot cancel a new reservation of the same slot");
-  assert.equal(requestScheduleBookings(row())[0].count, 1);
-});
-
-test("an old scheduled visit without an occurrence or time can be cancelled with the matching date", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest({
-    status: "AGENDADA", request_type: "Castração", animals: [{ name: "Bidu", requestTypeIds: ["castration"] }], workflow_data: { followUp: { enabled: false } },
-  }));
-  const action = { action: ProcedureAction.CANCEL_SCHEDULE, animalIndex: 0, requestTypeId: "castration" };
-  const cancel = (schedule) => call({ ...action, data: { schedule } });
-  assert.equal((await cancel({ date: FUTURE_DATE, occurrenceKey: "", time: "08:00" })).status, 409);
-  assert.equal((await cancel({ date: LATER_DATE, occurrenceKey: "", time: "" })).status, 409);
-  assert.equal((await cancel({ date: FUTURE_DATE, occurrenceKey: "", time: "" })).status, 200);
-  assert.deepEqual(requestScheduleBookings(row()), []);
-  assert.equal(row().history.at(-1).cancelledSchedule.date, FUTURE_DATE);
-  assert.equal(row().status, "NOVA");
-});
-
-test("a cancellation confirmation from before a reschedule cannot remove the new reservation", async (t) => {
-  const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }));
-  const target = { animalIndex: 0, requestTypeId: "castration" };
-  const schedule = { date: LATER_DATE, occurrenceKey: "day:88888888-8888-4888-8888-888888888888", time: "09:00" };
-  const cancellation = { ...target, action: ProcedureAction.CANCEL_SCHEDULE, data: { schedule: { date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, time: "08:00" } } };
-  assert.equal((await call({ ...target, action: ProcedureAction.RESCHEDULE, data: { schedule } })).status, 200);
-  assert.equal((await call(cancellation)).status, 409);
-  assert.equal(row().animals[0].procedures[0].schedule.slotTime, "09:00");
-  assert.equal(row().history.length, 1);
-});
-
 test("a process without a municipality requires a municipal link before a global procedure action", async (t) => {
   const { call } = await fixture(t, twoAnimalRequest({ municipality_id: null }));
-  const response = await call({ action: ProcedureAction.SAVE, animalIndex: 0, requestTypeId: "castration" }, { user: { ...STAFF, role: "master" } });
+  const response = await call(confirm, { user: { ...STAFF, role: "master" } });
   assert.equal(response.status, 409);
   assert.match(response.body.error, /prefeitura/);
 });
 
-test("a prescription stays on its procedure and is read-only after the attendance", async (t) => {
+test("unified recipes support general prescriptions, archive revisions and block repeated issuance", async (t) => {
   const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }));
-  const selection = { animalIndex: 1, requestTypeId: "castration" };
-  const payload = { ...selection, action: ProcedureAction.PRESCRIPTION,
-    data: { prescription: { text: "Repouso conforme orientação.", professionalName: "Veterinária", professionalRegistry: "CRMV 1234" } } };
-  const saved = await call(payload);
-  assert.equal(saved.status, 200);
-  assert.equal(row().animals[1].procedures[0].prescription.professionalRegistry, "CRMV 1234");
-  assert.equal(row().animals[1].procedures[0].prescription.number, `000001/${documentNumberYear()}`);
-  assert.equal(saved.body.animals[1].procedures[0].prescription.number, `000001/${documentNumberYear()}`, "the answer carries the number given");
-  assert.equal(row().animals[1].procedures[1].prescription, null);
-  assert.equal(row().status, "AGENDADA");
-  assert.equal((await call(payload)).status, 200);
-  assert.equal(row().animals[1].procedures[0].prescription.number, `000002/${documentNumberYear()}`, "saving again issues a new prescription");
-  assert.equal((await call({ ...selection, action: ProcedureAction.ATTEND })).status, 200);
-  assert.equal((await call(payload)).status, 409);
+  const draft = { animalIndex: 1, requestTypeId: "", text: "Repouso conforme orientação.",
+    professionalName: "Veterinária", professionalRegistry: "CRMV 1234" };
+  const save = (values) => call({ action: ProcedureAction.PRESCRIPTION, data: { prescriptions: [values] } });
+  const issued = await save(draft);
+  assert.equal(issued.status, 200);
+  assert.equal(issued.body.animals[1].prescriptions[0].number, `000001/${documentNumberYear()}`);
+  assert.equal(issued.body.animals[1].prescriptions[0].requestTypeId, "");
+  assert.equal((await save(draft)).status, 409);
+  assert.equal((await save({ ...draft, text: "Revisão do repouso", requestTypeId: "castration" })).status, 200);
+  assert.deepEqual(row().animals[1].prescriptions.map(({ number, archived, requestTypeId }) => [number, Boolean(archived), requestTypeId]), [
+    [`000001/${documentNumberYear()}`, true, ""], [`000002/${documentNumberYear()}`, false, "castration"],
+  ]);
+  assert.equal((await save({ animalIndex: 1, text: "" })).status, 200);
+  assert.equal(row().animals[1].prescriptions.every(({ archived }) => archived), true);
 });

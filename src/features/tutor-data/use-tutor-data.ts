@@ -4,7 +4,7 @@ import { formFromTutor, tutorPayload } from "./tutor-data";
 import type { TutorData, TutorForm } from "./tutor-data";
 
 // Loads the tutor of a request when the tab is opened, and saves what the staff edited.
-export function useTutorData(requestId: string, municipalityId: string, onSaved?: (tutor: TutorData) => void) {
+export function useTutorData(requestId: string, municipalityId: string, onSaved?: (tutor: TutorData) => void | Promise<void>) {
   const [tutor, setTutor] = useState<TutorData | null>(null);
   const [form, setForm] = useState<TutorForm | null>(null);
   const [loading, setLoading] = useState(true);
@@ -30,15 +30,17 @@ export function useTutorData(requestId: string, municipalityId: string, onSaved?
   }
 
   async function save() {
-    if (!tutor || !form || saving) return;
+    if (!tutor || !form || saving) return false;
     setSaving(true); setSaveError(""); setNotice("");
     try {
       const result = await api.updateRequestTutor(requestId, tutorPayload(form, tutor.contactOnly), municipalityId);
       setTutor(result.tutor); setForm(formFromTutor(result.tutor));
       setNotice(result.passwordChanged ? "Dados e senha atualizados." : "Dados atualizados.");
-      onSaved?.(result.tutor);
+      await onSaved?.(result.tutor);
+      return true;
     } catch (failure) {
       setSaveError(failure instanceof ApiError ? failure.message : "Não foi possível salvar os dados do tutor.");
+      return false;
     } finally { setSaving(false); }
   }
 

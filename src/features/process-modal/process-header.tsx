@@ -1,39 +1,36 @@
 import { Download } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "../../components/button";
 import { CloseButton } from "../../components/close-button";
-import { StatusBadge } from "../../components/ui";
 import { ProcessTab } from "./process-labels";
 
 interface ProcessHeaderProps {
   protocol: string;
   title: string;
   subtitle: string;
-  status: string;
-  reportLoading: boolean;
-  tabs: { id: ProcessTab; label: string; count?: number }[];
+  appointment: ReactNode;
+  tabs: { id: ProcessTab; label: string; count?: number; icon?: ReactNode }[];
   activeTab: ProcessTab;
   panelId: string;
   busy: boolean;
+  reportLoading: boolean;
   onTab: (tab: ProcessTab) => void;
   onReport: () => void;
   onClose: () => void;
 }
 
-// The fixed top of the process: protocol, who it is about, the status, the report and the tabs.
-export function ProcessHeader({ protocol, title, subtitle, status, reportLoading, tabs, activeTab, panelId, busy, onTab, onReport, onClose }: ProcessHeaderProps) {
+export function ProcessHeader({ protocol, title, subtitle, appointment, tabs, activeTab, panelId, busy, reportLoading, onTab, onReport, onClose }: ProcessHeaderProps) {
   return (
     <header className="prm-header">
       <div className="prm-header-identity">
         <div className="prm-header-identity-text">
           <span className="prm-eyebrow">Processo {protocol}</span>
           <h2 className="prm-headline-name" id={`${panelId}-title`}>{title}</h2>
-          <p className="prm-animal-summary">{subtitle}</p>
+          <div className="prm-animal-summary"><span>{subtitle}</span>{appointment}</div>
         </div>
         <div className="prm-header-actions">
-          <StatusBadge status={status} />
-          <Button variant="outline" disabled={reportLoading} onClick={onReport}>
-            <Download size={13} aria-hidden="true" /> {reportLoading ? "Preparando..." : "Relatório"}
-          </Button>
+          <Button variant="outline" className="prm-icon-button" title="Baixar relatório" aria-label={reportLoading ? "Preparando relatório" : "Baixar relatório"}
+            disabled={busy || reportLoading} onClick={onReport}><Download size={16} aria-hidden="true" /></Button>
           <CloseButton disabled={busy} onClick={onClose} />
         </div>
       </div>
@@ -48,9 +45,9 @@ export function ProcessHeader({ protocol, title, subtitle, status, reportLoading
         {tabs.map((tab) => (
           <Button key={tab.id} variant="custom" role="tab" id={`${panelId}-${tab.id}`} aria-controls={panelId} aria-selected={activeTab === tab.id}
             tabIndex={activeTab === tab.id ? 0 : -1} disabled={busy}
-            className="tw:max-w-full tw:border-card-border tw:bg-card-surface tw:text-left tw:font-semibold tw:text-ui-text tw:aria-selected:border-ui-accent tw:aria-selected:bg-ui-accent-soft tw:aria-selected:text-ui-accent-strong tw:max-[760px]:px-2.5 tw:max-[760px]:text-xs"
+            className="tw:border-card-border tw:bg-card-surface tw:text-left tw:font-semibold tw:text-ui-text tw:max-[760px]:px-2.5 tw:max-[760px]:text-xs"
             onClick={() => onTab(tab.id)}>
-            {tab.label}
+            {tab.icon}{tab.label}
             {Boolean(tab.count) && <span className="prm-tab-count">{tab.count}</span>}
           </Button>
         ))}

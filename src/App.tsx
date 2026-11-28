@@ -654,7 +654,11 @@ function ApplicationWorkspace({ currentUser, setCurrentUser, onProcedureIntent }
 
   // The tutor data saved in an attendance also changes the requests in progress, so the list is read again.
   const refreshRequests = useCallback(() => {
-    api.getRequests().then((list) => setRequests(list.map(normalizeRequest))).catch(console.error);
+    return api.getRequests().then((list) => {
+      const normalized = list.map(normalizeRequest);
+      setRequests(normalized);
+      return normalized;
+    }).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -3130,7 +3134,6 @@ function AdminDashboard({
     applyProcedureAction,
     updateDocuments,
     assignFromPreview,
-    assumeFromPreview,
     rejectRequestFromProcess,
     confirmSpecialRequest,
   } = useRequestActions({ patchRequest, runProcedureAction, currentUser, teams, showToast, setSelectedId });
@@ -3305,17 +3308,17 @@ function AdminDashboard({
           request={previewRequest}
           readOnly={!canEditRequests(currentUser?.role)}
           neighborhoods={neighborhoods}
-          onTutorSaved={(tutor) => { updatePreviewTutor(tutor); refreshRequests?.(); }}
+          onTutorSaved={(tutor) => updatePreviewTutor(tutor, refreshRequests)}
           requestTypes={requestTypes}
           documentTypes={documentTypes}
           sectors={activeSectors}
           users={activeUsers}
           municipalities={municipalities}
           currentUserName={currentUser?.name || ""}
+          currentUserId={currentUser?.id || ""}
           onClose={closeRequestPreview}
           onRejectProcess={rejectRequestFromProcess}
           onAssign={assignFromPreview}
-          onAssume={assumeFromPreview}
           onConfirmSpecial={confirmSpecialRequest}
           onProcedureAction={applyProcedureAction}
           onUpdateDocuments={updateDocuments}

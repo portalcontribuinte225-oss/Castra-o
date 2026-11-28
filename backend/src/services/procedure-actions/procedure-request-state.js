@@ -8,7 +8,7 @@ import { scheduleDate } from "../../../../shared/schedule-contract.js";
 const SCHEDULE_WORKFLOW_KEYS = ["scheduleOccurrenceKey", "scheduleSlotTime", "scheduleTime"];
 const SCHEDULE_COLUMNS = ["schedule_date", "schedule_location_name", "schedule_address", "schedule_address_url", "schedule_municipality"];
 const PROCEDURE_WORKFLOW_KEYS = ["procedureScheduleDates", "performedProcedures", "cancelReason", "rejectionReason", "rejectionNote", "previousSchedule"];
-const PROCEDURE_ANIMAL_FIELDS = ["procedures", "doencas", "alergias", "confirmedMicrochip", "microchip", "hasChip", "microchipStatus"];
+const PROCEDURE_ANIMAL_FIELDS = ["procedures", "prescriptions", "doencas", "alergias", "confirmedMicrochip", "microchip", "hasChip", "microchipStatus"];
 
 export function storeResolvedProcedures(animals) {
   return animals.map(({ procedures, ...animal }) => ({ ...animal, procedures: procedures.map(({ name: _name, ...procedure }) => procedure) }));
@@ -25,11 +25,13 @@ function latestRejection(procedures) {
 }
 
 // The nearest open procedure supplies the process's agenda. Closed processes retain a date for history and reports.
-export function deriveProcedureRequestState(previous, animals) {
+export function deriveProcedureRequestState(previous, animals, { close = false } = {}) {
   const procedures = animals.flatMap((animal) => animal.procedures || []);
   const derived = deriveRequestStatus(animals) || { status: previous.status, cancelReason: "" };
+  const hasOpen = procedures.some(isOpenProcedure);
+  const status = close || hasOpen ? derived.status : previous.status;
   const workflow = { ...(previous.workflow_data || {}) };
-  if (derived.status === RequestStatus.CANCELLED) {
+  if (close && status === RequestStatus.CANCELLED) {
     workflow.cancelReason = derived.cancelReason;
     const rejection = derived.cancelReason === REJECTED_CANCEL_REASON ? latestRejection(procedures) : null;
     if (rejection) Object.assign(workflow, { rejectionReason: rejection.reason, rejectionNote: rejection.note });
@@ -38,9 +40,8 @@ export function deriveProcedureRequestState(previous, animals) {
   workflow.performedProcedures = [...new Set(done)].join(", ");
   const placed = procedures.filter((item) => holdsSchedulePlace(item) && scheduleDate(item.schedule.date));
   workflow.procedureScheduleDates = [...new Set(placed.map((item) => item.schedule.date))];
-  const hasOpen = procedures.some(isOpenProcedure);
   const nearest = hasOpen ? placed.sort(compareSchedule)[0] : procedures
-    .filter((item) => scheduleDate(item.schedule?.date) && (derived.status !== RequestStatus.COMPLETED || item.status === ProcedureStatus.DONE))
+    .filter((item) => scheduleDate(item.schedule?.date) && (status !== RequestStatus.COMPLETED || item.status === ProcedureStatus.DONE))
     .sort(compareSchedule).at(-1);
   const columns = nearest ? {
     schedule_date: nearest.schedule.date, schedule_location_name: nearest.schedule.locationName || "",
@@ -56,7 +57,7 @@ export function deriveProcedureRequestState(previous, animals) {
     if (nearest?.schedule.occurrenceKey) workflow.scheduleOccurrenceKey = nearest.schedule.occurrenceKey;
     if (nearest?.schedule.slotTime) Object.assign(workflow, { scheduleSlotTime: nearest.schedule.slotTime, scheduleTime: nearest.schedule.slotTime });
   }
-  return { status: derived.status, workflow, ...columns };
+  return { status, workflow, ...columns };
 }
 
 function procedureConflict() {
@@ -66,7 +67,7 @@ function procedureConflict() {
 export function stripSuppliedProcedures(animals) {
   return Array.isArray(animals) ? animals.map((animal) => {
     if (!animal || typeof animal !== "object" || Array.isArray(animal)) return animal;
-    const { procedures: _ignored, ...rest } = animal;
+    const { procedures: _procedures, prescriptions: _prescriptions, ...rest } = animal;
     return rest;
   }) : [];
 }

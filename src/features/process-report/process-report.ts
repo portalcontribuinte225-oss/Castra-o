@@ -1,4 +1,4 @@
-import { ProcedureStatus } from "../../../shared/request-procedure-contract.js";
+import { ProcedureStatus, animalPrescriptionRecords } from "../../../shared/request-procedure-contract.js";
 import type { PrintablePrescription } from "../process-modal/prescription-pdf";
 
 // The process history comes as text blocks for the PDF.
@@ -11,6 +11,7 @@ interface HistoryEntry {
   at?: unknown;
   status?: unknown;
   notes?: unknown;
+  title?: unknown;
 }
 
 const isEntry = (value: unknown): value is HistoryEntry => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -19,7 +20,7 @@ const isEntry = (value: unknown): value is HistoryEntry => Boolean(value) && typ
 export function historyBlocks(history: unknown, statusLabel: (status: string) => string, formatDate: (value: string) => string): ReportBlock[] {
   return (Array.isArray(history) ? history : []).filter(isEntry).map((entry) => ({
     heading: [entry.at ? formatDate(String(entry.at)) : "", statusLabel(String(entry.status || ""))].filter(Boolean).join("  ·  "),
-    text: String(entry.notes || "").trim(),
+    text: [entry.title, entry.notes].filter(Boolean).join(" · ").trim(),
   }));
 }
 
@@ -28,19 +29,23 @@ interface IssuedPrescription {
   subtitle: string;
   animal: Record<string, unknown>;
   prescription: PrintablePrescription;
+  procedureName?: string;
 }
 
 const record = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {});
 const textValue = (value: unknown) => typeof value === "string" ? value : "";
 
-// The prescriptions saved on the procedures of each animal, with what identifies each one.
+// Per-animal emissions, including earlier versions and documents saved on legacy procedures.
 export function issuedPrescriptions(animals: unknown, { completedOnly = false } = {}): IssuedPrescription[] {
   const found: IssuedPrescription[] = [];
   for (const [animalIndex, animal] of (Array.isArray(animals) ? animals : []).map(record).entries()) {
     const procedures = Array.isArray(animal.procedures) ? animal.procedures.map(record) : [];
-    for (const [procedureIndex, procedure] of procedures.entries()) {
-      if (completedOnly && procedure.status !== ProcedureStatus.DONE) continue;
-      const prescription = record(procedure.prescription);
+    const prescriptions = animalPrescriptionRecords({ ...animal, procedures });
+    for (const [index, row] of prescriptions.entries()) {
+      const prescription = record(row);
+      const procedure = procedures.find((item) => Boolean(prescription.requestTypeId) && item.requestTypeId === prescription.requestTypeId);
+      if (completedOnly && (procedure ? procedure.status !== ProcedureStatus.DONE
+        : !procedures.some((item) => item.status === ProcedureStatus.DONE))) continue;
       const text = textValue(prescription.text);
       if (!text.trim()) continue;
       const number = textValue(prescription.number);
@@ -48,14 +53,15 @@ export function issuedPrescriptions(animals: unknown, { completedOnly = false } 
       const professionalRegistry = textValue(prescription.professionalRegistry);
       const professional = [professionalName, professionalRegistry].filter(Boolean).join(", ");
       found.push({
-        id: `${animalIndex}:${procedureIndex}`,
+        id: `${animalIndex}:${index}`,
         subtitle: [
           number && `Nº ${number}`,
           animal.name && `Animal: ${animal.name}`,
-          procedure.name && `Procedimento: ${procedure.name}`,
+          procedure?.name && `Procedimento: ${procedure.name}`,
           professional && `Profissional: ${professional}`,
         ].filter(Boolean).join("  ·  "),
         animal,
+        procedureName: textValue(procedure?.name) || undefined,
         prescription: { text, number, professionalName, professionalRegistry, issuedAt: textValue(prescription.issuedAt) },
       });
     }
