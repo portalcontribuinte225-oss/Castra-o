@@ -42,7 +42,8 @@ export async function requestContactChallenge(req, res) {
   let delivery;
   try {
     delivery = await deliverAuthMessage({ purpose, user: pending.user, municipalityId: req.user.municipalityId,
-      email: kind === "email" ? value : "", phone: kind === "phone" ? value : "", code: pending.code, kind, strictDestination: true });
+      email: kind === "email" ? value : "", phone: kind === "phone" ? value : "", code: pending.code,
+      challengeId: pending.challenge.id, expiresAt: pending.challenge.expires_at });
     await recordChallengeDelivery(pending.challenge.id, delivery);
   } catch { delivery = [{ status: "failed", reason: "Não foi possível enviar o código." }]; }
   res.set("Cache-Control", "no-store").json({ challengeId: pending.challenge.id, expiresIn: AUTH_CHALLENGE_SECONDS, retryAfter: AUTH_RETRY_SECONDS, delivery });

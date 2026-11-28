@@ -1,14 +1,29 @@
 import { MOBILE_PHONE_MESSAGE, isMobilePhone, onlyPhoneDigits } from "./phone-contract.js";
+import { AuthPurpose } from "./auth-contract.js";
 
 export const NotificationEvent = Object.freeze({
   REQUEST_REGISTERED: "request_registered",
   SCHEDULE_CONFIRMED: "schedule_confirmed",
   SCHEDULE_REMINDER: "schedule_reminder",
   SCHEDULE_CHANGED: "schedule_changed",
-  SCHEDULE_CANCELLED: "schedule_cancelled",
   NO_SHOW: "no_show",
   COMPLETED: "completed",
   REQUEST_REJECTED: "request_rejected",
+});
+
+export const NotificationLabel = Object.freeze({
+  [NotificationEvent.REQUEST_REGISTERED]: "Solicitação registrada",
+  [NotificationEvent.SCHEDULE_CONFIRMED]: "Agendamento confirmado",
+  [NotificationEvent.SCHEDULE_REMINDER]: "Lembrete de procedimento",
+  [NotificationEvent.SCHEDULE_CHANGED]: "Agendamento alterado",
+  [NotificationEvent.NO_SHOW]: "Não comparecimento",
+  [NotificationEvent.COMPLETED]: "Atendimento concluído",
+  [NotificationEvent.REQUEST_REJECTED]: "Solicitação indeferida",
+  [AuthPurpose.PASSWORD_RESET]: "Recuperação de senha",
+  [AuthPurpose.VERIFY_EMAIL]: "Confirmação de contato",
+  [AuthPurpose.VERIFY_PHONE]: "Confirmação de contato",
+  [AuthPurpose.REQUEST_TRACKING]: "Acesso à solicitação",
+  [AuthPurpose.CONTACT_CHANGED]: "Contato alterado",
 });
 
 // The reason the staff screen stores when the tutor did not come to a scheduled visit; it is what tells a no-show from any other cancellation.

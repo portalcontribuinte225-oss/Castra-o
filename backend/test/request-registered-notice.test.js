@@ -2,8 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { DeliveryStatus, NotificationChannel, NotificationEvent } from "../../shared/notification-contract.js";
 import { buildAccessPath, buildAccessUrl, readAccessLink } from "../../shared/request-access-contract.js";
-import { buildEmailNotice } from "../src/services/notifications/email-notice-text.js";
-import { buildNotificationMessage, registeredNoticeText } from "../src/services/notifications/notification-message.js";
+import { buildNotificationMessage } from "../src/services/notifications/notification-message.js";
 import { loadAccessLink, notifyRequestRegistered } from "../src/services/notify-request-registered.js";
 
 const MUNICIPALITY = "11111111-1111-4111-8111-111111111111";
@@ -36,16 +35,14 @@ test("the access link is the public address with the municipality, never the pro
 
 test("the notice gives the protocol, the visit, that it is under analysis and the link, by e-mail and WhatsApp alike", () => {
   const request = registeredRequest({ access_link: { url: URL, accountExists: false } });
-  const text = `Solicitação registrada! Protocolo 000123/2026. Atendimento em 20/11/2026, às 09:00, em Unidade Municipal. Sua solicitação está em análise. Para ver seu requerimento e criar sua senha, acesse: ${URL}`;
-  assert.equal(registeredNoticeText(request), text);
+  const message = (input) => buildNotificationMessage(EVENT, input).message;
+  const text = `Solicitação registrada. Protocolo: 000123/2026. Horário solicitado em 20/11/2026, às 09:00, em Unidade Municipal. Sua solicitação está em análise. Para ver seu requerimento e criar sua senha, acesse: ${URL}`;
   assert.deepEqual(buildNotificationMessage(EVENT, request), { subject: "Solicitação registrada", message: text });
-  assert.deepEqual(buildEmailNotice(EVENT, request), { subject: "Solicitação registrada", message: text });
-  assert.equal(registeredNoticeText({ ...request, access_link: { url: URL, accountExists: true } }),
-    `Solicitação registrada! Protocolo 000123/2026. Atendimento em 20/11/2026, às 09:00, em Unidade Municipal. Sua solicitação está em análise. Para ver seu requerimento, acesse: ${URL}`);
-  assert.equal(registeredNoticeText(registeredRequest({ schedule_date: null, access_link: null })), "Solicitação registrada! Protocolo 000123/2026. Sua solicitação está em análise.");
-  assert.equal(registeredNoticeText(registeredRequest({ schedule_location_name: "", workflow_data: {} })),
-    "Solicitação registrada! Protocolo 000123/2026. Atendimento em 20/11/2026. Sua solicitação está em análise.");
-  assert.doesNotMatch(registeredNoticeText(request), /52998224725|tutor@example/);
+  assert.match(message({ ...request, access_link: { url: URL, accountExists: true } }), /Para ver seu requerimento, acesse:/);
+  assert.equal(message(registeredRequest({ schedule_date: null, access_link: null, schedule_location_name: "", workflow_data: {} })), "Solicitação registrada. Protocolo: 000123/2026. Sua solicitação está em análise.");
+  assert.equal(message(registeredRequest({ schedule_location_name: "", workflow_data: {} })),
+    "Solicitação registrada. Protocolo: 000123/2026. Horário solicitado em 20/11/2026. Sua solicitação está em análise.");
+  assert.doesNotMatch(message(request), /52998224725|tutor@example|agendamento confirmado/i);
 });
 
 test("the link exists only for a request with a tutor and a public address, and says whether the password is still to be created", async () => {

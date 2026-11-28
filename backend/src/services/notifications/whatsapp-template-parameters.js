@@ -1,27 +1,8 @@
 import { WhatsappTemplateField } from "../../../../shared/whatsapp-templates-contract.js";
-import { formatScheduleDate } from "./notification-message.js";
+import { resolveNoticeField } from "./notification-message.js";
 
 const MAX_PARAMETER_LENGTH = 1024;
 const EMPTY_PARAMETER = "não informado";
-
-// Only mapped fields are resolved: never arbitrary request properties, the CPF or the contacts.
-export function resolveWhatsappField(field, request = {}) {
-  const workflow = request.workflow_data || request.workflowData || {};
-  const values = {
-    [WhatsappTemplateField.TUTOR_NAME]: request.tutor_name || "Solicitante",
-    [WhatsappTemplateField.PROTOCOL]: request.protocol,
-    [WhatsappTemplateField.SCHEDULE_DATE]: formatScheduleDate(request.schedule_date || ""),
-    [WhatsappTemplateField.SCHEDULE_TIME]: workflow.scheduleSlotTime || workflow.scheduleTime || request.schedule_time || "hora a confirmar",
-    [WhatsappTemplateField.SCHEDULE_LOCATION_NAME]: request.schedule_location_name || "local a confirmar",
-    [WhatsappTemplateField.SCHEDULE_ADDRESS]: request.schedule_address || "endereço a confirmar",
-    [WhatsappTemplateField.SCHEDULE_ADDRESS_URL]: request.schedule_address_url || "link indisponível",
-    [WhatsappTemplateField.ANIMAL_NAME]: request.animal_name || "animal",
-    [WhatsappTemplateField.SPECIES]: request.species || "espécie não informada",
-    [WhatsappTemplateField.CITY]: request.city || request.schedule_municipality || "município não informado",
-    [WhatsappTemplateField.NOTIFICATION_MESSAGE]: request.notification_message || "Há uma atualização na solicitação.",
-  };
-  return Object.hasOwn(values, field) ? String(values[field] ?? "") : "";
-}
 
 // The Cloud API rejects line breaks, tabs and long runs of spaces inside body parameters.
 function parameterText(value) {
@@ -30,14 +11,14 @@ function parameterText(value) {
 
 // `fields` is the field of each numbered variable, as the template was configured or in the use's own order: parameter n receives fields[n - 1].
 export function buildBodyComponents(fields, request) {
-  const parameters = fields.map((item) => ({ type: "text", text: parameterText(resolveWhatsappField(item, request)) }));
+  const parameters = fields.map((item) => ({ type: "text", text: parameterText(resolveNoticeField(item, request)) }));
   return parameters.length ? [{ type: "body", parameters }] : [];
 }
 
 // What each field shows in the preview of a template being configured, from the same example request the test send uses.
 export function previewFieldValues() {
   const request = previewRequest();
-  return Object.fromEntries(Object.values(WhatsappTemplateField).map((field) => [field, resolveWhatsappField(field, request)]));
+  return Object.fromEntries(Object.values(WhatsappTemplateField).map((field) => [field, resolveNoticeField(field, request)]));
 }
 
 export function previewRequest() {

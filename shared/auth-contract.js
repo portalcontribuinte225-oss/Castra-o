@@ -11,6 +11,17 @@ export const AUTH_CHALLENGE_SECONDS = 600;
 export const AUTH_RETRY_SECONDS = 60;
 export const AUTH_MAX_CODE_ATTEMPTS = 5;
 
+export const AuthCodeAction = Object.freeze({
+  [AuthPurpose.PASSWORD_RESET]: "redefinir sua senha",
+  [AuthPurpose.VERIFY_EMAIL]: "confirmar seu e-mail",
+  [AuthPurpose.VERIFY_PHONE]: "confirmar seu telefone",
+  [AuthPurpose.REQUEST_TRACKING]: "consultar sua solicitação",
+});
+
+export function isAuthCode(value) {
+  return typeof value === "string" && /^\d{6}$/.test(value);
+}
+
 export function validateNewPassword(value) {
   if (typeof value !== "string" || Array.from(value).length < 6) return "A senha deve ter pelo menos 6 caracteres.";
   if (new TextEncoder().encode(value).length > 72) return "A senha deve ter no máximo 72 bytes UTF-8.";

@@ -1,7 +1,6 @@
-import { AuthPurpose, AUTH_CHALLENGE_SECONDS } from "../../../../shared/auth-contract.js";
-import { NotificationChannel, DeliveryStatus, DeliveryCode } from "../../../../shared/notification-contract.js";
+import { AuthCodeAction, AuthPurpose, AUTH_CHALLENGE_SECONDS, isAuthCode } from "../../../../shared/auth-contract.js";
+import { NotificationChannel, NotificationLabel, DeliveryStatus, DeliveryCode } from "../../../../shared/notification-contract.js";
 import { EmailVariable } from "../../../../shared/email-uses-contract.js";
-import { getSmsUse } from "../../../../shared/sms-uses-contract.js";
 import { sendEmailTemplate } from "../email.js";
 import { loadEmailIdentityParams } from "../email-identity.js";
 import { resolveEmailTemplate } from "../email-templates.js";
@@ -27,14 +26,15 @@ function unavailable(purpose, channel, code) {
 
 const SELECTED_CHANNEL_PURPOSES = new Set([AuthPurpose.PASSWORD_RESET, AuthPurpose.REQUEST_TRACKING]);
 
-function isVerification(purpose) {
-  return purpose === AuthPurpose.VERIFY_EMAIL || purpose === AuthPurpose.VERIFY_PHONE;
-}
-
-function isRecoveryExpired(input) {
-  if (input.purpose !== AuthPurpose.PASSWORD_RESET) return false;
+function isCodeExpired(input) {
+  if (input.purpose !== AuthPurpose.PASSWORD_RESET && input.expiresAt === undefined) return false;
   const expiresAt = new Date(input.expiresAt).getTime();
   return !Number.isFinite(expiresAt) || expiresAt <= Date.now();
+}
+
+function codeMinutes(expiresAt) {
+  const remaining = expiresAt === undefined ? AUTH_CHALLENGE_SECONDS * 1000 : new Date(expiresAt).getTime() - Date.now();
+  return String(Math.max(1, Math.ceil(remaining / 60000)));
 }
 
 // The data that changed, as the notice names it ("e-mail", "telefone"); the contact the tutor just confirmed.
@@ -43,13 +43,18 @@ function changedFieldsText(input) {
 }
 
 function emailParameters(input) {
-  const common = { [EmailVariable.TO_NAME]: input.user?.name || "Tutor", [EmailVariable.PURPOSE]: input.purpose };
+  const common = { [EmailVariable.TO_NAME]: input.user?.name || "Tutor", [EmailVariable.PURPOSE]: input.purpose,
+    [EmailVariable.SUBJECT]: NotificationLabel[input.purpose] };
   if (input.purpose === AuthPurpose.CONTACT_CHANGED) {
     const changed = changedFieldsText(input);
     return { ...common, [EmailVariable.CHANGED_FIELDS]: changed,
       [EmailVariable.MESSAGE]: `Seus dados cadastrais foram atualizados. Informações alteradas: ${changed}. Se você não reconhece essa alteração, entre em contato com nossa equipe.` };
   }
-  return { ...common, [EmailVariable.CODE]: input.code, [EmailVariable.RECOVERY_CODE]: input.code, [EmailVariable.VALIDITY]: "10 minutos", [EmailVariable.VALIDITY_MINUTES]: "10" };
+  const minutes = codeMinutes(input.expiresAt);
+  const validity = `${minutes} ${minutes === "1" ? "minuto" : "minutos"}`;
+  return { ...common, [EmailVariable.CODE]: input.code, [EmailVariable.CODE_PT]: input.code, [EmailVariable.RECOVERY_CODE]: input.code,
+    [EmailVariable.VALIDITY]: validity, [EmailVariable.VALIDITY_MINUTES]: minutes,
+    [EmailVariable.MESSAGE]: `Use o código ${input.code} para ${AuthCodeAction[input.purpose]}. Válido por ${validity}. Não compartilhe este código.` };
 }
 
 function whatsappComponents(input) {
@@ -72,7 +77,7 @@ async function tryWhatsapp(input, dependencies) {
   const resolved = await dependencies.resolveTemplate(input.municipalityId, input.purpose);
   if (!resolved.ok) return unavailable(input.purpose, channel, resolved.code);
   if (!(await dependencies.consumeQuota(channel, input.municipalityId)).allowed) return unavailable(input.purpose, channel, DeliveryCode.QUOTA_UNAVAILABLE);
-  if (isRecoveryExpired(input)) return unavailable(input.purpose, channel, DeliveryCode.PREPARATION_FAILED);
+  if (isCodeExpired(input)) return unavailable(input.purpose, channel, DeliveryCode.PREPARATION_FAILED);
   const sent = await sendResolvedTemplate(
     { municipalityId: input.municipalityId, runtime, template: resolved.template, phone: input.phone, components: whatsappComponents(input) }, dependencies,
   );
@@ -84,31 +89,24 @@ async function tryEmail(input, dependencies, { platform = false } = {}) {
   const municipalityId = platform ? null : input.municipalityId;
   const resolved = await dependencies.resolveEmailTemplate({ municipalityId, use: input.purpose });
   if (!resolved.ok) return unavailable(input.purpose, NotificationChannel.EMAIL, resolved.code);
-  if (isRecoveryExpired(input)) return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.PREPARATION_FAILED);
+  if (isCodeExpired(input)) return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.PREPARATION_FAILED);
   const identity = await dependencies.loadEmailIdentity(municipalityId);
   if (municipalityId && !(await dependencies.consumeQuota(NotificationChannel.EMAIL, municipalityId)).allowed) {
     return unavailable(input.purpose, NotificationChannel.EMAIL, DeliveryCode.QUOTA_UNAVAILABLE);
   }
-  const sent = await dependencies.sendEmail({ toEmail: input.email, templateId: resolved.templateId, templateParams: { ...emailParameters(input), ...identity },
-    ...(input.purpose === AuthPurpose.PASSWORD_RESET ? { expiresAt: input.expiresAt } : {}) });
+  const sent = await dependencies.sendEmail({ toEmail: input.email, templateId: resolved.templateId,
+    templateParams: { ...identity, ...emailParameters(input) }, expiresAt: input.expiresAt });
   return safeResult(input.purpose, NotificationChannel.EMAIL, sent);
 }
 
-// What an SMS of this use needs besides the municipality name: the code, and how long it lasts (the rest of its challenge,
-// or the usual validity when the use has no challenge of its own); the changed data for the contact notice.
-function smsData(input) {
-  const remaining = input.expiresAt ? new Date(input.expiresAt).getTime() - Date.now() : AUTH_CHALLENGE_SECONDS * 1000;
-  return { code: input.code, minutes: String(Math.max(1, Math.ceil(remaining / 60000))),
-    ...(input.purpose === AuthPurpose.CONTACT_CHANGED ? { fields: changedFieldsText(input) } : {}) };
-}
-
-// Answers `null` when the municipality does not use SMS for this message, so it leaves no result.
-async function trySms(input, dependencies) {
-  if (!getSmsUse(input.purpose)) return null;
-  const sent = await dependencies.sendSms({ municipalityId: input.municipalityId, use: input.purpose, phone: input.phone, data: smsData(input),
+async function trySms(input, dependencies, selected = false) {
+  const data = input.purpose === AuthPurpose.CONTACT_CHANGED ? { fields: changedFieldsText(input) }
+    : { code: input.code, minutes: codeMinutes(input.expiresAt) };
+  const sent = await dependencies.sendSms({ municipalityId: input.municipalityId, use: input.purpose, phone: input.phone, data,
     messageId: input.challengeId, expiresAt: input.expiresAt });
-  if (sent?.status === DeliveryStatus.SKIPPED && sent.code === DeliveryCode.CHANNEL_DISABLED) return null;
-  return safeResult(input.purpose, NotificationChannel.SMS, sent);
+  if (!selected && sent?.status === DeliveryStatus.SKIPPED && sent.code === DeliveryCode.CHANNEL_DISABLED) return null;
+  const result = safeResult(input.purpose, NotificationChannel.SMS, sent);
+  return selected && sent?.status === DeliveryStatus.SENT ? { ...result, providerMessageId: sent.providerMessageId, reference: sent.reference } : result;
 }
 
 // WhatsApp first and, when it does not send, SMS, always to the same phone: a code never changes destination.
@@ -135,12 +133,13 @@ export async function deliverAuthMessage(input, overrides = {}) {
   const globalStaffReset = purpose === AuthPurpose.PASSWORD_RESET && !input.municipalityId && isGlobalUser(input.user);
   if (!Object.values(AuthPurpose).includes(purpose) || (!input.municipalityId && !globalStaffReset)) return [];
   if (SELECTED_CHANNEL_PURPOSES.has(purpose)) return deliverSelectedChannel(input, dependencies, globalStaffReset);
-  if (isVerification(purpose) && !/^\d{6}$/.test(input.code || "")) {
-    return [{ purpose, channel: NotificationChannel.EMAIL, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }];
+  if (Object.hasOwn(AuthCodeAction, purpose) && (!isAuthCode(input.code) || isCodeExpired(input))) {
+    const channel = purpose === AuthPurpose.VERIFY_PHONE ? NotificationChannel.WHATSAPP : NotificationChannel.EMAIL;
+    return [{ purpose, channel, ...deliveryFailure(DeliveryStatus.FAILED, DeliveryCode.PREPARATION_FAILED) }];
   }
   const emailAllowed = purpose !== AuthPurpose.VERIFY_PHONE && Boolean(input.email)
     && (purpose === AuthPurpose.VERIFY_EMAIL || input.emailVerified === true);
-  const phoneAllowed = !globalStaffReset && purpose !== AuthPurpose.VERIFY_EMAIL && Boolean(input.phone)
+  const phoneAllowed = purpose !== AuthPurpose.VERIFY_EMAIL && Boolean(input.phone)
     && (purpose === AuthPurpose.VERIFY_PHONE || input.phoneVerified === true);
   if (!emailAllowed && !phoneAllowed) return [];
   const results = [];
@@ -160,14 +159,11 @@ export async function deliverAuthMessage(input, overrides = {}) {
 async function deliverSelectedChannel(input, dependencies, globalStaffReset) {
   const { purpose, channel } = input;
   if (!Object.values(NotificationChannel).includes(channel)) return [];
-  if (!/^\d{6}$/.test(input.code || "") || isRecoveryExpired(input)) return [unavailable(purpose, channel, DeliveryCode.PREPARATION_FAILED)];
+  if (!isAuthCode(input.code) || isCodeExpired(input)) return [unavailable(purpose, channel, DeliveryCode.PREPARATION_FAILED)];
   try {
     if (channel === NotificationChannel.SMS) {
       if (globalStaffReset) return [unavailable(purpose, channel, DeliveryCode.CHANNEL_DISABLED)];
-      const result = await dependencies.sendSms({ municipalityId: input.municipalityId, use: purpose, phone: input.phone, data: smsData(input),
-        messageId: input.challengeId, expiresAt: input.expiresAt });
-      return [{ ...safeResult(purpose, channel, result), ...(result?.status === DeliveryStatus.SENT
-        ? { providerMessageId: result.providerMessageId, reference: result.reference } : {}) }];
+      return [await trySms(input, dependencies, true)];
     }
     if (channel === NotificationChannel.EMAIL) return [await tryEmail(input, dependencies, { platform: globalStaffReset })];
     if (!globalStaffReset) return [await tryWhatsapp(input, dependencies)];

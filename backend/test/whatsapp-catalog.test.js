@@ -215,12 +215,13 @@ test("the sync endpoint is the master's: it uses the credentials of the chosen m
   const sentTo = [];
   globalThis.fetch = async (url, options) => {
     sentTo.push({ url: String(url), auth: options.headers.Authorization });
-    return page([graph("castracao_agendamento_cancelado", [body("{{1}} {{2}} {{3}}")]), graph("lembrete_atendimento", [body("Oi")])]);
+    return page([graph("castracao_agendamento_cancelado", [body("{{1}} {{2}} {{3}}")]),
+      graph("castracao_nao_comparecimento", [body("{{1}} {{2}} {{3}}")]), graph("lembrete_atendimento", [body("Oi")])]);
   };
   const synced = await call("POST", "/whatsapp/templates/sync", { municipalityId });
   assert.equal(synced.status, 200);
   assert.deepEqual(synced.body.templates.map(({ name, canActivate, label }) => ({ name, canActivate, label })), [
-    { name: "castracao_agendamento_cancelado", canActivate: true, label: "Agendamento cancelado" },
+    { name: "castracao_nao_comparecimento", canActivate: true, label: "Não comparecimento" },
     { name: "lembrete_atendimento", canActivate: false, label: "" },
   ]);
   assert.equal(sentTo[0].auth, "Bearer private-test-token");

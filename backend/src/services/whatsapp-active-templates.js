@@ -1,7 +1,7 @@
 import { DeliveryCode } from "../../../shared/notification-contract.js";
 import {
   WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY, WHATSAPP_APPROVED_STATUS, WHATSAPP_TEMPLATE_LINKS_CONFIG_KEY, activateTemplate, activeUseKeys,
-  cleanTemplateIdentity, deactivateTemplate, findTemplateLink, getWhatsappUse, isWhatsappTemplateUsable, noticeStructureReason,
+  cleanTemplateIdentity, deactivateTemplate, findTemplateLink, getWhatsappUse, isRetiredWhatsappTemplate, isWhatsappTemplateUsable, noticeStructureReason,
   normalizeActiveTemplates, normalizeTemplateLinks, recognizeWhatsappTemplate, templateFields, templateLinkIssue, whatsappFieldLabels,
 } from "../../../shared/whatsapp-templates-contract.js";
 import { readWhatsappConfigValue, updateWhatsappConfigValue } from "../repositories/whatsapp-templates.js";
@@ -29,7 +29,7 @@ export async function loadTemplateLinks(municipalityId, database) {
 // numbered variable (the link's or the use's own order) and `variables` their names; a link keeps its notice and fields even while
 // the template no longer fits it, so the screen can show and fix it.
 export function buildTemplateRows(catalog, active, links = []) {
-  const rows = catalog.templates.map((entry) => {
+  const rows = catalog.templates.filter(({ name }) => !isRetiredWhatsappTemplate(name)).map((entry) => {
     const link = findTemplateLink(links, entry.name, entry.language);
     const { uses, reason } = recognizeWhatsappTemplate(entry, link);
     const first = getWhatsappUse(uses[0]);
@@ -58,6 +58,7 @@ export function buildTemplateRows(catalog, active, links = []) {
   const known = new Set(catalog.templates.map((entry) => `${entry.name}|${entry.language}`));
   const missing = new Map();
   for (const [key, item] of Object.entries(active)) {
+    if (isRetiredWhatsappTemplate(item.name)) continue;
     const id = `${item.name}|${item.language}`;
     if (known.has(id)) continue;
     const row = missing.get(id) || { name: item.name, language: item.language, keys: [] };

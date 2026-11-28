@@ -35,7 +35,7 @@ test("agenda notification content contains readable date, slot and location", as
     assert.match(templateParams.message, /20\/11\/2026/);
     assert.match(templateParams.message, /09:15/);
     assert.match(templateParams.message, /Centro/);
-    assert.match(templateParams.message, /na Centro\. Protocolo: 1\/2026\./);
+    assert.match(templateParams.message, /em Centro\. Protocolo: 1\/2026\./);
     assert.equal(templateParams.schedule_address, "Rua A", "the address still reaches the template as its own variable");
     return { status: DeliveryStatus.SENT };
   });
@@ -90,11 +90,10 @@ test("transport failures keep finite diagnostic codes", async () => {
 test("every notice carries its full text, the new subject and, for the no-show, the date of the missed visit", async () => {
   const request = { protocol: "1/2026", schedule_date: "2026-11-20", schedule_location_name: "Centro", workflow_data: { scheduleTime: "09:15" } };
   const expected = {
-    [NotificationEvent.SCHEDULE_CONFIRMED]: ["Agendamento confirmado", "Seu agendamento foi confirmado! Esperamos você no dia 20/11/2026, às 09:15, na Centro. Protocolo: 1/2026."],
-    [NotificationEvent.SCHEDULE_CANCELLED]: ["Agendamento cancelado", "O agendamento do dia 20/11/2026, às 09:15, na Centro foi cancelado. Protocolo 1/2026."],
-    [NotificationEvent.NO_SHOW]: ["Não comparecimento", "Identificamos que você não compareceu ao atendimento agendado para o dia 20/11/2026. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
-    [NotificationEvent.COMPLETED]: ["Atendimento concluído", "Seu atendimento foi concluído com sucesso! Agradecemos sua participação e o cuidado com seu animal. Protocolo: 1/2026."],
-    [NotificationEvent.REQUEST_REJECTED]: ["Solicitação indeferida", "Sua solicitação foi indeferida. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026."],
+    [NotificationEvent.SCHEDULE_CONFIRMED]: ["Agendamento confirmado", "Seu agendamento foi confirmado em 20/11/2026, às 09:15, em Centro. Protocolo: 1/2026."],
+    [NotificationEvent.NO_SHOW]: ["Não comparecimento", "Registramos não comparecimento no atendimento em 20/11/2026, às 09:15, em Centro. Para mais informações, fale com nossa equipe. Protocolo: 1/2026."],
+    [NotificationEvent.COMPLETED]: ["Atendimento concluído", "Seu atendimento foi concluído. Protocolo: 1/2026."],
+    [NotificationEvent.REQUEST_REJECTED]: ["Solicitação indeferida", "Sua solicitação foi indeferida. Para mais informações, fale com nossa equipe. Protocolo: 1/2026."],
   };
   for (const [event, [subject, message]] of Object.entries(expected)) {
     await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event, request }, async ({ templateParams }) => {
@@ -197,7 +196,7 @@ test("the rejection e-mail tells the reason the staff chose and nothing of the i
   const request = { protocol: "1/2026", workflow_data: { rejectionReason: "Fora da área de atendimento", rejectionNote: "private staff note" } };
   await sendNotificationEmail({ toEmail: "citizen@example.com", templateId: "notice", event: NotificationEvent.REQUEST_REJECTED, request }, async ({ templateParams }) => {
     assert.equal(templateParams.subject, "Solicitação indeferida");
-    assert.equal(templateParams.message, "Sua solicitação foi indeferida. Motivo: Fora da área de atendimento. Para mais informações, entre em contato com nossa equipe. Protocolo: 1/2026.");
+    assert.equal(templateParams.message, "Sua solicitação foi indeferida. Motivo: Fora da área de atendimento. Para mais informações, fale com nossa equipe. Protocolo: 1/2026.");
     assert.doesNotMatch(JSON.stringify(templateParams), /private staff note/);
     return { status: DeliveryStatus.SENT };
   });

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { setImmediate } from "node:timers/promises";
 import { dispatchNotification } from "../src/services/notifications/dispatch-notification.js";
-import { buildEmailNotice } from "../src/services/notifications/email-notice-text.js";
+import { buildNotificationMessage } from "../src/services/notifications/notification-message.js";
 import { NotificationEvent, NotificationChannel, DeliveryStatus, DeliveryCode } from "../../shared/notification-contract.js";
 import { getWhatsappUse, WhatsappTemplateField, templateFields } from "../../shared/whatsapp-templates-contract.js";
 import { buildSmsText } from "../../shared/sms-messages-contract.js";
@@ -24,7 +24,6 @@ function fixture() {
   const active = {
     [NotificationEvent.SCHEDULE_CONFIRMED]: "castracao_agendamento_confirmado",
     [NotificationEvent.SCHEDULE_CHANGED]: "castracao_agendamento_alterado",
-    [NotificationEvent.SCHEDULE_CANCELLED]: "castracao_agendamento_cancelado",
     [NotificationEvent.NO_SHOW]: "castracao_nao_comparecimento",
   };
   const dependencies = {
@@ -64,7 +63,7 @@ test("all request notices are defined across the three channels and resolve an i
     assert.deepEqual(results, Object.values(NotificationChannel).map((channel) => sent(event, channel)), event);
     const sentEmail = f.calls.find(([name]) => name === "email")[1];
     assert.equal(sentEmail.templateId, `email_${event}`);
-    const notice = buildEmailNotice(event, sentEmail.request);
+    const notice = buildNotificationMessage(event, sentEmail.request);
     assert.equal(notice.subject, email.label);
     assert.ok(notice.message.includes(f.request.protocol), event);
     const sentSms = f.calls.find(([name]) => name === "sms")[1];
@@ -100,7 +99,7 @@ test("the reminder uses the existing Meta template order and sends tomorrow's vi
   assert.equal(settings.templateName, "lembrete_agendamento_procedimento");
   assert.deepEqual(texts(components), ["Maria", "123/2026", "20/11/2026", "09:00", "Unidade Municipal"]);
   const [, email] = f.calls.find(([name]) => name === "email");
-  assert.match(buildEmailNotice(event, email.request).message, /amanhã, 20\/11\/2026, às 09:00/);
+  assert.match(buildNotificationMessage(event, email.request).message, /amanhã em 20\/11\/2026, às 09:00/);
   const [, sms] = f.calls.find(([name]) => name === "sms");
   assert.match(buildSmsText(sms.use, sms.data), /amanhã \(20\/11\/2026\), às 09:00/);
 });
@@ -191,11 +190,10 @@ test("an e-mail use turned on without its template is reported, while the other 
   assert.equal(["email", "identity"].some((kind) => ran(f, kind)), false);
 });
 
-test("confirmation, reschedule and cancellation send the parameters their Meta templates expect", async () => {
+test("confirmation, reschedule and absence send the parameters their Meta templates expect", async () => {
   const expected = [
     [NotificationEvent.SCHEDULE_CONFIRMED, "castracao_agendamento_confirmado", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
     [NotificationEvent.SCHEDULE_CHANGED, "castracao_agendamento_alterado", ["Maria", "20/11/2026", "09:00", "Unidade Municipal", "123/2026"]],
-    [NotificationEvent.SCHEDULE_CANCELLED, "castracao_agendamento_cancelado", ["Maria", "20/11/2026", "09:00"]],
     [NotificationEvent.NO_SHOW, "castracao_nao_comparecimento", ["Maria", "20/11/2026", "09:00"]],
   ];
   for (const [event, templateName, parameters] of expected) {
@@ -221,7 +219,7 @@ test("a template configured on screen gets each number from the field chosen for
 
 test("completion and rejection use their own template and send only their own content, never the review of documents", async () => {
   for (const [event, sentence] of [
-    [NotificationEvent.COMPLETED, /Atendimento concluído/],
+    [NotificationEvent.COMPLETED, /atendimento foi concluído/],
     [NotificationEvent.REQUEST_REJECTED, /indeferida/],
   ]) {
     const f = fixture();
@@ -360,7 +358,7 @@ test("a rejection reaches every channel in use with its reason, and never the st
   assert.deepEqual(results, [sent(event, NotificationChannel.EMAIL), sent(event, NotificationChannel.WHATSAPP), sent(event, NotificationChannel.SMS)]);
   const whatsapp = f.calls.find(([kind]) => kind === "whatsapp");
   assert.equal(whatsapp[1].templateName, "castracao_solicitacao_indeferida");
-  assert.deepEqual(texts(whatsapp[3]), ["123/2026", "Solicitação 123/2026: indeferida. Motivo: Tutor não localizado. Para mais informações, procure o atendimento do município."]);
+  assert.deepEqual(texts(whatsapp[3]), ["123/2026", "Sua solicitação foi indeferida. Motivo: Tutor não localizado. Para mais informações, fale com nossa equipe. Protocolo: 123/2026."]);
   const sms = f.calls.find(([kind]) => kind === "sms")[1];
   assert.deepEqual([sms.use, sms.phone, sms.data.reason, sms.data.protocol], [event, "48999999999", "Tutor não localizado", "123/2026"]);
   assert.doesNotMatch(JSON.stringify([whatsapp, sms]), /private staff note/);

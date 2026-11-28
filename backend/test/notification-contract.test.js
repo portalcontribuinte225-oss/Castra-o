@@ -39,13 +39,13 @@ test("the old channel option and its configuration no longer exist in the contra
   }
 });
 
-test("the request events distinguish cancellation, a no-show and a rejection, and the review of documents is not one of them", () => {
+test("the request events distinguish a no-show and a rejection, leaving out retired cancellation and document notices", () => {
   assert.equal(NotificationEvent.NO_SHOW, "no_show");
   assert.equal(NotificationEvent.REQUEST_REJECTED, "request_rejected");
   assert.equal(NotificationEvent.REQUEST_REGISTERED, "request_registered");
-  assert.equal(NotificationEvent.SCHEDULE_CANCELLED, "schedule_cancelled");
+  assert.equal(Object.values(NotificationEvent).includes("schedule_cancelled"), false);
   assert.equal(Object.values(NotificationEvent).some((event) => event.startsWith("documents_")), false);
-  assert.equal(Object.values(NotificationEvent).length, 8);
+  assert.equal(Object.values(NotificationEvent).length, 7);
 });
 
 test("the tutor is told the reason the staff chose, never the internal note, and nothing when the reason says nothing", () => {

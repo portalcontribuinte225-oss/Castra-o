@@ -73,7 +73,8 @@ export async function sendSmsUse(input, { database = pool, sendMessage = sendSms
   if (!token) return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED);
   if (!await isSmsUseOn({ municipalityId: input.municipalityId, use: input.use, database })) return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.CHANNEL_DISABLED);
   const municipality = await assertActiveMunicipality(input.municipalityId, database);
-  if (!(await consumeQuota(NotificationChannel.SMS, input.municipalityId, { database })).allowed) return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE);
   const text = buildSmsText(input.use, { ...input.data, municipality: municipality.name });
+  if (!text) return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.PREPARATION_FAILED);
+  if (!(await consumeQuota(NotificationChannel.SMS, input.municipalityId, { database })).allowed) return deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE);
   return sendMessage({ token, phone: input.phone, text, messageId: input.messageId || randomUUID(), expiresAt: input.expiresAt }, options);
 }

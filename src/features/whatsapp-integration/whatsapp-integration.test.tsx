@@ -90,7 +90,7 @@ describe("templates table", () => {
   it("lists each template with status, recognized use and a switch, and locks what cannot be turned on", () => {
     const html = renderToStaticMarkup(<WhatsappTemplatesTable {...tableProps} list={listOf(
       row({ active: true }),
-      row({ name: "castracao_cancelamento", label: "Agendamento cancelado", status: "PENDING", canActivate: false, variables: ["Nome do tutor", "Data do agendamento", "Horário do agendamento"] }),
+      row({ name: "castracao_nao_comparecimento", label: "Não comparecimento", status: "PENDING", canActivate: false, variables: ["Nome do tutor", "Data do agendamento", "Horário do agendamento"] }),
       row({ name: "lembrete_atendimento", label: "", uses: [], variables: [], reason: "O nome não indica um aviso do sistema.", canActivate: false }),
       row({ name: "castracao_reagendamento", label: "Agendamento alterado", status: "NOT_FOUND", active: true, canActivate: false }),
     )} />);
@@ -98,7 +98,7 @@ describe("templates table", () => {
     expect(html).toContain("Aprovado");
     expect(html).toContain("Em análise");
     expect(html).toContain("Não encontrado");
-    expect(html).toContain("Agendamento cancelado");
+    expect(html).toContain("Não comparecimento");
     expect(html).toContain('<span class="whatsapp-muted">Não usado pelo sistema</span>');
     expect(html).toContain('Agendamento confirmado<small class="whatsapp-muted"> (pelo nome)</small>');
     expect(html).not.toMatch(/<button[^>]*aria-label="Configurar /);

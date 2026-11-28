@@ -1,4 +1,4 @@
-import { NotificationEvent } from "./notification-contract.js";
+import { NotificationEvent, NotificationLabel } from "./notification-contract.js";
 import { AuthPurpose } from "./auth-contract.js";
 
 export const WHATSAPP_ACTIVE_TEMPLATES_CONFIG_KEY = "whatsapp_active_templates";
@@ -46,37 +46,35 @@ export const WhatsappAccessLayout = Object.freeze({ CODE: "code", CONTACT: "cont
 
 const field = WhatsappTemplateField;
 const scheduleFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.PROTOCOL];
-const scheduleOutcomeFields = [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME];
 const codeVariables = ["Código de verificação"];
 const reminderTemplateName = "lembrete_agendamento_procedimento";
 
-function notice(key, label, namePart, fields) {
+function notice(key, namePart, fields) {
   return Object.freeze({
-    key, kind: WhatsappUseKind.NOTICE, label, namePart,
+    key, kind: WhatsappUseKind.NOTICE, label: NotificationLabel[key], namePart,
     fields: Object.freeze([...fields]), variables: Object.freeze(fields.map((item) => whatsappFieldLabels[item])),
   });
 }
 
-function access(key, label, namePart, layout, variables) {
-  return Object.freeze({ key, kind: WhatsappUseKind.ACCESS, label, namePart, layout, variables: Object.freeze([...variables]) });
+function access(key, namePart, layout, variables) {
+  return Object.freeze({ key, kind: WhatsappUseKind.ACCESS, label: NotificationLabel[key], namePart, layout, variables: Object.freeze([...variables]) });
 }
 
 // The titles and their order are the same in every channel. Notice keys are NotificationEvent values and access keys are
 // AuthPurpose values, so they never collide.
 export const whatsappUses = Object.freeze([
-  notice(NotificationEvent.REQUEST_REGISTERED, "Solicitação registrada", "solicitacao_registrada", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
-  notice(NotificationEvent.SCHEDULE_CONFIRMED, "Agendamento confirmado", "agendamento_confirmado", scheduleFields),
-  notice(NotificationEvent.SCHEDULE_REMINDER, "Lembrete de procedimento", reminderTemplateName,
+  notice(NotificationEvent.REQUEST_REGISTERED, "solicitacao_registrada", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
+  notice(NotificationEvent.SCHEDULE_CONFIRMED, "agendamento_confirmado", scheduleFields),
+  notice(NotificationEvent.SCHEDULE_REMINDER, reminderTemplateName,
     [field.TUTOR_NAME, field.PROTOCOL, field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME]),
-  notice(NotificationEvent.SCHEDULE_CHANGED, "Agendamento alterado", "agendamento_alterado", scheduleFields),
-  notice(NotificationEvent.SCHEDULE_CANCELLED, "Agendamento cancelado", "agendamento_cancelado", scheduleOutcomeFields),
-  notice(NotificationEvent.NO_SHOW, "Não comparecimento", "nao_comparecimento", scheduleOutcomeFields),
-  notice(NotificationEvent.COMPLETED, "Atendimento concluído", "atendimento_concluido", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
-  notice(NotificationEvent.REQUEST_REJECTED, "Solicitação indeferida", "solicitacao_indeferida", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
-  access(AuthPurpose.PASSWORD_RESET, "Recuperação de senha", "codigo_recuperacao_senha", WhatsappAccessLayout.CODE, codeVariables),
-  access(AuthPurpose.VERIFY_PHONE, "Confirmação de contato", "codigo_confirmacao_contato", WhatsappAccessLayout.CODE, codeVariables),
-  access(AuthPurpose.REQUEST_TRACKING, "Acesso à solicitação", "codigo_acesso_solicitacao", WhatsappAccessLayout.CODE, codeVariables),
-  access(AuthPurpose.CONTACT_CHANGED, "Contato alterado", "contato_alterado", WhatsappAccessLayout.CONTACT, [whatsappFieldLabels[field.TUTOR_NAME]]),
+  notice(NotificationEvent.SCHEDULE_CHANGED, "agendamento_alterado", scheduleFields),
+  notice(NotificationEvent.NO_SHOW, "nao_comparecimento", [field.TUTOR_NAME, field.SCHEDULE_DATE, field.SCHEDULE_TIME]),
+  notice(NotificationEvent.COMPLETED, "atendimento_concluido", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
+  notice(NotificationEvent.REQUEST_REJECTED, "solicitacao_indeferida", [field.PROTOCOL, field.NOTIFICATION_MESSAGE]),
+  access(AuthPurpose.PASSWORD_RESET, "codigo_recuperacao_senha", WhatsappAccessLayout.CODE, codeVariables),
+  access(AuthPurpose.VERIFY_PHONE, "codigo_confirmacao_contato", WhatsappAccessLayout.CODE, codeVariables),
+  access(AuthPurpose.REQUEST_TRACKING, "codigo_acesso_solicitacao", WhatsappAccessLayout.CODE, codeVariables),
+  access(AuthPurpose.CONTACT_CHANGED, "contato_alterado", WhatsappAccessLayout.CONTACT, [whatsappFieldLabels[field.TUTOR_NAME]]),
 ]);
 
 export function getWhatsappUse(key) {
@@ -91,21 +89,21 @@ export function parseWhatsappTemplateName(name) {
   return /^[a-z0-9]+(?:_[a-z0-9]+)*$/.test(part) ? part : null;
 }
 
-// A name serves only the use it names: no other name, prefix or former name stands for it.
-const matchesUse = (part, use) => part === use.namePart;
+// Older configurations could link a cancellation template to the absence notice.
+export function isRetiredWhatsappTemplate(name) {
+  return parseWhatsappTemplateName(name) === "agendamento_cancelado";
+}
 
-function scheduleOutcomeLinkIssue(name, use) {
-  const part = parseWhatsappTemplateName(name);
-  const opposite = use === NotificationEvent.NO_SHOW ? NotificationEvent.SCHEDULE_CANCELLED
-    : use === NotificationEvent.SCHEDULE_CANCELLED ? NotificationEvent.NO_SHOW : null;
-  return opposite && matchesUse(part, getWhatsappUse(opposite))
-    ? "Este template pertence ao outro aviso de agenda. Confira o vínculo." : "";
+function retiredTemplateReason(name) {
+  return isRetiredWhatsappTemplate(name) ? "O aviso de agendamento cancelado saiu de uso." : "";
 }
 
 const NOTICE_BUTTONS = new Set(["QUICK_REPLY", "PHONE_NUMBER", "URL"]);
 const noticeButtonsReason = (entry) => (entry.buttons.every((button) => NOTICE_BUTTONS.has(button)) ? "" : "Botão com variável ou de código não é suportado.");
 
 function structuralReason(entry) {
+  const retired = retiredTemplateReason(entry.name);
+  if (retired) return retired;
   if (!entry.hasBody) return "O template não tem corpo de texto.";
   if (entry.parameterFormat !== "POSITIONAL") return "Variáveis com nome ainda não são suportadas.";
   if (!entry.bodySequential) return "As variáveis do corpo precisam ser numeradas em sequência: {{1}}, {{2}}…";
@@ -136,18 +134,15 @@ export function noticeStructureReason(entry) {
 // screen configured one, otherwise the notice its name indicates.
 export function recognizeWhatsappTemplate(entry, link = null) {
   if (link) {
-    const reason = scheduleOutcomeLinkIssue(entry.name, link.use) || noticeStructureReason(entry)
+    const reason = noticeStructureReason(entry)
       || (link.fields.length === entry.bodyVariables ? "" : `O corpo tem ${entry.bodyVariables} variável(is); a configuração tem ${link.fields.length}. Configure o template de novo.`);
     return reason ? { uses: [], reason } : { uses: [link.use], reason: "" };
   }
   const part = parseWhatsappTemplateName(entry?.name);
-  const candidates = part === null ? [] : whatsappUses.filter((use) => matchesUse(part, use));
-  if (!candidates.length) return { uses: [], reason: WHATSAPP_NOT_A_NOTICE_REASON };
-  const structural = structuralReason(entry);
-  if (structural) return { uses: [], reason: structural };
-  const checked = candidates.map((use) => ({ use, reason: useReason(entry, use) }));
-  const passing = checked.filter(({ reason }) => !reason).map(({ use }) => use.key);
-  return passing.length ? { uses: passing, reason: "" } : { uses: [], reason: checked[0].reason };
+  const use = whatsappUses.find(({ namePart }) => namePart === part);
+  if (!use) return { uses: [], reason: retiredTemplateReason(entry?.name) || WHATSAPP_NOT_A_NOTICE_REASON };
+  const reason = structuralReason(entry) || useReason(entry, use);
+  return reason ? { uses: [], reason } : { uses: [use.key], reason: "" };
 }
 
 export function isWhatsappTemplateUsable(entry, useKey, link = null) {
@@ -174,8 +169,7 @@ export function normalizeActiveTemplates(stored) {
   const active = {};
   for (const use of whatsappUses) {
     const identity = cleanTemplateIdentity(source[use.key]?.name, source[use.key]?.language);
-    // The previous alias must not be carried over as an activation for a different event.
-    if (identity && !scheduleOutcomeLinkIssue(identity.name, use.key)) active[use.key] = identity;
+    if (identity && !isRetiredWhatsappTemplate(identity.name)) active[use.key] = identity;
   }
   return active;
 }
@@ -206,10 +200,8 @@ export function normalizeTemplateLinks(stored) {
     const identity = cleanTemplateIdentity(item?.name, item?.language);
     if (!identity || !isWhatsappNoticeUse(item.use) || !Array.isArray(item.fields) || item.fields.length > WHATSAPP_MAX_VARIABLES) continue;
     if (!item.fields.every((value) => knownFields.has(value))) continue;
-    if (findTemplateLink(links, identity.name, identity.language)) continue;
-    const movedCancellation = item.use === NotificationEvent.NO_SHOW && scheduleOutcomeLinkIssue(identity.name, item.use);
-    const use = movedCancellation ? NotificationEvent.SCHEDULE_CANCELLED : item.use;
-    if (!scheduleOutcomeLinkIssue(identity.name, use)) links.push({ ...identity, use, fields: [...item.fields] });
+    if (isRetiredWhatsappTemplate(identity.name) || findTemplateLink(links, identity.name, identity.language)) continue;
+    links.push({ ...identity, use: item.use, fields: [...item.fields] });
   }
   return links;
 }
@@ -228,7 +220,7 @@ export function templateFields(useKey, link = null) {
 export function templateLinkIssue(entry, use, fields) {
   if (!isWhatsappNoticeUse(use)) return "Escolha um aviso do sistema.";
   if (!Array.isArray(fields) || fields.some((value) => !knownFields.has(value))) return "Escolha uma variável do sistema para cada número.";
-  const structural = scheduleOutcomeLinkIssue(entry.name, use) || noticeStructureReason(entry);
+  const structural = noticeStructureReason(entry);
   if (structural) return structural;
   return fields.length === entry.bodyVariables ? "" : `O template tem ${entry.bodyVariables} variável(is); escolha uma para cada número.`;
 }

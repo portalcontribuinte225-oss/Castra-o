@@ -31,7 +31,7 @@ test("the sender accepts only a clean text within the longest length", () => {
 });
 
 test("every use has a fixed text within the longest length that starts with the municipality", () => {
-  assert.equal(smsUses.length, 12);
+  assert.equal(smsUses.length, 11);
   for (const { key } of smsUses) {
     const text = buildSmsText(key, full);
     assert.equal(isSmsText(text), true, key);
@@ -40,38 +40,37 @@ test("every use has a fixed text within the longest length that starts with the 
 });
 
 test("the texts are the agreed ones, in correct Portuguese", () => {
-  assert.equal(buildSmsText(NotificationEvent.REQUEST_REGISTERED, full), "Criciúma: solicitação registrada! Protocolo: 123/2026. Aguardando aprovação!");
-  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CONFIRMED, full), "Criciúma: agendamento confirmado! Esperamos você em 20/11/2026, às 09:00 na Unidade Veterinária Municipal. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CHANGED, full), "Criciúma: seu atendimento foi reagendado para 20/11/2026, às 09:00 na Unidade Veterinária Municipal. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CANCELLED, full), "Criciúma: o agendamento de 20/11/2026, às 09:00, foi cancelado. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CANCELLED, { ...full, time: "" }), "Criciúma: o agendamento de 20/11/2026 foi cancelado. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.NO_SHOW, full), "Criciúma: você não compareceu ao atendimento de 20/11/2026. Fale com nossa equipe. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.COMPLETED, full), "Criciúma: atendimento concluído! Obrigado pelo cuidado com seu animal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.REQUEST_REGISTERED, full), "Criciúma: solicitação registrada. Aguarde a análise. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CONFIRMED, full), "Criciúma: agendamento confirmado em 20/11/2026, às 09:00 em Unidade Veterinária Municipal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_REMINDER, full), "Criciúma: atendimento amanhã (20/11/2026), às 09:00 em Unidade Veterinária Municipal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CHANGED, full), "Criciúma: agendamento alterado em 20/11/2026, às 09:00 em Unidade Veterinária Municipal. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.SCHEDULE_CHANGED, { ...full, time: "", location: "" }), "Criciúma: agendamento alterado em 20/11/2026. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.NO_SHOW, full), "Criciúma: registramos não comparecimento em 20/11/2026. Fale com nossa equipe. Protocolo: 123/2026.");
+  assert.equal(buildSmsText(NotificationEvent.COMPLETED, full), "Criciúma: atendimento concluído. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, full), "Criciúma: sua solicitação foi indeferida (Documentação incompleta). Fale com nossa equipe. Protocolo: 123/2026.");
   assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, { ...full, reason: "" }), "Criciúma: sua solicitação foi indeferida. Fale com nossa equipe. Protocolo: 123/2026.");
-  assert.equal(buildSmsText(NotificationEvent.REQUEST_REJECTED, { ...full, procedure: "Castração" }), "Criciúma: o procedimento Castração foi indeferido (Documentação incompleta). Protocolo: 123/2026.");
-  assert.equal(buildSmsText(AuthPurpose.PASSWORD_RESET, full), "Criciúma: recebemos um pedido para redefinir sua senha. Código: 123456. Válido por 10 minutos. Não compartilhe.");
-  assert.equal(buildSmsText(AuthPurpose.VERIFY_PHONE, full), "Criciúma: para confirmar seu telefone, informe o código 123456. Válido por 10 minutos. Não compartilhe.");
-  assert.equal(buildSmsText(AuthPurpose.REQUEST_TRACKING, full), "Criciúma: para consultar sua solicitação, use o código 123456. Válido por 10 minutos. Não compartilhe.");
-  assert.equal(buildSmsText(AuthPurpose.CONTACT_CHANGED, full), "Criciúma: seus dados foram atualizados (e-mail). Se não foi você, fale com nossa equipe.");
+  assert.equal(buildSmsText(AuthPurpose.PASSWORD_RESET, full), "Criciúma: use o código 123456 para redefinir sua senha. Válido por 10 minutos. Não compartilhe.");
+  assert.equal(buildSmsText(AuthPurpose.VERIFY_PHONE, full), "Criciúma: use o código 123456 para confirmar seu telefone. Válido por 10 minutos. Não compartilhe.");
+  assert.equal(buildSmsText(AuthPurpose.REQUEST_TRACKING, full), "Criciúma: use o código 123456 para consultar sua solicitação. Válido por 10 minutos. Não compartilhe.");
+  assert.equal(buildSmsText(AuthPurpose.CONTACT_CHANGED, full), "Criciúma: seus contatos foram atualizados (e-mail). Se não foi você, fale com nossa equipe.");
 });
 
 test("the registered notice carries no visit and no link: the request still waits for analysis", () => {
   const text = buildSmsText(NotificationEvent.REQUEST_REGISTERED, { ...full, link: "https://c.test/a", scheduled: true });
-  assert.equal(text, "Criciúma: solicitação registrada! Protocolo: 123/2026. Aguardando aprovação!");
+  assert.equal(text, "Criciúma: solicitação registrada. Aguarde a análise. Protocolo: 123/2026.");
   for (const { key } of smsUses) assert.equal(buildSmsText(key, { ...full, link: "https://c.test/a" }).includes("https://"), false, key);
 });
 
 test("the worst case still fits: long municipality, protocol, date, time and location are cut to make room", () => {
   const huge = { municipality: "Município de São José dos Campos do Norte ".repeat(5), protocol: "P".repeat(100), date: "D".repeat(100),
-    time: "T".repeat(100), location: "Unidade Veterinária Municipal de Atendimento ".repeat(20), reason: "Documentação incompleta ".repeat(20), code: "123456", minutes: "1".repeat(50), fields: "e-mail".repeat(20) };
+    time: "T".repeat(100), location: "Unidade Veterinária Municipal de Atendimento ".repeat(20), reason: "Documentação incompleta ".repeat(20), code: "123456", minutes: "100", fields: "e-mail".repeat(20) };
   for (const { key } of smsUses) {
     const text = buildSmsText(key, huge);
     assert.equal(isSmsText(text), true, `${key}: ${text.length}`);
     assert.ok(text.startsWith("Município de São José dos Camp: "), key);
   }
   const confirmed = buildSmsText(NotificationEvent.SCHEDULE_CONFIRMED, huge);
-  assert.match(confirmed, / na Unidade/, "the place is shortened, not dropped, while there is room");
+  assert.match(confirmed, / em Unidade/, "the place is shortened, not dropped, while there is room");
   assert.ok(confirmed.endsWith(`Protocolo: ${"P".repeat(20)}.`), "the protocol is never the part that is cut");
 });
 
@@ -80,6 +79,14 @@ test("the code and its validity appear only in the messages that carry a code", 
     const text = buildSmsText(key, full);
     assert.equal(text.includes("123456"), CODE_USES.includes(key), key);
     assert.equal(/Válido por 10 minutos/.test(text), CODE_USES.includes(key), key);
+  }
+});
+
+test("code SMS refuses a missing or malformed code, preserves leading zeroes and uses the remaining validity", () => {
+  for (const use of CODE_USES) {
+    for (const code of [undefined, "", "12345", "12345a", 123456]) assert.equal(buildSmsText(use, { ...full, code }), "");
+    assert.equal(buildSmsText(use, { ...full, minutes: "0" }), "");
+    assert.match(buildSmsText(use, { ...full, code: "012345", minutes: "1" }), /012345.*Válido por 1 minuto\./);
   }
 });
 
@@ -94,8 +101,7 @@ test("without a municipality name the text still starts with a neutral one, and 
   for (const municipality of ["", "   ", undefined, null, "🙂"]) {
     assert.ok(buildSmsText(AuthPurpose.PASSWORD_RESET, { ...full, municipality }).startsWith("Prefeitura: "), String(municipality));
   }
-  for (const use of ["unknown", "initial_password", AuthPurpose.VERIFY_EMAIL, undefined]) assert.equal(buildSmsText(use, full), "", String(use));
-  assert.equal(buildSmsText(NotificationEvent.COMPLETED), "Prefeitura: atendimento concluído! Obrigado pelo cuidado com seu animal. Protocolo: .");
+  for (const use of ["unknown", "initial_password", "schedule_cancelled", AuthPurpose.VERIFY_EMAIL, undefined]) assert.equal(buildSmsText(use, full), "", String(use));
 });
 
 test("the screen shows each message as it goes out, with the data in braces: filling them in gives exactly the text that is sent", () => {

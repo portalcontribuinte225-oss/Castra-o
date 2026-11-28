@@ -26,12 +26,12 @@ function configured(extra = {}) {
   } });
 }
 
-test("there are twelve uses, eight notices and four access messages; neither phone confirmation nor the initial password is one of them", () => {
-  assert.equal(emailUses.length, 12);
-  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 8);
+test("there are seven active notice types and four access messages, with irrelevant uses left out", () => {
+  assert.equal(emailUses.length, 11);
+  assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.NOTICE).length, 7);
   assert.equal(emailUses.filter(({ kind }) => kind === EmailUseKind.ACCESS).length, 4);
   assert.equal(getEmailUse("initial_password"), null);
-  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 12);
+  assert.equal(new Set(emailUses.map(({ key }) => key)).size, 11);
   for (const event of Object.values(NotificationEvent)) assert.ok(getEmailUse(event), event);
   assert.equal(getEmailUse(AuthPurpose.VERIFY_PHONE), null);
   assert.deepEqual(emailUses.filter(({ defaultActive }) => defaultActive).map(({ key }) => key), [RESET]);
@@ -43,19 +43,20 @@ test("every use carries the recipient and the municipality identity, and only ag
       assert.ok(use.variables.includes(name), `${use.key} must carry ${name}`);
     }
   }
-  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_REMINDER, NotificationEvent.SCHEDULE_CHANGED,
-    NotificationEvent.SCHEDULE_CANCELLED, NotificationEvent.NO_SHOW];
+  const schedule = [NotificationEvent.SCHEDULE_CONFIRMED, NotificationEvent.SCHEDULE_REMINDER, NotificationEvent.SCHEDULE_CHANGED, NotificationEvent.NO_SHOW];
   for (const use of emailUses) assert.equal(use.variables.includes("schedule_date"), schedule.includes(use.key), use.key);
   assert.equal(emailUses.some(({ variables }) => variables.includes("documents_result")), false);
   assert.ok(getEmailUse(AuthPurpose.CONTACT_CHANGED).variables.includes("changed_fields"));
-  assert.deepEqual(emailUses.map(({ label }) => label).slice(0, 8), ["Solicitação registrada", "Agendamento confirmado",
-    "Lembrete de procedimento", "Agendamento alterado", "Agendamento cancelado", "Não comparecimento", "Atendimento concluído", "Solicitação indeferida"]);
-  assert.ok(getEmailUse(RESET).variables.includes("codigo_recuperacao"));
+  for (const use of [RESET, AuthPurpose.VERIFY_EMAIL, AuthPurpose.REQUEST_TRACKING]) {
+    for (const name of ["subject", "message", "code", "codigo", "codigo_recuperacao", "validade", "validity_minutes"]) {
+      assert.ok(getEmailUse(use).variables.includes(name), `${use} must carry ${name}`);
+    }
+  }
   assert.equal(emailUses.some(({ variables }) => variables.includes("temporary_password")), false);
 });
 
 test("stored templates and switches keep only known uses, and an explicit false survives the password default", () => {
-  assert.deepEqual(normalizeEmailTemplateIds({ templates: { [RESET]: " tpl_reset ", [CONFIRMED]: "bad id", unknown: "tpl", [AuthPurpose.VERIFY_PHONE]: "tpl" } }), { [RESET]: "tpl_reset" });
+  assert.deepEqual(normalizeEmailTemplateIds({ templates: { [RESET]: " tpl_reset ", [CONFIRMED]: "bad id", schedule_cancelled: "tpl_old", unknown: "tpl", [AuthPurpose.VERIFY_PHONE]: "tpl" } }), { [RESET]: "tpl_reset" });
   assert.deepEqual(normalizeEmailTemplateIds(null), {});
   assert.deepEqual(normalizeEmailActiveUses({ active: { [RESET]: false, [CONFIRMED]: true, unknown: true, [AuthPurpose.VERIFY_EMAIL]: "yes" } }), { [RESET]: false, [CONFIRMED]: true });
   assert.equal(isEmailUseActive({}, RESET), true);

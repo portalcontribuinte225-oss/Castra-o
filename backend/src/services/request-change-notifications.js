@@ -1,11 +1,10 @@
-import { DeliveryStatus, NotificationChannel, NotificationEvent } from "../../../shared/notification-contract.js";
+import { DeliveryStatus, NotificationChannel, NotificationEvent, NotificationLabel } from "../../../shared/notification-contract.js";
 import { ProcedureAction } from "../../../shared/request-procedure-contract.js";
 import { RequestStatus } from "../../../shared/request-contract.js";
 import { RequestHistoryCategory } from "../../../shared/request-history-contract.js";
 import { scheduleDate } from "../../../shared/schedule-contract.js";
 import { selectNotificationEvents } from "./notifications/notification-events.js";
 import { dispatchNotification } from "./notifications/dispatch-notification.js";
-import { notificationEventLabels } from "./notifications/notification-message.js";
 
 const channelLabels = {
   [NotificationChannel.EMAIL]: "E-mail", [NotificationChannel.WHATSAPP]: "WhatsApp", [NotificationChannel.SMS]: "SMS",
@@ -41,18 +40,23 @@ function deliveries(before, after, action, outcomes) {
   if (action !== ProcedureAction.NO_SHOW) return [];
   const visits = new Map();
   for (const outcome of outcomes) {
-    const { date, occurrenceKey, slotTime } = outcome.procedure.schedule || {};
-    const key = JSON.stringify([outcome.animalIndex, scheduleDate(date), occurrenceKey, slotTime]);
-    visits.set(key, outcome);
+    const { date, occurrenceKey, slotTime, locationName, address } = outcome.procedure.schedule || {};
+    const key = JSON.stringify([scheduleDate(date), slotTime || "", occurrenceKey || [locationName || "", address || ""]]);
+    const visit = visits.get(key) || { procedure: outcome.procedure, names: new Set(), species: new Set() };
+    if (outcome.animal?.name) visit.names.add(outcome.animal.name);
+    if (outcome.animal?.species) visit.species.add(outcome.animal.species);
+    visits.set(key, visit);
   }
-  return [...visits.values()].map((visit) => ({ event: NotificationEvent.NO_SHOW, request: requestForProcedure(after, visit) }));
+  return [...visits.values()].map(({ procedure, names, species }) => ({ event: NotificationEvent.NO_SHOW,
+    request: requestForProcedure(after, { procedure, animal: { name: [...names].join(", "), species: [...species].join(", ") } }),
+  }));
 }
 
 // The operation was committed before the notices were sent. Return a delivery warning if recording the results fails.
 export async function recordNotificationResults(results, request, { appendHistory }) {
   const entries = results.map((result) => ({
     status: request.status, by: "sistema", at: new Date(), category: RequestHistoryCategory.PROCESS,
-    title: notificationEventLabels[result.event],
+    title: NotificationLabel[result.event],
     notes: `${channelLabels[result.channel]}: ${deliveryLabels[result.status]}.${result.reason ? ` ${result.reason}` : ""}`,
     notification: result,
   }));

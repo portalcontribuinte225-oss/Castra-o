@@ -1,4 +1,4 @@
-import { NotificationEvent } from "./notification-contract.js";
+import { NotificationEvent, NotificationLabel } from "./notification-contract.js";
 import { AuthPurpose } from "./auth-contract.js";
 import { WhatsappTemplateField } from "./whatsapp-templates-contract.js";
 
@@ -20,6 +20,7 @@ export const EmailVariable = Object.freeze({
   SUBJECT: "subject",
   MESSAGE: "message",
   CODE: "code",
+  CODE_PT: "codigo",
   RECOVERY_CODE: "codigo_recuperacao",
   VALIDITY: "validade",
   VALIDITY_MINUTES: "validity_minutes",
@@ -41,11 +42,11 @@ const noticeVariables = [variable.PROTOCOL, variable.EVENT, variable.SUBJECT, va
 // Request fields the agenda notices carry; they are resolved by the same safe whitelist WhatsApp uses.
 const scheduleFields = [field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME, field.SCHEDULE_ADDRESS];
 const noShowFields = [field.SCHEDULE_DATE, field.SCHEDULE_TIME, field.SCHEDULE_LOCATION_NAME];
-const codeVariables = [variable.CODE, variable.RECOVERY_CODE, variable.VALIDITY, variable.VALIDITY_MINUTES, variable.PURPOSE];
+const codeVariables = [variable.SUBJECT, variable.MESSAGE, variable.CODE, variable.CODE_PT, variable.RECOVERY_CODE, variable.VALIDITY, variable.VALIDITY_MINUTES, variable.PURPOSE];
 
-function emailUse(key, kind, label, { variables = [], requestFields = [], defaultActive = false } = {}) {
+function emailUse(key, kind, { variables = [], requestFields = [], defaultActive = false } = {}) {
   return Object.freeze({
-    key, kind, label, defaultActive,
+    key, kind, label: NotificationLabel[key], defaultActive,
     requestFields: Object.freeze([...requestFields]),
     variables: Object.freeze([...commonVariables, ...variables, ...requestFields]),
   });
@@ -55,18 +56,17 @@ function emailUse(key, kind, label, { variables = [], requestFields = [], defaul
 // AuthPurpose values, so they never collide. The titles and their order are the same in every channel; the confirmation code of
 // e-mail confirms an e-mail. Only password recovery starts on.
 export const emailUses = Object.freeze([
-  emailUse(NotificationEvent.REQUEST_REGISTERED, EmailUseKind.NOTICE, "Solicitação registrada", { variables: noticeVariables }),
-  emailUse(NotificationEvent.SCHEDULE_CONFIRMED, EmailUseKind.NOTICE, "Agendamento confirmado", { variables: noticeVariables, requestFields: scheduleFields }),
-  emailUse(NotificationEvent.SCHEDULE_REMINDER, EmailUseKind.NOTICE, "Lembrete de procedimento", { variables: noticeVariables, requestFields: scheduleFields }),
-  emailUse(NotificationEvent.SCHEDULE_CHANGED, EmailUseKind.NOTICE, "Agendamento alterado", { variables: noticeVariables, requestFields: scheduleFields }),
-  emailUse(NotificationEvent.SCHEDULE_CANCELLED, EmailUseKind.NOTICE, "Agendamento cancelado", { variables: noticeVariables, requestFields: scheduleFields }),
-  emailUse(NotificationEvent.NO_SHOW, EmailUseKind.NOTICE, "Não comparecimento", { variables: noticeVariables, requestFields: noShowFields }),
-  emailUse(NotificationEvent.COMPLETED, EmailUseKind.NOTICE, "Atendimento concluído", { variables: noticeVariables }),
-  emailUse(NotificationEvent.REQUEST_REJECTED, EmailUseKind.NOTICE, "Solicitação indeferida", { variables: noticeVariables }),
-  emailUse(AuthPurpose.PASSWORD_RESET, EmailUseKind.ACCESS, "Recuperação de senha", { variables: codeVariables, defaultActive: true }),
-  emailUse(AuthPurpose.VERIFY_EMAIL, EmailUseKind.ACCESS, "Confirmação de contato", { variables: codeVariables }),
-  emailUse(AuthPurpose.REQUEST_TRACKING, EmailUseKind.ACCESS, "Acesso à solicitação", { variables: codeVariables }),
-  emailUse(AuthPurpose.CONTACT_CHANGED, EmailUseKind.ACCESS, "Contato alterado", { variables: [variable.CHANGED_FIELDS, variable.MESSAGE, variable.PURPOSE] }),
+  emailUse(NotificationEvent.REQUEST_REGISTERED, EmailUseKind.NOTICE, { variables: noticeVariables }),
+  emailUse(NotificationEvent.SCHEDULE_CONFIRMED, EmailUseKind.NOTICE, { variables: noticeVariables, requestFields: scheduleFields }),
+  emailUse(NotificationEvent.SCHEDULE_REMINDER, EmailUseKind.NOTICE, { variables: noticeVariables, requestFields: scheduleFields }),
+  emailUse(NotificationEvent.SCHEDULE_CHANGED, EmailUseKind.NOTICE, { variables: noticeVariables, requestFields: scheduleFields }),
+  emailUse(NotificationEvent.NO_SHOW, EmailUseKind.NOTICE, { variables: noticeVariables, requestFields: noShowFields }),
+  emailUse(NotificationEvent.COMPLETED, EmailUseKind.NOTICE, { variables: noticeVariables }),
+  emailUse(NotificationEvent.REQUEST_REJECTED, EmailUseKind.NOTICE, { variables: noticeVariables }),
+  emailUse(AuthPurpose.PASSWORD_RESET, EmailUseKind.ACCESS, { variables: codeVariables, defaultActive: true }),
+  emailUse(AuthPurpose.VERIFY_EMAIL, EmailUseKind.ACCESS, { variables: codeVariables }),
+  emailUse(AuthPurpose.REQUEST_TRACKING, EmailUseKind.ACCESS, { variables: codeVariables }),
+  emailUse(AuthPurpose.CONTACT_CHANGED, EmailUseKind.ACCESS, { variables: [variable.CHANGED_FIELDS, variable.SUBJECT, variable.MESSAGE, variable.PURPOSE] }),
 ]);
 
 export function getEmailUse(key) {

@@ -1,4 +1,4 @@
-import { AuthPurpose } from "./auth-contract.js";
+import { AuthCodeAction, AuthPurpose, isAuthCode } from "./auth-contract.js";
 import { NotificationEvent } from "./notification-contract.js";
 
 // The texts carry accents, so they go in the Unicode encoding of SMS: one SMS holds 70 characters, and a longer text goes in parts
@@ -12,11 +12,10 @@ const MAX_MUNICIPALITY = 30;
 const MAX_PROTOCOL = 20;
 const MAX_DATE = 16;
 const MAX_TIME = 16;
-const MAX_MINUTES = 3;
 const MAX_LOCATION = 60;
 const MAX_FIELDS = 40;
 const MAX_REASON = 40;
-const PLACE_SEPARATOR = " na ";
+const PLACE_SEPARATOR = " em ";
 const REASON_WRAP = " ()";
 const NOT_SMS_CHARACTER = /[^\p{L}\p{N} !"#$%&'()*+,\-./:;<=>?@_]/gu;
 
@@ -36,37 +35,44 @@ export function isSmsText(text) {
 
 const clip = (value, max) => toSmsText(value).slice(0, max).trim();
 
-// The texts are fixed. `place` is the schedule location already prefixed with its separator, or empty; `cause` is the reason of a
-// rejection already in parentheses, or empty.
+function visit({ date, time, place }) {
+  return `${date ? ` em ${date}` : ""}${time ? `${date ? "," : ""} às ${time}` : ""}${place}`;
+}
+
+function codeText({ town, action, code, minutes }) {
+  return `${town}: use o código ${code} para ${action}. Válido por ${minutes} ${minutes === "1" ? "minuto" : "minutos"}. Não compartilhe.`;
+}
+
 const templates = Object.freeze({
-  [NotificationEvent.REQUEST_REGISTERED]: (d) => `${d.town}: solicitação registrada! Protocolo: ${d.protocol}. Aguardando aprovação!`,
-  [NotificationEvent.SCHEDULE_CONFIRMED]: (d) => `${d.town}: agendamento confirmado! Esperamos você em ${d.date}, às ${d.time}${d.place}. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.SCHEDULE_REMINDER]: (d) => `${d.town}: o procedimento do seu animal é amanhã (${d.date})${d.time ? `, às ${d.time}` : ""}${d.place}. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.SCHEDULE_CHANGED]: (d) => `${d.town}: seu atendimento foi reagendado para ${d.date}, às ${d.time}${d.place}. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.SCHEDULE_CANCELLED]: (d) => `${d.town}: o agendamento de ${d.date}${d.time ? `, às ${d.time},` : ""} foi cancelado. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.NO_SHOW]: (d) => `${d.town}: você não compareceu ao atendimento de ${d.date}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.COMPLETED]: (d) => `${d.town}: atendimento concluído! Obrigado pelo cuidado com seu animal. Protocolo: ${d.protocol}.`,
-  [NotificationEvent.REQUEST_REJECTED]: (d) => d.procedure ? `${d.town}: o procedimento ${d.procedure} foi indeferido${d.cause}. Protocolo: ${d.protocol}.`
-    : `${d.town}: sua solicitação foi indeferida${d.cause}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,
-  [AuthPurpose.PASSWORD_RESET]: (d) => `${d.town}: recebemos um pedido para redefinir sua senha. Código: ${d.code}. Válido por ${d.minutes} minutos. Não compartilhe.`,
-  [AuthPurpose.VERIFY_PHONE]: (d) => `${d.town}: para confirmar seu telefone, informe o código ${d.code}. Válido por ${d.minutes} minutos. Não compartilhe.`,
-  [AuthPurpose.REQUEST_TRACKING]: (d) => `${d.town}: para consultar sua solicitação, use o código ${d.code}. Válido por ${d.minutes} minutos. Não compartilhe.`,
-  [AuthPurpose.CONTACT_CHANGED]: (d) => `${d.town}: seus dados foram atualizados (${d.fields}). Se não foi você, fale com nossa equipe.`,
+  [NotificationEvent.REQUEST_REGISTERED]: (d) => `${d.town}: solicitação registrada. Aguarde a análise. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.SCHEDULE_CONFIRMED]: (d) => `${d.town}: agendamento confirmado${visit(d)}. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.SCHEDULE_REMINDER]: (d) => `${d.town}: atendimento amanhã${d.date ? ` (${d.date})` : ""}${d.time ? `, às ${d.time}` : ""}${d.place}. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.SCHEDULE_CHANGED]: (d) => `${d.town}: agendamento alterado${visit(d)}. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.NO_SHOW]: (d) => `${d.town}: registramos não comparecimento${d.date ? ` em ${d.date}` : ""}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.COMPLETED]: (d) => `${d.town}: atendimento concluído. Protocolo: ${d.protocol}.`,
+  [NotificationEvent.REQUEST_REJECTED]: (d) => `${d.town}: sua solicitação foi indeferida${d.cause}. Fale com nossa equipe. Protocolo: ${d.protocol}.`,
+  [AuthPurpose.PASSWORD_RESET]: codeText,
+  [AuthPurpose.VERIFY_PHONE]: codeText,
+  [AuthPurpose.REQUEST_TRACKING]: codeText,
+  [AuthPurpose.CONTACT_CHANGED]: (d) => `${d.town}: seus contatos foram atualizados (${d.fields}). Se não foi você, fale com nossa equipe.`,
 });
 
 // Builds the text of one use. Every field is bounded, and the location and the reason take only the room that is left, so the result
 // never passes the longest length. An unknown use yields an empty text, which the sender refuses.
 export function buildSmsText(use, data = {}) {
+  if (!Object.hasOwn(templates, use)) return "";
   const template = templates[use];
-  if (!template) return "";
+  const action = AuthCodeAction[use];
+  const minutes = String(data.minutes ?? "");
+  if (action && (!isAuthCode(data.code) || !/^[1-9]\d{0,2}$/.test(minutes))) return "";
   const fields = {
     town: clip(data.municipality, MAX_MUNICIPALITY) || "Prefeitura",
     protocol: clip(data.protocol, MAX_PROTOCOL),
     date: clip(data.date, MAX_DATE),
     time: clip(data.time, MAX_TIME),
-    procedure: clip(data.procedure, MAX_FIELDS),
-    code: toSmsText(data.code),
-    minutes: clip(data.minutes, MAX_MINUTES),
+    action,
+    code: data.code,
+    minutes,
     fields: clip(data.fields, MAX_FIELDS) || "contato",
   };
   const bare = template({ ...fields, place: "", cause: "" }).length;
@@ -84,11 +90,10 @@ export function buildSmsTestText(municipality) {
 
 // Preview the same fixed words sent to the citizen, with placeholders for request data.
 export function smsTextPreview(use, municipality = "Município") {
-  const template = templates[use];
-  if (!template) return "";
+  if (!Object.hasOwn(templates, use)) return "";
   const data = {
     town: clip(municipality, MAX_MUNICIPALITY) || "Prefeitura", protocol: "{protocolo}", date: "{data}", time: "{horario}",
-    place: `${PLACE_SEPARATOR}{unidade}`, cause: " ({motivo})", code: "{codigo}", minutes: "{minutos}", fields: "{campos_alterados}",
+    place: `${PLACE_SEPARATOR}{unidade}`, cause: " ({motivo})", action: AuthCodeAction[use], code: "{codigo}", minutes: "{minutos}", fields: "{campos_alterados}",
   };
-  return template(data);
+  return templates[use](data);
 }

@@ -115,19 +115,19 @@ test("saving a result never sends an agenda notice when the nearest remaining ap
   assert.deepEqual(results, []);
 });
 
-test("an absence sends one notice per animal and time when several procedures share a reservation", async () => {
+test("an absence sends one notice per appointment and preserves the animals in that group", async () => {
   const scheduled = after();
   const next = { ...scheduled };
   const visit = (animalIndex, date, name) => ({ animalIndex, animal: { name, species: "Gato" },
     procedure: { status: ProcedureStatus.NO_SHOW, schedule: { date, occurrenceKey: "day:unit", slotTime: "09:15" } } });
-  const outcomes = [visit(0, "2026-11-30", "Luna"), visit(0, "2026-11-30", "Luna"), visit(1, "2026-11-30", "Thor")];
+  const outcomes = [visit(0, "2026-11-30", "Luna"), visit(0, "2026-11-30", "Luna"), visit(1, "2026-11-30", "Thor"), visit(2, "2026-12-01", "Mel")];
   const visits = [];
   await notifyRequestChanges(scheduled, next, dependencies({ procedureAction: ProcedureAction.NO_SHOW, outcomes, dispatch: async ({ event, request }) => {
     assert.equal(event, NotificationEvent.NO_SHOW);
     visits.push([request.animal_name, request.schedule_date, request.workflow_data.scheduleSlotTime]);
     return [];
   } }));
-  assert.deepEqual(visits, [["Luna", "2026-11-30", "09:15"], ["Thor", "2026-11-30", "09:15"]]);
+  assert.deepEqual(visits, [["Luna, Thor", "2026-11-30", "09:15"], ["Mel", "2026-12-01", "09:15"]]);
 });
 
 test("only an explicit successful closure sends the completion notice", async () => {

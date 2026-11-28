@@ -32,13 +32,13 @@ export function authUser(overrides = {}) {
     profile_phone: "", email_verified_at: null, phone_verified_at: null, profile_version: 0, ...overrides };
 }
 
-export async function authHttpFixture(t, initialUsers = [authUser()], { failAudit = false, emailEnabled = false, configs = {} } = {}) {
+export async function authHttpFixture(t, initialUsers = [authUser()], { failAudit = false, emailEnabled = false, configs = {}, credentials = {}, mockTransport } = {}) {
   const original = { query: pool.query, connect: pool.connect, fetch: globalThis.fetch };
   const environment = ["JWT_SECRET", "ADMIN_EMAIL"];
   const originalEnvironment = Object.fromEntries(environment.map((key) => [key, process.env[key]]));
   process.env.JWT_SECRET = "auth-http-tests-only";
   process.env.ADMIN_EMAIL = "staff@example.test";
-  const restoreCredentials = replaceServerCredentials(emailEnabled ? TEST_EMAIL_CREDENTIALS : {});
+  const restoreCredentials = replaceServerCredentials({ ...(emailEnabled ? TEST_EMAIL_CREDENTIALS : {}), ...credentials });
   const storedConfigs = { ...(emailEnabled ? emailConfigs() : {}), ...configs };
   const users = new Map(initialUsers.map((user) => [user.id, structuredClone(user)]));
   const challenges = new Map(); const limits = new Map(); const calls = []; const followUps = []; const requestRows = []; const animalTutorUpdates = [];
@@ -173,6 +173,9 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
       if (sql.includes("pg_advisory_xact_lock")) return { rows: [] };
       if (sql.includes("INSERT INTO config")) { storedConfigs[`${values[0]}:${values[1]}`] = JSON.parse(values[2]); return { rows: [] }; }
       if (sql.startsWith("SELECT value FROM config")) return { rows: storedConfigs[`${values[0]}:${values[1]}`] ? [{ value: storedConfigs[`${values[0]}:${values[1]}`] }] : [] };
+      if (sql.startsWith("SELECT id, name FROM municipalities WHERE id=$1 AND active=TRUE")) {
+        return { rows: values[0] === AUTH_TEST_MUNICIPALITY ? [{ id: values[0], name: "Test City" }] : [] };
+      }
       if (sql.includes("FROM municipalities WHERE id = $1")) return { rows: [{ id: values[0], name: "Test City", department_name: "Test Department", contact: "", email: "", address: "", updated_at: new Date(0), has_brasao: false, has_department_logo: false }] };
       throw new Error(`Unhandled auth fixture SQL: ${sql}`);
     } };
@@ -183,6 +186,8 @@ export async function authHttpFixture(t, initialUsers = [authUser()], { failAudi
     if (emailEnabled && url === "https://api.emailjs.com/api/v1.0/email/send") {
       messages.push(JSON.parse(options.body)); return { ok: true };
     }
+    const response = await mockTransport?.(url, options);
+    if (response) return response;
     externalCalls += 1; throw new Error("External transport forbidden");
   };
   const app = express(); app.use(express.json()); app.use("/auth", authRouter);

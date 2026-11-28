@@ -103,7 +103,7 @@ test("sending a message builds the fixed text for the municipality through the p
   assert.deepEqual([uncontracted.status, uncontracted.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE, 0], "no contract, no send");
   f.database.setContract(MUNICIPALITY, { plan: 2 });
   assert.equal((await sendSmsUse(reset, deps)).status, DeliveryStatus.SENT);
-  assert.deepEqual(sent[0], { token: TOKEN, phone: "48999991234", text: "Test Town: recebemos um pedido para redefinir sua senha. Código: 123456. Válido por 10 minutos. Não compartilhe.",
+  assert.deepEqual(sent[0], { token: TOKEN, phone: "48999991234", text: "Test Town: use o código 123456 para redefinir sua senha. Válido por 10 minutos. Não compartilhe.",
     messageId: ACTOR.id, expiresAt: "2026-11-13T12:10:00Z" });
   assert.equal(f.database.contractOf(MUNICIPALITY).currentPeriodUsed, 1);
   const notice = { municipalityId: MUNICIPALITY, use: NotificationEvent.SCHEDULE_CONFIRMED, phone: "48999991234",
@@ -113,11 +113,21 @@ test("sending a message builds the fixed text for the municipality through the p
   assert.equal(f.database.contractOf(MUNICIPALITY).currentPeriodUsed, 1, "a message that is off spends nothing");
   f.database.configs.set(`${SMS_ACTIVE_USES_CONFIG_KEY}:${MUNICIPALITY}`, { active: { [NotificationEvent.SCHEDULE_CONFIRMED]: true } });
   assert.equal((await sendSmsUse(notice, deps)).status, DeliveryStatus.SENT);
-  assert.equal(sent[1].text, "Test Town: agendamento confirmado! Esperamos você em 20/11/2026, às 09:00 na Unidade Veterinária Municipal. Protocolo: 123/2026.");
+  assert.equal(sent[1].text, "Test Town: agendamento confirmado em 20/11/2026, às 09:00 em Unidade Veterinária Municipal. Protocolo: 123/2026.");
   assert.match(sent[1].messageId, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.equal(sent[1].expiresAt, undefined);
   const spent = await sendSmsUse(notice, deps);
   assert.deepEqual([spent.status, spent.code, sent.length], [DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE, 2], "the contract of two messages is spent");
+});
+
+test("an SMS with a missing recovery code never calls the provider or consumes quota", async (t) => {
+  const f = fixture(t);
+  f.database.setContract(MUNICIPALITY, { plan: 5 });
+  const result = await sendSmsUse({ municipalityId: MUNICIPALITY, use: AuthPurpose.PASSWORD_RESET, phone: "48999991234", data: { minutes: "10" } }, {
+    database: f.database, sendMessage: async () => assert.fail("a message without the code cannot be sent"),
+  });
+  assert.deepEqual([result.status, result.code], [DeliveryStatus.SKIPPED, DeliveryCode.PREPARATION_FAILED]);
+  assert.equal(f.database.contractOf(MUNICIPALITY).currentPeriodUsed, undefined);
 });
 
 test("each municipality spends only its own SMS contract", async (t) => {

@@ -188,6 +188,21 @@ test("the reset e-mail carries the municipality identity and keeps the variable 
   assert.deepEqual([templateParams.code, templateParams.codigo_recuperacao, templateParams.validade, templateParams.validity_minutes],
     ["012345", "012345", "10 minutos", "10"]);
   assert.deepEqual([templateParams.to_name, templateParams.purpose, templateParams.municipality_name], ["Tutor", AuthPurpose.PASSWORD_RESET, "Test Town"]);
+  assert.equal(templateParams.codigo, "012345");
+  assert.equal(templateParams.subject, "Recuperação de senha");
+  assert.equal(templateParams.message, "Use o código 012345 para redefinir sua senha. Válido por 10 minutos. Não compartilhe este código.");
+});
+
+test("a malformed or expired recovery code never reaches any provider", async () => {
+  for (const channel of Object.values(NotificationChannel)) {
+    for (const invalid of [{ code: "" }, { code: 123456 }, { code: "0123xx" }, { expiresAt: new Date(0) }]) {
+      const f = fixture(); const sms = smsSent(f);
+      const [result] = await deliverAuthMessage({ ...f.input, channel, ...invalid }, f.dependencies);
+      assert.equal(result.code, DeliveryCode.PREPARATION_FAILED);
+      assert.equal(result.channel, channel);
+      assert.equal(f.calls.length + sms.length, 0);
+    }
+  }
 });
 
 test("auth recovery failure preserves safe codes and never falls back to email", async () => {

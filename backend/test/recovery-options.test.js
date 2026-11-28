@@ -6,6 +6,7 @@ import { NotificationChannel } from "../../shared/notification-contract.js";
 import { createRecoveryToken, readRecoveryToken, matchesRecoveryUser, recoveryDestination, recoveryOptionId } from "../src/services/auth/recovery-token.js";
 import { getRecoveryOptions } from "../src/services/auth/recovery-channels.js";
 import { pool } from "../src/db/index.js";
+import { GRAPH_API_BASE } from "../src/services/whatsapp.js";
 import { SMS_ACTIVE_USES_CONFIG_KEY } from "../../shared/sms-contract.js";
 import { smsSettingsDatabase, SMS_TEST_MUNICIPALITY } from "./fixtures/sms-settings-db.js";
 import { authHttpFixture, authUser, AUTH_TEST_MUNICIPALITY as MUNICIPALITY, AUTH_TEST_OTHER_MUNICIPALITY as OTHER } from "./fixtures/auth-http.js";
@@ -116,6 +117,14 @@ test("discovery sends nothing; explicit choice sends one code, enforces cooldown
   assert.equal(new Date(sent.body.expiresAt) - new Date(sent.body.retryAt), 540000);
   assert.equal((await f.request("/auth/forgot-password", { method: "POST", body })).status, 429);
   const code = f.messages[0].template_params.code;
+  const params = f.messages[0].template_params;
+  assert.match(code, /^\d{6}$/);
+  assert.equal(params.codigo, code);
+  assert.equal(params.codigo_recuperacao, code);
+  assert.equal(params.subject, "Recuperação de senha");
+  assert.match(params.message, new RegExp(`Use o código ${code} para redefinir sua senha`));
+  assert.deepEqual(sent.body.delivery, [{ channel: NotificationChannel.EMAIL, status: "sent" }]);
+  assert.equal(Object.hasOwn(sent.body, "code"), false);
   assert.equal((await f.request("/auth/reset-password", { method: "POST", body: { ...context, challengeId: sent.body.challengeId,
     password: "123456", code: code === "111111" ? "222222" : "111111" } })).status, 400);
   assert.equal(f.users.get(user.id).email_verified_at, null);
@@ -127,6 +136,57 @@ test("discovery sends nothing; explicit choice sends one code, enforces cooldown
   f.limits.clear();
   assert.equal((await f.request("/auth/forgot-password", { method: "POST", body })).status, 400);
 });
+
+for (const channel of [NotificationChannel.SMS, NotificationChannel.WHATSAPP]) {
+  test(`password recovery sends the generated code through ${channel} and accepts that same code`, async (t) => {
+    const user = authUser({ profile_phone: "48999991234" });
+    const phone = `55${user.profile_phone}`;
+    const template = { name: "castracao_codigo_recuperacao_senha", language: "pt_BR", status: "APPROVED", category: "AUTHENTICATION",
+      parameterFormat: "POSITIONAL", hasBody: true, bodyVariables: 1, bodySequential: true, header: "NONE", buttons: ["OTP_COPY_CODE"], extraComponents: false };
+    const configs = channel === NotificationChannel.SMS ? { [`sms_quota:${MUNICIPALITY}`]: { plan: 10 } } : {
+      [`whatsapp:${MUNICIPALITY}`]: { active: true, tokenVariable: "WHATSAPP_TOKEN_TEST", phoneNumberId: "12345" },
+      [`whatsapp_quota:${MUNICIPALITY}`]: { plan: 10 },
+      [`whatsapp_active_templates:${MUNICIPALITY}`]: { active: { [AuthPurpose.PASSWORD_RESET]: { name: template.name, language: template.language } } },
+      [`whatsapp_catalog:${MUNICIPALITY}`]: { syncedAt: "2026-11-15T10:00:00.000Z", templates: [template] },
+    };
+    const deliveries = [];
+    const mockTransport = async (url, options) => {
+      const body = JSON.parse(options.body);
+      if (channel === NotificationChannel.SMS && url === "https://smsmais.com/send") {
+        const [{ id, destinations: [destination], msg }] = body.messages;
+        assert.equal(destination.to, phone);
+        deliveries.push({ id, code: msg.match(/use o código (\d{6}) para redefinir sua senha/)?.[1] });
+        return Response.json([{ id: 1, externalId: id, to: phone, msg }]);
+      }
+      if (channel === NotificationChannel.WHATSAPP && url === `${GRAPH_API_BASE}/12345/messages`) {
+        assert.equal(body.to, phone);
+        assert.equal(body.template.name, template.name);
+        const [text, button] = body.template.components;
+        const [{ text: code }] = text.parameters;
+        assert.equal(text.type, "body");
+        assert.deepEqual(button, { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: code }] });
+        deliveries.push({ code });
+        return Response.json({ messages: [{ id: "test-message" }] });
+      }
+      return null;
+    };
+    const f = await authHttpFixture(t, [user], { configs, mockTransport,
+      credentials: channel === NotificationChannel.SMS ? { SMS_TOKEN: "production-test-token" } : { WHATSAPP_TOKEN_TEST: "fake-whatsapp-token" } });
+    const discovery = await f.request("/auth/recovery-options", { method: "POST", body: { ...context, identifier: user.cpf } });
+    assert.deepEqual(discovery.body.options.map((option) => option.channel), [channel]);
+    const sent = await f.request("/auth/forgot-password", { method: "POST", body: { ...context, recoveryToken: discovery.body.recoveryToken, optionId: discovery.body.options[0].id } });
+    assert.equal(sent.status, 200);
+    assert.deepEqual(sent.body.delivery, [{ channel, status: "sent" }]);
+    assert.equal(deliveries.length, 1);
+    const [{ id, code }] = deliveries;
+    assert.match(code, /^\d{6}$/);
+    if (channel === NotificationChannel.SMS) assert.equal(id, sent.body.challengeId);
+    assert.equal(Object.hasOwn(sent.body, "code"), false);
+    assert.equal((await f.request("/auth/reset-password", { method: "POST", body: { ...context, challengeId: sent.body.challengeId, password: "updated password", code } })).status, 200);
+    assert.ok(f.users.get(user.id).phone_verified_at);
+    assert.equal(f.users.get(user.id).email_verified_at, null);
+  });
+}
 
 test("shared email asks for CPF and stale or forged selection never delivers", async (t) => {
   const user = authUser(); const other = authUser({ cpf: "11144477735" });

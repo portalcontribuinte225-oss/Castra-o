@@ -10,8 +10,8 @@ import { sendNotificationEmail } from "../email.js";
 import { loadEmailIdentityParams } from "../email-identity.js";
 import { resolveEmailTemplate } from "../email-templates.js";
 import { sendSmsUse } from "../sms-integration-settings.js";
-import { buildNotificationMessage } from "./notification-message.js";
-import { buildBodyComponents, resolveWhatsappField } from "./whatsapp-template-parameters.js";
+import { buildNotificationMessage, notificationSchedule } from "./notification-message.js";
+import { buildBodyComponents } from "./whatsapp-template-parameters.js";
 import { deliveryFailure, knownDeliveryCode } from "./delivery-result.js";
 
 function result(event, channel, status, reason = "") {
@@ -39,8 +39,9 @@ async function attempt(event, channel, task) {
 
 async function deliverWhatsapp({ event, request, phone, runtime, template }, dependencies) {
   const channel = NotificationChannel.WHATSAPP;
-  const content = buildNotificationMessage(event, request);
-  const components = buildBodyComponents(template.fields, { ...request, notification_message: content.message });
+  const templateRequest = template.fields.includes(WhatsappTemplateField.NOTIFICATION_MESSAGE)
+    ? { ...request, notification_message: buildNotificationMessage(event, request).message } : request;
+  const components = buildBodyComponents(template.fields, templateRequest);
   const quota = await dependencies.consumeQuota(channel, request.municipality_id);
   if (!quota.allowed) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, DeliveryCode.QUOTA_UNAVAILABLE) };
   const transport = await sendResolvedTemplate({ municipalityId: request.municipality_id, runtime, template, phone, components }, dependencies);
@@ -50,9 +51,10 @@ async function deliverWhatsapp({ event, request, phone, runtime, template }, dep
 // Each channel answers `null` when the municipality does not use it for this notice (channel off, no template or switch for the
 // notice, no contact to reach), so only the channels in use leave a result in the request history.
 async function tryWhatsapp({ event, request, followUp }, dependencies) {
+  if (!followUp.phone) return null;
   const channel = NotificationChannel.WHATSAPP;
   const raw = await dependencies.loadWhatsappConfig(request.municipality_id);
-  if (!usesWhatsapp(raw) || !followUp.phone) return null;
+  if (!usesWhatsapp(raw)) return null;
   const resolved = await dependencies.resolveTemplate(request.municipality_id, event);
   if (!resolved.ok && resolved.code === DeliveryCode.NOT_CONFIGURED) return null;
   if (!resolved.ok) return { event, channel, ...deliveryFailure(DeliveryStatus.SKIPPED, resolved.code) };
@@ -84,18 +86,9 @@ async function tryEmail({ event, request, followUp }, dependencies) {
 
 // Only the fields used in the SMS text are shared with the sender.
 function smsNoticeData(event, request) {
-  const field = (name) => resolveWhatsappField(name, request);
-  const workflow = request.workflow_data || request.workflowData || {};
-  const rejection = event === NotificationEvent.REQUEST_REJECTED
-    ? { reason: rejectionReasonText(workflow), ...(request.procedure_name ? { procedure: request.procedure_name } : {}) } : {};
-  return {
-    protocol: request.protocol,
-    date: field(WhatsappTemplateField.SCHEDULE_DATE),
-    time: event === NotificationEvent.SCHEDULE_CANCELLED || event === NotificationEvent.SCHEDULE_REMINDER
-      ? workflow.scheduleSlotTime || workflow.scheduleTime || request.schedule_time : field(WhatsappTemplateField.SCHEDULE_TIME),
-    location: field(WhatsappTemplateField.SCHEDULE_LOCATION_NAME),
-    ...rejection,
-  };
+  const data = { protocol: request.protocol, ...notificationSchedule(request) };
+  if (event === NotificationEvent.REQUEST_REJECTED) data.reason = rejectionReasonText(request.workflow_data || request.workflowData);
+  return data;
 }
 
 async function trySms({ event, request, followUp }, dependencies) {
