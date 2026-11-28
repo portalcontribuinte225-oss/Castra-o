@@ -2,6 +2,14 @@ import { RequestStatus } from "./request-contract.js";
 import { hasStoredProcedures, holdsSchedulePlace } from "./request-procedure-contract.js";
 
 const DAY_MS = 86400000;
+const localDateFormat = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" });
+
+export function scheduleLocalDate(now = new Date()) {
+  const parts = localDateFormat.formatToParts(now);
+  const part = (type) => parts.find((item) => item.type === type).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 export function scheduleDate(value) {
   const input = String(value || "");
   const match = input.match(/^(\d{4})-(\d{2})-(\d{2})$/) || input.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
@@ -19,8 +27,16 @@ export function displayScheduleDate(value) {
 export function procedureScheduleSelection(schedule) {
   const date = scheduleDate(schedule?.date);
   const { occurrenceKey, slotTime: time } = schedule || {};
-  return date && occurrenceKey && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
+  return date && typeof occurrenceKey === "string" && occurrenceKey.trim() && typeof time === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(time)
     ? { date, occurrenceKey, time } : null;
+}
+
+export function procedureGroupScheduleSelection(schedules) {
+  const [first, ...rest] = schedules;
+  const selection = procedureScheduleSelection(first);
+  if (!selection) return null;
+  return rest.every(({ date, occurrenceKey, slotTime }) =>
+    scheduleDate(date) === selection.date && occurrenceKey === selection.occurrenceKey && slotTime === selection.time) ? selection : null;
 }
 
 export function normalizeSlots(slots, time = "08:00", vacancies = 0) {

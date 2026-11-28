@@ -7845,6 +7845,7 @@ main {
 .prm-footer {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -7865,7 +7866,8 @@ main {
   white-space: nowrap;
 }
 
-.prm-footer-end { margin-left: auto; }
+.prm-footer-end { margin-left: auto; max-width: 100%; flex-wrap: wrap; justify-content: flex-end; }
+.prm-footer-note { flex-basis: 100%; }
 .prm-footer [data-ui-button] { padding: 8px 12px; }
 .prm-footer [aria-expanded="true"][aria-haspopup="menu"] svg:last-child { transform: rotate(180deg); }
 

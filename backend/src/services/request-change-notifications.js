@@ -1,5 +1,6 @@
 import { DeliveryStatus, NotificationChannel, NotificationEvent } from "../../../shared/notification-contract.js";
 import { ProcedureAction } from "../../../shared/request-procedure-contract.js";
+import { RequestStatus } from "../../../shared/request-contract.js";
 import { RequestHistoryCategory } from "../../../shared/request-history-contract.js";
 import { scheduleDate } from "../../../shared/schedule-contract.js";
 import { selectNotificationEvents } from "./notifications/notification-events.js";
@@ -32,7 +33,7 @@ export function requestForProcedure(request, { procedure, animal }) {
 function deliveries(before, after, action, outcomes) {
   if (!action) return selectNotificationEvents(before, after).map((event) => ({ event, request: after }));
   if (action === ProcedureAction.CONFIRM_SCHEDULE) return [{ event: NotificationEvent.SCHEDULE_CONFIRMED, request: after }];
-  if (action === ProcedureAction.RESCHEDULE) return [{ event: NotificationEvent.SCHEDULE_CHANGED, request: after }];
+  if (action === ProcedureAction.RESCHEDULE) return after.status === RequestStatus.SCHEDULED ? [{ event: NotificationEvent.SCHEDULE_CHANGED, request: after }] : [];
   if (action === ProcedureAction.CLOSE) {
     return selectNotificationEvents(before, after).filter((event) => event === NotificationEvent.COMPLETED)
       .map((event) => ({ event, request: after }));

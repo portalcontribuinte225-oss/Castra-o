@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { displayScheduleDate, scheduleDate } from "../../../shared/schedule-contract.js";
+import { displayScheduleDate, procedureGroupScheduleSelection, scheduleDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
 import { configTextareaStyle } from "../../components/ui";
 import { isPastScheduleDay } from "../../domain";
@@ -9,12 +9,11 @@ import { buildMonthCalendarDays, formatMonthYear, getCurrentScheduleMonthKey } f
 import { ProcessDialog } from "./process-dialog";
 import type { AppointmentSlot, ScheduleSelection } from "./process-types";
 
-interface ProcessScheduleDialogProps {
+interface RescheduleDialogProps {
   requestId: string;
   municipalityId: string;
   schedules: AppointmentSlot[];
   animalCount: number;
-  reschedule: boolean;
   busy: boolean;
   onConfirm: (selection: ScheduleSelection, reason: string) => void;
   onClose: () => void;
@@ -22,20 +21,19 @@ interface ProcessScheduleDialogProps {
 
 const weekDays = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
 
-export function ProcessScheduleDialog({ requestId, municipalityId, schedules, animalCount, reschedule, busy, onConfirm, onClose }: ProcessScheduleDialogProps) {
-  const current = schedules[0];
-  const sameTime = schedules.length === 1;
-  const nextDate = current?.date && !isPastScheduleDay(current.date) ? displayScheduleDate(scheduleDate(current.date)) : "";
+export function RescheduleDialog({ requestId, municipalityId, schedules, animalCount, busy, onConfirm, onClose }: RescheduleDialogProps) {
+  const current = procedureGroupScheduleSelection(schedules);
+  const nextDate = schedules[0]?.date && !isPastScheduleDay(schedules[0].date) ? displayScheduleDate(schedules[0].date) : "";
   const [month, setMonth] = useState(nextDate ? nextDate.slice(3) : getCurrentScheduleMonthKey());
-  const [date, setDate] = useState(reschedule ? "" : nextDate);
-  const [location, setLocation] = useState(reschedule ? "" : current?.occurrenceKey || "");
-  const [time, setTime] = useState(reschedule ? "" : current?.slotTime || "");
+  const [date, setDate] = useState("");
+  const [location, setLocation] = useState("");
+  const [time, setTime] = useState("");
   const [reason, setReason] = useState("");
   const availability = useScheduleAvailability(municipalityId, `01/${month}`, requestId);
 
   function eligible(day: { date: string; occurrenceKey: string }, slot: { time: string; remaining: number }) {
-    return !isPastScheduleDay(day.date) && slot.remaining >= animalCount && !(reschedule && sameTime
-      && scheduleDate(day.date) === scheduleDate(current.date) && day.occurrenceKey === current.occurrenceKey && slot.time === current.slotTime);
+    return !isPastScheduleDay(day.date) && slot.remaining >= animalCount && !(current
+      && scheduleDate(day.date) === current.date && day.occurrenceKey === current.occurrenceKey && slot.time === current.time);
   }
   const locations = availability.days.filter((day) => day.date === date);
   const selectedDay = locations.find((day) => day.occurrenceKey === location);
@@ -61,10 +59,10 @@ export function ProcessScheduleDialog({ requestId, municipalityId, schedules, an
   }
 
   return (
-    <ProcessDialog title={reschedule ? "Reagendar solicitação" : "Agendar solicitação"} className="prm-calendar-dialog" busy={busy} onClose={onClose}
+    <ProcessDialog title="Reagendar solicitação" className="prm-calendar-dialog" busy={busy} onClose={onClose}
       actions={
         <Button disabled={busy || !availability.ready || !selected} onClick={() => onConfirm({ date, occurrenceKey: location, time }, reason.trim())}>
-          {busy ? "Salvando..." : reschedule ? "Confirmar reagendamento" : "Confirmar agendamento"}
+          {busy ? "Salvando..." : "Confirmar reagendamento"}
         </Button>
       }>
       <div className="prm-calendar-meta">
@@ -106,10 +104,10 @@ export function ProcessScheduleDialog({ requestId, municipalityId, schedules, an
           ))) : <span className="prm-muted-note">Selecione uma data disponível.</span>}
         </div>
       </section>
-      {reschedule && <label className="prm-field">
+      <label className="prm-field">
         <span>Motivo do reagendamento (opcional)</span>
         <textarea data-ui-input="" className={configTextareaStyle} value={reason} disabled={busy} maxLength={1000} rows={2} placeholder="Se houver" onChange={(event) => setReason(event.target.value)} />
-      </label>}
+      </label>
     </ProcessDialog>
   );
 }

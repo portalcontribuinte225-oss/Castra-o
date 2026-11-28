@@ -1,16 +1,16 @@
 import {
-  ProcedureAction, ProcedureStatus, animalPrescriptionRecords, distinctProcedureSchedules, isMicrochipProcedure, isOpenProcedure,
+  ProcedureAction, ProcedureActionErrorCode, ProcedureStatus, animalPrescriptionRecords, distinctProcedureSchedules, isMicrochipProcedure, isOpenProcedure,
 } from "../../../../shared/request-procedure-contract.js";
 import { RequestHistoryCategory } from "../../../../shared/request-history-contract.js";
 import { RequestOrigin, RequestStatus } from "../../../../shared/request-contract.js";
-import { scheduleDate } from "../../../../shared/schedule-contract.js";
+import { procedureGroupScheduleSelection, scheduleDate } from "../../../../shared/schedule-contract.js";
 import { DocumentSequence } from "../../../../shared/document-number-contract.js";
 import { nextDocumentNumber } from "../../repositories/document-numbers.js";
-import { reserveProcedureSchedule } from "../schedule/schedule-booking.js";
+import { checkProcedureSchedule } from "../schedule/schedule-booking.js";
 import { pendingRequiredDocuments } from "./procedure-documents.js";
 
-function fail(message, status = 409) {
-  throw Object.assign(new Error(message), { status });
+function fail(message, status = 409, code) {
+  throw Object.assign(new Error(message), { status, code });
 }
 
 const nameOf = (animal, index) => animal.name || `Animal ${index + 1}`;
@@ -31,23 +31,31 @@ function requireAssignment(request) {
   }
 }
 
-async function applySchedule(client, { request, animals, input, settings, stamp, addEvent }) {
+async function applySchedule(client, { request, animals, input, settings, now, stamp, addEvent }) {
   const open = animals.flatMap((animal) => animal.procedures.filter(isOpenProcedure));
   if (!open.length) fail("O processo não tem procedimentos pendentes para agendar.");
   const reschedule = input.action === ProcedureAction.RESCHEDULE;
-  const confirmed = open.some(({ status }) => status === ProcedureStatus.SCHEDULED);
-  if (confirmed !== reschedule) fail("A situação do agendamento mudou. Atualize o processo.");
+  const confirmed = request.status === RequestStatus.SCHEDULED || open.some(({ status }) => status === ProcedureStatus.SCHEDULED);
+  if (confirmed && !reschedule) fail("A situação do agendamento mudou. Atualize o processo.");
   requireAssignment(request);
   const pending = pendingRequiredDocuments(settings, request, animals);
   if (pending.length) fail(`Resolva os documentos obrigatórios antes de confirmar a agenda: ${pending.join(", ")}.`);
   const previous = distinctProcedureSchedules(animals);
-  const schedule = await reserveProcedureSchedule(client, { request, animals, selection: input.schedule, municipalityId: request.municipality_id });
+  const booking = { request, animals, now };
+  const reservation = confirmed ? null : await checkProcedureSchedule(client, { ...booking, selection: procedureGroupScheduleSelection(previous) });
+  if (reschedule && reservation?.schedule) {
+    fail("A reserva atual está disponível. Use Confirmar Agenda.", 409, ProcedureActionErrorCode.RESERVATION_AVAILABLE);
+  }
+  const { schedule, error, status } = reschedule ? await checkProcedureSchedule(client, { ...booking, selection: input.schedule }) : reservation;
+  if (!schedule) fail(error, reschedule ? status : 409, reschedule ? undefined : ProcedureActionErrorCode.RESERVATION_UNAVAILABLE);
   if (reschedule && open.every((procedure) => procedure.status === ProcedureStatus.SCHEDULED && sameSlot(procedure.schedule, schedule))) {
     fail("Escolha um horário diferente do agendamento atual.");
   }
-  for (const procedure of open) Object.assign(procedure, stamp, { schedule, status: ProcedureStatus.SCHEDULED });
+  const staysPending = reschedule && !confirmed;
+  for (const procedure of open) Object.assign(procedure, stamp, { schedule, status: staysPending ? ProcedureStatus.WAITING : ProcedureStatus.SCHEDULED });
   const detail = [reschedule && previous.length ? `Anterior: ${previous.map(scheduleText).join(" / ")}` : "",
-    `Horário: ${scheduleText(schedule)}`, input.schedule.reason ? `Motivo: ${input.schedule.reason}` : ""].filter(Boolean).join(" · ");
+    `Horário: ${scheduleText(schedule)}`, input.schedule?.reason ? `Motivo: ${input.schedule.reason}` : "",
+    staysPending ? "Aguardando confirmação" : ""].filter(Boolean).join(" · ");
   addEvent(reschedule ? "Solicitação reagendada" : "Agendamento confirmado", detail, RequestHistoryCategory.SCHEDULE);
   return { previousSchedule: previous[0] };
 }
@@ -127,7 +135,7 @@ export async function applyProcedureAction(client, { request, animals, input, se
   const stamp = { updatedAt: now.toISOString(), updatedBy: user.id };
   const events = [];
   const addEvent = (title, notes, category) => events.push({ title, notes, category, by: user.id, at: now });
-  const context = { request, animals, input, settings, stamp, addEvent };
+  const context = { request, animals, input, settings, now, stamp, addEvent };
   let outcomes = [];
   let previousSchedule;
   switch (input.action) {

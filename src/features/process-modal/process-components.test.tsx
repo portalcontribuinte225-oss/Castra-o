@@ -22,12 +22,18 @@ const animals = [
   { name: "Mel", species: "Felina", sex: "Fêmea", procedures: [castration] },
 ];
 const chipTarget = { animalIndex: 0, requestTypeId: "chip" };
+const pendingRequest = {
+  id: "request-a", protocol: "123/2026", status: "NOVA", tutor_name: "Maria Silva", request_type: "Castração",
+  schedule_date: `${new Date().getFullYear() + 1}-01-12`, schedule_location_name: "Unidade Centro",
+  animals: [{ name: "Bidu", requestTypeIds: ["castration"] }],
+  workflow_data: { assignedSectorId: "clinic", assignedUserId: "operator", scheduleOccurrenceKey: "day:centro", scheduleSlotTime: "08:00" },
+};
+const buttonMarkup = (html: string, label: string) => html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g)?.find((button) => button.endsWith(`${label}</button>`));
 
 describe("ProcessModal", () => {
   it("opens in the v31 clinical tab and preserves the four tabs and the header actions", () => {
     const html = renderToStaticMarkup(<ProcessModal
-      request={{ id: "request-a", protocol: "123/2026", status: "NOVA", tutor_name: "Maria Silva", request_type: "Castração",
-        animals: [{ name: "Bidu", requestTypeIds: ["castration"] }] }}
+      request={pendingRequest}
       requestTypes={[{ id: "castration", name: "Castração" }]}
       readOnly={false}
       onClose={noop}
@@ -44,8 +50,32 @@ describe("ProcessModal", () => {
     expect(html).toContain("Animais e procedimentos");
     expect(html).toContain("Todos realizados");
     expect(html).toContain("Receita unificada");
-    expect(html).toContain("Agendar");
+    expect(buttonMarkup(html, "Confirmar Agenda")).not.toContain("disabled");
+    expect(html).toContain("08:00 · Unidade Centro");
+    expect(html).not.toContain("Reagendar");
+    expect(html).not.toContain("Agenda de atendimento");
     expect(html).not.toContain("Ver procedimentos");
+  });
+
+  it("blocks confirmation and explains missing required documents or a missing assignee", () => {
+    const documents = renderToStaticMarkup(<ProcessModal request={pendingRequest}
+      requestTypes={[{ id: "castration", name: "Castração", documents: [{ id: "identity", name: "Identidade", required: true }] }]}
+      readOnly={false} onClose={noop} />);
+    expect(buttonMarkup(documents, "Confirmar Agenda")).toContain("disabled");
+    expect(documents).toContain("Aprove os documentos obrigatórios do processo.");
+
+    const unassigned = { ...pendingRequest, workflow_data: { ...pendingRequest.workflow_data, assignedUserId: "" } };
+    const assignment = renderToStaticMarkup(<ProcessModal request={unassigned} readOnly={false} onClose={noop} />);
+    expect(buttonMarkup(assignment, "Confirmar Agenda")).toContain("disabled");
+    expect(assignment).toContain("Defina o setor e o responsável pelo processo.");
+  });
+
+  it("offers the explicit reschedule action for an expired reservation", () => {
+    const html = renderToStaticMarkup(<ProcessModal request={{ ...pendingRequest, schedule_date: "01/01/2000" }} readOnly={false} onClose={noop} />);
+    expect(html).toContain("A data da reserva já passou.");
+    expect(buttonMarkup(html, "Confirmar Agenda")).toContain("disabled");
+    expect(buttonMarkup(html, "Reagendar")).not.toContain("disabled");
+    expect(html).not.toContain("Agenda de atendimento");
   });
 
   it("keeps special requests in their own flow", () => {
@@ -72,15 +102,26 @@ describe("ProcessModal", () => {
 describe("ProcessFooter", () => {
   const props: ComponentProps<typeof ProcessFooter> = {
     tab: ProcessTab.PROCEDURES, busy: false, readOnly: false, closed: false, responsible: "Setor: Clínica", dirty: true,
-    confirmed: true, canSchedule: true, canClose: false, canMarkAbsent: true, scheduleBlocked: "",
-    onAssign: noop, onSave: noop, onSchedule: noop, onAbsent: noop, onFinish: noop, actionsSlot: noop,
+    confirmed: true, hasOpenProcedures: true, canClose: false, canMarkAbsent: true, scheduleBlocked: "", reservationUnavailable: "",
+    onAssign: noop, onSave: noop, onConfirmSchedule: noop, onReschedule: noop, onAbsent: noop, onFinish: noop, actionsSlot: noop,
   };
-  it("keeps assignment in every tab and shows agenda actions in the clinical tab", () => {
+  it("keeps assignment in every tab and shares the appropriate booking action between the two operational tabs", () => {
     for (const tab of Object.values(ProcessTab)) {
       const html = renderToStaticMarkup(<ProcessFooter {...props} tab={tab} />);
+      const unconfirmed = renderToStaticMarkup(<ProcessFooter {...props} tab={tab} confirmed={false} />);
+      const hasScheduleAction = tab === ProcessTab.PROCEDURES || tab === ProcessTab.ATTACHMENTS;
       expect(html).toContain("Definir responsável");
-      expect(html.includes("Gerenciar agendamento")).toBe(tab === ProcessTab.PROCEDURES);
+      expect(html.includes("Gerenciar agendamento")).toBe(hasScheduleAction);
+      expect(unconfirmed.includes("Confirmar Agenda")).toBe(hasScheduleAction);
+      expect(Boolean(buttonMarkup(html, "Salvar"))).toBe(tab === ProcessTab.PROCEDURES);
     }
+  });
+  it("disables confirmation while saving and preserves closure access when no procedure is open", () => {
+    const busy = renderToStaticMarkup(<ProcessFooter {...props} confirmed={false} busy />);
+    expect(buttonMarkup(busy, "Confirmar Agenda")).toContain("disabled");
+    const closure = renderToStaticMarkup(<ProcessFooter {...props} confirmed={false} hasOpenProcedures={false} canClose />);
+    expect(closure).toContain("Gerenciar agendamento");
+    expect(closure).not.toContain("Confirmar Agenda");
   });
   it("blocks a closed process and busy assignments", () => {
     const html = renderToStaticMarkup(<ProcessFooter {...props} closed busy />);

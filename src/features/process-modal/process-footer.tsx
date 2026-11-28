@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { CalendarDays, Check, ChevronDown, Save, User, UserX } from "lucide-react";
 import { Button } from "../../components/button";
 import { ProcessTab } from "./process-labels";
@@ -12,33 +12,39 @@ interface ProcessFooterProps {
   responsible: string;
   dirty: boolean;
   confirmed: boolean;
-  canSchedule: boolean;
+  hasOpenProcedures: boolean;
   canClose: boolean;
   canMarkAbsent: boolean;
   scheduleBlocked: string;
+  reservationUnavailable: string;
   onAssign: () => void;
   onSave: () => void;
-  onSchedule: () => void;
+  onConfirmSchedule: () => void;
+  onReschedule: () => void;
   onAbsent: () => void;
   onFinish: () => void;
   actionsSlot: (element: HTMLDivElement | null) => void;
   specialActions?: ReactNode;
 }
 
-function ScheduleMenu({ closed, confirmed, busy, canClose, canSchedule, canMarkAbsent, scheduleBlocked, onSchedule, onAbsent, onFinish }:
-  Pick<ProcessFooterProps, "closed" | "confirmed" | "busy" | "canClose" | "canSchedule" | "canMarkAbsent" | "scheduleBlocked" | "onSchedule" | "onAbsent" | "onFinish">) {
+function supportsMouseHover(event: ReactPointerEvent<HTMLElement>) {
+  return event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches;
+}
+
+function ScheduleMenu({ closed, busy, canClose, canReschedule, canMarkAbsent, scheduleBlocked, onReschedule, onAbsent, onFinish }:
+  Pick<ProcessFooterProps, "closed" | "busy" | "canClose" | "canMarkAbsent" | "scheduleBlocked" | "onReschedule" | "onAbsent" | "onFinish">
+  & { canReschedule: boolean }) {
   const id = useId();
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const [position, setPosition] = useState<{ right: number; bottom: number } | null>(null);
   const open = Boolean(position);
-  const managed = confirmed || canClose;
-  const items = managed ? [
-    { label: "Reagendar", icon: CalendarDays, disabled: !canSchedule, run: onSchedule, title: scheduleBlocked, tone: "neutral" },
+  const items = [
+    { label: "Reagendar", icon: CalendarDays, disabled: !canReschedule, run: onReschedule, title: scheduleBlocked, tone: "neutral" },
     { label: "Atendimento Encerrado", icon: Check, disabled: !canClose, run: onFinish, title: "Classifique todos os procedimentos antes de concluir", tone: "positive" },
     { label: "Não compareceu", icon: UserX, disabled: !canMarkAbsent, run: onAbsent, title: "", tone: "negative" },
-  ] : [{ label: "Agendar", icon: CalendarDays, disabled: !canSchedule, run: onSchedule, title: scheduleBlocked, tone: "neutral" }];
+  ];
 
   function show(focus = false) {
     clearTimeout(timer.current);
@@ -48,7 +54,8 @@ function ScheduleMenu({ closed, confirmed, busy, canClose, canSchedule, canMarkA
     if (focus) requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
   }
 
-  function leave() {
+  function leave(event: ReactPointerEvent<HTMLElement>) {
+    if (!supportsMouseHover(event)) return;
     clearTimeout(timer.current);
     timer.current = setTimeout(() => {
       if (!panel.current?.contains(document.activeElement)) setPosition(null);
@@ -74,7 +81,7 @@ function ScheduleMenu({ closed, confirmed, busy, canClose, canSchedule, canMarkA
 
   return <>
     <Button ref={trigger} aria-haspopup="menu" aria-expanded={open} aria-controls={id} disabled={closed || busy}
-      onPointerEnter={(event) => { if (event.pointerType === "mouse") show(); }} onPointerLeave={leave}
+      onPointerEnter={(event) => { if (supportsMouseHover(event)) show(); }} onPointerLeave={leave}
       onClick={(event) => {
         if (open && event.detail !== 0 && !window.matchMedia("(hover: hover)").matches) setPosition(null);
         else show(event.detail === 0);
@@ -83,7 +90,7 @@ function ScheduleMenu({ closed, confirmed, busy, canClose, canSchedule, canMarkA
         if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); show(true); }
         if (event.key === "Escape" && open) { event.preventDefault(); setPosition(null); }
       }}>
-      <CalendarDays size={15} aria-hidden="true" /> {closed ? "Atendimento concluído" : managed ? "Gerenciar agendamento" : "Agendar"} <ChevronDown size={13} aria-hidden="true" />
+      <CalendarDays size={15} aria-hidden="true" /> {closed ? "Atendimento concluído" : "Gerenciar agendamento"} <ChevronDown size={13} aria-hidden="true" />
     </Button>
     {open && <div ref={panel} id={id} role="menu" aria-label="Gerenciar agendamento" className="prm-schedule-menu" style={position || undefined}
       onPointerEnter={() => clearTimeout(timer.current)} onPointerLeave={leave} onBlur={(event) => {
@@ -107,21 +114,36 @@ function ScheduleMenu({ closed, confirmed, busy, canClose, canSchedule, canMarkA
 }
 
 export function ProcessFooter(props: ProcessFooterProps) {
-  const { tab, readOnly, closed, busy, responsible, onAssign, onSave, dirty, actionsSlot, specialActions } = props;
+  const { tab, readOnly, closed, busy, responsible, onAssign, onSave, dirty, actionsSlot, specialActions,
+    confirmed, canClose, hasOpenProcedures, scheduleBlocked, reservationUnavailable, onConfirmSchedule, onReschedule } = props;
+  const noteId = useId();
+  const proceduresTab = tab === ProcessTab.PROCEDURES;
+  const showSchedule = !readOnly && specialActions === undefined && (proceduresTab || tab === ProcessTab.ATTACHMENTS);
+  const managed = confirmed || canClose || closed;
+  const canReschedule = hasOpenProcedures && !scheduleBlocked;
+  const scheduleNote = showSchedule && !closed && hasOpenProcedures
+    ? [scheduleBlocked, managed ? "" : reservationUnavailable].filter(Boolean).join(" ") : "";
   return (
     <footer className="prm-footer" aria-label="Ações do processo">
       <div className="prm-footer-start">
         <Button variant="outline" disabled={readOnly || closed || busy} title={responsible} onClick={onAssign}><User size={15} aria-hidden="true" /> Definir responsável</Button>
       </div>
       {tab === ProcessTab.TUTOR && <div className="prm-footer-end" ref={actionsSlot} />}
-      {tab === ProcessTab.PROCEDURES && (
+      {(proceduresTab || showSchedule) && (
         <div className="prm-footer-end">
-          {specialActions ?? (!readOnly && <>
-            <Button variant="outline" disabled={busy || closed || !dirty} onClick={onSave}><Save size={15} aria-hidden="true" /> Salvar</Button>
-            <ScheduleMenu {...props} />
+          {proceduresTab && (specialActions ?? (!readOnly &&
+            <Button variant="outline" disabled={busy || closed || !dirty} onClick={onSave}><Save size={15} aria-hidden="true" /> Salvar</Button>))}
+          {showSchedule && (managed ? <ScheduleMenu {...props} canReschedule={canReschedule} /> : hasOpenProcedures && <>
+            <Button disabled={busy || Boolean(scheduleNote)} aria-describedby={scheduleNote ? noteId : undefined} onClick={onConfirmSchedule}>
+              <CalendarDays size={15} aria-hidden="true" /> Confirmar Agenda
+            </Button>
+            {reservationUnavailable && <Button variant="outline" disabled={busy || !canReschedule} aria-describedby={noteId} onClick={onReschedule}>
+              <CalendarDays size={15} aria-hidden="true" /> Reagendar
+            </Button>}
           </>)}
         </div>
       )}
+      {scheduleNote && <p className="prm-footer-note prm-muted-note" id={noteId} role="status">{scheduleNote}</p>}
     </footer>
   );
 }

@@ -33,7 +33,8 @@ Escritores de pedidos e calendário compartilham um advisory lock municipal para
 ### Atendimento de animais
 
 - A equipe interna pode informar `excludeRequestId` em `GET /api/schedule/availability` para consultar a capacidade que poderá realocar em um reagendamento. A consulta usa a prefeitura autorizada.
-- `POST /api/requests/:id/procedures/action` recebe `action`, `expectedUpdatedAt` e os dados da operação. Confirmar ou reagendar aplica um único horário aos procedimentos abertos. Salvar saúde e resultados, registrar falta, encerrar e emitir receitas usam lotes validados pelo servidor. A versão desatualizada recebe HTTP 409.
+- `POST /api/requests/:id/procedures/action` requer `action` e `expectedUpdatedAt`. `confirm_schedule` usa o horário vigente da reserva dos procedimentos abertos. Para `reschedule`, envie `data.schedule` com `date`, `occurrenceKey` e `time`. Se a reserva pendente perder disponibilidade, ela pode ser substituída e continua aguardando a confirmação. A equipe pode então confirmar o novo horário e disparar o aviso de confirmação.
+- Salvar saúde e resultados, registrar falta, encerrar e emitir receitas usam lotes validados pelo servidor. A versão desatualizada recebe HTTP 409. A confirmação de horário indisponível retorna HTTP 409 com `RESERVATION_UNAVAILABLE`. A tentativa de substituir uma reserva pendente ainda válida retorna HTTP 409 com `RESERVATION_AVAILABLE`.
 - A reserva conta uma vaga por animal na mesma data, local e horário. Salvar o último resultado libera a vaga correspondente. A situação final do processo é publicada após a confirmação explícita de encerramento.
 - A receita unificada registra emissões por animal, com vínculo opcional a um procedimento. O PDF reúne as emissões numeradas, incluindo versões anteriores em consulta.
 

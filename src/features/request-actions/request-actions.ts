@@ -1,11 +1,13 @@
 import { useCallback, useState } from "react";
 import { RequestStatus, RequestTag } from "../../../shared/request-contract.js";
+import { ProcedureActionErrorCode } from "../../../shared/request-procedure-contract.js";
+import { ApiError } from "../../api";
 import type { AnyRecord } from "../../types";
 import { mergeTags, normalizeRequest } from "../../domain";
 import { getNotificationNotice } from "../notifications/notification-results";
 import { normalizeText } from "../../utils";
 import { REJECTED_CANCEL_REASON } from "../../../shared/notification-contract.js";
-import type { ProcedureOperation } from "../process-modal/process-types";
+import type { ProcedureActionResult, ProcedureOperation } from "../process-modal/process-types";
 
 export function canEditRequests(role = ""): boolean {
   return ["master", "suporte", "admin_municipal", "analista", "servidor_publico"].includes(normalizeText(role));
@@ -56,7 +58,7 @@ export function useRequestActions({
     if (refreshed) setPreviewRequest((current) => current?.id === id ? refreshed : current);
   }
 
-  async function applyProcedureAction(request: AnyRecord, action: ProcedureOperation, successMessage: string): Promise<AnyRecord | null> {
+  async function applyProcedureAction(request: AnyRecord, action: ProcedureOperation, successMessage: string): Promise<ProcedureActionResult | null> {
     try {
       const updated = await runProcedureAction?.(request.id, { ...action, expectedUpdatedAt: request.updated_at || request.updatedAt || "" });
       if (!updated) return null;
@@ -64,8 +66,13 @@ export function useRequestActions({
       showNotificationNotice(updated);
       const normalized = normalizeRequest(updated);
       setPreviewRequest((current) => current?.id === request.id ? normalized : current);
-      return normalized;
-    } catch (failure) { showToast(failure?.message || "Não foi possível atualizar o procedimento.", "error"); return null; }
+      return { ok: true };
+    } catch (failure) {
+      const message = failure?.message || "Não foi possível atualizar o procedimento.";
+      const code = failure instanceof ApiError ? failure.code : undefined;
+      if (code !== ProcedureActionErrorCode.RESERVATION_UNAVAILABLE) showToast(message, "error");
+      return { ok: false, message, code };
+    }
   }
 
   // The attachments tab saves each document decision and each evidence as soon as it is made.

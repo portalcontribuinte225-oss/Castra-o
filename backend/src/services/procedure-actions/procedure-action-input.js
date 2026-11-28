@@ -76,9 +76,15 @@ export function parseProcedureActionInput(body) {
   if (typeof expectedUpdatedAt !== "string" || (expectedUpdatedAt && !Number.isFinite(Date.parse(expectedUpdatedAt)))) {
     invalid("Atualize o processo antes de enviar a ação.");
   }
-  const data = object(body.data) ? body.data : {};
   const operation = { action, expectedUpdatedAt };
-  if (action === ProcedureAction.CONFIRM_SCHEDULE || action === ProcedureAction.RESCHEDULE) return { ...operation, schedule: readSchedule(data) };
+  if (action === ProcedureAction.CONFIRM_SCHEDULE) {
+    if (body.data !== undefined && (!object(body.data) || Object.keys(body.data).length)) {
+      invalid("A confirmação usa a reserva atual. Atualize o processo e tente novamente.");
+    }
+    return operation;
+  }
+  const data = object(body.data) ? body.data : {};
+  if (action === ProcedureAction.RESCHEDULE) return { ...operation, schedule: readSchedule(data) };
   if (action === ProcedureAction.REMOVE) return { ...operation, target: target(data.target), reason: text(data.reason, MAX_PROCEDURE_NOTE, "O motivo da remoção", true) };
   if (action === ProcedureAction.PRESCRIPTION) {
     const prescriptions = list(data.prescriptions, prescription, (row) => row.animalIndex);

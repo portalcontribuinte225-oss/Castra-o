@@ -1,11 +1,11 @@
 import { useId, useRef, useState } from "react";
 import { CalendarDays, History } from "lucide-react";
 import {
-  CLOSED_WITHOUT_ATTENDANCE, POSITIVE_CLOSURE, ProcedureAction, ProcedureStatus, REQUESTED_SCHEDULE_KEY,
+  CLOSED_WITHOUT_ATTENDANCE, POSITIVE_CLOSURE, ProcedureAction, ProcedureActionErrorCode, ProcedureStatus, REQUESTED_SCHEDULE_KEY,
   appointmentNumberOfAnimals, distinctProcedureSchedules, isClosedRequest, isOpenProcedure, openProcedureSelections, scheduleFromRequest,
 } from "../../../shared/request-procedure-contract.js";
 import { RequestOrigin, RequestStatus } from "../../../shared/request-contract.js";
-import { displayScheduleDate, scheduleDate } from "../../../shared/schedule-contract.js";
+import { displayScheduleDate, procedureGroupScheduleSelection, scheduleDate, scheduleLocalDate } from "../../../shared/schedule-contract.js";
 import { Button } from "../../components/button";
 import { DocumentPreviewModal } from "../../components/document-preview-modal";
 import { useModalFocus } from "../../components/modal-focus";
@@ -29,15 +29,15 @@ import { ProcessHeader } from "./process-header";
 import { ProcessHistoryTab } from "./process-history-tab";
 import { ProcessTab } from "./process-labels";
 import { procedureTargetKey } from "./process-types";
-import type { AppointmentSlot, ProcedureOperation, ProcedureTarget } from "./process-types";
+import type { AppointmentSlot, ProcedureActionResult, ProcedureOperation, ProcedureTarget } from "./process-types";
 import { PrescriptionDialog } from "./prescription-dialog";
 import { processAnimalLabel, ProceduresTab } from "./procedures-tab";
-import { ProcessScheduleDialog } from "./reschedule-dialog";
+import { RescheduleDialog } from "./reschedule-dialog";
 import { getSpecialRequestSection, specialRequestConfirmLabel } from "./special-request-sections";
 import { useAttachmentActions } from "./use-attachment-actions";
 import { useProcessProcedures } from "./use-process-procedures";
 
-enum DialogKind { ASSIGN, SCHEDULE, ABSENCE, REMOVE, FINISH, PRESCRIPTION, REJECT_DOCUMENT, SPECIAL_REJECT, COMPLAINT, UNSAVED }
+enum DialogKind { ASSIGN, RESCHEDULE, ABSENCE, REMOVE, FINISH, PRESCRIPTION, REJECT_DOCUMENT, SPECIAL_REJECT, COMPLAINT, UNSAVED }
 type Dialog = { kind: DialogKind.REMOVE; target: ProcedureTarget } | { kind: DialogKind.REJECT_DOCUMENT; row: AttachmentRow }
   | { kind: Exclude<DialogKind, DialogKind.REMOVE | DialogKind.REJECT_DOCUMENT> };
 type Assignment = { sectorId: string; userId: string };
@@ -59,7 +59,7 @@ interface ProcessModalProps {
   onAssign?: (request: AnyRecord, assignment: Assignment) => Promise<boolean | undefined>;
   onRejectProcess?: (request: AnyRecord, data: { category: string; note: string }) => Promise<boolean | undefined>;
   onConfirmSpecial?: (request: AnyRecord, data?: { note: string }) => Promise<boolean | undefined>;
-  onProcedureAction?: (request: AnyRecord, operation: ProcedureOperation, message: string) => Promise<AnyRecord | null>;
+  onProcedureAction?: (request: AnyRecord, operation: ProcedureOperation, message: string) => Promise<ProcedureActionResult | null>;
   onUpdateDocuments?: (request: AnyRecord, patch: AnyRecord, note: string) => Promise<boolean>;
 }
 
@@ -99,6 +99,7 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const [tutorBusy, setTutorBusy] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState("");
+  const [reservationFailure, setReservationFailure] = useState<{ version: string; message: string }>();
   const [historyCount, setHistoryCount] = useState<number>();
   const [tutorSlot, setTutorSlot] = useState<HTMLDivElement | null>(null);
   const panelId = useId();
@@ -120,6 +121,15 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   const anyDone = batch.results.length > 0 || all.some(({ procedure }) => procedure.status === ProcedureStatus.DONE);
   const confirmed = scheduled.length > 0 || normalized.status === RequestStatus.SCHEDULED;
   const current = distinctProcedureSchedules(animals);
+  const animalCount = appointmentNumberOfAnimals(animals);
+  const requestVersion = `${normalized.id}:${request.updated_at || normalized.updatedAt}`;
+  const selection = procedureGroupScheduleSelection(current);
+  let reservationUnavailable = "";
+  if (!confirmed && animalCount > 0) {
+    if (!selection) reservationUnavailable = "A reserva atual não identifica um único horário.";
+    else if (selection.date < scheduleLocalDate()) reservationUnavailable = "A data da reserva já passou.";
+    else if (reservationFailure?.version === requestVersion) reservationUnavailable = reservationFailure.message;
+  }
   const originalSchedule = workflow[REQUESTED_SCHEDULE_KEY];
   const requested = originalSchedule === undefined ? scheduleFromRequest(request) : originalSchedule;
   const retainedSchedules = current.length ? current : distinctProcedureSchedules(animals, () => true);
@@ -133,8 +143,9 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   });
   const assignmentRequired = normalized.origin !== RequestOrigin.INTERNAL && !(normalized.assignedSectorId && normalized.assignedUserId);
   const documentsBlocked = rows.some(isBlockingAttachment);
-  const scheduleBlocked = batch.results.length ? "Salve os procedimentos marcados antes de alterar o agendamento."
-    : assignmentRequired ? "Defina o setor e o responsável antes de agendar." : documentsBlocked ? "Resolva os documentos obrigatórios antes de confirmar a agenda." : "";
+  const scheduleBlocked = batch.results.length ? "Salve os procedimentos marcados antes de alterar a agenda."
+    : documentsBlocked ? "Aprove os documentos obrigatórios do processo."
+      : assignmentRequired ? "Defina o setor e o responsável pelo processo." : "";
 
   async function perform(action: () => Promise<unknown> | undefined) {
     if (pending || !editable || writing.current) return false;
@@ -153,7 +164,18 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
   }
 
   async function act(operation: ProcedureOperation, message: string) {
-    const saved = await perform(() => onProcedureAction?.(request, operation, message));
+    const saved = await perform(async () => {
+      const result = await onProcedureAction?.(request, operation, message);
+      if (result?.ok === false) {
+        if (result.code === ProcedureActionErrorCode.RESERVATION_UNAVAILABLE) {
+          setReservationFailure({ version: requestVersion, message: result.message });
+        } else if (result.code === ProcedureActionErrorCode.RESERVATION_AVAILABLE) {
+          setReservationFailure(undefined);
+          setDialog(null);
+        }
+      }
+      return result?.ok;
+    });
     if (saved && (operation.action === ProcedureAction.SAVE || operation.action === ProcedureAction.CLOSE)) procedures.clearDrafts();
     return saved;
   }
@@ -218,9 +240,12 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
           </div>
           <ProcessFooter tab={tab} busy={pending} readOnly={readOnly} closed={closed}
             responsible={`Setor: ${normalized.assignedSectorName || "Não definido"} · Responsável: ${normalized.responsible || "Não atribuído"}`}
-            dirty={procedures.dirty} confirmed={confirmed} canClose={canClose} canSchedule={!scheduleBlocked && appointmentNumberOfAnimals(animals) > 0}
-            canMarkAbsent={scheduled.length > 0 && batch.results.length === 0} scheduleBlocked={scheduleBlocked} actionsSlot={setTutorSlot}
-            onAssign={() => setDialog({ kind: DialogKind.ASSIGN })} onSave={save} onSchedule={() => setDialog({ kind: DialogKind.SCHEDULE })}
+            dirty={procedures.dirty} confirmed={confirmed} canClose={canClose} hasOpenProcedures={animalCount > 0}
+            canMarkAbsent={scheduled.length > 0 && batch.results.length === 0} scheduleBlocked={scheduleBlocked}
+            reservationUnavailable={reservationUnavailable} actionsSlot={setTutorSlot}
+            onAssign={() => setDialog({ kind: DialogKind.ASSIGN })} onSave={save}
+            onConfirmSchedule={() => act({ action: ProcedureAction.CONFIRM_SCHEDULE }, "Agendamento confirmado")}
+            onReschedule={() => setDialog({ kind: DialogKind.RESCHEDULE })}
             onAbsent={() => setDialog({ kind: DialogKind.ABSENCE })} onFinish={() => setDialog({ kind: DialogKind.FINISH })}
             specialActions={SpecialSection ? (editable ? <>
               <Button variant="danger" disabled={pending || assignmentRequired} onClick={() => setDialog({ kind: DialogKind.SPECIAL_REJECT })}>Indeferir</Button>
@@ -236,9 +261,10 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
       {dialog?.kind === DialogKind.REJECT_DOCUMENT && <NoteDialog title={`Indeferir ${dialog.row.title}`} label="Justificativa do indeferimento"
         placeholder="Explique o motivo do indeferimento." confirmLabel="Indeferir documento" busy={pending} maxLength={500} onClose={closeDialog}
         onConfirm={async (note) => { if (await attachments.reject(dialog.row, note)) { setDialog(null); setHistoryCount(undefined); } }} />}
-      {dialog?.kind === DialogKind.SCHEDULE && <ProcessScheduleDialog requestId={normalized.id} municipalityId={normalized.municipalityId} schedules={current}
-        reschedule={scheduled.length > 0} animalCount={appointmentNumberOfAnimals(animals)} busy={pending} onClose={closeDialog}
-        onConfirm={(schedule, reason) => act({ action: scheduled.length > 0 ? ProcedureAction.RESCHEDULE : ProcedureAction.CONFIRM_SCHEDULE, data: { schedule, reason } }, "Agendamento atualizado")} />}
+      {dialog?.kind === DialogKind.RESCHEDULE && <RescheduleDialog requestId={normalized.id} municipalityId={normalized.municipalityId} schedules={current}
+        animalCount={animalCount} busy={pending} onClose={closeDialog}
+        onConfirm={(schedule, reason) => act({ action: ProcedureAction.RESCHEDULE, data: { schedule, reason } },
+          confirmed ? "Agendamento atualizado" : "Reserva atualizada. Aguardando confirmação.")} />}
       {dialog?.kind === DialogKind.ABSENCE && selectedForAbsence && <AbsenceDialog animals={animals} scheduled={scheduled} initial={selectedForAbsence} busy={pending}
         onClose={closeDialog} onConfirm={(results) => act({ action: ProcedureAction.NO_SHOW, data: { results } }, "Não comparecimento registrado")} />}
       {dialog?.kind === DialogKind.REMOVE && removal && <NoteDialog title="Remover procedimento"

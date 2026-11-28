@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import express from "express";
 import requestsRouter from "../src/routes/requests.js";
 import { pool } from "../src/db/index.js";
-import { CLOSED_WITHOUT_ATTENDANCE, ProcedureAction, ProcedureStatus, deriveRequestStatus, resolveRequestProcedures } from "../../shared/request-procedure-contract.js";
+import { CLOSED_WITHOUT_ATTENDANCE, ProcedureAction, ProcedureActionErrorCode, ProcedureStatus, deriveRequestStatus, resolveRequestProcedures } from "../../shared/request-procedure-contract.js";
 import { DocumentSequence, documentNumberYear } from "../../shared/document-number-contract.js";
 import { allocateScheduleAvailability, buildScheduleOccurrences, requestScheduleBookings } from "../../shared/schedule-contract.js";
 import { NO_SHOW_CANCEL_REASON } from "../../shared/notification-contract.js";
@@ -41,6 +41,8 @@ async function fixture(t, existing, { requiredDocument = false, requiredDocument
   const sessions = new Map();
   const counters = { prescription: 0 };
   let row = clone(existing);
+  const scheduleDays = [{ id: DAY_ID, date: FUTURE_DATE, active: true, slots: [{ time: "08:00", vacancies }] },
+    { id: "88888888-8888-4888-8888-888888888888", date: LATER_DATE, active: true, slots: [{ time: "09:00", vacancies }] }];
   const types = REQUEST_TYPES.map((type) => requiredDocument && (!requiredDocumentFor || requiredDocumentFor === type.id)
     ? { ...type, documents: [{ id: "identity", name: "Documento de identidade", required: true, active: true }] } : type);
   const configuration = new Map([["castragestao:request-types", types], ["castragestao:document-types", []]]);
@@ -51,9 +53,14 @@ async function fixture(t, existing, { requiredDocument = false, requiredDocument
     if (sql.includes("FROM municipalities m LEFT JOIN config")) return { rows: [...configuration].map(([key, value]) => ({ key, value: clone(value), municipality_id: values[0] })) };
     if (sql.includes("SELECT value FROM config")) return { rows: [{ value: clone(configuration.get(values[0])) }] };
     if (sql.startsWith("SELECT municipality_id FROM requests")) return { rows: row.id === values[0] ? [{ municipality_id: row.municipality_id }] : [] };
-    if (sql.includes("SELECT * FROM schedule_days")) return { rows: [{ id: DAY_ID, date: FUTURE_DATE, active: true, slots: [{ time: "08:00", vacancies }] },
-      { id: "88888888-8888-4888-8888-888888888888", date: LATER_DATE, active: true, slots: [{ time: "09:00", vacancies }] }] };
-    if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) return { rows: [] };
+    if (sql.includes("SELECT * FROM schedule_days")) {
+      assert.deepEqual(values, [row.municipality_id]);
+      return { rows: clone(scheduleDays) };
+    }
+    if (sql.includes("SELECT id, status, schedule_date, animals, workflow_data FROM requests")) {
+      assert.equal(values[0], row.municipality_id);
+      return { rows: row.id === values[2] ? [] : [clone(row)] };
+    }
     if (sql.includes("INSERT INTO document_counters")) {
       assert.deepEqual(values.slice(0, 2), [row.municipality_id, DocumentSequence.PRESCRIPTION]);
       counters.prescription += 1;
@@ -96,7 +103,7 @@ async function fixture(t, existing, { requiredDocument = false, requiredDocument
     });
     return { status: response.status, body: await response.json().catch(() => null) };
   }
-  return { call, row: () => row, documentRows: () => decorateRequestDocuments(row, { requestTypes: types }).documents };
+  return { call, row: () => row, scheduleDays, documentRows: () => decorateRequestDocuments(row, { requestTypes: types }).documents };
 }
 
 const statusesOf = (row) => row.animals.map((animal) => animal.procedures.map((procedure) => procedure.status));
@@ -156,9 +163,9 @@ test("the nearest open procedure supplies the date, location, and time even whil
 });
 
 const target = (animalIndex, requestTypeId) => ({ animalIndex, requestTypeId });
-const atFirst = { date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, time: "08:00" };
 const atLater = { date: LATER_DATE, occurrenceKey: "day:88888888-8888-4888-8888-888888888888", time: "09:00" };
-const confirm = { action: ProcedureAction.CONFIRM_SCHEDULE, data: { schedule: atFirst } };
+const confirm = { action: ProcedureAction.CONFIRM_SCHEDULE };
+const reschedule = { action: ProcedureAction.RESCHEDULE, data: { schedule: atLater, reason: "Pedido do tutor" } };
 const patch = { method: "PATCH", path: `/requests/${REQUEST_ID}` };
 const close = { action: ProcedureAction.CLOSE };
 
@@ -166,8 +173,9 @@ test("all open procedures share one appointment, then results and closure are in
   const { call, row } = await fixture(t, twoAnimalRequest(), { vacancies: 2 });
   assert.equal((await call(confirm)).status, 200);
   assert.deepEqual(statusesOf(row()), [[ProcedureStatus.SCHEDULED, ProcedureStatus.SCHEDULED], [ProcedureStatus.SCHEDULED, ProcedureStatus.SCHEDULED]]);
-  assert.equal(requestScheduleBookings(row())[0].count, 2);
+  assert.deepEqual(requestScheduleBookings(row()), [{ date: FUTURE_DATE, occurrenceKey: `day:${DAY_ID}`, slotTime: "08:00", count: 2, exactSlot: true }]);
   assert.equal((await call(confirm)).status, 409);
+  assert.equal(row().history.filter(({ title }) => title === "Agendamento confirmado").length, 1);
   const outcomes = await call({ action: ProcedureAction.SAVE, data: {
     results: [target(0, "castration"), target(0, "microchip"), target(1, "castration"), target(1, "microchip")],
     health: [{ animalIndex: 0, microchip: "abc1234", doencas: "Displasia" }, { animalIndex: 1, microchip: "xyz7890" }],
@@ -230,7 +238,6 @@ test("an invalid batch and a stale screen leave the saved operation intact", asy
 
 test("a group reschedule moves every open procedure and leaves the original request date", async (t) => {
   const { call, row } = await fixture(t, twoAnimalRequest({ status: "AGENDADA" }), { vacancies: 2 });
-  const reschedule = { action: ProcedureAction.RESCHEDULE, data: { schedule: atLater, reason: "Pedido do tutor" } };
   assert.equal((await call(reschedule)).status, 200);
   assert.deepEqual(row().animals.flatMap((animal) => animal.procedures.map((item) => item.schedule.date)), Array(4).fill(LATER_DATE));
   assert.deepEqual(row().workflow_data.procedureScheduleDates, [LATER_DATE]);
@@ -238,6 +245,60 @@ test("a group reschedule moves every open procedure and leaves the original requ
   assert.equal(requestScheduleBookings(row())[0].count, 2);
   assert.match(row().history.at(-1).notes, /Pedido do tutor/);
   assert.equal((await call(reschedule)).status, 409);
+});
+
+test("confirmation rejects a new selection and a valid pending reservation cannot be rescheduled", async (t) => {
+  const existing = twoAnimalRequest();
+  const { call, row } = await fixture(t, existing);
+  assert.equal((await call({ ...confirm, data: { schedule: atLater } })).status, 400);
+  const blocked = await call(reschedule);
+  assert.equal(blocked.status, 409);
+  assert.equal(blocked.body.code, ProcedureActionErrorCode.RESERVATION_AVAILABLE);
+  assert.deepEqual(row(), existing);
+});
+
+test("an expired pending reservation is replaced without confirming, then confirmation uses the replacement", async (t) => {
+  const expiredDate = "01/01/2000";
+  const { call, row } = await fixture(t, twoAnimalRequest({ schedule_date: expiredDate }), { vacancies: 2 });
+  const unavailable = await call(confirm);
+  assert.equal(unavailable.status, 409);
+  assert.equal(unavailable.body.code, ProcedureActionErrorCode.RESERVATION_UNAVAILABLE);
+  assert.equal((await call(reschedule)).status, 200);
+  assert.equal(row().status, "NOVA");
+  assert.deepEqual(statusesOf(row()).flat(), Array(4).fill(ProcedureStatus.WAITING));
+  assert.equal(row().workflow_data.requestedSchedule.date, expiredDate);
+  assert.match(row().history.at(-1).notes, /Aguardando confirmação/);
+  assert.deepEqual(requestScheduleBookings(row()), [{ date: LATER_DATE, occurrenceKey: atLater.occurrenceKey, slotTime: "09:00", count: 2, exactSlot: true }]);
+  assert.equal((await call(confirm)).status, 200);
+  assert.equal(row().schedule_date, LATER_DATE);
+  assert.equal(row().workflow_data.requestedSchedule.date, expiredDate);
+  assert.deepEqual(row().history.map(({ title }) => title), ["Solicitação reagendada", "Agendamento confirmado"]);
+});
+
+test("a removed slot allows recovery and a full destination preserves the entire pending reservation", async (t) => {
+  const existing = twoAnimalRequest();
+  const { call, row, scheduleDays } = await fixture(t, existing, { vacancies: 2 });
+  scheduleDays[0].slots[0].time = "07:00";
+  scheduleDays[1].slots[0].vacancies = 1;
+  const unavailable = await call(confirm);
+  assert.equal(unavailable.status, 409);
+  assert.equal(unavailable.body.code, ProcedureActionErrorCode.RESERVATION_UNAVAILABLE);
+  assert.equal((await call(reschedule)).status, 409);
+  assert.deepEqual(row(), existing);
+  scheduleDays[1].slots[0].vacancies = 2;
+  assert.equal((await call(reschedule)).status, 200);
+  assert.equal(row().status, "NOVA");
+  assert.equal(row().schedule_date, LATER_DATE);
+});
+
+test("a legacy pending reservation with no identifiable slot requires an explicit replacement", async (t) => {
+  const existing = twoAnimalRequest({ workflow_data: { scheduleSlotTime: "08:00" } });
+  const { call, row } = await fixture(t, existing);
+  assert.equal((await call(confirm)).body.code, ProcedureActionErrorCode.RESERVATION_UNAVAILABLE);
+  assert.deepEqual(row(), existing);
+  assert.equal((await call(reschedule)).status, 200);
+  assert.equal(row().status, "NOVA");
+  assert.equal(row().schedule_date, LATER_DATE);
 });
 
 test("too few places at the new time conserve the entire group appointment", async (t) => {

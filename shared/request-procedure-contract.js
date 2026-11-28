@@ -17,6 +17,10 @@ export const ProcedureAction = Object.freeze({
   REMOVE: "remove", CLOSE: "close", PRESCRIPTION: "prescription",
 });
 
+export const ProcedureActionErrorCode = Object.freeze({
+  RESERVATION_UNAVAILABLE: "RESERVATION_UNAVAILABLE", RESERVATION_AVAILABLE: "RESERVATION_AVAILABLE",
+});
+
 export const REQUESTED_SCHEDULE_KEY = "requestedSchedule";
 export const CLOSED_WITHOUT_ATTENDANCE = "Encerrado sem realização";
 export const POSITIVE_CLOSURE = "Conclusão positiva";

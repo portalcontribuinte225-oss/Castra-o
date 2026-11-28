@@ -42,9 +42,12 @@ export interface PrescriptionDraft {
 export type ProcedureOperation =
   | { action: typeof ProcedureAction.SAVE | typeof ProcedureAction.CLOSE; data: ClinicalBatch }
   | { action: typeof ProcedureAction.NO_SHOW; data: { results: ProcedureTarget[] } }
-  | { action: typeof ProcedureAction.CONFIRM_SCHEDULE | typeof ProcedureAction.RESCHEDULE; data: { schedule: ScheduleSelection; reason: string } }
+  | { action: typeof ProcedureAction.CONFIRM_SCHEDULE }
+  | { action: typeof ProcedureAction.RESCHEDULE; data: { schedule: ScheduleSelection; reason: string } }
   | { action: typeof ProcedureAction.REMOVE; data: { target: ProcedureTarget; reason: string } }
   | { action: typeof ProcedureAction.PRESCRIPTION; data: { prescriptions: PrescriptionDraft[] } };
+
+export type ProcedureActionResult = { ok: true } | { ok: false; message: string; code?: string };
 
 export type ProcessProcedure = AnyRecord & { requestTypeId: string; status: string; name: string; schedule?: AppointmentSlot | null };
 export type ProcessAnimal = AnyRecord & { procedures: ProcessProcedure[] };

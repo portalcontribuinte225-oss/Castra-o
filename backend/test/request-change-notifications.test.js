@@ -98,6 +98,14 @@ test("group confirmation and rescheduling each send one notice with the saved ap
   }
 });
 
+test("replacing an unavailable reservation before confirmation sends no agenda notice", async () => {
+  const pending = { ...before, schedule_date: "2026-12-03" };
+  const results = await notifyRequestChanges(before, pending, dependencies({ procedureAction: ProcedureAction.RESCHEDULE,
+    dispatch: async () => assert.fail("the new reservation still needs confirmation"),
+  }));
+  assert.deepEqual(results, []);
+});
+
 test("saving a result never sends an agenda notice when the nearest remaining appointment changes", async () => {
   const scheduled = { ...after(), schedule_date: "2026-11-23" };
   const next = { ...scheduled, schedule_date: "2026-11-30" };

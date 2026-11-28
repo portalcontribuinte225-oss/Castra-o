@@ -8,6 +8,7 @@ import { COMPLAINT_PHOTO_IDS } from "../../shared/complaint-photo-contract.js";
 import { DocumentSequence, documentNumberYear } from "../../shared/document-number-contract.js";
 import { NotificationEvent } from "../../shared/notification-contract.js";
 import { REQUEST_CONTACT_CPF_KEY, RequestKind, RequestOrigin } from "../../shared/request-contract.js";
+import { ProcedureAction } from "../../shared/request-procedure-contract.js";
 import { AnimalTutorship } from "../../shared/request-tutorship-contract.js";
 import { EMAIL_ACTIVE_USES_CONFIG_KEY } from "../../shared/email-contract.js";
 import { StaffNotificationType } from "../../shared/staff-notifications-contract.js";
@@ -538,7 +539,7 @@ test("confirming a group marks every procedure and never repeats the schedule no
     workflow_data: { ...configured.workflow_data, scheduleSlotTime: "08:00", scheduleOccurrenceKey: `day:${SCHEDULE_DAY_ID}` } };
   const { request, row, stats } = await fixture(t, { existing });
   const confirm = () => request({ method: "POST", path: `/requests/${REQUEST_ID}/procedures/action`, user: ADMIN,
-    body: { action: "confirm_schedule", expectedUpdatedAt: "", data: { schedule: { date: FUTURE_DATE, occurrenceKey: `day:${SCHEDULE_DAY_ID}`, time: "08:00" } } },
+    body: { action: ProcedureAction.CONFIRM_SCHEDULE, expectedUpdatedAt: "" },
   });
   const results = await Promise.all([confirm(), confirm()]);
   assert.deepEqual(results.map(({ status }) => status).sort(), [200, 409]);

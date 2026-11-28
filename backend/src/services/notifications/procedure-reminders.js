@@ -1,11 +1,10 @@
 import { NotificationEvent } from "../../../../shared/notification-contract.js";
 import { RequestStatus, isProcedureRequest } from "../../../../shared/request-contract.js";
 import { ProcedureStatus, hasStoredProcedures, resolveRequestProcedures } from "../../../../shared/request-procedure-contract.js";
-import { scheduleDate } from "../../../../shared/schedule-contract.js";
+import { scheduleDate, scheduleLocalDate } from "../../../../shared/schedule-contract.js";
 import { claimProcedureReminder, procedureReminderRequests } from "../../repositories/procedure-reminders.js";
 import { appendRequestHistory } from "../../repositories/request-history.js";
 import { recordNotificationResults, requestForProcedure } from "../request-change-notifications.js";
-import { localToday } from "../schedule/schedule-booking.js";
 import { dispatchNotification } from "./dispatch-notification.js";
 
 const EVENT = NotificationEvent.SCHEDULE_REMINDER;
@@ -53,7 +52,7 @@ export function startProcedureReminders() {
   let running = false;
   async function tick() {
     const now = new Date();
-    const today = localToday(now);
+    const today = scheduleLocalDate(now);
     const hour = Number(localHour.format(now));
     if (running || hour < 9 || hour >= 20) return;
     running = true;
