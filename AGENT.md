@@ -11,17 +11,17 @@ Sistema de castração animal multi-prefeitura. Frontend React + Vite + TypeScri
 ## Git, PRs e deploy
 
 - Fluxo deste projeto (definido pelas skills `implementar`/`finalizar`): commit e push direto em `main`, sem `staging` e sem PR. Isso prevalece sobre qualquer menção a `staging`/PR em documentos antigos.
-- Publicação em produção exige autorização explícita. Para um envio só ao GitHub, use `[skip render]` na mensagem do commit se o auto-deploy estiver ativo ou se o estado dele for desconhecido.
+- Publicação em produção exige pedido explícito. Chamar a skill `finalizar` já autoriza o commit e o push em `main` que aciona o deploy no Render. Use `[skip render]` quando o pedido for enviar somente ao GitHub.
 - Commits pequenos e focados, Conventional Commits em inglês (`feat:`, `fix:`, `refactor:`, `chore:`). Sem `git push --force` e sem reset destrutivo, salvo pedido explícito e confirmado.
 - Não commitar secrets, tokens, `.pem`, `.key`, certificados nem arquivos privados.
 - Não alterar CI/CD, Render, Dockerfiles, scripts de deploy, start/build commands, health checks ou portas sem necessidade explícita.
 - Banco: o schema base é criado por `backend/src/db/migrations.js` (`runMigrations()` no boot do servidor); mudanças manuais ficam em `backend/src/db/sql/`. Nunca edite SQL ou migration já aplicado; crie um novo. SQL e migrations só com confirmação explícita (o ambiente pode apontar para produção); sem `DATABASE_URL` local, entregue o SQL ao usuário.
 - Produção roda no Render: evite aumentar CPU, memória, tempo de request e bloqueios síncronos. Trabalho pesado (PDFs grandes, relatórios, importações, uploads) não deve rodar dentro de request HTTP; proponha antes uma alternativa assíncrona.
-- Execute `npm run build` e `npm start` na raiz. O build prepara as dependências do frontend e do backend quando necessário e gera `dist/`. O start inicia o backend, que serve os arquivos compilados. Configure `DATABASE_URL` com a URL do PostgreSQL nas variáveis do ambiente.
+- No Render, `npm run build` na raiz prepara as dependências e gera `dist/`. O serviço inicia com `npm start` e usa `DATABASE_URL` para conectar ao PostgreSQL.
 
 ## Qualidade e validação
 
-- Antes de concluir: typecheck, testes e build sem erros novos. Da raiz: `npm run typecheck`, `npm test` (frontend, vitest), `node --test backend/test/*.test.js` (backend) e `npm run build`. Não há lint configurado. Nenhum segredo exposto; nenhum arquivo não relacionado alterado; nenhuma migration antiga modificada. Erro preexistente deve ser documentado.
+- Para alterações de código, valide com `npm run typecheck`, `npm test`, `node --test backend/test/*.test.js` e `npm run build`. A skill `finalizar` reaproveita os resultados feitos sobre o código atual e executa os checks pendentes. Documente erros preexistentes.
 - Não atualize dependências nem lockfiles sem necessidade; não adicione dependência se o que já existe resolve.
 - Código novo em inglês (arquivos, pastas, funções, tipos, variáveis, enums, tabelas, colunas, migrations, testes, componentes, hooks, comentários técnicos). Código legado em português permanece; não renomeie em massa sem pedido.
 - Sem código morto, imports não usados, `TODO`/`FIXME`, gambiarras temporárias, `console.log` ou debug. Sem `as unknown as` (se inevitável, escopo mínimo e motivo documentado). Sem efeitos colaterais ocultos ou abstrações surpreendentes.
