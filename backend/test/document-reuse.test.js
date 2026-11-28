@@ -247,7 +247,7 @@ test("foreign owner/municipality, changed hashes, expired/rejected files and req
 
 test("manual decisions bind actor, bytes and current criteria; body status alone cannot approve", async () => {
   const document = received();
-  const previous = { ...row(document), documents: [document] };
+  const previous = { ...row(document), documents: [document], workflow_data: { assignedUserId: STAFF.id } };
   const unchanged = await applyDocumentReviews(null, { previous, patch: { documents: [{ ...document, status: "approved", review: { reviewedBy: "fake" } }] },
     user: STAFF, municipalityId: MUNICIPALITY, settings: settingsFor(), now: NOW });
   assert.equal(unchanged[0].status, "attached");
@@ -269,7 +269,7 @@ test("manual decisions bind actor, bytes and current criteria; body status alone
 
 test("reviewing an attachment without a valid receipt keeps its id and signs it without inventing a receipt date", async () => {
   const document = { attachmentId: "stored-id", documentId: "identity", dataUrl: PDF, fileName: "old.pdf", status: "approved", receivedAt: "2099-01-01" };
-  const previous = { ...row(document), documents: [document] };
+  const previous = { ...row(document), documents: [document], workflow_data: { assignedUserId: STAFF.id } };
   const beforeReview = decorateRequestDocuments(previous, settingsFor());
   assert.equal(beforeReview.documents[0].attachmentId, "stored-id");
   const [reviewed] = await applyDocumentReviews(null, { previous, patch: { documentReviews: [{ attachmentId: "stored-id", decision: "approved" }] },

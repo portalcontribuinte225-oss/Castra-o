@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { Check, CircleAlert, Download, Eye, FileText, Paperclip } from "lucide-react";
 import { AiAnalysisDetails } from "../document-analysis/ai-analysis-details";
 import { Button } from "../../components/button";
@@ -10,6 +10,7 @@ interface AttachmentsTabProps {
   rows: AttachmentRow[];
   reviewRequired: boolean;
   canReview: boolean;
+  hasAssignedUser: boolean;
   canAttach: boolean;
   busy: boolean;
   uploadingEvidence: boolean;
@@ -21,8 +22,11 @@ interface AttachmentsTabProps {
   onEvidence: (files: File[]) => void;
 }
 
-export function AttachmentsTab({ rows, reviewRequired, canReview, canAttach, busy, uploadingEvidence, error, onPreview, onDownload, onApprove, onReject, onEvidence }: AttachmentsTabProps) {
+export function AttachmentsTab({ rows, reviewRequired, canReview, hasAssignedUser, canAttach, busy, uploadingEvidence, error,
+  onPreview, onDownload, onApprove, onReject, onEvidence }: AttachmentsTabProps) {
   const blocking = rows.filter(isBlockingAttachment);
+  const assignmentNoteId = useId();
+  const showAssignmentNote = reviewRequired && canReview && !hasAssignedUser && rows.some(canReviewAttachment);
   const evidenceInput = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const complementary = rows.filter((row) => row.document?.internalEvidence || row.document?.documentId?.startsWith?.("evidencia-"));
@@ -33,7 +37,8 @@ export function AttachmentsTab({ rows, reviewRequired, canReview, canAttach, bus
     const stateClass = attachmentStateClasses[state];
     const fileButtonClass = row.kind === AttachmentKind.REQUEST_DOCUMENT ? "prm-icon-button" : undefined;
     const reviewable = row.kind === AttachmentKind.MISSING || row.kind === AttachmentKind.ATTACHMENT && row.state !== AttachmentState.INFO;
-    const decisionDisabled = busy || !canReviewAttachment(row);
+    const pendingReview = canReviewAttachment(row);
+    const decisionDisabled = busy || !pendingReview;
     return (
       <Card as="article" key={`${row.kind}-${row.id}`} className={`process-attachment-row process-attachment-row--${stateClass}`}>
         <div className="process-attachment-main">
@@ -60,7 +65,9 @@ export function AttachmentsTab({ rows, reviewRequired, canReview, canAttach, bus
               onClick={() => onDownload(row)}><Download size={16} aria-hidden="true" /></Button>
           </div>}
           {reviewable && reviewRequired && canReview && <div className="process-attachment-review-actions">
-            <Button variant="outline" className="prm-approve-document" aria-label={`Deferir ${row.title}`} disabled={decisionDisabled} onClick={() => onApprove(row)}>
+            <Button variant="outline" className="prm-approve-document" aria-label={`Deferir ${row.title}`}
+              aria-describedby={showAssignmentNote && pendingReview ? assignmentNoteId : undefined}
+              disabled={decisionDisabled || !hasAssignedUser} onClick={() => onApprove(row)}>
               <Check size={15} aria-hidden="true" /> Deferir
             </Button>
             <Button variant="outline" className="prm-reject-document" aria-label={`Indeferir ${row.title}`} disabled={decisionDisabled} onClick={() => onReject(row)}>
@@ -76,6 +83,7 @@ export function AttachmentsTab({ rows, reviewRequired, canReview, canAttach, bus
     <div className="prm-attachments">
       {error && <p className="form-error" role="alert">{error}</p>}
       <h3 className="prm-section-title">Conferência de documentos</h3>
+      {showAssignmentNote && <p className="prm-muted-note" id={assignmentNoteId}>Atribua um usuário ao processo antes de deferir documentos.</p>}
       <div className="process-attachments-list">
         {regular.map((row) => rowView(row))}
       </div>

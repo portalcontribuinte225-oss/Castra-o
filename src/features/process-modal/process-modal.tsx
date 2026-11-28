@@ -226,7 +226,8 @@ export function ProcessModal({ request, readOnly = true, neighborhoods = [], req
             onClose={() => procedures.dirty ? setDialog({ kind: DialogKind.UNSAVED }) : onClose()} />
           <div ref={body} className="prm-body" role="tabpanel" id={panelId} aria-labelledby={`${panelId}-${tab}`}>
             {reportError && <p className="form-error" role="alert">{reportError}</p>}
-            {tab === ProcessTab.ATTACHMENTS && <AttachmentsTab rows={rows} reviewRequired={!internal} canReview={editable} canAttach={editable} busy={pending}
+            {tab === ProcessTab.ATTACHMENTS && <AttachmentsTab rows={rows} reviewRequired={!internal} canReview={editable}
+              hasAssignedUser={Boolean(normalized.assignedUserId)} canAttach={editable} busy={pending}
               uploadingEvidence={attachments.uploadingEvidence} error={attachments.error}
               onPreview={(row, trigger) => { attachmentTrigger.current = trigger; void attachments.open(row); }} onDownload={attachments.save}
               onApprove={attachments.approve} onReject={(row) => setDialog({ kind: DialogKind.REJECT_DOCUMENT, row })} onEvidence={attachments.attachEvidence} />}

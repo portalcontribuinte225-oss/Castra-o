@@ -7902,6 +7902,7 @@ main {
 
 .prm-schedule-menu button[data-tone="positive"] { color: var(--prm-green); }
 .prm-schedule-menu button[data-tone="negative"] { color: var(--prm-red); }
+.prm-schedule-menu button:disabled { color: var(--prm-muted); cursor: not-allowed; }
 .prm-schedule-menu button:enabled:hover,
 .prm-schedule-menu button:focus-visible { background: #f3f6f8; }
 

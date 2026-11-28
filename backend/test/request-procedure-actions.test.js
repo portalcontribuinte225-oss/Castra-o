@@ -318,9 +318,15 @@ test("document confirmation waits for the new approved version and requires a re
     { requestId: REQUEST_ID, ownerUserId: null, municipalityId: MUNICIPALITY_ID, animalIds: [] })];
   const [{ attachmentId }] = documentRows();
   assert.equal((await call(confirm)).status, 409);
+  row().workflow_data.assignedUserId = "";
+  const blockedApproval = await call({ documentReviews: [{ attachmentId, decision: "approved" }] }, patch);
+  assert.equal(blockedApproval.status, 409);
+  assert.match(blockedApproval.body.error, /Atribua um usuário ao processo/);
+  assert.equal(documentRows()[0].status, "attached");
   assert.equal((await call({ documentReviews: [{ attachmentId, decision: "rejected" }] }, patch)).status, 400);
   assert.equal((await call({ documentReviews: [{ attachmentId, decision: "rejected", note: "  Envie uma foto legível. " }] }, patch)).status, 200);
   assert.equal(row().documents[0].review.note, "Envie uma foto legível.");
+  row().workflow_data.assignedUserId = STAFF.id;
   assert.equal((await call(confirm)).status, 409);
   assert.equal((await call({ documentReviews: [{ attachmentId, decision: "approved" }] }, patch)).status, 409);
   assert.equal((await call({ documents: [{ documentId: "identity", fileName: "nova.pdf", dataUrl: dataUrl("new") }] }, patch)).status, 200);

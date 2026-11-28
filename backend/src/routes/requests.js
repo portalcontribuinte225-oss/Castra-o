@@ -384,7 +384,8 @@ router.patch("/:id", auth, async (req, res) => {
       }
     }
     if (changesDocuments) {
-      const documents = await applyDocumentReviews(client, { previous: existingRows[0], patch: body, user: req.user, municipalityId: existingRows[0].municipality_id, settings });
+      const documents = await applyDocumentReviews(client, { previous: existingRows[0], patch: body, user: req.user,
+        municipalityId: existingRows[0].municipality_id, settings, assignedUserId: nextWorkflow.assignedUserId });
       const position = dedupedEntries.findIndex(([key]) => key === "documents");
       if (position >= 0) dedupedEntries[position] = ["documents", documents];
       else dedupedEntries.push(["documents", documents]);

@@ -46,7 +46,8 @@ export function decorateRequestDocuments(request, settings = {}) {
   }) };
 }
 
-export async function applyDocumentReviews(_client, { previous, patch, user, municipalityId, settings = {}, now = new Date() }) {
+export async function applyDocumentReviews(_client, { previous, patch, user, municipalityId, settings = {}, now = new Date(),
+  assignedUserId = previous.workflow_data?.assignedUserId }) {
   if (patch.documents === undefined && patch.documentReviews === undefined && patch.documentEvidence === undefined) return undefined;
   if (!isInternalUser(user) || municipalityId !== previous.municipality_id) throw documentError("Revisão não autorizada.", 403);
   const oldDocuments = Array.isArray(previous.documents) ? previous.documents : [];
@@ -97,6 +98,9 @@ export async function applyDocumentReviews(_client, { previous, patch, user, mun
     const document = documents.find((item) => item.attachmentId === review.attachmentId);
     if (!document || isExcludedDocument(document) || isComplaintPhotoId(document.documentId)) throw documentError("O arquivo a revisar não está mais disponível.", 409);
     if (document.status !== DocumentReviewStatus.ATTACHED) throw documentError("Esta versão do documento já foi analisada.", 409);
+    if (review.decision === DocumentReviewStatus.APPROVED && !assignedUserId) {
+      throw documentError("Atribua um usuário ao processo antes de deferir documentos.", 409);
+    }
     const definition = definitionFor(document, definitions);
     const content = decodeDocumentContent(document, definition);
     document.status = review.decision;

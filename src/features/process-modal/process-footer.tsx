@@ -31,9 +31,9 @@ function supportsMouseHover(event: ReactPointerEvent<HTMLElement>) {
   return event.pointerType === "mouse" && window.matchMedia("(hover: hover)").matches;
 }
 
-function ScheduleMenu({ closed, busy, canClose, canReschedule, canMarkAbsent, awaitingConfirmation, scheduleBlocked, reservationUnavailable,
+function ScheduleMenu({ closed, busy, confirmed, canClose, canReschedule, canMarkAbsent, awaitingConfirmation, scheduleBlocked, reservationUnavailable,
   noteId, onConfirmSchedule, onReschedule, onAbsent, onFinish }:
-  Pick<ProcessFooterProps, "closed" | "busy" | "canClose" | "canMarkAbsent" | "scheduleBlocked" | "reservationUnavailable"
+  Pick<ProcessFooterProps, "closed" | "busy" | "confirmed" | "canClose" | "canMarkAbsent" | "scheduleBlocked" | "reservationUnavailable"
     | "onConfirmSchedule" | "onReschedule" | "onAbsent" | "onFinish">
   & { canReschedule: boolean; awaitingConfirmation: boolean; noteId?: string }) {
   const id = useId();
@@ -41,15 +41,12 @@ function ScheduleMenu({ closed, busy, canClose, canReschedule, canMarkAbsent, aw
   const panel = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
   const [position, setPosition] = useState<{ right: number; bottom: number } | null>(null);
-  const open = Boolean(position) && !closed && !busy;
+  const open = Boolean(position);
   const label = "Gerir agendamento";
-  const confirmationBlocked = scheduleBlocked || reservationUnavailable;
-  const reschedule = { label: "Reagendar", icon: CalendarDays, disabled: !canReschedule, run: onReschedule, title: scheduleBlocked, tone: "neutral" };
-  const items = awaitingConfirmation ? [
-    { label: "Confirmar Agenda", icon: Check, disabled: Boolean(confirmationBlocked), run: onConfirmSchedule, title: confirmationBlocked, tone: "positive" },
-    ...(reservationUnavailable ? [reschedule] : []),
-  ] : [
-    reschedule,
+  const confirmationBlocked = confirmed ? "A agenda já foi confirmada." : scheduleBlocked || reservationUnavailable;
+  const items = [
+    { label: "Confirmar Agenda", icon: Check, disabled: !awaitingConfirmation || Boolean(confirmationBlocked), run: onConfirmSchedule, title: confirmationBlocked, tone: "positive" },
+    { label: "Reagendar", icon: CalendarDays, disabled: !canReschedule, run: onReschedule, title: scheduleBlocked, tone: "neutral" },
     { label: "Atendimento Encerrado", icon: Check, disabled: !canClose, run: onFinish, title: "Classifique todos os procedimentos antes de concluir", tone: "positive" },
     { label: "Não compareceu", icon: UserX, disabled: !canMarkAbsent, run: onAbsent, title: "", tone: "negative" },
   ];
@@ -57,7 +54,7 @@ function ScheduleMenu({ closed, busy, canClose, canReschedule, canMarkAbsent, aw
   function show(focus = false) {
     clearTimeout(timer.current);
     const bounds = trigger.current?.getBoundingClientRect();
-    if (!bounds || closed || busy) return;
+    if (!bounds) return;
     setPosition({ right: Math.max(8, window.innerWidth - bounds.right), bottom: window.innerHeight - bounds.top + 5 });
     if (focus) requestAnimationFrame(() => panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
   }
@@ -88,7 +85,7 @@ function ScheduleMenu({ closed, busy, canClose, canReschedule, canMarkAbsent, aw
   }, [open]);
 
   return <>
-    <Button ref={trigger} aria-haspopup="menu" aria-expanded={open} aria-controls={id} aria-describedby={noteId} disabled={closed || busy}
+    <Button ref={trigger} aria-haspopup="menu" aria-expanded={open} aria-controls={id} aria-describedby={noteId}
       onPointerEnter={(event) => { if (supportsMouseHover(event)) show(); }} onPointerLeave={leave}
       onClick={(event) => {
         if (open && event.detail !== 0 && !window.matchMedia("(hover: hover)").matches) setPosition(null);
@@ -98,7 +95,7 @@ function ScheduleMenu({ closed, busy, canClose, canReschedule, canMarkAbsent, aw
         if (event.key === "ArrowUp" || event.key === "ArrowDown") { event.preventDefault(); show(true); }
         if (event.key === "Escape" && open) { event.preventDefault(); setPosition(null); }
       }}>
-      <CalendarDays size={15} aria-hidden="true" /> {closed ? "Atendimento concluído" : label} <ChevronDown size={13} aria-hidden="true" />
+      <CalendarDays size={15} aria-hidden="true" /> {label} <ChevronDown size={13} aria-hidden="true" />
     </Button>
     <div ref={panel} id={id} role="menu" aria-label={label} className="prm-schedule-menu" hidden={!open} style={position || undefined}
       onPointerEnter={() => clearTimeout(timer.current)} onPointerLeave={leave} onBlur={(event) => {
@@ -127,9 +124,8 @@ export function ProcessFooter(props: ProcessFooterProps) {
   const noteId = useId();
   const proceduresTab = tab === ProcessTab.PROCEDURES;
   const awaitingConfirmation = !confirmed && !canClose && !closed && hasOpenProcedures;
-  const showSchedule = !readOnly && specialActions === undefined && (proceduresTab || tab === ProcessTab.ATTACHMENTS)
-    && (awaitingConfirmation || confirmed || canClose || closed);
-  const canReschedule = hasOpenProcedures && !scheduleBlocked;
+  const showSchedule = !readOnly && specialActions === undefined && (proceduresTab || tab === ProcessTab.ATTACHMENTS);
+  const canReschedule = hasOpenProcedures && !scheduleBlocked && (confirmed || Boolean(reservationUnavailable));
   const scheduleNote = showSchedule && !closed && hasOpenProcedures
     ? [scheduleBlocked, awaitingConfirmation ? reservationUnavailable : ""].filter(Boolean).join(" ") : "";
   return (
